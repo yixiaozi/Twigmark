@@ -331,6 +331,15 @@
 		</antcall>
 	</target>
 
+	<target name="build_docear_mcp" unless="skip_docear">
+		<antcall target="makePlugin" inheritall="false">
+			<param name="anttarget" value="dist"/>
+			<param name="targetdir" value="plugins"/>
+			<param name="plugindir" value="docear_plugin_mcp"/>
+			<param name="pluginname" value="org.docear.plugin.mcp"/>
+		</antcall>
+	</target>
+
 	
 	<target name="build_docear_jabref">
 		<ant antfile="${workspace}/Jabref_Beta_2_7_Docear/build.xml" target="jars" dir="${workspace}/Jabref_Beta_2_7_Docear" inheritAll="false" />
@@ -358,7 +367,7 @@
 	</target>
 
 	<target name="build" depends="build_core, build_latex, build_svg, build_script, build_formula, build_bugreport, build_openmaps
-		   , build_workspace, build_docear_core, build_docear_services, build_docear_pdfutilities, build_docear_bibtex, build_docear_ai
+		   , build_workspace, build_docear_core, build_docear_services, build_docear_pdfutilities, build_docear_bibtex, build_docear_ai, build_docear_mcp
 		   , build_launcher, git_version_info">
 		<mkdir dir="${build.resources}" />
 		<copy todir="${build.resources}">

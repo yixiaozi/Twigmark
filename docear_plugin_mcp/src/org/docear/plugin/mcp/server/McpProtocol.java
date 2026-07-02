@@ -1,0 +1,436 @@
+package org.docear.plugin.mcp.server;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.docear.plugin.mcp.json.JsonValue;
+import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.service.McpContextService;
+import org.docear.plugin.mcp.service.McpMindMapService;
+import org.docear.plugin.mcp.service.McpTaskService;
+import org.docear.plugin.mcp.service.McpWorkspaceService;
+
+public final class McpProtocol {
+
+	public String handle(final JsonValue request) throws Exception {
+		final Map<String, JsonValue> map = request.asMap();
+		final String method = map.containsKey("method") ? map.get("method").asString() : "";
+		final JsonValue id = map.get("id");
+		final JsonValue params = map.containsKey("params") ? map.get("params") : JsonValue.ofMap(new LinkedHashMap<String, JsonValue>());
+
+		if ("initialize".equals(method)) {
+			return success(id, initializeResult());
+		}
+		if ("notifications/initialized".equals(method) || "initialized".equals(method)) {
+			return success(id, JsonValue.ofMap(new LinkedHashMap<String, JsonValue>()));
+		}
+		if ("ping".equals(method)) {
+			return success(id, JsonValue.ofMap(new LinkedHashMap<String, JsonValue>()));
+		}
+		if ("tools/list".equals(method)) {
+			return success(id, JsonValue.ofMap(singleEntry("tools", JsonValue.ofList(listTools()))));
+		}
+		if ("tools/call".equals(method)) {
+			return success(id, callTool(params));
+		}
+		if ("resources/list".equals(method)) {
+			return success(id, JsonValue.ofMap(singleEntry("resources", JsonValue.ofList(listResources()))));
+		}
+		if ("resources/read".equals(method)) {
+			return success(id, readResource(params));
+		}
+		if ("prompts/list".equals(method)) {
+			return success(id, JsonValue.ofMap(singleEntry("prompts", JsonValue.ofList(listPrompts()))));
+		}
+		if ("prompts/get".equals(method)) {
+			return success(id, getPrompt(params));
+		}
+		throw new IllegalArgumentException("Unsupported MCP method: " + method);
+	}
+
+	private JsonValue initializeResult() {
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
+		result.put("protocolVersion", JsonValue.ofString("2024-11-05"));
+		final Map<String, JsonValue> capabilities = new LinkedHashMap<String, JsonValue>();
+		capabilities.put("tools", JsonValue.ofMap(new LinkedHashMap<String, JsonValue>()));
+		capabilities.put("resources", JsonValue.ofMap(singleEntry("subscribe", JsonValue.ofBoolean(false))));
+		capabilities.put("prompts", JsonValue.ofMap(new LinkedHashMap<String, JsonValue>()));
+		result.put("capabilities", JsonValue.ofMap(capabilities));
+		final Map<String, JsonValue> serverInfo = new LinkedHashMap<String, JsonValue>();
+		serverInfo.put("name", JsonValue.ofString("docear-mcp"));
+		serverInfo.put("version", JsonValue.ofString("1.0.0"));
+		result.put("serverInfo", JsonValue.ofMap(serverInfo));
+		return JsonValue.ofMap(result);
+	}
+
+	private List<JsonValue> listTools() {
+		final List<JsonValue> tools = new ArrayList<JsonValue>();
+		tools.add(tool("list_todos", "List all todo items across the workspace."));
+		tools.add(tool("list_reminders", "List reminders. Optional filters: oneTimeOnly, recurringOnly.",
+				schema("oneTimeOnly", "boolean", false), schema("recurringOnly", "boolean", false)));
+		tools.add(tool("list_overdue", "List overdue one-time reminders."));
+		tools.add(tool("get_workspace_plan", "Get formatted workspace plan summary for AI."));
+		tools.add(tool("get_active_map_json",
+				"Get the currently open mind map as JSON. Does not open any file."));
+		tools.add(tool("get_mindmap_json",
+				"Read a mind map file as JSON without opening it in Docear UI (silent).",
+				schema("filePath", "string", true), schema("maxDepth", "number", false)));
+		tools.add(tool("get_selection_context", "Get current selection context in Docear."));
+		tools.add(tool("search_nodes",
+				"Search nodes by keyword. Results include node MODIFIED time, sorted newest first. "
+						+ "Use modifiedWithinDays for current-state questions (e.g. 365). Silent; does not open files.",
+				schema("query", "string", true), schema("limit", "number", false),
+				schema("modifiedWithinDays", "number", false)));
+		tools.add(tool("list_recently_modified",
+				"List recently modified nodes (by MODIFIED timestamp), optionally filtered by keyword. "
+						+ "Prefer this before wide search for personal/current questions.",
+				schema("query", "string", false), schema("limit", "number", false),
+				schema("modifiedWithinDays", "number", false)));
+		tools.add(tool("open_mindmap",
+				"Open a mind map tab in Docear UI. Use only when the user asks to open/show a map.",
+				schema("filePath", "string", true)));
+		tools.add(tool("navigate_to_node",
+				"Open a mind map in Docear UI and select a node. Use only when the user asks to navigate.",
+				schema("filePath", "string", true), schema("nodeId", "string", true)));
+		tools.add(tool("add_node", "Add a child node.", schema("parentNodeId", "string", true),
+				schema("text", "string", true)));
+		tools.add(tool("change_node_text", "Change node text.", schema("nodeId", "string", true),
+				schema("text", "string", true)));
+		tools.add(tool("remove_node", "Remove a node.", schema("nodeId", "string", true)));
+		tools.add(tool("create_todo", "Create a todo node with hourglass icon.",
+				schema("parentNodeId", "string", true), schema("text", "string", true)));
+		tools.add(tool("complete_todo", "Complete a todo by removing hourglass icon.",
+				schema("nodeId", "string", true)));
+		tools.add(tool("set_reminder", "Set a one-time reminder on a node.",
+				schema("nodeId", "string", true), schema("remindAtMillis", "number", true)));
+		tools.add(tool("set_priority", "Set priority icon full-1..full-7 on a node.",
+				schema("nodeId", "string", true), schema("level", "number", true)));
+		tools.add(tool("list_projects", "List workspace projects."));
+		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
+		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
+		tools.add(tool("export_workspace_snapshot", "Export workspace snapshot markdown files."));
+		return tools;
+	}
+
+	private JsonValue callTool(final JsonValue params) throws Exception {
+		final Map<String, JsonValue> args = params.asMap().containsKey("arguments")
+				? params.asMap().get("arguments").asMap()
+				: params.asMap();
+		final String name = params.asMap().get("name").asString();
+		final String textResult;
+		if ("list_todos".equals(name)) {
+			textResult = McpTaskService.listTodos();
+		}
+		else if ("list_reminders".equals(name)) {
+			textResult = McpTaskService.listReminders(argBool(args, "oneTimeOnly", false),
+					argBool(args, "recurringOnly", false));
+		}
+		else if ("list_overdue".equals(name)) {
+			textResult = McpTaskService.listOverdue();
+		}
+		else if ("get_workspace_plan".equals(name)) {
+			textResult = McpContextService.getWorkspacePlan();
+		}
+		else if ("get_active_map_json".equals(name)) {
+			textResult = McpMindMapService.getActiveMapJson();
+		}
+		else if ("get_mindmap_json".equals(name)) {
+			textResult = McpMindMapService.getMindmapJson(required(args, "filePath"),
+					argInt(args, "maxDepth", 0));
+		}
+		else if ("get_selection_context".equals(name)) {
+			textResult = McpContextService.getSelectionContext();
+		}
+		else if ("search_nodes".equals(name)) {
+			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
+					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0));
+		}
+		else if ("list_recently_modified".equals(name)) {
+			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
+					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 365));
+		}
+		else if ("open_mindmap".equals(name)) {
+			textResult = McpMindMapService.openMindmap(required(args, "filePath"));
+		}
+		else if ("navigate_to_node".equals(name)) {
+			textResult = McpMindMapService.navigateToNode(required(args, "filePath"), required(args, "nodeId"));
+		}
+		else if ("add_node".equals(name)) {
+			textResult = McpMindMapService.addNode(required(args, "parentNodeId"), required(args, "text"));
+		}
+		else if ("change_node_text".equals(name)) {
+			textResult = McpMindMapService.changeNodeText(required(args, "nodeId"), required(args, "text"));
+		}
+		else if ("remove_node".equals(name)) {
+			textResult = McpMindMapService.removeNode(required(args, "nodeId"));
+		}
+		else if ("create_todo".equals(name)) {
+			textResult = McpMindMapService.createTodo(required(args, "parentNodeId"), required(args, "text"));
+		}
+		else if ("complete_todo".equals(name)) {
+			textResult = McpMindMapService.completeTodo(required(args, "nodeId"));
+		}
+		else if ("set_reminder".equals(name)) {
+			textResult = McpMindMapService.setReminder(required(args, "nodeId"),
+					argLong(args, "remindAtMillis", System.currentTimeMillis()));
+		}
+		else if ("set_priority".equals(name)) {
+			textResult = McpMindMapService.setPriority(required(args, "nodeId"), argInt(args, "level", 3));
+		}
+		else if ("list_projects".equals(name)) {
+			textResult = McpWorkspaceService.listProjects();
+		}
+		else if ("quick_capture".equals(name)) {
+			textResult = McpMindMapService.quickCapture(required(args, "text"));
+		}
+		else if ("sync_todoist".equals(name)) {
+			textResult = McpMindMapService.syncTodoist();
+		}
+		else if ("export_workspace_snapshot".equals(name)) {
+			textResult = McpMindMapService.exportWorkspaceSnapshot();
+		}
+		else {
+			throw new IllegalArgumentException("Unknown tool: " + name);
+		}
+		return toolResult(textResult);
+	}
+
+	private List<JsonValue> listResources() {
+		final List<JsonValue> resources = new ArrayList<JsonValue>();
+		resources.add(resource("docear://manifest", "Capability manifest", "application/json"));
+		resources.add(resource("docear://workspace/overview", "Workspace overview", "application/json"));
+		resources.add(resource("docear://workspace/plan", "Workspace plan summary", "text/plain"));
+		resources.add(resource("docear://tasks/today", "Today's reminders", "application/json"));
+		resources.add(resource("docear://tasks/todos", "All todos", "application/json"));
+		resources.add(resource("docear://tasks/reminders", "All reminders", "application/json"));
+		resources.add(resource("docear://tasks/overdue", "Overdue reminders", "application/json"));
+		resources.add(resource("docear://context/selection", "Current selection", "application/json"));
+		resources.add(resource("docear://context/active-map", "Active mind map JSON", "application/json"));
+		resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
+		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
+		return resources;
+	}
+
+	private JsonValue readResource(final JsonValue params) throws Exception {
+		final String uri = params.asMap().get("uri").asString();
+		final String mimeType;
+		final String text;
+		if ("docear://manifest".equals(uri)) {
+			mimeType = "application/json";
+			text = McpContextService.getManifestJson();
+		}
+		else if ("docear://workspace/overview".equals(uri)) {
+			mimeType = "application/json";
+			text = McpWorkspaceService.getOverview();
+		}
+		else if ("docear://workspace/plan".equals(uri)) {
+			mimeType = "text/plain";
+			text = McpContextService.getWorkspacePlan();
+		}
+		else if ("docear://tasks/today".equals(uri)) {
+			mimeType = "application/json";
+			text = McpContextService.getTodayTimelineJson();
+		}
+		else if ("docear://tasks/todos".equals(uri)) {
+			mimeType = "application/json";
+			text = McpTaskService.listTodos();
+		}
+		else if ("docear://tasks/reminders".equals(uri)) {
+			mimeType = "application/json";
+			text = McpTaskService.listReminders(false, false);
+		}
+		else if ("docear://tasks/overdue".equals(uri)) {
+			mimeType = "application/json";
+			text = McpTaskService.listOverdue();
+		}
+		else if ("docear://context/selection".equals(uri)) {
+			mimeType = "application/json";
+			text = McpContextService.getSelectionContext();
+		}
+		else if ("docear://context/active-map".equals(uri)) {
+			mimeType = "application/json";
+			text = McpMindMapService.getActiveMapJson();
+		}
+		else if ("docear://context/recent".equals(uri)) {
+			mimeType = "application/json";
+			text = McpContextService.getRecentContext(50);
+		}
+		else if ("docear://inbox".equals(uri)) {
+			mimeType = "application/json";
+			text = McpContextService.getInboxContext();
+		}
+		else {
+			throw new IllegalArgumentException("Unknown resource: " + uri);
+		}
+		return resourceResult(uri, mimeType, text);
+	}
+
+	private List<JsonValue> listPrompts() {
+		final List<JsonValue> prompts = new ArrayList<JsonValue>();
+		prompts.add(prompt("daily-review", "Review today's reminders, todos and overdue items."));
+		prompts.add(prompt("plan-my-day", "Plan the day based on reminders, todos and priorities."));
+		prompts.add(prompt("break-down-task", "Break the selected node into actionable subtasks."));
+		prompts.add(prompt("project-status", "Summarize project progress from workspace mind maps."));
+		prompts.add(prompt("inbox-triage", "Triage inbox captures into projects and todos."));
+		prompts.add(prompt("weekly-review", "Weekly review of completed and pending work."));
+		return prompts;
+	}
+
+	private JsonValue getPrompt(final JsonValue params) throws Exception {
+		final String name = params.asMap().get("name").asString();
+		final String instructions;
+		if ("daily-review".equals(name)) {
+			instructions = "Read docear://workspace/plan, docear://tasks/today, docear://tasks/overdue and docear://tasks/todos. Summarize what is due today, what is overdue, and suggest the top 3 actions.";
+		}
+		else if ("plan-my-day".equals(name)) {
+			instructions = "Read docear://tasks/today and docear://tasks/todos. Propose a realistic schedule for today with time blocks. Offer to create todos or reminders via MCP tools if helpful.";
+		}
+		else if ("break-down-task".equals(name)) {
+			instructions = "Read docear://context/selection. Break the selected task into 3-7 concrete subtasks. Use create_todo or add_node tools when the user agrees.";
+		}
+		else if ("project-status".equals(name)) {
+			instructions = "Read docear://workspace/overview and search_nodes for the target project. Summarize open todos, reminders and recent changes.";
+		}
+		else if ("inbox-triage".equals(name)) {
+			instructions = "Read docear://inbox and docear://workspace/plan. Suggest how to classify inbox items into projects, todos and reminders.";
+		}
+		else if ("weekly-review".equals(name)) {
+			instructions = "Read docear://workspace/plan, docear://tasks/reminders, docear://tasks/todos and docear://context/recent. Produce a weekly summary with wins, blockers and next-week priorities.";
+		}
+		else {
+			throw new IllegalArgumentException("Unknown prompt: " + name);
+		}
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
+		result.put("description", JsonValue.ofString(name));
+		final List<JsonValue> messages = new ArrayList<JsonValue>();
+		final Map<String, JsonValue> message = new LinkedHashMap<String, JsonValue>();
+		message.put("role", JsonValue.ofString("user"));
+		final Map<String, JsonValue> content = new LinkedHashMap<String, JsonValue>();
+		content.put("type", JsonValue.ofString("text"));
+		content.put("text", JsonValue.ofString(instructions));
+		message.put("content", JsonValue.ofMap(content));
+		messages.add(JsonValue.ofMap(message));
+		result.put("messages", JsonValue.ofList(messages));
+		return JsonValue.ofMap(result);
+	}
+
+	private JsonValue tool(final String name, final String description) {
+		return tool(name, description, new JsonValue[0]);
+	}
+
+	private JsonValue tool(final String name, final String description, final JsonValue... properties) {
+		final Map<String, JsonValue> tool = new LinkedHashMap<String, JsonValue>();
+		tool.put("name", JsonValue.ofString(name));
+		tool.put("description", JsonValue.ofString(description));
+		final Map<String, JsonValue> inputSchema = new LinkedHashMap<String, JsonValue>();
+		inputSchema.put("type", JsonValue.ofString("object"));
+		final Map<String, JsonValue> props = new LinkedHashMap<String, JsonValue>();
+		final List<JsonValue> required = new ArrayList<JsonValue>();
+		for (int i = 0; i < properties.length; i++) {
+			final Map<String, JsonValue> property = properties[i].asMap();
+			if (!property.containsKey("name") || !property.containsKey("schema")) {
+				continue;
+			}
+			final String propName = property.get("name").asString();
+			props.put(propName, property.get("schema"));
+			if (property.containsKey("required") && property.get("required").asBoolean()) {
+				required.add(JsonValue.ofString(propName));
+			}
+		}
+		inputSchema.put("properties", JsonValue.ofMap(props));
+		if (!required.isEmpty()) {
+			inputSchema.put("required", JsonValue.ofList(required));
+		}
+		tool.put("inputSchema", JsonValue.ofMap(inputSchema));
+		return JsonValue.ofMap(tool);
+	}
+
+	private JsonValue schema(final String name, final String type, final boolean required) {
+		final Map<String, JsonValue> property = new LinkedHashMap<String, JsonValue>();
+		property.put("name", JsonValue.ofString(name));
+		final Map<String, JsonValue> schema = new LinkedHashMap<String, JsonValue>();
+		schema.put("type", JsonValue.ofString(type));
+		property.put("schema", JsonValue.ofMap(schema));
+		property.put("required", JsonValue.ofBoolean(required));
+		return JsonValue.ofMap(property);
+	}
+
+	private JsonValue resource(final String uri, final String name, final String mimeType) {
+		final Map<String, JsonValue> resource = new LinkedHashMap<String, JsonValue>();
+		resource.put("uri", JsonValue.ofString(uri));
+		resource.put("name", JsonValue.ofString(name));
+		resource.put("mimeType", JsonValue.ofString(mimeType));
+		return JsonValue.ofMap(resource);
+	}
+
+	private JsonValue prompt(final String name, final String description) {
+		final Map<String, JsonValue> prompt = new LinkedHashMap<String, JsonValue>();
+		prompt.put("name", JsonValue.ofString(name));
+		prompt.put("description", JsonValue.ofString(description));
+		return JsonValue.ofMap(prompt);
+	}
+
+	private JsonValue toolResult(final String text) {
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
+		final List<JsonValue> content = new ArrayList<JsonValue>();
+		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
+		item.put("type", JsonValue.ofString("text"));
+		item.put("text", JsonValue.ofString(text));
+		content.add(JsonValue.ofMap(item));
+		result.put("content", JsonValue.ofList(content));
+		return JsonValue.ofMap(result);
+	}
+
+	private JsonValue resourceResult(final String uri, final String mimeType, final String text) {
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
+		final List<JsonValue> contents = new ArrayList<JsonValue>();
+		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
+		item.put("uri", JsonValue.ofString(uri));
+		item.put("mimeType", JsonValue.ofString(mimeType));
+		item.put("text", JsonValue.ofString(text));
+		contents.add(JsonValue.ofMap(item));
+		result.put("contents", JsonValue.ofList(contents));
+		return JsonValue.ofMap(result);
+	}
+
+	private String success(final JsonValue id, final JsonValue result) {
+		final Map<String, JsonValue> response = new LinkedHashMap<String, JsonValue>();
+		response.put("jsonrpc", JsonValue.ofString("2.0"));
+		if (id != null && !id.isNull()) {
+			response.put("id", id);
+		}
+		response.put("result", result);
+		return JsonWriter.write(JsonValue.ofMap(response));
+	}
+
+	private Map<String, JsonValue> singleEntry(final String key, final JsonValue value) {
+		final Map<String, JsonValue> map = new LinkedHashMap<String, JsonValue>();
+		map.put(key, value);
+		return map;
+	}
+
+	private static String required(final Map<String, JsonValue> args, final String key) {
+		if (!args.containsKey(key) || args.get(key).isNull()) {
+			throw new IllegalArgumentException("Missing required argument: " + key);
+		}
+		return args.get(key).asString();
+	}
+
+	private static String argString(final Map<String, JsonValue> args, final String key, final String defaultValue) {
+		return args.containsKey(key) ? args.get(key).asString() : defaultValue;
+	}
+
+	private static boolean argBool(final Map<String, JsonValue> args, final String key, final boolean defaultValue) {
+		return args.containsKey(key) ? args.get(key).asBoolean() : defaultValue;
+	}
+
+	private static int argInt(final Map<String, JsonValue> args, final String key, final int defaultValue) {
+		return args.containsKey(key) ? args.get(key).asInt(defaultValue) : defaultValue;
+	}
+
+	private static long argLong(final Map<String, JsonValue> args, final String key, final long defaultValue) {
+		return args.containsKey(key) ? args.get(key).asLong(defaultValue) : defaultValue;
+	}
+}

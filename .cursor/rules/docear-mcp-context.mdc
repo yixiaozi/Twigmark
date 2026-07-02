@@ -1,0 +1,16 @@
+---
+description: Docear MCP 操作前必须先读取当前打开导图和选中节点
+alwaysApply: true
+---
+
+# Docear MCP：先读当前上下文
+
+对 Docear 思维导图的任何 MCP 读/写操作之前：
+
+1. 调用 `get_selection_context`；只读查任意导图用 `search_nodes` / `get_mindmap_json`（**禁止**为查信息调用 `open_mindmap`）。问「现在/最近」类问题须加 `modifiedWithinDays` 或先用 `list_recently_modified`
+2. 以返回的 `mapFile`、`nodeId` 为准，不默认 `test.mm`，不复用旧会话节点 ID
+3. 用户说「记到这里」时，父节点 = 当前选中节点
+4. 完成后在回复中说明：当前导图、选中节点、写入位置
+5. **写入时分类清晰**：先分大类（工具/资源/提示词/用法），再分子类；一条节点一个主题，不挤长句
+
+详见技能：`.cursor/skills/docear-mcp-context/SKILL.md`

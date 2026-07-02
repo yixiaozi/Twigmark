@@ -10,7 +10,7 @@ import org.xml.sax.Attributes;
 /**
  * DocearReminder-compatible task attributes stored on mind map {@code <node>} elements.
  */
-final class ReminderTaskAttributes {
+public final class ReminderTaskAttributes {
 	static final String TASKTIME = "TASKTIME";
 	static final String TASKLEVEL = "TASKLEVEL";
 	static final String JINJI = "JINJI";
@@ -113,6 +113,10 @@ final class ReminderTaskAttributes {
 	}
 
 	static void clearFromNode(final NodeModel node) {
+		writeToNode(node, TaskConfig.empty());
+	}
+
+	public static void writeEmptyTask(final NodeModel node) {
 		writeToNode(node, TaskConfig.empty());
 	}
 

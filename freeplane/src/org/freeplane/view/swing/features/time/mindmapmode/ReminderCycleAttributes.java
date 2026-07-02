@@ -10,7 +10,7 @@ import org.xml.sax.Attributes;
 /**
  * DocearReminder-compatible cycle attributes stored on mind map {@code <node>} elements.
  */
-final class ReminderCycleAttributes {
+public final class ReminderCycleAttributes {
 	static final String REMINDERTYPE = "REMINDERTYPE";
 	static final String RHOUR = "RHOUR";
 	static final String RDAYS = "RDAYS";
@@ -137,6 +137,10 @@ final class ReminderCycleAttributes {
 	}
 
 	static void clearFromNode(final NodeModel node) {
+		writeToNode(node, CycleConfig.oneTime());
+	}
+
+	public static void writeOneTimeReminder(final NodeModel node) {
 		writeToNode(node, CycleConfig.oneTime());
 	}
 
