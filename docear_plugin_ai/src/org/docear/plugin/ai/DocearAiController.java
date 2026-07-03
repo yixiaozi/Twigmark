@@ -175,7 +175,10 @@ public class DocearAiController {
         usageCounter.recordInvocation(AiUsageCounter.TYPE_CHAT);
 
         if (progress != null) {
-            progress.onStep(6, 6, "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
+            final DocearAiConfig aiConfig = new DocearAiConfig();
+            progress.onStep(6, 6, aiConfig.isMcpEnabled()
+                    ? "\u8c03\u7528 Copilot CLI + Docear MCP\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09..."
+                    : "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
         }
 
         backend.chatStreaming(prompt, new AiChatStreamListener() {

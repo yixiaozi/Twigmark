@@ -13,6 +13,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.docear.plugin.ai.DocearAiConfig;
 import org.freeplane.core.util.LogUtils;
 
 /**
@@ -110,11 +111,16 @@ public class CopilotCliBackend implements AiBackend {
         }
 
         File promptFile = null;
+        File mcpConfigFile = null;
         Process process = null;
         BufferedReader reader = null;
         try {
             promptFile = writePromptToTempFile(prompt);
-            ProcessBuilder pb = new ProcessBuilder(buildPowerShellCommand(promptFile, copilotPath));
+            final DocearAiConfig aiConfig = new DocearAiConfig();
+            if (aiConfig.isMcpEnabled()) {
+                mcpConfigFile = writeMcpConfigToTempFile(aiConfig.getMcpUrl());
+            }
+            ProcessBuilder pb = new ProcessBuilder(buildPowerShellCommand(promptFile, copilotPath, mcpConfigFile));
             pb.redirectErrorStream(true);
             enrichPath(pb.environment());
             process = pb.start();
@@ -250,7 +256,71 @@ public class CopilotCliBackend implements AiBackend {
             if (promptFile != null) {
                 promptFile.delete();
             }
+            if (mcpConfigFile != null) {
+                mcpConfigFile.delete();
+            }
         }
+    }
+
+    private File writeMcpConfigToTempFile(String mcpUrl) throws Exception {
+        final String url = mcpUrl != null && mcpUrl.trim().length() > 0
+                ? mcpUrl.trim()
+                : new DocearAiConfig().getMcpUrl();
+        final File file = File.createTempFile("docear_ai_mcp_", ".json");
+        FileOutputStream fos = new FileOutputStream(file);
+        try {
+            // Copilot CLI JSON parser rejects UTF-8 BOM (Invalid JSON at column 1).
+            OutputStreamWriter writer = new OutputStreamWriter(fos, "UTF-8");
+            writer.write("{\"mcpServers\":{\"docear\":{\"type\":\"http\",\"url\":\"");
+            writer.write(escapeJsonString(url));
+            writer.write("\",\"tools\":[\"*\"]}}}");
+            writer.flush();
+            writer.close();
+        }
+        finally {
+            fos.close();
+        }
+        return file;
+    }
+
+    private static String escapeJsonString(String value) {
+        if (value == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < value.length(); i++) {
+            char c = value.charAt(i);
+            if (c == '\\' || c == '"') {
+                sb.append('\\');
+            }
+            sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private List<String> buildPowerShellCommand(File promptFile, String copilotPath, File mcpConfigFile) {
+        String promptPath = escapePowerShellSingleQuoted(promptFile.getAbsolutePath());
+        String copilotLiteral = escapePowerShellSingleQuoted(copilotPath);
+        StringBuilder script = new StringBuilder();
+        script.append("[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ");
+        script.append("$OutputEncoding = [Console]::OutputEncoding; ");
+        script.append("chcp 65001 | Out-Null; ");
+        script.append("& '").append(copilotLiteral).append("' -p '@").append(promptPath).append("' -s");
+        if (mcpConfigFile != null) {
+            String mcpPath = escapePowerShellSingleQuoted(mcpConfigFile.getAbsolutePath());
+            script.append(" --allow-all-tools --allow-all-mcp-server-instructions");
+            script.append(" --additional-mcp-config '@").append(mcpPath).append("'");
+            script.append(" --allow-tool=docear");
+        }
+
+        List<String> command = new ArrayList<String>();
+        command.add("powershell.exe");
+        command.add("-NoProfile");
+        command.add("-ExecutionPolicy");
+        command.add("Bypass");
+        command.add("-Command");
+        command.add(script.toString());
+        return command;
     }
 
     private File writePromptToTempFile(String prompt) throws Exception {
@@ -268,25 +338,6 @@ public class CopilotCliBackend implements AiBackend {
             fos.close();
         }
         return file;
-    }
-
-    private List<String> buildPowerShellCommand(File promptFile, String copilotPath) {
-        String promptPath = escapePowerShellSingleQuoted(promptFile.getAbsolutePath());
-        String copilotLiteral = escapePowerShellSingleQuoted(copilotPath);
-        // 使用 -p @文件路径 让 Copilot 自行读取提示词，避免 Windows 命令行长度上限。
-        String script = "[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); "
-                + "$OutputEncoding = [Console]::OutputEncoding; "
-                + "chcp 65001 | Out-Null; "
-                + "& '" + copilotLiteral + "' -p '@" + promptPath + "' -s";
-
-        List<String> command = new ArrayList<String>();
-        command.add("powershell.exe");
-        command.add("-NoProfile");
-        command.add("-ExecutionPolicy");
-        command.add("Bypass");
-        command.add("-Command");
-        command.add(script);
-        return command;
     }
 
     private String escapePowerShellSingleQuoted(String value) {

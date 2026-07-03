@@ -45,6 +45,9 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED = "ai.workspace_snapshot_export_enabled";
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR = "ai.workspace_snapshot_directory";
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS = "ai.workspace_snapshot_debounce_ms";
+    private static final String PROPERTY_AI_MCP_ENABLED = "ai.mcp.enabled";
+    private static final String PROPERTY_AI_MCP_URL = "ai.mcp.url";
+    private static final String DEFAULT_MCP_URL = "http://127.0.0.1:7720/mcp";
     private static final String DEFAULT_WORKSPACE_SNAPSHOT_DIR =
             "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\.AI\u8bf7\u67e5\u770b\u8fd9\u91cc";
 
@@ -301,6 +304,17 @@ public class DocearAiConfig {
         } catch (NumberFormatException e) {
             return 8000;
         }
+    }
+
+    /** 内置 AI 聊天是否通过 Copilot CLI 启用 Docear MCP 工具。 */
+    public boolean isMcpEnabled() {
+        String value = ResourceController.getResourceController().getProperty(PROPERTY_AI_MCP_ENABLED, "true");
+        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+    }
+
+    /** Docear MCP HTTP 端点（需 Docear 运行且 org.docear.plugin.mcp 已加载）。 */
+    public String getMcpUrl() {
+        return ResourceController.getResourceController().getProperty(PROPERTY_AI_MCP_URL, DEFAULT_MCP_URL);
     }
 
     // TODO: 未来在这里添加 OpenAI API Key、Base URL 等配置读取方法
