@@ -1,0 +1,34 @@
+package org.freeplane.plugin.workspace.components;
+
+import javax.swing.JComponent;
+
+/**
+ * Bridge so Docear core can supply the relationship-graph side tab without a compile-time dependency.
+ */
+public final class RelationshipGraphTabBridge {
+
+	public interface Provider {
+		JComponent createSideTabPanel();
+
+		void onTabSelected();
+
+		void onTabDeselected();
+	}
+
+	private static Provider provider;
+
+	private RelationshipGraphTabBridge() {
+	}
+
+	public static void setProvider(final Provider newProvider) {
+		provider = newProvider;
+	}
+
+	public static Provider getProvider() {
+		return provider;
+	}
+
+	public static boolean isAvailable() {
+		return provider != null;
+	}
+}

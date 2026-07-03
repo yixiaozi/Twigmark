@@ -26,4 +26,17 @@ public final class MapViewTabOrder {
 			tabs.setNextTabInsertIndex(index);
 		}
 	}
+
+	/** Docear: exit overlay views (e.g. relationship graph) when the current bottom tab is clicked again. */
+	public interface SameTabClickListener {
+		boolean onSameTabClicked(int tabIndex, Component mapView);
+	}
+
+	public static void setSameTabClickListener(final SameTabClickListener listener) {
+		MapViewTabs.setSameTabClickListener(new MapViewTabs.SameTabClickListener() {
+			public boolean onSameTabClicked(final int tabIndex, final Component mapView) {
+				return listener != null && listener.onSameTabClicked(tabIndex, mapView);
+			}
+		});
+	}
 }

@@ -10,6 +10,7 @@ import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeService;
+import org.docear.plugin.mcp.service.McpRelationshipGraphService;
 import org.docear.plugin.mcp.service.McpTaskService;
 import org.docear.plugin.mcp.service.McpWorkspaceService;
 
@@ -100,6 +101,21 @@ public final class McpProtocol {
 				"List recently modified nodes (node MODIFIED per file). Optional keyword filter.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false)));
+		tools.add(tool("get_relationship_graph",
+				"Silent relationship graph across workspace .mm files (hyperlinks + arrow links). "
+						+ "Modes: map_files (default, file-level) or map_nodes (node-level, slower). "
+						+ "Use filePath/nodeId + hops for local neighborhood; query for label search. Cached ~10min unless refresh=true.",
+				schema("mode", "string", false), schema("query", "string", false),
+				schema("filePath", "string", false), schema("nodeId", "string", false),
+				schema("hops", "number", false), schema("showIsolated", "boolean", false),
+				schema("maxNodes", "number", false), schema("maxEdges", "number", false),
+				schema("refresh", "boolean", false)));
+		tools.add(tool("get_node_relationships",
+				"Direct link neighbors of one mind map or node (ego network). Silent; does not open UI.",
+				schema("filePath", "string", true), schema("nodeId", "string", false),
+				schema("hops", "number", false), schema("mode", "string", false),
+				schema("maxNodes", "number", false), schema("maxEdges", "number", false),
+				schema("refresh", "boolean", false)));
 		tools.add(tool("open_mindmap",
 				"Open a mind map tab in Docear UI. Use only when the user asks to open/show a map.",
 				schema("filePath", "string", true)));
@@ -223,6 +239,17 @@ public final class McpProtocol {
 			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
 					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 365));
 		}
+		else if ("get_relationship_graph".equals(name)) {
+			textResult = McpRelationshipGraphService.getRelationshipGraph(argString(args, "mode", "map_files"),
+					argString(args, "query", ""), argString(args, "filePath", ""), argString(args, "nodeId", ""),
+					argInt(args, "hops", 1), argBool(args, "showIsolated", false), argInt(args, "maxNodes", 100),
+					argInt(args, "maxEdges", 200), argBool(args, "refresh", false));
+		}
+		else if ("get_node_relationships".equals(name)) {
+			textResult = McpRelationshipGraphService.getNodeRelationships(required(args, "filePath"),
+					argString(args, "nodeId", ""), argInt(args, "hops", 1), argString(args, "mode", "map_files"),
+					argInt(args, "maxNodes", 80), argInt(args, "maxEdges", 120), argBool(args, "refresh", false));
+		}
 		else if ("open_mindmap".equals(name)) {
 			textResult = McpMindMapService.openMindmap(required(args, "filePath"));
 		}
@@ -322,6 +349,7 @@ public final class McpProtocol {
 		resources.add(resource("docear://context/selection", "Current selection", "application/json"));
 		resources.add(resource("docear://context/active-map", "Active mind map JSON", "application/json"));
 		resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
+		resources.add(resource("docear://graph/summary", "Relationship graph summary (file + node modes)", "application/json"));
 		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
 		return resources;
 	}
@@ -369,6 +397,10 @@ public final class McpProtocol {
 		else if ("docear://context/recent".equals(uri)) {
 			mimeType = "application/json";
 			text = McpContextService.getRecentContext(50);
+		}
+		else if ("docear://graph/summary".equals(uri)) {
+			mimeType = "application/json";
+			text = McpRelationshipGraphService.getGraphSummary(false);
 		}
 		else if ("docear://inbox".equals(uri)) {
 			mimeType = "application/json";

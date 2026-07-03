@@ -66,6 +66,19 @@ class MapViewTabs implements IMapViewChangeListener {
 	
 	private static final int MAX_TAB_SHORTCUT = 9;
 
+	/**
+	 * Optional hook (Docear relationship graph): fired when the user clicks the already-selected bottom map tab.
+	 */
+	interface SameTabClickListener {
+		boolean onSameTabClicked(int tabIndex, Component mapView);
+	}
+
+	private static SameTabClickListener sameTabClickListener;
+
+	static void setSameTabClickListener(final SameTabClickListener listener) {
+		sameTabClickListener = listener;
+	}
+
 	static MapViewTabs getInstance() {
 		return instance;
 	}
@@ -125,6 +138,9 @@ class MapViewTabs implements IMapViewChangeListener {
 				final int dropIndex = mTabbedPane.indexAtLocation(e.getX(), e.getY());
 				if (dropIndex >= 0 && dropIndex != dragTabIndex) {
 					reorderTab(dragTabIndex, dropIndex);
+				}
+				else if (dropIndex >= 0 && dropIndex == dragTabIndex && dropIndex == mTabbedPane.getSelectedIndex()) {
+					notifySameTabClicked(dropIndex);
 				}
 				dragTabIndex = -1;
 			}
@@ -338,10 +354,20 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (mapView != controller.getMapViewManager().getMapViewComponent()) {
 			controller.getMapViewManager().changeToMapView(mapView.getName());
 		}
+		else {
+			notifySameTabClicked(selectedIndex);
+		}
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);
 			mTabbedPane.setComponentAt(selectedIndex, mContentComponent);
 		}
+	}
+
+	private boolean notifySameTabClicked(final int tabIndex) {
+		if (sameTabClickListener == null || tabIndex < 0 || tabIndex >= mTabbedPaneMapViews.size()) {
+			return false;
+		}
+		return sameTabClickListener.onSameTabClicked(tabIndex, mTabbedPaneMapViews.get(tabIndex));
 	}
 
 	private void setTabsVisible() {

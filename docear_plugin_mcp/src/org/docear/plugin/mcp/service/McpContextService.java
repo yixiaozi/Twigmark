@@ -203,6 +203,7 @@ public final class McpContextService {
 		model.put("reminder", JsonValue.ofString("ReminderExtension with REMINDUSERAT"));
 		model.put("priority", JsonValue.ofString("full-1 to full-7 icons"));
 		model.put("tags", JsonValue.ofString("#待办 #高优先级 #钉选 in node details"));
+		model.put("relationshipGraph", JsonValue.ofString("file-level .mm hyperlinks + node LINK/arrowlink edges"));
 		return model;
 	}
 
@@ -212,6 +213,7 @@ public final class McpContextService {
 		caps.put("tasks", JsonValue.ofList(stringList(new String[] { "list", "create", "complete", "prioritize" })));
 		caps.put("reminders", JsonValue.ofList(stringList(new String[] { "list", "set", "timeline", "overdue" })));
 		caps.put("workspace", JsonValue.ofList(stringList(new String[] { "projects", "plan", "snapshot", "inbox" })));
+		caps.put("graph", JsonValue.ofList(stringList(new String[] { "map_files", "map_nodes", "neighbors", "search" })));
 		caps.put("integrations", JsonValue.ofList(stringList(new String[] { "todoist" })));
 		return caps;
 	}

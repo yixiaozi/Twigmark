@@ -2,6 +2,7 @@ package org.freeplane.plugin.workspace.mindmapmode;
 
 import java.awt.Container;
 import java.awt.Dimension;
+import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.dnd.DropTarget;
@@ -20,6 +21,7 @@ import java.util.Set;
 
 import javax.swing.Box;
 import javax.swing.JComponent;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
@@ -87,6 +89,7 @@ import org.freeplane.plugin.workspace.actions.WorkspaceNewProjectAction;
 import org.freeplane.plugin.workspace.actions.WorkspaceProjectOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.WorkspaceRemoveProjectAction;
 import org.freeplane.plugin.workspace.components.DraggableTabbedPane;
+import org.freeplane.plugin.workspace.components.RelationshipGraphTabBridge;
 import org.freeplane.plugin.workspace.components.IWorkspaceView;
 import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
@@ -133,13 +136,14 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_ALL_FILE_SEARCH = "all_file_search";
 	private static final String TAB_ACTIVITY = "activity";
 	private static final String TAB_GIT = "git";
+	private static final String TAB_GRAPH = "relationship_graph";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
 	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
 	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
 			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
-			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
+			TAB_WORKSPACE, TAB_GRAPH, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -340,8 +344,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 		}
 		sideTabs.addChangeListener(new ChangeListener() {
+			private String previousTabId = TAB_WORKSPACE;
+
 			public void stateChanged(final ChangeEvent e) {
 				ensureSideTabLoaded(sideTabs.getSelectedIndex());
+				final String selectedTabId = getSelectedSideTabId();
+				notifyRelationshipGraphTabChange(previousTabId, selectedTabId);
+				previousTabId = selectedTabId;
 			}
 		});
 		sideTabs.setTabReorderListener(new DraggableTabbedPane.TabReorderListener() {
@@ -617,6 +626,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_GIT.equals(tabId)) {
 			return "Git";
 		}
+		if (TAB_GRAPH.equals(tabId)) {
+			return "\u5173\u7cfb\u56fe";
+		}
 		return tabId;
 	}
 
@@ -683,6 +695,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		else if (TAB_GIT.equals(tabId)) {
 			panel = new GitTabPanel();
+		}
+		else if (TAB_GRAPH.equals(tabId)) {
+			panel = createRelationshipGraphSideTabPanel();
 		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);
@@ -932,6 +947,46 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			getModel().removeProject(project);
 		}
 		getView().setPaintingEnabled(true);
+	}
+
+	/**
+	 * Switches the left workspace side tab (e.g. back to workspace after opening a mind map from the graph).
+	 */
+	public void selectSideTab(final String tabId) {
+		if (tabId == null || sideTabs == null) {
+			return;
+		}
+		final int index = sideTabOrder.indexOf(tabId);
+		if (index >= 0 && index < sideTabs.getTabCount()) {
+			sideTabs.setSelectedIndex(index);
+		}
+	}
+
+	private JComponent createRelationshipGraphSideTabPanel() {
+		if (RelationshipGraphTabBridge.isAvailable()) {
+			try {
+				return RelationshipGraphTabBridge.getProvider().createSideTabPanel();
+			}
+			catch (final Exception e) {
+				LogUtils.warn(e);
+			}
+		}
+		final JPanel placeholder = new JPanel(new BorderLayout());
+		placeholder.add(new JLabel("\u5173\u7cfb\u56fe\u63d2\u4ef6\u672a\u52a0\u8f7d"), BorderLayout.NORTH);
+		return placeholder;
+	}
+
+	private void notifyRelationshipGraphTabChange(final String previousTabId, final String selectedTabId) {
+		if (!RelationshipGraphTabBridge.isAvailable()) {
+			return;
+		}
+		final RelationshipGraphTabBridge.Provider provider = RelationshipGraphTabBridge.getProvider();
+		if (TAB_GRAPH.equals(previousTabId) && !TAB_GRAPH.equals(selectedTabId)) {
+			provider.onTabDeselected();
+		}
+		if (TAB_GRAPH.equals(selectedTabId)) {
+			provider.onTabSelected();
+		}
 	}
 
 }

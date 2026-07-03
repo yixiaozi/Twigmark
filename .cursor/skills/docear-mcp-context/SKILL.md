@@ -5,7 +5,7 @@ description: >-
   open map and selected node via get_selection_context. When writing to mind maps,
   use clear hierarchical categories (overview → major sections → sub-items), not
   flat long one-liners. Use when the user mentions mind maps, .mm files, Docear,
-  MCP tools, todos, reminders, or asks to add/organize nodes.
+  MCP tools, todos, reminders, relationship graph, or asks to add/organize nodes.
 ---
 
 # Docear MCP：先读当前上下文
@@ -119,6 +119,7 @@ description: >-
 | `search_nodes` | 否 |
 | `get_mindmap_json` | 否（默认 `includeFolded=true` 含折叠分支；`false` 同 UI 折叠视图） |
 | `get_node_details` / `list_pinned` | 否 |
+| `get_relationship_graph` / `get_node_relationships` | 否 |
 | `get_selection_context` / `get_active_map_json` | 否（只读当前状态） |
 | `open_mindmap` | **是** — 仅用户明确要求打开时 |
 | `navigate_to_node` | **是** — 仅用户要求跳转时 |
@@ -137,9 +138,33 @@ Docear 原生 UI 在加载失败时会 `UITools.errorMessage` 弹窗。MCP 后�
 
 **规避**：优先 `get_selection_context`；搜索用静默 SAX（已修复）；打开导图前确认文件存在；不要批量 `open_mindmap`。
 
+## 关系图（跨导图 / 跨节点关联）
+
+Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关联（arrowlink），**MCP 静默读取，不打开 UI**。
+
+| 场景 | 推荐 MCP 调用 |
+|------|----------------|
+| 概览有多少连接 | 资源 `docear://graph/summary` 或 `get_relationship_graph`（默认 `map_files`，`maxNodes` 小） |
+| 某导图连了哪些导图 | `get_node_relationships`，`filePath` = 目标 `.mm`，`hops: 1` |
+| 某节点连了哪些节点 | `get_node_relationships`，`filePath` + `nodeId`（来自 `get_selection_context` 或 `search_nodes`），`mode` 自动为 `map_nodes` |
+| 按关键词找关联簇 | `get_relationship_graph`，`mode: map_nodes`，`query: 关键词`，`maxNodes: 50` |
+| 全库节点级图（慢） | `get_relationship_graph`，`mode: map_nodes`，`refresh: false`（有 10 分钟缓存） |
+
+**参数要点**
+
+- `mode`: `map_files`（导图级，快）| `map_nodes`（节点级，慢，112k+ 节点时务必加 `query` / `filePath` / 小 `maxNodes`）
+- `filePath` + `nodeId` + `hops`: 以该点为中心的 N 跳邻域
+- `query`: 按 label / mapLabel / 路径过滤，并包含匹配节点的直接邻居
+- `showIsolated`: 默认 false（隐藏无连接项）
+- `refresh`: true 强制重扫；默认用缓存
+- 返回 `nodes[]`（`key`, `label`, `mapFile`, `nodeId?`, `openUrl`）与 `edges[]`（`source`, `target` 为 `key`）
+
+**与 UI 关系图 Tab 共用同一扫描引擎**；MCP 不触发中心视口切换。
+
 ## MCP 工具速查
 
 - 读上下文：`get_selection_context`、`get_active_map_json`、`get_mindmap_json`（含 note/link/icons/tags/MODIFIED）
+- **关系图**：`get_relationship_graph`、`get_node_relationships`；资源 `docear://graph/summary`
 - 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
 - 写节点：`add_node`、`create_todo`、`set_reminder`、`set_recurring_reminder`

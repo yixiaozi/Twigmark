@@ -127,6 +127,7 @@ def main() -> int:
         ("search_nodes (MCP, 365d)", "search_nodes", {"query": "MCP", "limit": 5, "modifiedWithinDays": 365}),
         ("list_pinned", "list_pinned", {"limit": 5}),
         ("list_projects", "list_projects", {}),
+        ("get_relationship_graph (map_files)", "get_relationship_graph", {"mode": "map_files", "maxNodes": 10, "maxEdges": 20}),
         ("list_todos", "list_todos", {}),
         ("list_reminders", "list_reminders", {"oneTimeOnly": False, "recurringOnly": False}),
         ("get_workspace_plan", "get_workspace_plan", {}),
@@ -143,6 +144,16 @@ def main() -> int:
         lines.append(
             trunc(
                 tool("search_nodes", {"query": "", "filePath": map_file, "limit": 3}),
+                1500,
+            )
+        )
+        lines.append("```")
+        lines.append("")
+        lines.append("### get_node_relationships (current file, 1 hop)")
+        lines.append("```json")
+        lines.append(
+            trunc(
+                tool("get_node_relationships", {"filePath": map_file, "hops": 1, "maxNodes": 10}),
                 1500,
             )
         )
