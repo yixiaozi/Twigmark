@@ -9,7 +9,7 @@ alwaysApply: true
 
 1. 调用 `get_selection_context`；只读查任意导图用 `search_nodes` / `get_mindmap_json`（**禁止**为查信息调用 `open_mindmap`）。问「现在/最近」类问题须加 `modifiedWithinDays` 或先用 `list_recently_modified`
 2. 以返回的 `mapFile`、`nodeId` 为准，不默认 `test.mm`，不复用旧会话节点 ID
-3. 用户说「记到这里」时，父节点 = 当前选中节点
+3. 用户说「记到这里」时，父节点 = 当前选中节点；跨文件写入须传 `filePath`（来自 `search_nodes.mapFile`）
 4. 完成后在回复中说明：当前导图、选中节点、写入位置
 5. **写入时分类清晰**：先分大类（工具/资源/提示词/用法），再分子类；一条节点一个主题，不挤长句
 

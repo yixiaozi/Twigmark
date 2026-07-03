@@ -120,6 +120,22 @@ public final class ReminderTaskAttributes {
 		writeToNode(node, TaskConfig.empty());
 	}
 
+	public static int readTaskTimeFromNode(final NodeModel node) {
+		return readFromNode(node).taskTime;
+	}
+
+	public static int readTaskLevelFromNode(final NodeModel node) {
+		return readFromNode(node).taskLevel;
+	}
+
+	public static int readJinjiFromNode(final NodeModel node) {
+		return readFromNode(node).jinji;
+	}
+
+	public static void writeTaskMetadata(final NodeModel node, final int taskLevel, final int jinji) {
+		writeToNode(node, new TaskConfig(0, taskLevel, jinji));
+	}
+
 	private static ReminderTaskExtension copyExtension(final ReminderTaskExtension source) {
 		if (source == null) {
 			return null;

@@ -144,6 +144,23 @@ public final class ReminderCycleAttributes {
 		writeToNode(node, CycleConfig.oneTime());
 	}
 
+	public static String readRemindTypeFromNode(final NodeModel node) {
+		return readFromNode(node).remindType;
+	}
+
+	public static int readIntervalFromNode(final NodeModel node) {
+		return readFromNode(node).interval;
+	}
+
+	public static String readWeekDaysFromNode(final NodeModel node) {
+		return readFromNode(node).weekDays;
+	}
+
+	public static void writeRecurringCycle(final NodeModel node, final String remindType, final int interval,
+			final String weekDays) {
+		writeToNode(node, new CycleConfig(remindType, interval > 0 ? interval : 1, weekDays != null ? weekDays : "", 0));
+	}
+
 	private static ReminderCycleExtension copyExtension(final ReminderCycleExtension source) {
 		if (source == null) {
 			return null;

@@ -9,6 +9,7 @@ import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpMindMapService;
+import org.docear.plugin.mcp.service.McpNodeService;
 import org.docear.plugin.mcp.service.McpTaskService;
 import org.docear.plugin.mcp.service.McpWorkspaceService;
 
@@ -73,19 +74,30 @@ public final class McpProtocol {
 		tools.add(tool("list_overdue", "List overdue one-time reminders."));
 		tools.add(tool("get_workspace_plan", "Get formatted workspace plan summary for AI."));
 		tools.add(tool("get_active_map_json",
-				"Get the currently open mind map as JSON. Does not open any file."));
+				"Get the currently open mind map as JSON. Set includeFolded=false to omit folded branches.",
+				schema("includeFolded", "boolean", false)));
 		tools.add(tool("get_mindmap_json",
-				"Read a mind map file as JSON without opening it in Docear UI (silent).",
-				schema("filePath", "string", true), schema("maxDepth", "number", false)));
+				"Read a mind map file as JSON without opening it in Docear UI (silent). "
+						+ "Includes note, link, icons, tags, MODIFIED, task attrs. "
+						+ "Prefer partial path (dir/file.mm) when filenames are duplicated.",
+				schema("filePath", "string", true), schema("maxDepth", "number", false),
+				schema("includeFolded", "boolean", false)));
+		tools.add(tool("get_node_details",
+				"Get full details for one node: note, link, icons, tags, reminders, privacy, parent path.",
+				schema("filePath", "string", true), schema("nodeId", "string", true)));
+		tools.add(tool("list_pinned", "List pinned nodes from the workspace sidebar.",
+				schema("limit", "number", false)));
+		tools.add(tool("list_published", "List nodes marked with the published icon.",
+				schema("limit", "number", false)));
 		tools.add(tool("get_selection_context", "Get current selection context in Docear."));
 		tools.add(tool("search_nodes",
-				"Search nodes by keyword. Results include node MODIFIED time, sorted newest first. "
-						+ "Use modifiedWithinDays for current-state questions (e.g. 365). Silent; does not open files.",
-				schema("query", "string", true), schema("limit", "number", false),
-				schema("modifiedWithinDays", "number", false)));
+				"Search nodes by keyword via silent SAX. Filters by node MODIFIED (not global Top-N). "
+						+ "Use modifiedWithinDays, filePath, or projectId to narrow large workspaces.",
+				schema("query", "string", false), schema("limit", "number", false),
+				schema("modifiedWithinDays", "number", false), schema("filePath", "string", false),
+				schema("projectId", "string", false)));
 		tools.add(tool("list_recently_modified",
-				"List recently modified nodes (by MODIFIED timestamp), optionally filtered by keyword. "
-						+ "Prefer this before wide search for personal/current questions.",
+				"List recently modified nodes (node MODIFIED per file). Optional keyword filter.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false)));
 		tools.add(tool("open_mindmap",
@@ -94,19 +106,69 @@ public final class McpProtocol {
 		tools.add(tool("navigate_to_node",
 				"Open a mind map in Docear UI and select a node. Use only when the user asks to navigate.",
 				schema("filePath", "string", true), schema("nodeId", "string", true)));
-		tools.add(tool("add_node", "Add a child node.", schema("parentNodeId", "string", true),
+		tools.add(tool("add_node",
+				"Add a child node. Optional filePath targets any .mm without opening it in UI; omit to use the current map.",
+				schema("filePath", "string", false), schema("parentNodeId", "string", true),
 				schema("text", "string", true)));
-		tools.add(tool("change_node_text", "Change node text.", schema("nodeId", "string", true),
+		tools.add(tool("change_node_text",
+				"Change node text. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
 				schema("text", "string", true)));
-		tools.add(tool("remove_node", "Remove a node.", schema("nodeId", "string", true)));
-		tools.add(tool("create_todo", "Create a todo node with hourglass icon.",
-				schema("parentNodeId", "string", true), schema("text", "string", true)));
-		tools.add(tool("complete_todo", "Complete a todo by removing hourglass icon.",
-				schema("nodeId", "string", true)));
-		tools.add(tool("set_reminder", "Set a one-time reminder on a node.",
-				schema("nodeId", "string", true), schema("remindAtMillis", "number", true)));
-		tools.add(tool("set_priority", "Set priority icon full-1..full-7 on a node.",
-				schema("nodeId", "string", true), schema("level", "number", true)));
+		tools.add(tool("remove_node",
+				"Remove a node. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("create_todo",
+				"Create a todo node with hourglass icon. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("parentNodeId", "string", true),
+				schema("text", "string", true)));
+		tools.add(tool("complete_todo",
+				"Complete a todo by removing hourglass icon. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("set_reminder",
+				"Set a one-time reminder on a node. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("remindAtMillis", "number", true)));
+		tools.add(tool("set_priority",
+				"Set priority icon full-1..full-7 on a node. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("level", "number", true)));
+		tools.add(tool("move_node",
+				"Move a node under a new parent. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("newParentNodeId", "string", true), schema("index", "number", false)));
+		tools.add(tool("set_node_folded",
+				"Fold or unfold a node branch. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("folded", "boolean", true)));
+		tools.add(tool("set_node_link",
+				"Set or clear a node hyperlink / file link. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("link", "string", false)));
+		tools.add(tool("set_node_note",
+				"Set node note (HTML). Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("noteHtml", "string", false)));
+		tools.add(tool("set_node_tags",
+				"Set user tags on a node (comma-separated). Use pinned=true to add pin tag.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("tags", "string", false), schema("pinned", "boolean", false)));
+		tools.add(tool("toggle_pin",
+				"Toggle pin tag on a node. Optional filePath targets any .mm without opening it in UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("set_node_icon",
+				"Add or remove a mind map icon by name (e.g. hourglass, full-3).",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("iconName", "string", true), schema("enabled", "boolean", false)));
+		tools.add(tool("set_recurring_reminder",
+				"Set a recurring reminder with Docear cycle attrs (day/week/month/year/eb).",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("remindAtMillis", "number", true), schema("remindType", "string", false),
+				schema("interval", "number", false), schema("weekDays", "string", false),
+				schema("taskLevel", "number", false), schema("jinji", "number", false)));
+		tools.add(tool("create_mindmap",
+				"Create a new .mm file on disk. Optionally open it in Docear UI.",
+				schema("filePath", "string", true), schema("rootText", "string", false),
+				schema("openInUi", "boolean", false)));
 		tools.add(tool("list_projects", "List workspace projects."));
 		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
 		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
@@ -134,18 +196,28 @@ public final class McpProtocol {
 			textResult = McpContextService.getWorkspacePlan();
 		}
 		else if ("get_active_map_json".equals(name)) {
-			textResult = McpMindMapService.getActiveMapJson();
+			textResult = McpMindMapService.getActiveMapJson(argBool(args, "includeFolded", true));
 		}
 		else if ("get_mindmap_json".equals(name)) {
 			textResult = McpMindMapService.getMindmapJson(required(args, "filePath"),
-					argInt(args, "maxDepth", 0));
+					argInt(args, "maxDepth", 0), argBool(args, "includeFolded", true));
+		}
+		else if ("get_node_details".equals(name)) {
+			textResult = McpNodeService.getNodeDetails(required(args, "filePath"), required(args, "nodeId"));
+		}
+		else if ("list_pinned".equals(name)) {
+			textResult = McpNodeService.listPinned(argInt(args, "limit", 100));
+		}
+		else if ("list_published".equals(name)) {
+			textResult = McpNodeService.listPublished(argInt(args, "limit", 100));
 		}
 		else if ("get_selection_context".equals(name)) {
 			textResult = McpContextService.getSelectionContext();
 		}
 		else if ("search_nodes".equals(name)) {
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
-					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0));
+					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0),
+					argString(args, "filePath", ""), argString(args, "projectId", ""));
 		}
 		else if ("list_recently_modified".equals(name)) {
 			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
@@ -158,26 +230,67 @@ public final class McpProtocol {
 			textResult = McpMindMapService.navigateToNode(required(args, "filePath"), required(args, "nodeId"));
 		}
 		else if ("add_node".equals(name)) {
-			textResult = McpMindMapService.addNode(required(args, "parentNodeId"), required(args, "text"));
+			textResult = McpMindMapService.addNode(argString(args, "filePath", ""), required(args, "parentNodeId"),
+					required(args, "text"));
 		}
 		else if ("change_node_text".equals(name)) {
-			textResult = McpMindMapService.changeNodeText(required(args, "nodeId"), required(args, "text"));
+			textResult = McpMindMapService.changeNodeText(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "text"));
 		}
 		else if ("remove_node".equals(name)) {
-			textResult = McpMindMapService.removeNode(required(args, "nodeId"));
+			textResult = McpMindMapService.removeNode(argString(args, "filePath", ""), required(args, "nodeId"));
 		}
 		else if ("create_todo".equals(name)) {
-			textResult = McpMindMapService.createTodo(required(args, "parentNodeId"), required(args, "text"));
+			textResult = McpMindMapService.createTodo(argString(args, "filePath", ""), required(args, "parentNodeId"),
+					required(args, "text"));
 		}
 		else if ("complete_todo".equals(name)) {
-			textResult = McpMindMapService.completeTodo(required(args, "nodeId"));
+			textResult = McpMindMapService.completeTodo(argString(args, "filePath", ""), required(args, "nodeId"));
 		}
 		else if ("set_reminder".equals(name)) {
-			textResult = McpMindMapService.setReminder(required(args, "nodeId"),
+			textResult = McpMindMapService.setReminder(argString(args, "filePath", ""), required(args, "nodeId"),
 					argLong(args, "remindAtMillis", System.currentTimeMillis()));
 		}
 		else if ("set_priority".equals(name)) {
-			textResult = McpMindMapService.setPriority(required(args, "nodeId"), argInt(args, "level", 3));
+			textResult = McpMindMapService.setPriority(argString(args, "filePath", ""), required(args, "nodeId"),
+					argInt(args, "level", 3));
+		}
+		else if ("move_node".equals(name)) {
+			textResult = McpNodeService.moveNode(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "newParentNodeId"), argInt(args, "index", -1));
+		}
+		else if ("set_node_folded".equals(name)) {
+			textResult = McpNodeService.setNodeFolded(argString(args, "filePath", ""), required(args, "nodeId"),
+					argBool(args, "folded", true));
+		}
+		else if ("set_node_link".equals(name)) {
+			textResult = McpNodeService.setNodeLink(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "link", ""));
+		}
+		else if ("set_node_note".equals(name)) {
+			textResult = McpNodeService.setNodeNote(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "noteHtml", ""));
+		}
+		else if ("set_node_tags".equals(name)) {
+			textResult = McpNodeService.setNodeTags(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "tags", ""), argBool(args, "pinned", false));
+		}
+		else if ("toggle_pin".equals(name)) {
+			textResult = McpNodeService.togglePin(argString(args, "filePath", ""), required(args, "nodeId"));
+		}
+		else if ("set_node_icon".equals(name)) {
+			textResult = McpNodeService.setNodeIcon(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "iconName"), argBool(args, "enabled", true));
+		}
+		else if ("set_recurring_reminder".equals(name)) {
+			textResult = McpNodeService.setRecurringReminder(argString(args, "filePath", ""), required(args, "nodeId"),
+					argLong(args, "remindAtMillis", System.currentTimeMillis()),
+					argString(args, "remindType", "day"), argInt(args, "interval", 1),
+					argString(args, "weekDays", ""), argInt(args, "taskLevel", 0), argInt(args, "jinji", 0));
+		}
+		else if ("create_mindmap".equals(name)) {
+			textResult = McpNodeService.createMindmap(required(args, "filePath"), argString(args, "rootText", ""),
+					argBool(args, "openInUi", false));
 		}
 		else if ("list_projects".equals(name)) {
 			textResult = McpWorkspaceService.listProjects();

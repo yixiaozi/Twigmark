@@ -32,9 +32,20 @@ description: >-
 | 问题类型 | 推荐 MCP 调用 |
 |----------|----------------|
 | 当前状态、最近想法、「现在喜欢谁」 | 先 `list_recently_modified`（默认近 365 天），再 `search_nodes` 且 `modifiedWithinDays: 365` |
-| 历史全文、考古 | `search_nodes` 不设 `modifiedWithinDays`（仍按修改时间**新→旧**排序） |
+| 历史全文、考古 | `search_nodes` 不设 `modifiedWithinDays`（按节点 MODIFIED 新→旧；会扫全库，建议加 `projectId`） |
+| 只在某个文件里搜 | `search_nodes` 传 `filePath`（可用 `子目录/文件名.mm` 消歧） |
 
-结果字段：`modifiedAt` / `modifiedAtMillis`。回答时注明依据节点的修改时间。
+结果字段：`modifiedAt` / `modifiedAtMillis`、`parentPath`、`depth`、`parentNodeId`。
+
+**搜索语义**：`modifiedWithinDays` 按每个节点的 XML `MODIFIED` 过滤，不再用全局「最近修改 Top 5000」预截断。
+
+**性能**：无时间窗会 SAX 扫全部 `.mm`；大库请用 `modifiedWithinDays`、`filePath` 或 `projectId`。有时间窗时跳过 `lastModified` 早于 cutoff 的文件。
+
+**路径消歧**：仅 `文件名.mm` 且有多份同名时，优先已打开标签 → 当前导图同目录 → 主项目 → 唯一最新文件；仍歧义则报错并列候选路径。建议传 partial path。
+
+限定范围：`search_nodes` 可传 `filePath` 或 `projectId`（来自 `list_projects`）。
+
+钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别等）。
 
 ## 第二步：决定写入位置
 
@@ -47,9 +58,11 @@ description: >-
 
 ## 第三步：执行写入
 
-- **仅写入时**且目标导图未打开，才调 `open_mindmap`；只读查询禁止调用
-- `parentNodeId` 必须来自上一步，不能来自旧会话
-- 写入后可用 `get_selection_context` 或 `get_active_map_json` 验证
+- 写入任意导图：传 `filePath`（来自 `search_nodes` 的 `mapFile` 或 `get_selection_context`），**无需** `open_mindmap`
+- 未传 `filePath` 时写入当前打开的导图；若无打开导图则报错
+- 只读查询禁止调用 `open_mindmap`
+- `parentNodeId` / `nodeId` 必须来自上一步，不能来自旧会话
+- 写入后检查返回的 `mapFile`、`saved`、`headlessLoad`
 
 ## 回复用户时
 
@@ -104,7 +117,8 @@ description: >-
 | 工具 | 是否打开导图标签 |
 |------|------------------|
 | `search_nodes` | 否 |
-| `get_mindmap_json` | 否 |
+| `get_mindmap_json` | 否（默认 `includeFolded=true` 含折叠分支；`false` 同 UI 折叠视图） |
+| `get_node_details` / `list_pinned` | 否 |
 | `get_selection_context` / `get_active_map_json` | 否（只读当前状态） |
 | `open_mindmap` | **是** — 仅用户明确要求打开时 |
 | `navigate_to_node` | **是** — 仅用户要求跳转时 |
@@ -125,6 +139,9 @@ Docear 原生 UI 在加载失败时会 `UITools.errorMessage` 弹窗。MCP 后�
 
 ## MCP 工具速查
 
-- 读上下文：`get_selection_context`、`get_active_map_json`
-- 写节点：`add_node`、`create_todo`、`set_reminder`（`parentNodeId` / `nodeId` 来自上下文）
+- 读上下文：`get_selection_context`、`get_active_map_json`、`get_mindmap_json`（含 note/link/icons/tags/MODIFIED）
+- 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
+- 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
+- 写节点：`add_node`、`create_todo`、`set_reminder`、`set_recurring_reminder`
+- 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`create_mindmap`
 - 打开导图：`open_mindmap`（`filePath` 来自上下文 `mapFile`）
