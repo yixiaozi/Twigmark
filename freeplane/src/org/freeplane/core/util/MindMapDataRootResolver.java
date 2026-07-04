@@ -47,6 +47,27 @@ public final class MindMapDataRootResolver {
 		return root.isDirectory() ? root : null;
 	}
 
+	/**
+	 * Writable application profile (preferences, logs, workspace UI state).
+	 * Same tree as project metadata parent: {@code {dataRoot}/_data}.
+	 */
+	public static File getApplicationConfigDirectory() {
+		final File dataRoot = getFixedDataRoot();
+		if (dataRoot == null) {
+			return null;
+		}
+		return new File(dataRoot, "_data");
+	}
+
+	/** Log files: {@code {dataRoot}/_data/logs}. */
+	public static File getLogDirectory() {
+		final File configDir = getApplicationConfigDirectory();
+		if (configDir == null) {
+			return null;
+		}
+		return new File(configDir, "logs");
+	}
+
 	/** Project settings directory: {@code {dataRoot}/_data/{projectId}}. */
 	public static File getProjectDataDirectory() {
 		final File dataRoot = getFixedDataRoot();

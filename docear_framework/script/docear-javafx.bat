@@ -13,5 +13,5 @@ start "" "%java_exe%" -Xmx512m -Xss2m ^
   "-Dorg.knopflerfish.framework.bundlestorage=memory" ^
   "-Dorg.knopflerfish.gosg.jars=reference:file:%freeplanedir%core/" ^
   "-Dorg.freeplane.globalresourcedir=%freeplanedir%resources/" ^
-  "-Dorg.freeplane.userfpdir=%APPDATA%\Docear" ^
+  "-Dorg.freeplane.userfpdir=E:\yixiaozi\_data" ^
   -jar "%freeplanedir%freeplanelauncher.jar"

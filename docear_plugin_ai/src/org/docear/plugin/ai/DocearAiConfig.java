@@ -3,6 +3,7 @@ package org.docear.plugin.ai;
 import java.io.File;
 
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.Compat;
 
 /**
  * Docear AI 插件配置管理类。
@@ -17,7 +18,7 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_TEMPERATURE = "ai.temperature";
     private static final String PROPERTY_AI_PROMPT_TEMPLATE_FILE = "ai.prompt_template_file";
     private static final String PROPERTY_AI_INTERACTION_LOG_DIR = "ai.interaction_log_dir";
-    private static final String AI_HOME_DIR_NAME = ".docear" + File.separator + "ai";
+    private static final String AI_HOME_DIR_NAME = "ai";
     private static final String PROMPT_FILE_NAME = "AI\u63d0\u793a\u8bcd.mm";
     private static final String PROPERTY_AI_LOG_PROMPT = "ai.log_prompt";
     private static final String AI_LOGS_DIR_NAME = "ai_logs";
@@ -75,11 +76,7 @@ public class DocearAiConfig {
     }
 
     public String getAiHomeDirectory() {
-        String home = System.getProperty("user.home");
-        if (home == null || home.trim().length() == 0) {
-            home = ".";
-        }
-        return home + File.separator + AI_HOME_DIR_NAME;
+        return Compat.getApplicationUserDirectory() + File.separator + AI_HOME_DIR_NAME;
     }
 
     public String getDefaultPromptTemplateFile() {

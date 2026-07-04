@@ -162,7 +162,7 @@ public class CoreConfiguration extends ALanguageController {
 		WorkspaceController.replaceAction(new DocearAboutAction());
 		WorkspaceController.replaceAction(new DocearQuitAction());
 		WorkspaceController.replaceAction(new DocearImportProjectAction());
-		copyInfoIfNecessary();		
+		// Profile files (welcome map, logo) are not copied into the config directory.
 	}
 
 	private void initIcons(Controller controller) {

@@ -26,6 +26,6 @@
     <opt>-Dorg.freeplane.param1=%~2%</opt>
     <opt>-Dorg.freeplane.param3=%~3%</opt>
     <opt>-Dorg.freeplane.param4=%~4%</opt>
-    <opt>-Dorg.freeplane.userfpdir=%appdata%/Docear</opt>
+    <opt>-Dorg.freeplane.userfpdir=E:/yixiaozi/_data</opt>
   </jre>
 </launch4jConfig>

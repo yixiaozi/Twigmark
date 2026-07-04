@@ -64,7 +64,7 @@ public final class DocearFileBackupController implements IFileBackupHandler {
 	}
 	
 	public File getBackupDir() {
-		return new File(URIUtils.getAbsoluteFile(URIUtils.createURI(Compat.getDefaultApplicationUserDirectory())), "backup");
+		return new File(URIUtils.getAbsoluteFile(URIUtils.createURI(Compat.getApplicationUserDirectory())), "backup");
 	}
 
 	

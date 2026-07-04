@@ -262,9 +262,7 @@ public final class WorkspaceController implements IExtension {
 	}
 
 	public static URI getApplicationHome() {
-		String appName = Controller.getCurrentController().getResourceController().getProperty("ApplicationName");
-		String homePath = System.getProperty("user.home")+ File.separator + appName;
-		return new File(homePath).toURI();
+		return getApplicationSettingsHome();
 	}
 	
 	public static URI getApplicationSettingsHome() {

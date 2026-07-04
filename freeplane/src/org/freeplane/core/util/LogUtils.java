@@ -95,6 +95,10 @@ public class LogUtils {
 	}
 
 	public static String getLogDirectory() {
+	    final File fixedLogDir = MindMapDataRootResolver.getLogDirectory();
+	    if (fixedLogDir != null) {
+	        return fixedLogDir.getAbsolutePath();
+	    }
 	    final String logDirectory = ResourceController.getResourceController().getFreeplaneUserDirectory() + File.separatorChar + "logs";
 	    return logDirectory;
     }

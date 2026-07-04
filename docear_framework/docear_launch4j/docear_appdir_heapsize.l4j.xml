@@ -19,7 +19,7 @@
     <maxVersion></maxVersion>
     <jdkPreference>preferJre</jdkPreference>
     <maxHeapSize>512</maxHeapSize>
-    <opt>-Dorg.freeplane.userfpdir=&quot;%APPDATA%\\Docear&quot;</opt>
+    <opt>-Dorg.freeplane.userfpdir=&quot;E:\\yixiaozi\\_data&quot;</opt>
     <opt>-Xms40m</opt>
   </jre>
 </launch4jConfig>

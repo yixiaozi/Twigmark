@@ -179,7 +179,7 @@
 						<menu_submenu name="toolbars" name_ref="menu_toolbars">
 							<menu_action action="ToggleMenubarAction" menu_key="MB_ToggleMenubarAction"/>
 							<menu_action action="ToggleToolbarAction" />
-							<menu_action action="ShowFilterToolbarAction"  accelerator="control shift L"/>
+							<menu_action action="ShowFilterToolbarAction" />
 							<menu_action action="ToggleFBarAction" />
 							<menu_action action="ToggleLeftToolbarAction" />
 							<menu_action action="ToggleStatusAction" />

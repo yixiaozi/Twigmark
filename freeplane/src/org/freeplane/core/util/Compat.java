@@ -167,18 +167,33 @@ public class Compat {
 	/** the directory *including* the version directory. */
 	public static String getApplicationUserDirectory() {
 		String userFpDir = System.getProperty(PROPERTY_FREEPLANE_USERDIR);
-		
-		if(userFpDir == null) {
-			userFpDir = getDefaultApplicationUserDirectory();
-			if(userFpDir.endsWith("freeplane")){
-				userFpDir += CURRENT_VERSION_DIR;
+		if (userFpDir == null || userFpDir.trim().length() == 0) {
+			final File fixedConfigDir = MindMapDataRootResolver.getApplicationConfigDirectory();
+			if (fixedConfigDir != null) {
+				userFpDir = fixedConfigDir.getAbsolutePath();
 			}
+			else {
+				userFpDir = getLegacyDefaultApplicationUserDirectory();
+				if (userFpDir.endsWith("freeplane")) {
+					userFpDir += CURRENT_VERSION_DIR;
+				}
+			}
+			System.setProperty(PROPERTY_FREEPLANE_USERDIR, userFpDir);
 		}
 		return userFpDir;
 	}
 
-	/** the default FP directory *excluding* the version directory. */
-    public static String getDefaultApplicationUserDirectory() {
+	/** Default profile directory (excludes Freeplane version suffix). Uses fixed {@code _data} when configured. */
+	public static String getDefaultApplicationUserDirectory() {
+		final File fixedConfigDir = MindMapDataRootResolver.getApplicationConfigDirectory();
+		if (fixedConfigDir != null) {
+			return fixedConfigDir.getAbsolutePath();
+		}
+		return getLegacyDefaultApplicationUserDirectory();
+	}
+
+	/** Legacy Freeplane/Docear profile under {@code user.home/.docear} — not used when fixed library is configured. */
+    private static String getLegacyDefaultApplicationUserDirectory() {
     	Properties freeplaneProperties = new Properties();
 		try {
 			freeplaneProperties.load(Compat.class.getClassLoader().getResourceAsStream(ResourceController.FREEPLANE_PROPERTIES));
