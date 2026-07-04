@@ -3,6 +3,7 @@ package org.freeplane.plugin.workspace.mindmapmode;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
+import java.awt.FontMetrics;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.dnd.DropTarget;
@@ -27,6 +28,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.JTabbedPane;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.PopupMenuEvent;
@@ -354,6 +356,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
+		sideTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 		for (final String tabId : sideTabOrder) {
 			final JComponent component = createSideTabPlaceholder(tabId);
 			sideTabComponents.put(tabId, component);
@@ -389,6 +392,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				boolean expanded = true;
 				try {
 					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "250"));
+					width = Math.max(width, computeMinimumSideTabsWidth());
 					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
 				catch (Exception e) {
@@ -415,6 +419,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(LinkTypeFileNode.class, new LinkTypeFileIconHandler());
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(DefaultFileNode.class, new DefaultFileNodeIconHandler());
 		getView().refreshView();
+		applySideTabsWidth();
 		scheduleScanCachePreload();
 		scheduleSideTabBackgroundPreload();
 	}
@@ -666,6 +671,26 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		return TAB_WORKSPACE;
 	}
 
+	private int computeMinimumSideTabsWidth() {
+		if (sideTabs == null || sideTabs.getTabCount() == 0) {
+			return 360;
+		}
+		final FontMetrics fm = sideTabs.getFontMetrics(sideTabs.getFont());
+		int total = 12;
+		for (int i = 0; i < sideTabs.getTabCount(); i++) {
+			total += fm.stringWidth(sideTabs.getTitleAt(i)) + 28;
+		}
+		return Math.max(360, total);
+	}
+
+	private void applySideTabsWidth() {
+		if (sideTabs == null || viewUpdater == null) {
+			return;
+		}
+		viewUpdater.run();
+		sideTabs.revalidate();
+	}
+
 	private void rebuildSideTabs(final String selectedTabId) {
 		sideTabs.removeAll();
 		for (final String tabId : sideTabOrder) {
@@ -683,6 +708,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else if (sideTabs.getTabCount() > 0) {
 			sideTabs.setSelectedIndex(0);
 		}
+		applySideTabsWidth();
 		ensureSideTabLoaded(sideTabs.getSelectedIndex());
 	}
 
@@ -926,7 +952,26 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			backupAndRemoveProjectSettings(project);
 			getProjectLoader().loadProject(project);
 		}
-		ensureMyFilesPopulatedFromDisk(project);
+	}
+
+	private void refreshFixedLibraryWorkspaceView() {
+		final File fixedRoot = MindMapDataRootResolver.getFixedDataRoot();
+		if (fixedRoot == null) {
+			return;
+		}
+		for (final AWorkspaceProject project : getModel().getProjects()) {
+			final File home = URIUtils.getAbsoluteFile(project.getProjectHome());
+			if (home == null || !home.equals(fixedRoot)) {
+				continue;
+			}
+			try {
+				getProjectLoader().loadProject(project);
+			}
+			catch (final IOException e) {
+				LogUtils.warn("Could not refresh fixed library workspace: " + e.getMessage());
+			}
+		}
+		getView().refreshView();
 	}
 
 	private void backupAndRemoveProjectSettings(final AWorkspaceProject project) {
@@ -939,44 +984,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (!settingsFile.renameTo(backup)) {
 			settingsFile.delete();
 		}
-	}
-
-	private void ensureMyFilesPopulatedFromDisk(final AWorkspaceProject project) {
-		if (project == null || project.getModel() == null || project.getModel().getRoot() == null) {
-			return;
-		}
-		final ProjectRootNode root = (ProjectRootNode) project.getModel().getRoot();
-		FolderTypeMyFilesNode myFiles = findMyFilesNode(root);
-		if (myFiles == null) {
-			root.initiateMyFile(project);
-			myFiles = findMyFilesNode(root);
-		}
-		if (myFiles == null) {
-			return;
-		}
-		if (myFiles.getModelChildCount() > 0) {
-			return;
-		}
-		final File dataRoot = URIUtils.getAbsoluteFile(project.getProjectHome());
-		if (dataRoot == null) {
-			return;
-		}
-		final File[] entries = dataRoot.listFiles();
-		if (entries == null || entries.length == 0) {
-			return;
-		}
-		LogUtils.info("My files empty in project settings, rescanning: " + dataRoot.getAbsolutePath());
-		myFiles.refresh();
-	}
-
-	private FolderTypeMyFilesNode findMyFilesNode(final ProjectRootNode root) {
-		for (int i = 0; i < root.getModelChildCount(); i++) {
-			final AWorkspaceTreeNode child = root.getModelChildAt(i);
-			if (child instanceof FolderTypeMyFilesNode) {
-				return (FolderTypeMyFilesNode) child;
-			}
-		}
-		return null;
 	}
 
 	@Override

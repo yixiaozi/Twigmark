@@ -16,6 +16,7 @@ import java.util.Map;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOExceptionWithCause;
 import org.docear.plugin.core.io.ReplacingInputStream;
+import org.docear.plugin.core.workspace.FixedLibraryWorkspaceTree;
 import org.docear.plugin.core.workspace.actions.DocearProjectSettings;
 import org.docear.plugin.core.workspace.creator.FolderTypeLibraryCreator;
 import org.docear.plugin.core.workspace.creator.FolderTypeLiteratureRepositoryCreator;
@@ -32,6 +33,7 @@ import org.docear.plugin.core.workspace.node.LinkTypeLiteratureAnnotationsNode;
 import org.docear.plugin.core.workspace.node.LiteratureRepositoryPathNode;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.link.LinkController;
 import org.freeplane.plugin.workspace.URIUtils;
@@ -126,6 +128,11 @@ public class DocearProjectLoader extends ProjectLoader {
 	public synchronized LOAD_RETURN_TYPE loadProject(AWorkspaceProject project) throws IOException {
 		long time = System.currentTimeMillis();
 		try {
+			if (FixedLibraryWorkspaceTree.isFixedLibrary(project)) {
+				FixedLibraryWorkspaceTree.syncProjectFromDisk(project);
+				project.setLoaded();
+				return LOAD_RETURN_TYPE.EXISTING_PROJECT;
+			}
 			File projectSettings = new File(URIUtils.getAbsoluteFile(project.getProjectDataPath()),"settings.xml");
 			if(projectSettings.exists() && projectSettings.length() > 0) {
 				getDefaultResultProcessor().setProject(project);

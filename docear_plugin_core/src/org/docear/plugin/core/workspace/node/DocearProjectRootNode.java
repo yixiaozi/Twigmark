@@ -35,27 +35,37 @@ public class DocearProjectRootNode extends ProjectRootNode implements IMyFilesTr
 	public int getDisplayChildCount() {
 		final FolderTypeMyFilesNode myFiles = findMyFilesNode();
 		if (myFiles != null) {
-			return myFiles.getChildCount();
+			return myFiles.getModelChildCount();
 		}
-		return getChildCount();
+		return getModelChildCount();
 	}
 
 	@Override
 	public AWorkspaceTreeNode getDisplayChildAt(int childIndex) {
 		final FolderTypeMyFilesNode myFiles = findMyFilesNode();
 		if (myFiles != null) {
-			return myFiles.getChildAt(childIndex);
+			return myFiles.getModelChildAt(childIndex);
 		}
-		return getChildAt(childIndex);
+		return getModelChildAt(childIndex);
 	}
 
 	@Override
 	public int getDisplayChildIndex(TreeNode node) {
 		final FolderTypeMyFilesNode myFiles = findMyFilesNode();
-		if (myFiles != null) {
-			return myFiles.getIndex(node);
+		if (myFiles != null && node instanceof AWorkspaceTreeNode) {
+			for (int i = 0; i < myFiles.getModelChildCount(); i++) {
+				if (myFiles.getModelChildAt(i) == node) {
+					return i;
+				}
+			}
+			return -1;
 		}
-		return getIndex(node);
+		for (int i = 0; i < getModelChildCount(); i++) {
+			if (getModelChildAt(i) == node) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	@Override

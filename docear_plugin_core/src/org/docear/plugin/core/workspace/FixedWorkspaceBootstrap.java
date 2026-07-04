@@ -9,7 +9,6 @@ import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
-import org.freeplane.plugin.workspace.io.IProjectSettingsIOHandler.LOAD_RETURN_TYPE;
 import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
@@ -52,25 +51,24 @@ public final class FixedWorkspaceBootstrap {
 		try {
 			final AWorkspaceProject existing = findProjectByHome(dataRoot);
 			if (existing != null) {
+				FixedLibraryWorkspaceTree.syncProjectFromDisk(existing);
+				existing.setLoaded();
 				return existing;
 			}
 			final String projectId = MindMapDataRootResolver.resolveProjectIdForDataRoot(dataRoot);
 			final AWorkspaceProject project = AWorkspaceProject.create(projectId, dataRoot.toURI());
 			WorkspaceController.getCurrentModel().addProject(project);
-			final LOAD_RETURN_TYPE loadResult = WorkspaceController.getCurrentModeExtension().getProjectLoader()
-			        .loadProject(project);
-			if (loadResult == LOAD_RETURN_TYPE.NEW_PROJECT) {
-				project.getModel().getRoot().setName(dataRoot.getName());
-				project.getModel().nodeChanged(project.getModel().getRoot(), null, dataRoot.getName());
-			}
+			FixedLibraryWorkspaceTree.syncProjectFromDisk(project);
+			project.setLoaded();
 			return project;
 		}
-		catch (final IOException e) {
-			DocearLogger.error(e);
-			return null;
-		}
 		catch (final Exception e) {
-			LogUtils.severe(e);
+			if (e instanceof IOException) {
+				DocearLogger.error((IOException) e);
+			}
+			else {
+				LogUtils.severe(e);
+			}
 			return null;
 		}
 	}
