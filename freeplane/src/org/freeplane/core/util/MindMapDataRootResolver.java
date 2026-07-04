@@ -26,8 +26,7 @@ import org.freeplane.features.url.UrlManager;
 
 /**
  * Resolves directories used for cross-map scan/search (reminders, todos, global search, etc.).
- * Priority: user property {@link #SCAN_ROOT_PROPERTY} → workspace project homes →
- * selected workspace project → current map project → current map folder → application data directory.
+ * Fixed to {@link #FIXED_DATA_ROOT_PATH} for this Docear fork.
  */
 public final class MindMapDataRootResolver {
 
@@ -51,18 +50,10 @@ public final class MindMapDataRootResolver {
 	/** Project settings directory: {@code {dataRoot}/_data/{projectId}}. */
 	public static File getProjectDataDirectory() {
 		final File dataRoot = getFixedDataRoot();
-		if (dataRoot != null) {
-			final String projectId = resolveProjectIdForDataRoot(dataRoot);
-			return new File(new File(dataRoot, "_data"), projectId);
+		if (dataRoot == null) {
+			return null;
 		}
-		final File selectedProject = getSelectedProjectRoot();
-		if (selectedProject != null) {
-			final File projectData = new File(new File(selectedProject, "_data"), selectedProject.getName());
-			if (projectData.isDirectory()) {
-				return projectData;
-			}
-		}
-		return getPrimaryScanRoot();
+		return new File(new File(dataRoot, "_data"), resolveProjectIdForDataRoot(dataRoot));
 	}
 
 	/** Finds project id from dataRoot/_data/settings.xml; falls back to FIXED_PROJECT_ID. */
@@ -131,56 +122,15 @@ public final class MindMapDataRootResolver {
 	}
 
 	public static File getPrimaryScanRoot() {
-		final File fixed = getFixedDataRoot();
-		if (fixed != null) {
-			return fixed;
-		}
-		final File configured = getConfiguredRoot();
-		if (configured != null) {
-			return configured;
-		}
-		final File[] projectRoots = getAllProjectRoots();
-		if (projectRoots.length > 0 && projectRoots[0] != null) {
-			return projectRoots[0];
-		}
-		final File selectedProject = getSelectedProjectRoot();
-		if (selectedProject != null) {
-			return selectedProject;
-		}
-		final File mapProject = getCurrentMapProjectRoot();
-		if (mapProject != null) {
-			return mapProject;
-		}
-		final File mapDir = getCurrentMapFileDirectory();
-		if (mapDir != null) {
-			return mapDir;
-		}
-		final File openMapDir = getFirstOpenMapDirectory();
-		if (openMapDir != null) {
-			return openMapDir;
-		}
-		return getDefaultApplicationRoot();
+		return getFixedDataRoot();
 	}
 
 	public static File[] getScanRoots() {
-		final Set roots = new LinkedHashSet();
-		addCanonicalRoot(roots, getFixedDataRoot());
-		final File configured = getConfiguredRoot();
-		if (configured != null) {
-			addCanonicalRoot(roots, configured);
+		final File fixed = getFixedDataRoot();
+		if (fixed != null) {
+			return new File[] { fixed };
 		}
-		final File[] projectRoots = getAllProjectRoots();
-		for (int i = 0; i < projectRoots.length; i++) {
-			addCanonicalRoot(roots, projectRoots[i]);
-		}
-		if (projectRoots.length == 0) {
-			addOpenMapDirectories(roots);
-		}
-		if (roots.isEmpty()) {
-			final File primary = getPrimaryScanRoot();
-			addCanonicalRoot(roots, primary);
-		}
-		return normalizeScanRoots(roots);
+		return new File[0];
 	}
 
 	public static String getRelativePathWithinScanRoots(final File directory) {

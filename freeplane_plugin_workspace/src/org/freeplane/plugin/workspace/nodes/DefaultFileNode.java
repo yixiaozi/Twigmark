@@ -29,6 +29,7 @@ import org.freeplane.plugin.workspace.dnd.IWorkspaceTransferableCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
 import org.freeplane.plugin.workspace.event.WorkspaceActionEvent;
+import org.freeplane.plugin.workspace.handler.WorkspaceDocumentOpenRegistry;
 import org.freeplane.plugin.workspace.io.IFileSystemRepresentation;
 import org.freeplane.plugin.workspace.io.annotation.ExportAsAttribute;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
@@ -162,6 +163,9 @@ public class DefaultFileNode extends AWorkspaceTreeNode implements IWorkspaceNod
 					}
 				}
 				else {
+					if (WorkspaceDocumentOpenRegistry.tryOpen(getFile())) {
+						return;
+					}
 					try {
 						Controller.getCurrentController().getViewController().openDocument(Compat.fileToUrl(getFile()));
 					}

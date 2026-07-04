@@ -14,7 +14,6 @@
   <manifest></manifest>
   <icon>docear.ico</icon>
   <jre>
-    <path></path>
     <minVersion>1.6.0</minVersion>
     <maxVersion></maxVersion>
     <jdkPreference>preferJre</jdkPreference>

@@ -147,6 +147,7 @@ public class CoreConfiguration extends ALanguageController {
 		Controller.getCurrentController().addExtension(IControllerExecuteExtension.class, getDocearCommandExecutor());
 		loadAndStoreVersion(controller);
 		adjustProperties(controller);
+		DocearController.getController().markApplicationInitialized();
 		
 		AWorkspaceProject.setCurrentProjectCreator(new DocearWorspaceProjectCreator());
 		if(DocearController.getPropertiesController().getProperty("ApplicationName", "Docear").equals("Docear")) {

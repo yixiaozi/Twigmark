@@ -215,7 +215,10 @@ public class DocearUserController extends ADocearServiceFeature {
 					}
 					adjustInfoBarConnectionState((DocearUser) event.getUser());
 					ServiceController.getConnectionController().setDefaultHeader("accessToken", ((DocearUser) event.getUser()).getAccessToken());
-					DocearController.getController().getEventQueue().invoke(new DocearEvent(this, new LoadWorkspaceEvent()));
+					// Local user uses fixed data root; workspace loads in MModeWorkspaceController.start().
+					if (!(event.getUser() instanceof DocearLocalUser)) {
+						DocearController.getController().getEventQueue().invoke(new DocearEvent(this, new LoadWorkspaceEvent()));
+					}
 				}
 				else {
 					getActiveUser().activate();

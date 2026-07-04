@@ -36,3 +36,4 @@ docear_framework/eclipse/docear-osgi (1.7).launch
 desktop.ini
 folderhighlight-*.ico
 **/.project
+/install

@@ -65,6 +65,10 @@ public class IOController {
 		}
 		else {
 			List<IWorkspaceNodeActionListener> listeners = levelOne.get(eventType);
+			if (listeners == null) {
+				listeners = new Vector<IWorkspaceNodeActionListener>();
+				levelOne.put(eventType, listeners);
+			}
 			if(!listeners.contains(listener)) {
 				listeners.add(listener);
 			}

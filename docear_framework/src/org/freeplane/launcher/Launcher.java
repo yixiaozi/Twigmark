@@ -38,7 +38,6 @@ public class Launcher {
 		new Launcher().launch(args);
 	}
 
-
 	private void launch(String[] args) {
 		setDefines();
 		setArgProperties(args);

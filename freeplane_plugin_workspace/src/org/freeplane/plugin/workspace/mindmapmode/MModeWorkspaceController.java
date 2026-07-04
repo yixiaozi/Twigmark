@@ -171,8 +171,31 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		setupModel(modeController);
 		setupView(modeController);
 		setupPinnedNodesTab(modeController);
+		scheduleLoadAfterFrameVisible();
 	}
-	
+
+	private void scheduleLoadAfterFrameVisible() {
+		final Runnable waitForFrame = new Runnable() {
+			private int attempts;
+
+			public void run() {
+				final java.awt.Frame frame = org.freeplane.core.ui.components.UITools.getFrame();
+				if (frame != null && frame.isVisible()) {
+					load();
+					return;
+				}
+				if (++attempts < 1200) {
+					Controller.getCurrentController().getViewController().invokeLater(this);
+				}
+				else {
+					LogUtils.warn("Workspace load: main frame not visible, loading anyway");
+					load();
+				}
+			}
+		};
+		Controller.getCurrentController().getViewController().invokeLater(waitForFrame);
+	}
+
 	private void setupController(ModeController modeController) {
 		modeController.removeExtension(UrlManager.class);
 		UrlManager.install(new MModeWorkspaceUrlManager());
@@ -211,9 +234,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				JMenu projectMenu = new JMenu(TextUtils.getText("menu.project.entry.label"));
 				projectMenu.setMnemonic('o');				
 				builder.addMenuItem("/menu_bar/format", projectMenu, MENU_PROJECT_KEY, MenuBuilder.AFTER);
-				
-				builder.addAction(MENU_PROJECT_KEY, WorkspaceController.getAction(WorkspaceNewProjectAction.KEY), MenuBuilder.AS_CHILD);
-				builder.addAction(MENU_PROJECT_KEY, WorkspaceController.getAction(WorkspaceImportProjectAction.KEY), MenuBuilder.AS_CHILD);
 				
 				builder.addSeparator(MENU_PROJECT_KEY, MenuBuilder.AS_CHILD);
 				final String MENU_PROJECT_ADD_KEY = builder.getMenuKey(MENU_PROJECT_KEY, "new");				
@@ -294,7 +314,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 //	}
 	
 	private void setupModel(ModeController modeController) {
-		load();
 		FavoritesAndTagsStore.getInstance().reloadAllProjects();
 		NodePinsIndex.getInstance().rescan();
 	}
@@ -845,12 +864,20 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 
 	@Override
 	public void load() {
-		clear();
 		if(this.viewUpdater != null) {
 			this.viewUpdater.run();
 		}
+		getView().setPaintingEnabled(false);
+		final AWorkspaceProject[] projects = getModel().getProjects().toArray(new AWorkspaceProject[0]);
+		for (final AWorkspaceProject project : projects) {
+			getModel().removeProject(project);
+		}
 		loadFixedDataRootProject();
-		getWorkspaceView().repaint();
+		getView().setPaintingEnabled(true);
+		getView().refreshView();
+		if (getModel().getRoot() != null) {
+			getView().expandPath(getModel().getRoot().getTreePath());
+		}
 	}
 
 	private void loadFixedDataRootProject() {
@@ -861,7 +888,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return;
 		}
 		try {
-			SwingUtilities.invokeAndWait(new Runnable() {
+			final Runnable loadTask = new Runnable() {
 				public void run() {
 					AWorkspaceProject project = null;
 					try {
@@ -877,7 +904,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 						}
 					}
 				}
-			});
+			};
+			if (SwingUtilities.isEventDispatchThread()) {
+				loadTask.run();
+			}
+			else {
+				SwingUtilities.invokeAndWait(loadTask);
+			}
 		}
 		catch (Exception e) {
 			LogUtils.severe(e);
@@ -912,19 +945,16 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (project == null || project.getModel() == null || project.getModel().getRoot() == null) {
 			return;
 		}
-		FolderTypeMyFilesNode myFiles = null;
 		final ProjectRootNode root = (ProjectRootNode) project.getModel().getRoot();
-		for (int i = 0; i < root.getChildCount(); i++) {
-			final AWorkspaceTreeNode child = root.getChildAt(i);
-			if (child instanceof FolderTypeMyFilesNode) {
-				myFiles = (FolderTypeMyFilesNode) child;
-				break;
-			}
+		FolderTypeMyFilesNode myFiles = findMyFilesNode(root);
+		if (myFiles == null) {
+			root.initiateMyFile(project);
+			myFiles = findMyFilesNode(root);
 		}
 		if (myFiles == null) {
 			return;
 		}
-		if (myFiles.getChildCount() > 0) {
+		if (myFiles.getModelChildCount() > 0) {
 			return;
 		}
 		final File dataRoot = URIUtils.getAbsoluteFile(project.getProjectHome());
@@ -937,6 +967,16 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		LogUtils.info("My files empty in project settings, rescanning: " + dataRoot.getAbsolutePath());
 		myFiles.refresh();
+	}
+
+	private FolderTypeMyFilesNode findMyFilesNode(final ProjectRootNode root) {
+		for (int i = 0; i < root.getModelChildCount(); i++) {
+			final AWorkspaceTreeNode child = root.getModelChildAt(i);
+			if (child instanceof FolderTypeMyFilesNode) {
+				return (FolderTypeMyFilesNode) child;
+			}
+		}
+		return null;
 	}
 
 	@Override

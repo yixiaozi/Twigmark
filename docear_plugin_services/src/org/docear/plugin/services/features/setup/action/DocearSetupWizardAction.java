@@ -56,36 +56,9 @@ public class DocearSetupWizardAction extends AFreeplaneAction {
 	}
 	
 	public static void startWizard(boolean exitOnCancel) {
-		Wizard wiz = new Wizard(UITools.getFrame());
-		initWizard(wiz);
-		if(!Compat.isWindowsOS()) {
-			UITools.backOtherWindows();
-		}		
-		int ret = wiz.show();
-		if(ret == Wizard.OK_OPTION) {
-			if(wiz.getSession().get(DocearLocalUser.class) != null) {
-				DocearUserController.LOCAL_USER.activate();
-			}
-			else {
-				wiz.getSession().get(DocearUser.class).activate();
-			}
-			DocearWorkspaceProject project = wiz.getSession().get(DocearWorkspaceProject.class);
-			if(project != null) {
-				if(wiz.getSession().get(START_OPTION.class) == START_OPTION.REGISTRATION || wiz.getSession().get(DATA_OPTION.class) == DATA_OPTION.CREATE) {
-					DocearNewProjectAction.createProject(project);
-				}
-				else if(wiz.getSession().get(DATA_OPTION.class) == DATA_OPTION.IMPORT) {
-					DocearImportProjectAction.importProject(project);
-				}
-			}
-			WorkspaceController.save();
-			DocearController.getPropertiesController().saveProperties();
-		}
-		else {
-			if(exitOnCancel) {
-				System.exit(0);
-			}
-		}
+		DocearController.getController().markApplicationInitialized();
+		DocearUserController.LOCAL_USER.activate();
+		org.docear.plugin.core.workspace.FixedWorkspaceBootstrap.getOrLoadFixedProject();
 	}
 
 	private static void initWizard(final Wizard wizard) {

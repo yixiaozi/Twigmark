@@ -33,6 +33,7 @@ import org.freeplane.plugin.workspace.dnd.IWorkspaceTransferableCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
 import org.freeplane.plugin.workspace.event.WorkspaceActionEvent;
+import org.freeplane.plugin.workspace.handler.WorkspaceDocumentOpenRegistry;
 import org.freeplane.plugin.workspace.io.annotation.ExportAsAttribute;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 import org.freeplane.plugin.workspace.model.IMutableLinkNode;
@@ -125,6 +126,9 @@ public class LinkTypeFileNode extends ALinkNode implements IWorkspaceNodeActionL
 					}
 				}
 				else {
+					if (WorkspaceDocumentOpenRegistry.tryOpen(file)) {
+						return;
+					}
 					try {
 						Controller.getCurrentController().getViewController().openDocument(Compat.fileToUrl(file));
 					}

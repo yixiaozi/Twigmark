@@ -127,14 +127,22 @@ public class DocearProjectLoader extends ProjectLoader {
 		long time = System.currentTimeMillis();
 		try {
 			File projectSettings = new File(URIUtils.getAbsoluteFile(project.getProjectDataPath()),"settings.xml");
-			if(projectSettings.exists()) {
+			if(projectSettings.exists() && projectSettings.length() > 0) {
 				getDefaultResultProcessor().setProject(project);
 				load(projectSettings.toURI());
+				if (project.getModel().getRoot() == null) {
+					throw new IOException("Project settings did not produce a workspace root");
+				}
 				removeDefaultProjectNodes((DocearWorkspaceProject) project);
 				project.setLoaded();
 				return LOAD_RETURN_TYPE.EXISTING_PROJECT;
 			}
 			else {
+				if (projectSettings.exists()) {
+					LogUtils.warn("Project settings empty, rebuilding workspace tree from disk: "
+					        + projectSettings.getAbsolutePath());
+					backupDamagedProjectSettings(projectSettings);
+				}
 				createDefaultProject((DocearWorkspaceProject)project);
 				((ProjectRootNode)project.getModel().getRoot()).setVersion(DocearWorkspaceProject.CURRENT_PROJECT_VERSION.getVersionString());
 				removeDefaultProjectNodes((DocearWorkspaceProject) project);
@@ -150,6 +158,17 @@ public class DocearProjectLoader extends ProjectLoader {
 		}
 	}
 
+	private void backupDamagedProjectSettings(final File settingsFile) {
+		if (settingsFile == null || !settingsFile.exists()) {
+			return;
+		}
+		final File backup = new File(settingsFile.getParentFile(),
+		    "settings.xml.empty." + System.currentTimeMillis());
+		if (!settingsFile.renameTo(backup)) {
+			settingsFile.delete();
+		}
+	}
+
 	private void removeDefaultProjectNodes(DocearWorkspaceProject project) {
 		if (project == null || project.getModel() == null || project.getModel().getRoot() == null) {
 			return;
@@ -157,8 +176,8 @@ public class DocearProjectLoader extends ProjectLoader {
 		ProjectRootNode root = (ProjectRootNode) project.getModel().getRoot();
 		List<AWorkspaceTreeNode> toRemove = new ArrayList<AWorkspaceTreeNode>();
 		String draftsLabel = TextUtils.getText("org.freeplane.plugin.workspace.nodes.folderlinknode.drafts.label", "");
-		for (int i = 0; i < root.getChildCount(); i++) {
-			AWorkspaceTreeNode child = root.getChildAt(i);
+		for (int i = 0; i < root.getModelChildCount(); i++) {
+			AWorkspaceTreeNode child = root.getModelChildAt(i);
 			if (child instanceof FolderTypeLibraryNode
 					|| child instanceof FolderTypeLiteratureRepositoryNode) {
 				toRemove.add(child);
@@ -182,9 +201,9 @@ public class DocearProjectLoader extends ProjectLoader {
 
 	private void ensureMyFilesNode(DocearWorkspaceProject project, ProjectRootNode root) {
 		List<FolderTypeMyFilesNode> myFilesNodes = new ArrayList<FolderTypeMyFilesNode>();
-		for (int i = 0; i < root.getChildCount(); i++) {
-			if (root.getChildAt(i) instanceof FolderTypeMyFilesNode) {
-				FolderTypeMyFilesNode node = (FolderTypeMyFilesNode) root.getChildAt(i);
+		for (int i = 0; i < root.getModelChildCount(); i++) {
+			if (root.getModelChildAt(i) instanceof FolderTypeMyFilesNode) {
+				FolderTypeMyFilesNode node = (FolderTypeMyFilesNode) root.getModelChildAt(i);
 				node.setName(MY_FILES_LABEL);
 				myFilesNodes.add(node);
 			}
@@ -204,9 +223,9 @@ public class DocearProjectLoader extends ProjectLoader {
 		}
 		try {
 			root.initiateMyFile(project);
-			for (int i = 0; i < root.getChildCount(); i++) {
-				if (root.getChildAt(i) instanceof FolderTypeMyFilesNode) {
-					root.getChildAt(i).setName(MY_FILES_LABEL);
+			for (int i = 0; i < root.getModelChildCount(); i++) {
+				if (root.getModelChildAt(i) instanceof FolderTypeMyFilesNode) {
+					root.getModelChildAt(i).setName(MY_FILES_LABEL);
 					break;
 				}
 			}
@@ -219,8 +238,8 @@ public class DocearProjectLoader extends ProjectLoader {
 	private void sortProjectRootNodes(DocearWorkspaceProject project, ProjectRootNode root) {
 		FolderTypeMyFilesNode myFilesNode = null;
 		List<AWorkspaceTreeNode> others = new ArrayList<AWorkspaceTreeNode>();
-		for (int i = 0; i < root.getChildCount(); i++) {
-			AWorkspaceTreeNode child = root.getChildAt(i);
+		for (int i = 0; i < root.getModelChildCount(); i++) {
+			AWorkspaceTreeNode child = root.getModelChildAt(i);
 			if (child instanceof FolderTypeMyFilesNode) {
 				if (myFilesNode == null) {
 					myFilesNode = (FolderTypeMyFilesNode) child;

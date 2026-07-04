@@ -126,14 +126,18 @@ public class DocearController implements IDocearEventListener {
 		return true;
 	}
 	
-	public boolean isLicenseDialogNecessary() {		
-		int storedBuildNumber = Integer.parseInt(DocearController.getPropertiesController().getProperty(DOCEAR_VERSION_NUMBER, "0"));
-		if (storedBuildNumber == 0 || hasOutdatedConfigFiles()) {
-			DocearController.getPropertiesController().setProperty(DOCEAR_VERSION_NUMBER, ""+this.applicationBuildNumber);
-			return true;
+	public boolean isLicenseDialogNecessary() {
+		return false;
+	}
+
+	public void markApplicationInitialized() {
+		DocearController.getPropertiesController().setProperty(DOCEAR_FIRST_RUN_PROPERTY, true);
+		DocearController.getPropertiesController().setProperty(DOCEAR_VERSION_NUMBER, "" + applicationBuildNumber);
+		try {
+			DocearController.getPropertiesController().saveProperties();
 		}
-		else {
-			return false;
+		catch (final Exception e) {
+			DocearLogger.warn(e);
 		}
 	}
 	

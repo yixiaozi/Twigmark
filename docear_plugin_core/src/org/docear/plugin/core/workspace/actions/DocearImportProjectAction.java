@@ -30,52 +30,11 @@ public class DocearImportProjectAction extends AWorkspaceAction {
 	
 	public DocearImportProjectAction() {
 		super(KEY);
+		setEnabled(false);
 	}
 
 	public void actionPerformed(ActionEvent event) {
-		final Wizard wiz = new Wizard(UITools.getFrame());
-		initWizard(wiz);
-		
-		new Thread(new Runnable() {
-			@Override
-			public void run() {
-				int ret = wiz.show();
-				if(ret == Wizard.OK_OPTION) {
-					AWorkspaceProject project = wiz.getSession().get(DocearWorkspaceProject.class);
-					importProject(project);
-				}
-			}
-		}).start();
-	}
-	
-	private void initWizard(Wizard wizard) {
-		//new project page
-		WizardPageDescriptor desc = new WizardPageDescriptor("page.project.import", new ImportProjectPagePanel()) {
-			public WizardPageDescriptor getNextPageDescriptor(WizardSession context) {
-				AWorkspaceProject project = ((ImportProjectPagePanel)getPage()).getProject();
-				context.set(DocearWorkspaceProject.class, project);
-				return Wizard.FINISH_PAGE;
-			}
-
-			@Override
-			public void aboutToDisplayPage(WizardSession context) {
-				context.getNextButton().setText(TextUtils.getText("docear.setup.wizard.controls.finish"));
-				super.aboutToDisplayPage(context);
-			}
-			
-			@Override
-			public void displayingPage(WizardSession context) {
-				super.displayingPage(context);
-				context.setWizardTitle(TextUtils.getText("workspace.action.node.import.project.dialog.title"));
-				context.getBackButton().setVisible(false);
-				context.getNextButton().setText(TextUtils.getText("docear.setup.wizard.controls.finish"));
-			}
-			
-			
-		};
-		desc.getPage().setPreferredSize(new Dimension(640,480));
-		wizard.registerWizardPanel(desc);
-		wizard.setStartPage(desc.getIdentifier());
+		// Project import disabled: fixed data root is used automatically.
 	}
 
 	public static void importProject(final AWorkspaceProject project) {

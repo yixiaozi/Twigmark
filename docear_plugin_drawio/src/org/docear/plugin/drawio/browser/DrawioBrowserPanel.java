@@ -1,0 +1,329 @@
+package org.docear.plugin.drawio.browser;
+
+import java.awt.BorderLayout;
+import java.awt.Component;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
+
+import javax.swing.JButton;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+
+import org.docear.plugin.drawio.DrawioEmbedServer;
+import org.docear.plugin.drawio.DrawioJson;
+import org.docear.plugin.drawio.ui.DrawioEditorListener;
+import org.freeplane.core.util.LogUtils;
+
+/**
+ * Embeds Draw.io via JavaFX WebView (loaded reflectively when JavaFX is available).
+ */
+public final class DrawioBrowserPanel extends JPanel {
+
+	private static final long serialVersionUID = 1L;
+	private static volatile boolean javafxChecked;
+	private static volatile boolean javafxAvailable;
+
+	private final DrawioEditorListener listener;
+	private final JPanel browserHost = new JPanel(new BorderLayout());
+	private Object webEngine;
+	private Object jfxPanel;
+	private boolean loaded;
+	private String pendingLoadMessage;
+
+	public DrawioBrowserPanel(final DrawioEditorListener listener) {
+		this.listener = listener;
+		setLayout(new BorderLayout());
+		add(browserHost, BorderLayout.CENTER);
+	}
+
+	public void ensureLoaded() {
+		if (loaded) {
+			return;
+		}
+		if (!isJavaFxAvailable()) {
+			showJavaFxMissingHelp();
+			loaded = true;
+			return;
+		}
+		if (SwingUtilities.isEventDispatchThread()) {
+			initBrowserAsync();
+		}
+		else {
+			SwingUtilities.invokeLater(new Runnable() {
+				public void run() {
+					initBrowserAsync();
+				}
+			});
+		}
+	}
+
+	public void loadDiagram(final String xml, final String title) {
+		final String message = DrawioJson.buildLoadMessage(xml, title);
+		if (webEngine == null) {
+			pendingLoadMessage = message;
+			return;
+		}
+		postToEditor(message);
+	}
+
+	public void disposeBrowser() {
+		webEngine = null;
+		jfxPanel = null;
+		browserHost.removeAll();
+	}
+
+	private void initBrowserAsync() {
+		if (loaded) {
+			return;
+		}
+		try {
+			final Class<?> jfxPanelClass = Class.forName("javafx.embed.swing.JFXPanel");
+			jfxPanel = jfxPanelClass.newInstance();
+			browserHost.removeAll();
+			browserHost.add((Component) jfxPanel, BorderLayout.CENTER);
+			revalidate();
+			repaint();
+			loaded = true;
+
+			runOnFxThread(new Runnable() {
+				public void run() {
+					try {
+						disableImplicitJavaFxExit();
+						createWebView();
+					}
+					catch (Exception e) {
+						LogUtils.warn("Draw.io WebView init failed", e);
+						final String msg = e.getMessage();
+						SwingUtilities.invokeLater(new Runnable() {
+							public void run() {
+								showError("无法初始化 Draw.io 浏览器：\n" + msg);
+							}
+						});
+					}
+				}
+			});
+		}
+		catch (Exception e) {
+			LogUtils.warn("Draw.io JavaFX init failed", e);
+			showJavaFxMissingHelp();
+			loaded = true;
+		}
+	}
+
+	private void createWebView() throws Exception {
+		final Class<?> webViewClass = Class.forName("javafx.scene.web.WebView");
+		final Object webView = webViewClass.newInstance();
+		webEngine = invokeAccessible(webView, "getEngine");
+
+		final Object bridge = new DrawioJsBridge(listener, this);
+
+		invokeAccessible(webEngine, "setJavaScriptEnabled", new Class[] { boolean.class }, Boolean.TRUE);
+
+		final Method loadMethod = accessibleMethod(webEngine.getClass(), "load", String.class);
+		loadMethod.invoke(webEngine, DrawioEmbedServer.getShellUrl());
+
+		final Class<?> sceneClass = Class.forName("javafx.scene.Scene");
+		final Constructor<?> sceneCtor = sceneClass.getConstructor(Class.forName("javafx.scene.Parent"));
+		final Object scene = sceneCtor.newInstance(webView);
+
+		final Method setScene = accessibleMethod(jfxPanel.getClass(), "setScene", sceneClass);
+		setScene.invoke(jfxPanel, scene);
+
+		scheduleBridgeInstallAttempt(bridge, 0);
+	}
+
+	private void scheduleBridgeInstallAttempt(final Object bridge, final int attempt) throws Exception {
+		if (attempt >= 100) {
+			LogUtils.warn("Draw.io bridge install timed out");
+			return;
+		}
+		runOnFxThread(new Runnable() {
+			public void run() {
+				try {
+					if (tryInstallBridge(bridge)) {
+						return;
+					}
+				}
+				catch (Exception e) {
+					LogUtils.warn("Draw.io bridge install attempt failed", e);
+				}
+				final javax.swing.Timer timer = new javax.swing.Timer(100, new ActionListener() {
+					public void actionPerformed(final ActionEvent e) {
+						try {
+							scheduleBridgeInstallAttempt(bridge, attempt + 1);
+						}
+						catch (Exception ex) {
+							LogUtils.warn("Draw.io bridge install scheduling failed", ex);
+						}
+					}
+				});
+				timer.setRepeats(false);
+				timer.start();
+			}
+		});
+	}
+
+	private boolean tryInstallBridge(final Object bridge) throws Exception {
+		final Method executeScript = accessibleMethod(webEngine.getClass(), "executeScript", String.class);
+		final Object readyState = executeScript.invoke(webEngine, "document.readyState");
+		if (readyState == null) {
+			return false;
+		}
+		final String state = readyState.toString();
+		if (!"complete".equals(state) && !"interactive".equals(state)) {
+			return false;
+		}
+		installBridge(bridge);
+		return true;
+	}
+
+	private static Method accessibleMethod(final Class<?> clazz, final String name, final Class<?>... parameterTypes)
+	        throws NoSuchMethodException {
+		final Method method = clazz.getMethod(name, parameterTypes);
+		method.setAccessible(true);
+		return method;
+	}
+
+	private static Object invokeAccessible(final Object target, final String name, final Class<?>[] parameterTypes,
+	        final Object... args) throws Exception {
+		final Method method = accessibleMethod(target.getClass(), name, parameterTypes);
+		return method.invoke(target, args);
+	}
+
+	private static Object invokeAccessible(final Object target, final String name) throws Exception {
+		return invokeAccessible(target, name, new Class[0]);
+	}
+
+	private void installBridge(final Object bridge) throws Exception {
+		final Class<?> JSObjectClass = Class.forName("netscape.javascript.JSObject");
+		final Object window = invokeAccessible(webEngine, "executeScript", new Class[] { String.class }, "window");
+		if (window != null) {
+			final Method setMember = accessibleMethod(JSObjectClass, "setMember", String.class, Object.class);
+			setMember.invoke(window, "javaBridge", bridge);
+		}
+	}
+
+	void handleEditorMessage(final String json) {
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				handleEditorMessageOnEdt(json);
+			}
+		});
+	}
+
+	private void handleEditorMessageOnEdt(final String json) {
+		final String event = DrawioJson.getEvent(json);
+		if (event == null) {
+			return;
+		}
+		if ("init".equals(event)) {
+			listener.onEditorReady();
+			if (pendingLoadMessage != null) {
+				postToEditor(pendingLoadMessage);
+				pendingLoadMessage = null;
+			}
+		}
+		else if ("save".equals(event) || "autosave".equals(event)) {
+			final String xml = DrawioJson.getXml(json);
+			listener.onDiagramSaved(xml, "autosave".equals(event));
+		}
+		else if ("exit".equals(event)) {
+			final String xml = DrawioJson.getXml(json);
+			listener.onEditorExit(xml, true);
+		}
+	}
+
+	private void postToEditor(final String jsonMessage) {
+		if (webEngine == null) {
+			return;
+		}
+		final String script = "if(window.postToEditor){window.postToEditor(" + jsonMessage + ");}";
+		try {
+			runOnFxThread(new Runnable() {
+				public void run() {
+					try {
+						invokeAccessible(webEngine, "executeScript", new Class[] { String.class }, script);
+					}
+					catch (Exception e) {
+						LogUtils.warn("Draw.io postToEditor failed", e);
+					}
+				}
+			});
+		}
+		catch (Exception e) {
+			LogUtils.warn("Draw.io postToEditor scheduling failed", e);
+		}
+	}
+
+	private static void disableImplicitJavaFxExit() throws Exception {
+		final Class<?> platformClass = Class.forName("javafx.application.Platform");
+		final Method setImplicitExit = accessibleMethod(platformClass, "setImplicitExit", boolean.class);
+		setImplicitExit.invoke(null, Boolean.FALSE);
+	}
+
+	private static void runOnFxThread(final Runnable runnable) throws Exception {
+		final Class<?> platformClass = Class.forName("javafx.application.Platform");
+		final Method runLater = accessibleMethod(platformClass, "runLater", Runnable.class);
+		runLater.invoke(null, runnable);
+	}
+
+	private static boolean isJavaFxAvailable() {
+		if (!javafxChecked) {
+			try {
+				Class.forName("javafx.embed.swing.JFXPanel");
+				javafxAvailable = true;
+			}
+			catch (Throwable t) {
+				javafxAvailable = false;
+			}
+			javafxChecked = true;
+		}
+		return javafxAvailable;
+	}
+
+	private void showJavaFxMissingHelp() {
+		final JPanel panel = new JPanel(new BorderLayout(8, 8));
+		panel.add(new JLabel("<html><b>Draw.io 内嵌编辑器需要 JavaFX</b><br><br>"
+		        + "当前 Java 运行环境不含 JavaFX（例如 Eclipse Adoptium JDK 8）。<br><br>"
+		        + "解决方法（任选其一）：<br>"
+		        + "1. 使用带 JavaFX 的 Docear 发行包（含 <code>jre</code> 目录）<br>"
+		        + "2. 在项目根目录运行：<code>scripts\\setup-drawio-javafx.ps1</code> 后重新构建<br>"
+		        + "3. 安装 BellSoft Liberica JDK 8 <i>Full</i> 版，并用其启动 Docear</html>"), BorderLayout.CENTER);
+		final JButton openExternal = new JButton("用系统默认程序打开 .drawio");
+		openExternal.addActionListener(new java.awt.event.ActionListener() {
+			public void actionPerformed(final java.awt.event.ActionEvent e) {
+				// parent DrawioDocumentView handles external open if needed
+			}
+		});
+		openExternal.setVisible(false);
+		browserHost.removeAll();
+		browserHost.add(panel, BorderLayout.CENTER);
+		revalidate();
+		repaint();
+	}
+
+	private void showError(final String message) {
+		browserHost.removeAll();
+		browserHost.add(new JLabel("<html>" + message.replace("\n", "<br>") + "</html>"), BorderLayout.CENTER);
+		revalidate();
+		repaint();
+	}
+
+	/** Called from JavaScript through JavaFX bridge. */
+	public static final class DrawioJsBridge {
+		private final DrawioEditorListener listener;
+		private final DrawioBrowserPanel panel;
+
+		public DrawioJsBridge(final DrawioEditorListener listener, final DrawioBrowserPanel panel) {
+			this.listener = listener;
+			this.panel = panel;
+		}
+
+		public void onEditorMessage(final String json) {
+			panel.handleEditorMessage(json);
+		}
+	}
+}

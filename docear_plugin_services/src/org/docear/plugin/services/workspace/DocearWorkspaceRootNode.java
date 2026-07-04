@@ -6,8 +6,6 @@ import org.docear.plugin.services.features.user.action.DocearUserRegistrationAct
 import org.docear.plugin.services.features.user.action.DocearUserServicesAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.actions.NodeRefreshAction;
-import org.freeplane.plugin.workspace.actions.WorkspaceImportProjectAction;
-import org.freeplane.plugin.workspace.actions.WorkspaceNewProjectAction;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenuBuilder;
 import org.freeplane.plugin.workspace.nodes.WorkspaceRootNode;
@@ -37,9 +35,6 @@ public class DocearWorkspaceRootNode extends WorkspaceRootNode {
 		if (popupMenu == null) {			
 			popupMenu = new WorkspacePopupMenu();
 			WorkspacePopupMenuBuilder.addActions(popupMenu, new String[] {
-					WorkspaceNewProjectAction.KEY,
-					WorkspaceImportProjectAction.KEY,
-					WorkspacePopupMenuBuilder.SEPARATOR,
 					DocearUserLoginAction.KEY,
 					DocearUserRegistrationAction.KEY,
 					DocearUserServicesAction.KEY,

@@ -63,6 +63,10 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 	 **********************************************************************************/
 
  	public void setAccelerator(final AFreeplaneAction action, final KeyStroke keyStroke) {
+ 		setAccelerator(action, keyStroke, true);
+ 	}
+
+ 	private void setAccelerator(final AFreeplaneAction action, final KeyStroke keyStroke, final boolean showConflictDialog) {
  		if(action == null) {
  			return;
  		}
@@ -72,7 +76,13 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
     			return;
     		}
     		if (keyStroke != null && oldAction != null) {
-    			UITools.errorMessage(TextUtils.removeTranslateComment(TextUtils.format("action_keystroke_in_use_error", keyStroke, getActionTitle(action.getKey()), getActionTitle(oldAction.getKey()))));
+    			final String message = TextUtils.removeTranslateComment(TextUtils.format("action_keystroke_in_use_error", keyStroke, getActionTitle(action.getKey()), getActionTitle(oldAction.getKey())));
+    			if (showConflictDialog) {
+    				UITools.errorMessage(message);
+    			}
+    			else {
+    				LogUtils.warn(message);
+    			}
     			accelerators.put(keyStroke, oldAction);
     			final String shortcutKey = getPropertyKey(action.getKey());
     			
@@ -108,20 +118,24 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 		}
 		KeyStroke ks = KeyStroke.getKeyStroke(accelerator);
 		AFreeplaneAction action = builder.getMode().getAction(itemKey);
-		setAccelerator(action, ks);
-		
+		setAccelerator(action, ks, false);
 	}
  	
- 	public KeyStroke removeAccelerator(final AFreeplaneAction action) throws AssertionError {
+ 	public KeyStroke removeAccelerator(final AFreeplaneAction action) {
  		if(action == null) {
  			return null;
  		}
 		final KeyStroke oldAccelerator = actionMap.get(action.getKey());
 		if (oldAccelerator != null) {
-			final AFreeplaneAction oldAction = accelerators.remove(oldAccelerator);
-			if (!action.equals(oldAction)) {
-				throw new AssertionError("unexpected action " + "for accelerator " + oldAccelerator);
+			final AFreeplaneAction mappedAction = accelerators.get(oldAccelerator);
+			if (mappedAction != null && !action.equals(mappedAction)) {
+				LogUtils.warn("Accelerator map inconsistency for " + oldAccelerator
+				        + ": expected " + action.getKey() + ", found " + mappedAction.getKey()
+				        + " - clearing stale mapping");
+				actionMap.remove(mappedAction.getKey());
 			}
+			accelerators.remove(oldAccelerator);
+			actionMap.remove(action.getKey());
 		}
 		return oldAccelerator;
 	}
@@ -248,7 +262,7 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 				else {
 					keyStroke = null;
 				}
-				setAccelerator(action, keyStroke);
+				setAccelerator(action, keyStroke, false);
 				keysetProps.setProperty(shortcutKey, keystrokeString);
 			}
 		}

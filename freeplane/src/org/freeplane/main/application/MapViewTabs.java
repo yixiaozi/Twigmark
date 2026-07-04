@@ -47,9 +47,15 @@ import javax.swing.plaf.TabbedPaneUI;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 
 import org.freeplane.features.mode.Controller;
+import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.mindmapmode.FileOpener;
+import java.awt.Component;
+
+import javax.swing.JPanel;
+import javax.swing.JSplitPane;
+
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.ui.DefaultMapMouseListener;
 
@@ -149,7 +155,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		//DOCEAR - MapViewTabs: keep track on not MapView tab additions
 		mTabbedPane.addContainerListener(new ContainerListener() {
 			public void componentRemoved(ContainerEvent event) {
-				if(!(event.getChild() instanceof MapView)) {
+				if (shouldTrackAsDocumentTab(event.getChild())) {
 					mTabbedPaneMapViews.remove(event.getChild());
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
@@ -160,19 +166,20 @@ class MapViewTabs implements IMapViewChangeListener {
 			}
 			
 			public void componentAdded(final ContainerEvent event) {
+				if (!shouldTrackAsDocumentTab(event.getChild())) {
+					return;
+				}
 				for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 					if (mTabbedPaneMapViews.get(i) == event.getChild()) {
-						return;
+					 return;
 					}
 				}
-				if(!(event.getChild() instanceof MapView)) {
-					mTabbedPaneMapViews.add(event.getChild());
-					SwingUtilities.invokeLater(new Runnable() {
-						public void run() {
-							setTabsVisible();
-						}
-					});
-				}
+				mTabbedPaneMapViews.add(event.getChild());
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						setTabsVisible();
+					}
+				});
 			}
 		});
 		final Controller controller = Controller.getCurrentController();
@@ -208,11 +215,56 @@ class MapViewTabs implements IMapViewChangeListener {
         }
     }
     
-    private void switchToTab(int index) {
+	private void switchToTab(int index) {
         if (index >= 0 && index < mTabbedPane.getTabCount()) {
             mTabbedPane.setSelectedIndex(index);
         }
     }
+
+	public void openDocumentTab(final IDocumentTabView documentView) {
+		if (documentView == null) {
+			return;
+		}
+		final Component tabKey = documentView.getTabKey();
+		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
+			if (mTabbedPaneMapViews.get(i) == tabKey) {
+				mTabbedPane.setSelectedIndex(i);
+				return;
+			}
+		}
+		final String title = formatTabTitle(documentView.getTabTitle());
+		final int insertIndex = resolveInsertIndex();
+		mTabbedPaneMapViews.insertElementAt(tabKey, insertIndex);
+		mTabbedPane.insertTab(title, null, new JPanel(), null, insertIndex);
+		mTabbedPane.setSelectedIndex(insertIndex);
+		setTabsVisible();
+	}
+
+	public void selectDocumentTab(final Component tabKey) {
+		if (tabKey == null) {
+			return;
+		}
+		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
+			if (mTabbedPaneMapViews.get(i) == tabKey) {
+				mTabbedPane.setSelectedIndex(i);
+				return;
+			}
+		}
+	}
+
+	public void closeDocumentTab(final Component tabKey) {
+		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
+			if (mTabbedPaneMapViews.get(i) == tabKey) {
+				mTabbedPaneSelectionUpdate = false;
+				mTabbedPane.removeTabAt(i);
+				mTabbedPaneMapViews.remove(i);
+				mTabbedPaneSelectionUpdate = true;
+				tabSelectionChanged();
+				setTabsVisible();
+				return;
+			}
+		}
+	}
 
 	public void afterViewChange(final Component pOldMap, final Component pNewMap) {
 		final int selectedIndex = mTabbedPane.getSelectedIndex();
@@ -312,8 +364,12 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (title == null) {
 			return "";
 		}
-		if (title.toLowerCase().endsWith(".mm")) {
+		final String lower = title.toLowerCase();
+		if (lower.endsWith(".mm")) {
 			return title.substring(0, title.length() - 3);
+		}
+		if (lower.endsWith(".drawio")) {
+			return title.substring(0, title.length() - 7);
 		}
 		return title;
 	}
@@ -351,11 +407,17 @@ class MapViewTabs implements IMapViewChangeListener {
 		final Component mapView = mTabbedPaneMapViews.get(selectedIndex);
 		Controller controller = Controller.getCurrentController();
 
-		if (mapView != controller.getMapViewManager().getMapViewComponent()) {
-			controller.getMapViewManager().changeToMapView(mapView.getName());
+		if (mapView instanceof IDocumentTabView) {
+			DocumentTabSupport.activateDocumentView((IDocumentTabView) mapView);
 		}
-		else {
-			notifySameTabClicked(selectedIndex);
+		else if (mapView instanceof MapView) {
+			DocumentTabSupport.deactivateDocumentView();
+			if (mapView != controller.getMapViewManager().getMapViewComponent()) {
+				controller.getMapViewManager().changeToMapView(mapView.getName());
+			}
+			else {
+				notifySameTabClicked(selectedIndex);
+			}
 		}
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);
@@ -405,5 +467,13 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	private boolean areTabsVisible() {
 		return tabbedPaneUI == null || tabbedPaneUI == mTabbedPane.getUI();
+	}
+
+	/** Tab placeholders and the split pane must not become tab identity entries. */
+	private static boolean shouldTrackAsDocumentTab(final Component child) {
+		if (child == null || child instanceof MapView || child instanceof JSplitPane || child instanceof JPanel) {
+			return false;
+		}
+		return child instanceof IDocumentTabView;
 	}
 }

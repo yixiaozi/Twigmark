@@ -340,6 +340,17 @@
 		</antcall>
 	</target>
 
+	<!-- Draw.io embed + JavaFX JRE bundling disabled (use external app for .drawio files)
+	<target name="build_docear_drawio" unless="skip_docear">
+		<antcall target="makePlugin" inheritall="false">
+			<param name="anttarget" value="dist"/>
+			<param name="targetdir" value="plugins"/>
+			<param name="plugindir" value="docear_plugin_drawio"/>
+			<param name="pluginname" value="org.docear.plugin.drawio"/>
+		</antcall>
+	</target>
+	-->
+
 	
 	<target name="build_docear_jabref">
 		<ant antfile="${workspace}/Jabref_Beta_2_7_Docear/build.xml" target="jars" dir="${workspace}/Jabref_Beta_2_7_Docear" inheritAll="false" />
@@ -362,6 +373,7 @@
 			<!--<fileset file="windows-icons/freeplaneIcons.dll" /-->
 			<fileset dir="docear_launch4j" includes="*.exe" />
 			<fileset dir="docear_launch4j" includes="*.ini" />
+			<fileset dir="${script}" includes="docear.bat" />
 		</copy>
 		<chmod file="${build}/${ApplicationNameToLowerCase}.sh" perm="ugo+rx" />
 	</target>
@@ -432,6 +444,7 @@
 				<include name="${license}" />
 			</zipfileset>
 		</zip>
+		<!-- Linux / all-platform packages disabled for now (Windows-only dev build)
 		<tar destfile="${dist}/${ApplicationNameToLowerCase}_linux.tar.gz" compression="gzip" longfile="gnu">
 			<tarfileset dir="${build}" prefix="${ApplicationNameToLowerCase}-${ver}" mode="644">
 				<exclude name="${ApplicationNameToLowerCase}.sh" />
@@ -452,6 +465,7 @@
 				<include name="${license}" />
 			</zipfileset>
 		</zip>
+		-->
 	</target>
 
 	<target name="srczip" depends="mkdistdir, git_version_info">
@@ -743,15 +757,13 @@
 	<target name="docear-dist" depends="docear-bin">
 		<checksum>
 			<fileset dir="${dist}">
-				<include name="*.dmg"/>
-				<include name="*.zip"/>
-				<include name="*.gz"/>
-				<include name="*.exe"/>
+				<include name="docear_windows.zip"/>
 			</fileset>
 		</checksum>
 	</target>
 	
-	<target name="docear-bin" depends="clean, git_version_info, binzip, srczip">
+	<target name="docear-bin" depends="clean, git_version_info, binzip">
+		<!-- srczip disabled: Windows-only dev build (no source zips) -->
 		<copy file="${workspace}/freeplane/doc/history_en.txt" 
 			todir="${dist}" />
         <copy file="${build}/gitinfo.txt"

@@ -52,7 +52,7 @@
 				<menu_action action="AlwaysUnfoldedNodeAction"/>
 				<menu_action action="CloudAction" accelerator="control shift B" />
 			</menu_submenu>	
-			<menu_action action="AddConnectorAction" accelerator="control shift C" />						
+			<menu_action action="AddConnectorAction" accelerator="control shift L" />						
 			<menu_submenu name="links" name_ref="menu_links">
 				<menu_action action="SetLinkByFileChooserAction" accelerator="control shift K" />
 				<menu_action action="SetLinkByTextFieldAction" accelerator="control K" />

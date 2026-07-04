@@ -657,7 +657,10 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	public void refreshView() {
 		paintingEnabled = true;
 		clearFilterCaches();
-		getExpandedStateHandler().setExpandedStates(((AWorkspaceTreeNode)mTree.getModel().getRoot()).getModel(), true);
+		final Object root = mTree.getModel().getRoot();
+		if (root instanceof AWorkspaceTreeNode) {
+			getExpandedStateHandler().setExpandedStates(((AWorkspaceTreeNode) root).getModel(), true);
+		}
 		if (hasSearchFilter()) {
 			expandVisiblePaths();
 		}

@@ -16,7 +16,6 @@ import org.docear.plugin.services.features.documentretrieval.recommendations.Rec
 import org.docear.plugin.services.features.documentretrieval.recommendations.actions.ShowRecommendationsAction;
 import org.docear.plugin.services.features.io.DocearConnectionProvider;
 import org.docear.plugin.services.features.payment.DocearPaymentController;
-import org.docear.plugin.services.features.setup.action.DocearSetupWizardAction;
 import org.docear.plugin.services.features.update.UpdateCheck;
 import org.docear.plugin.services.features.update.action.DocearCheckForUpdatesAction;
 import org.docear.plugin.services.features.upload.MapLifeCycleListener;
@@ -84,9 +83,7 @@ public class ServiceController {
 			serviceController.installFeature(new DocearUserController());
 			serviceController.installFeature(new DocearPaymentController());
 			
-			if (DocearController.getController().isLicenseDialogNecessary()) {
-				DocearSetupWizardAction.startWizard(true);
-			}
+			DocearController.getController().markApplicationInitialized();
 			
 			//TODO SERVICE
 			if(DocearController.getController().isServiceAvailable()){
