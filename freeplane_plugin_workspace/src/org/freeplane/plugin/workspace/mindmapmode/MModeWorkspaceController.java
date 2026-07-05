@@ -145,7 +145,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
-			TAB_WORKSPACE, TAB_GRAPH, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
+			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GRAPH, TAB_GIT
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -596,6 +596,27 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				sideTabOrder.add(tabId);
 			}
 		}
+		normalizeSideTabOrder();
+	}
+
+	private void normalizeSideTabOrder() {
+		if (!sideTabOrder.contains(TAB_GRAPH) || !sideTabOrder.contains(TAB_GIT)) {
+			return;
+		}
+		final int graphIndex = sideTabOrder.indexOf(TAB_GRAPH);
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		if (graphIndex >= 0 && gitIndex >= 0 && graphIndex == gitIndex - 1) {
+			return;
+		}
+		sideTabOrder.remove(TAB_GRAPH);
+		final int newGitIndex = sideTabOrder.indexOf(TAB_GIT);
+		if (newGitIndex >= 0) {
+			sideTabOrder.add(newGitIndex, TAB_GRAPH);
+		}
+		else {
+			sideTabOrder.add(TAB_GRAPH);
+		}
+		persistSideTabOrder();
 	}
 
 	private void saveSideTabOrder() {

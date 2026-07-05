@@ -39,6 +39,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.FileUtils;
 import org.freeplane.core.util.FreeplaneVersion;
+import org.freeplane.core.util.UserProfileDataMigration;
 import org.freeplane.features.filter.FilterController;
 
 /**
@@ -59,6 +60,7 @@ public class ApplicationResourceController extends ResourceController {
 		super();
 		defProps = readDefaultPreferences();
 		props = readUsersPreferences(defProps);
+		UserProfileDataMigration.migrateSessionStateIfNeeded(this);
 		final File userDir = createUserDirectory(defProps);
 		final ArrayList<URL> urls = new ArrayList<URL>(2);
 		final String resourceBaseDir = getResourceBaseDir();

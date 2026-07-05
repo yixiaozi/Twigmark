@@ -41,6 +41,7 @@ import org.freeplane.core.util.WorkspaceSideTabScanCache;
 
 public class AllFileSearchPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
+	private static final int MAX_VISIBLE_RESULTS = 100;
 	
 	private final JTextField searchField = new JTextField();
 	private final DefaultListModel<FileResult> listModel = new DefaultListModel<FileResult>();
@@ -48,6 +49,7 @@ public class AllFileSearchPanel extends JPanel {
 	private JLabel statusLabel = new JLabel("加载中...");
 	
 	private final List<File> allFiles = new CopyOnWriteArrayList<File>();
+	private volatile int searchGeneration = 0;
 	
 	public static class FileResult {
 		final File file;
@@ -271,54 +273,73 @@ public class AllFileSearchPanel extends JPanel {
 	
 	private void performSearch() {
 		final String query = searchField.getText().trim().toLowerCase();
+		final int generation = ++searchGeneration;
 		
-		SwingUtilities.invokeLater(new Runnable() {
-			public void run() {
-				listModel.clear();
-				statusLabel.setText("搜索中...");
-			}
-		});
+		if (query.isEmpty()) {
+			SwingUtilities.invokeLater(new Runnable() {
+				public void run() {
+					if (generation != searchGeneration) {
+						return;
+					}
+					final List<FileResult> results = buildRecentResults();
+					applySearchResults(results);
+					if (allFiles.isEmpty()) {
+						statusLabel.setText("就绪");
+					}
+					else {
+						statusLabel.setText(String.format("最近 %d 个文件 (共 %d 个)", results.size(), allFiles.size()));
+					}
+				}
+			});
+			return;
+		}
 		
+		statusLabel.setText("搜索中...");
 		new Thread(new Runnable() {
 			public void run() {
-				List<FileResult> results = new ArrayList<FileResult>();
-				
-				if (query.isEmpty()) {
-					for (File file : allFiles) {
+				final List<FileResult> results = new ArrayList<FileResult>();
+				for (File file : allFiles) {
+					String fileName = file.getName().toLowerCase();
+					if (fileName.contains(query)) {
 						results.add(new FileResult(file, file.lastModified()));
 					}
-				} else {
-					for (File file : allFiles) {
-						String fileName = file.getName().toLowerCase();
-						if (fileName.contains(query)) {
-							results.add(new FileResult(file, file.lastModified()));
-						}
+				}
+				
+				Collections.sort(results, new Comparator<FileResult>() {
+					public int compare(FileResult a, FileResult b) {
+						return Long.compare(b.lastModified, a.lastModified);
 					}
-					
-					Collections.sort(results, new Comparator<FileResult>() {
-						public int compare(FileResult a, FileResult b) {
-							return Long.compare(b.lastModified, a.lastModified);
-						}
-					});
+				});
+				if (results.size() > MAX_VISIBLE_RESULTS) {
+					results.subList(MAX_VISIBLE_RESULTS, results.size()).clear();
 				}
 				
 				final List<FileResult> finalResults = results;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						listModel.clear();
-						for (FileResult result : finalResults) {
-							listModel.addElement(result);
+						if (generation != searchGeneration) {
+							return;
 						}
-						
-						if (query.isEmpty()) {
-							statusLabel.setText("就绪 (共 " + allFiles.size() + " 个文件)");
-						} else {
-							statusLabel.setText("找到 " + finalResults.size() + " 个文件");
-						}
+						applySearchResults(finalResults);
+						statusLabel.setText("找到 " + finalResults.size() + " 个文件");
 					}
 				});
 			}
-		}).start();
+		}, "AllFileSearch").start();
+	}
+	
+	private List<FileResult> buildRecentResults() {
+		final List<FileResult> results = new ArrayList<FileResult>();
+		final int limit = Math.min(MAX_VISIBLE_RESULTS, allFiles.size());
+		for (int i = 0; i < limit; i++) {
+			final File file = allFiles.get(i);
+			results.add(new FileResult(file, file.lastModified()));
+		}
+		return results;
+	}
+	
+	private void applySearchResults(final List<FileResult> results) {
+		resultList.setListData(results.toArray(new FileResult[results.size()]));
 	}
 	
 	private void openSelectedResult() {

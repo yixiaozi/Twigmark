@@ -19,6 +19,7 @@ import java.util.Set;
 
 import org.freeplane.core.util.FileUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.UserProfileDataMigration;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.features.IWorkspaceSettingsHandler;
@@ -104,6 +105,7 @@ public final class FavoritesAndTagsStore {
 			return;
 		}
 		final File favFile = getFavoritesFile(project);
+		tryRestoreFavoritesFromBackup(project, favFile);
 		if (!favFile.exists()) {
 			migrateLegacySettingsForProject(project);
 			projectLastModified.put(project.getProjectID(), Long.valueOf(0L));
@@ -445,6 +447,30 @@ public final class FavoritesAndTagsStore {
 			project.addExtension(ProjectFavoritesExtension.class, ext);
 		}
 		return ext;
+	}
+
+	private void tryRestoreFavoritesFromBackup(final AWorkspaceProject project, final File favFile) {
+		final int currentCount = UserProfileDataMigration.countFavoritesInFile(favFile);
+		final File backupFile = UserProfileDataMigration.findBestFavoritesBackup(project.getProjectID());
+		if (backupFile == null) {
+			return;
+		}
+		final int backupCount = UserProfileDataMigration.countFavoritesInFile(backupFile);
+		if (backupCount <= currentCount) {
+			return;
+		}
+		try {
+			final File parent = favFile.getParentFile();
+			if (parent != null && !parent.exists()) {
+				parent.mkdirs();
+			}
+			FileUtils.copyFile(backupFile, favFile);
+			LogUtils.info("Restored favorites.settings from backup (" + backupCount + " entries): "
+			        + backupFile.getAbsolutePath());
+		}
+		catch (final Exception e) {
+			LogUtils.warn("could not restore favorites from backup " + backupFile, e);
+		}
 	}
 
 	private File getFavoritesFile(final AWorkspaceProject project) {
