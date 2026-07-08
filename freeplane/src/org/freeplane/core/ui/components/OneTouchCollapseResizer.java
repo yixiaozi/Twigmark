@@ -178,6 +178,10 @@ public class OneTouchCollapseResizer extends JResizer {
 					if(lastComponentSize != null) {
 						resizedComponent.setPreferredSize(lastComponentSize);
 					}
+					else if (direction.equals(Direction.RIGHT) || direction.equals(Direction.LEFT)) {
+						final int fallbackWidth = Math.max(resizedComponent.getMinimumSize().width, 240);
+						resizedComponent.setPreferredSize(new Dimension(fallbackWidth, Math.max(resizedComponent.getMinimumSize().height, 100)));
+					}
 				}
 				else {
 					resizedComponent.setPreferredSize(new Dimension(0,0));

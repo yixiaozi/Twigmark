@@ -322,6 +322,8 @@ public class MModeControllerFactory {
 		resisableTabs.add(otcr);
 		//resisableTabs.add(new JResizer(Direction.RIGHT));
 		resisableTabs.add(tabs);
+		final int savedTabWidth = ResourceController.getResourceController().getIntProperty(TABBEDPANE_VIEW_WIDTH, 320);
+		tabs.setPreferredSize(new java.awt.Dimension(Math.max(savedTabWidth, 120), 100));
 		otcr.addResizerListener(new ResizerListener() {			
 			public void componentResized(ResizeEvent event) {
 				if(event.getComponent().equals(tabs)) {

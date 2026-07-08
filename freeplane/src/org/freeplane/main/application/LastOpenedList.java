@@ -33,7 +33,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.StringTokenizer;
 
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
@@ -127,7 +126,16 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		if (file == null) {
 			return null;
 		}
-		final String absolutePath = file.getAbsolutePath();
+		String absolutePath = file.getAbsolutePath();
+		try {
+			final File canonical = file.getCanonicalFile();
+			if (canonical.exists()) {
+				absolutePath = canonical.getAbsolutePath();
+			}
+		}
+		catch (final IOException e) {
+			// keep absolute path
+		}
 		if (!PORTABLE_APP || !USER_DRIVE.endsWith(":")) {
 			return "MindMap:" + absolutePath;
 		}
@@ -202,15 +210,14 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	        IOException, URISyntaxException, XMLException {
 		final boolean changedToMapView = tryToChangeToMapView(restoreable);
 		if ((restoreable != null) && !(changedToMapView)) {
-			final StringTokenizer token = new StringTokenizer(restoreable, ":");
-			if (token.hasMoreTokens()) {
-				final String mode = token.nextToken();
+			final String mode = extractMode(restoreable);
+			if (mode != null) {
 				Controller.getCurrentController().selectMode(mode);
-				String fileName = token.nextToken("").substring(1);
-				if (PORTABLE_APP && fileName.startsWith(":") && USER_DRIVE.endsWith(":")) {
-					fileName = USER_DRIVE + fileName.substring(1);
+				final File mapFile = resolveMapFile(restoreable);
+				if (mapFile == null || !mapFile.isFile()) {
+					throw new FileNotFoundException(restoreable);
 				}
-				Controller.getCurrentModeController().getMapController().newMap(Compat.fileToUrl(new File(fileName)));
+				Controller.getCurrentModeController().getMapController().newMap(Compat.fileToUrl(mapFile));
 			}
 		}
 	}
@@ -232,14 +239,14 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			if (!startList.isEmpty()) {
 				LogUtils.info("Restoring " + startList.size() + " map(s) from session list");
 			}
-			safeOpen(startList);
+			safeOpenOnStart(startList);
 			if (lastMap != null) {
 				tryToChangeToMapView(lastMap);
 			}
 			return;
 		}
 		if (loadLastMap && lastMap != null && isSessionRestorableMap(lastMap)) {
-			safeOpen(lastMap);
+			safeOpen(lastMap, true);
 		}
 	}
 
@@ -282,16 +289,31 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 
 	void safeOpen(final List<String> maps) {
 		for (final String restoreable : maps) {
-			safeOpen(restoreable);
+			safeOpen(restoreable, false);
+		}
+	}
+
+	void safeOpenOnStart(final List<String> maps) {
+		for (final String restoreable : maps) {
+			safeOpen(restoreable, true);
 		}
 	}
 
 	public void safeOpen(final String restoreable) {
+		safeOpen(restoreable, false);
+	}
+
+	public void safeOpen(final String restoreable, final boolean silentOnMissing) {
 		try {
 			open(restoreable);
 		}
 		catch (final Exception ex) {
 			LogUtils.warn(ex);
+			final File resolved = resolveMapFile(restoreable);
+			if (silentOnMissing && (resolved == null || !resolved.isFile())) {
+				LogUtils.info("Skipping missing session map: " + restoreable);
+				return;
+			}
 			final String message = TextUtils.format("remove_file_from_list_on_error", restoreable);
 			UITools.showFrame();
 			final Frame frame = UITools.getFrame();
@@ -382,8 +404,8 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	private void appendMostRecentRestorableMap(final List<String> startList) {
 		for (int i = 0; i < lastOpenedList.size(); i++) {
 			final String restoreable = decodeRestoreable(lastOpenedList.get(i));
-			if (isSessionRestorableMap(restoreable)) {
-				startList.add(restoreable);
+			if (isSessionRestorableMap(restoreable) && mapFileExists(restoreable)) {
+				startList.add(lastOpenedList.get(i));
 				return;
 			}
 		}
@@ -391,10 +413,92 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 
 	private static void filterNonRestorableMaps(final List<String> maps) {
 		for (int i = maps.size() - 1; i >= 0; i--) {
-			if (!isSessionRestorableMap(decodeRestoreable(maps.get(i)))) {
+			final String restoreable = decodeRestoreable(maps.get(i));
+			if (!isSessionRestorableMap(restoreable) || !mapFileExists(restoreable)) {
 				maps.remove(i);
 			}
 		}
+	}
+
+	private static boolean mapFileExists(final String restoreable) {
+		final File file = resolveMapFileStatic(restoreable);
+		return file != null && file.isFile();
+	}
+
+	private File resolveMapFile(final String restoreable) {
+		return resolveMapFileStatic(decodeRestoreable(restoreable));
+	}
+
+	private static File resolveMapFileStatic(final String restoreable) {
+		final String path = extractFilePath(restoreable);
+		if (path == null || path.length() == 0) {
+			return null;
+		}
+		File file = new File(path);
+		if (file.isFile()) {
+			return file;
+		}
+		try {
+			final File canonical = file.getCanonicalFile();
+			if (canonical.isFile()) {
+				return canonical;
+			}
+		}
+		catch (final IOException e) {
+			// ignore
+		}
+		return findByFileName(new File(path).getName());
+	}
+
+	private static File findByFileName(final String fileName) {
+		if (fileName == null || fileName.length() == 0) {
+			return null;
+		}
+		final ResourceController resourceController = ResourceController.getResourceController();
+		final String lastOpened = resourceController.getProperty(LAST_OPENED, null);
+		if (lastOpened == null || lastOpened.length() == 0) {
+			return null;
+		}
+		final List<String> candidates = ConfigurationUtils.decodeListValue(lastOpened, true);
+		for (int i = 0; i < candidates.size(); i++) {
+			final String candidatePath = extractFilePath(decodeRestoreable(candidates.get(i)));
+			if (candidatePath == null) {
+				continue;
+			}
+			final File candidate = new File(candidatePath);
+			if (fileName.equalsIgnoreCase(candidate.getName()) && candidate.isFile()) {
+				return candidate;
+			}
+		}
+		return null;
+	}
+
+	private static String extractMode(final String restoreable) {
+		final String decoded = decodeRestoreable(restoreable);
+		if (decoded == null) {
+			return null;
+		}
+		final int separator = decoded.indexOf(':');
+		if (separator <= 0) {
+			return null;
+		}
+		return decoded.substring(0, separator);
+	}
+
+	private static String extractFilePath(final String restoreable) {
+		final String decoded = decodeRestoreable(restoreable);
+		if (decoded == null) {
+			return null;
+		}
+		final int separator = decoded.indexOf(':');
+		if (separator < 0 || separator >= decoded.length() - 1) {
+			return null;
+		}
+		String path = decoded.substring(separator + 1);
+		if (PORTABLE_APP && path.startsWith(":") && USER_DRIVE.endsWith(":")) {
+			path = USER_DRIVE + path.substring(1);
+		}
+		return path;
 	}
 
 	private static boolean isSessionRestorableMap(final String restoreable) {
