@@ -5,6 +5,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.docear.plugin.mcp.audit.McpAuditService;
+import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
@@ -23,6 +25,7 @@ public final class McpProtocol {
 		final JsonValue params = map.containsKey("params") ? map.get("params") : JsonValue.ofMap(new LinkedHashMap<String, JsonValue>());
 
 		if ("initialize".equals(method)) {
+			captureInitializeClient(params);
 			return success(id, initializeResult());
 		}
 		if ("notifications/initialized".equals(method) || "initialized".equals(method)) {
@@ -189,14 +192,49 @@ public final class McpProtocol {
 		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
 		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
 		tools.add(tool("export_workspace_snapshot", "Export workspace snapshot markdown files."));
+		tools.add(tool("list_audit_log",
+				"List MCP audit detail rows from SQLite (_data/audit.db): request/response JSON, question summary, operation goal.",
+				schema("limit", "number", false), schema("intent", "string", false), schema("traceId", "string", false),
+				schema("questionQuery", "string", false), schema("action", "string", false),
+				schema("sinceMillis", "number", false)));
+		tools.add(tool("list_audit_traces",
+				"List grouped user-question traces (traceId + questionSummary + actions invoked).",
+				schema("limit", "number", false), schema("questionQuery", "string", false),
+				schema("sinceMillis", "number", false)));
+		tools.add(tool("get_audit_stats",
+				"Read pre-aggregated MCP audit stats (minute/hour/day buckets) for reporting.",
+				schema("granularity", "string", false), schema("limit", "number", false), schema("intent", "string", false),
+				schema("action", "string", false), schema("sinceMillis", "number", false)));
 		return tools;
 	}
 
 	private JsonValue callTool(final JsonValue params) throws Exception {
-		final Map<String, JsonValue> args = params.asMap().containsKey("arguments")
+		final Map<String, JsonValue> rawArgs = params.asMap().containsKey("arguments")
 				? params.asMap().get("arguments").asMap()
 				: params.asMap();
+		final McpAuditService.AuditMetadata auditMetadata = McpAuditService.extractAuditMetadata(rawArgs);
+		final Map<String, JsonValue> args = McpAuditService.stripAuditMetadata(rawArgs);
 		final String name = params.asMap().get("name").asString();
+		final long startedAt = System.currentTimeMillis();
+		boolean success = true;
+		String errorMessage = null;
+		String textResult = null;
+		try {
+			textResult = dispatchTool(name, args);
+			return toolResult(textResult);
+		}
+		catch (Exception e) {
+			success = false;
+			errorMessage = e.getMessage();
+			throw e;
+		}
+		finally {
+			McpAuditService.recordToolCall(name, args, auditMetadata, success, errorMessage,
+					System.currentTimeMillis() - startedAt, textResult);
+		}
+	}
+
+	private String dispatchTool(final String name, final Map<String, JsonValue> args) throws Exception {
 		final String textResult;
 		if ("list_todos".equals(name)) {
 			textResult = McpTaskService.listTodos();
@@ -331,10 +369,24 @@ public final class McpProtocol {
 		else if ("export_workspace_snapshot".equals(name)) {
 			textResult = McpMindMapService.exportWorkspaceSnapshot();
 		}
+		else if ("list_audit_log".equals(name)) {
+			textResult = McpAuditService.listAuditLog(argInt(args, "limit", 50), argString(args, "intent", ""),
+					argString(args, "traceId", ""), argString(args, "questionQuery", ""), argString(args, "action", ""),
+					argLong(args, "sinceMillis", 0L));
+		}
+		else if ("list_audit_traces".equals(name)) {
+			textResult = McpAuditService.listAuditTraces(argInt(args, "limit", 50), argString(args, "questionQuery", ""),
+					argLong(args, "sinceMillis", 0L));
+		}
+		else if ("get_audit_stats".equals(name)) {
+			textResult = McpAuditService.getAuditStats(argString(args, "granularity", "minute"),
+					argInt(args, "limit", 100), argString(args, "intent", ""), argString(args, "action", ""),
+					argLong(args, "sinceMillis", 0L));
+		}
 		else {
 			throw new IllegalArgumentException("Unknown tool: " + name);
 		}
-		return toolResult(textResult);
+		return textResult;
 	}
 
 	private List<JsonValue> listResources() {
@@ -356,6 +408,41 @@ public final class McpProtocol {
 
 	private JsonValue readResource(final JsonValue params) throws Exception {
 		final String uri = params.asMap().get("uri").asString();
+		final Map<String, JsonValue> requestParams = params.asMap();
+		final McpAuditService.AuditMetadata auditMetadata = McpAuditService.extractAuditMetadata(requestParams);
+		final long startedAt = System.currentTimeMillis();
+		boolean success = true;
+		String errorMessage = null;
+		String text = null;
+		String mimeType = "application/json";
+		try {
+			final ResourceReadResult read = readResourceBody(uri);
+			mimeType = read.mimeType;
+			text = read.text;
+			return resourceResult(uri, mimeType, text);
+		}
+		catch (Exception e) {
+			success = false;
+			errorMessage = e.getMessage();
+			throw e;
+		}
+		finally {
+			McpAuditService.recordResourceRead(uri, requestParams, auditMetadata, success, errorMessage,
+					System.currentTimeMillis() - startedAt, text);
+		}
+	}
+
+	private static final class ResourceReadResult {
+		final String mimeType;
+		final String text;
+
+		ResourceReadResult(final String mimeType, final String text) {
+			this.mimeType = mimeType;
+			this.text = text;
+		}
+	}
+
+	private ResourceReadResult readResourceBody(final String uri) throws Exception {
 		final String mimeType;
 		final String text;
 		if ("docear://manifest".equals(uri)) {
@@ -409,7 +496,7 @@ public final class McpProtocol {
 		else {
 			throw new IllegalArgumentException("Unknown resource: " + uri);
 		}
-		return resourceResult(uri, mimeType, text);
+		return new ResourceReadResult(mimeType, text);
 	}
 
 	private List<JsonValue> listPrompts() {
@@ -425,6 +512,28 @@ public final class McpProtocol {
 
 	private JsonValue getPrompt(final JsonValue params) throws Exception {
 		final String name = params.asMap().get("name").asString();
+		final Map<String, JsonValue> requestParams = params.asMap();
+		final McpAuditService.AuditMetadata auditMetadata = McpAuditService.extractAuditMetadata(requestParams);
+		final long startedAt = System.currentTimeMillis();
+		boolean success = true;
+		String errorMessage = null;
+		JsonValue result = null;
+		try {
+			result = buildPromptResult(name);
+			return result;
+		}
+		catch (Exception e) {
+			success = false;
+			errorMessage = e.getMessage();
+			throw e;
+		}
+		finally {
+			McpAuditService.recordPromptGet(name, requestParams, auditMetadata, success, errorMessage,
+					System.currentTimeMillis() - startedAt, result != null ? JsonWriter.write(result) : "");
+		}
+	}
+
+	private JsonValue buildPromptResult(final String name) throws Exception {
 		final String instructions;
 		if ("daily-review".equals(name)) {
 			instructions = "Read docear://workspace/plan, docear://tasks/today, docear://tasks/overdue and docear://tasks/todos. Summarize what is due today, what is overdue, and suggest the top 3 actions.";
@@ -459,6 +568,21 @@ public final class McpProtocol {
 		messages.add(JsonValue.ofMap(message));
 		result.put("messages", JsonValue.ofList(messages));
 		return JsonValue.ofMap(result);
+	}
+
+	private void captureInitializeClient(final JsonValue params) {
+		final McpRequestContext ctx = McpRequestContext.current();
+		if (ctx == null || ctx.getSessionId().length() == 0) {
+			return;
+		}
+		final Map<String, JsonValue> map = params.asMap();
+		if (!map.containsKey("clientInfo")) {
+			return;
+		}
+		final Map<String, JsonValue> clientInfo = map.get("clientInfo").asMap();
+		if (clientInfo.containsKey("name")) {
+			McpAuditService.registerClient(ctx.getSessionId(), clientInfo.get("name").asString());
+		}
 	}
 
 	private JsonValue tool(final String name, final String description) {

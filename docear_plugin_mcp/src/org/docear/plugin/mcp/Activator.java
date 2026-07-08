@@ -2,6 +2,7 @@ package org.docear.plugin.mcp;
 
 import java.util.Hashtable;
 
+import org.docear.plugin.mcp.audit.McpAuditService;
 import org.docear.plugin.mcp.server.McpHttpServer;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.ModeController;
@@ -47,6 +48,7 @@ public class Activator implements BundleActivator {
 			return;
 		}
 		try {
+			McpAuditService.start();
 			httpServer = new McpHttpServer();
 			httpServer.start();
 		}
@@ -61,5 +63,6 @@ public class Activator implements BundleActivator {
 			httpServer.stop();
 			httpServer = null;
 		}
+		McpAuditService.shutdown();
 	}
 }

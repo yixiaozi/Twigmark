@@ -1,10 +1,12 @@
 package org.docear.plugin.mcp;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.Compat;
 
 public final class DocearMcpConfig {
 	private static final String PREFIX = "mcp.";
@@ -28,6 +30,57 @@ public final class DocearMcpConfig {
 
 	public static boolean isReadOnly() {
 		return getBoolean("readonly", false);
+	}
+
+	public static boolean isAuditEnabled() {
+		return getBoolean("audit.enabled", true);
+	}
+
+	public static int getAuditMaxEntries() {
+		return getInt("audit.maxEntries", 1000);
+	}
+
+	public static File getAuditDataDir() {
+		final String configured = getString("audit.dataDir", "");
+		if (configured.length() > 0) {
+			return new File(configured);
+		}
+		return new File(Compat.getApplicationUserDirectory(), "_data");
+	}
+
+	public static File getAuditDbFile() {
+		final String configured = getString("audit.dbPath", "");
+		if (configured.length() > 0) {
+			return new File(configured);
+		}
+		return new File(getAuditDataDir(), "audit.db");
+	}
+
+	public static int getAuditQueueSize() {
+		return getInt("audit.queueSize", 5000);
+	}
+
+	public static int getAuditBatchSize() {
+		final int batch = getInt("audit.batchSize", 200);
+		if (batch < 10) {
+			return 10;
+		}
+		if (batch > 500) {
+			return 500;
+		}
+		return batch;
+	}
+
+	public static int getAuditMaxResponseBytes() {
+		return getInt("audit.maxResponseBytes", 524288);
+	}
+
+	public static boolean isCursorPluginSyncEnabled() {
+		return getBoolean("cursorPlugin.sync.enabled", true);
+	}
+
+	public static int getCursorPluginSyncDelayMs() {
+		return getInt("cursorPlugin.sync.delayMs", 12000);
 	}
 
 	private static String getString(final String key, final String defaultValue) {

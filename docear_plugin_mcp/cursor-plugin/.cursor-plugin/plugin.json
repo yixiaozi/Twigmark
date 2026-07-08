@@ -1,0 +1,12 @@
+{
+  "name": "docear",
+  "description": "Docear 思维导图 MCP：静默查询、写入规范、时间优先搜索、访问审计",
+  "version": "@DOCEAR_CURSOR_PLUGIN_VERSION@",
+  "author": {
+    "name": "Docear"
+  },
+  "keywords": ["docear", "mindmap", "mcp", "freeplane"],
+  "rules": "rules/",
+  "skills": "skills/",
+  "mcpServers": "mcp.json"
+}

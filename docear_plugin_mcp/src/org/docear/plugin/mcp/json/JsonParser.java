@@ -113,6 +113,15 @@ public final class JsonParser {
 				else if (escaped == 't') {
 					builder.append('\t');
 				}
+				else if (escaped == 'b') {
+					builder.append('\b');
+				}
+				else if (escaped == 'f') {
+					builder.append('\f');
+				}
+				else if (escaped == 'u') {
+					builder.append(parseUnicodeEscape());
+				}
 				else {
 					builder.append(escaped);
 				}
@@ -148,6 +157,30 @@ public final class JsonParser {
 		catch (NumberFormatException e) {
 			return JsonValue.ofNumber(Integer.valueOf(0));
 		}
+	}
+
+	private char parseUnicodeEscape() {
+		if (index + 4 > json.length()) {
+			throw new IllegalArgumentException("Incomplete unicode escape at position " + index);
+		}
+		int code = 0;
+		for (int i = 0; i < 4; i++) {
+			code = (code << 4) | hexValue(json.charAt(index++));
+		}
+		return (char) code;
+	}
+
+	private static int hexValue(final char ch) {
+		if (ch >= '0' && ch <= '9') {
+			return ch - '0';
+		}
+		if (ch >= 'a' && ch <= 'f') {
+			return ch - 'a' + 10;
+		}
+		if (ch >= 'A' && ch <= 'F') {
+			return ch - 'A' + 10;
+		}
+		throw new IllegalArgumentException("Invalid hex digit in unicode escape: " + ch);
 	}
 
 	private void skipWhitespace() {

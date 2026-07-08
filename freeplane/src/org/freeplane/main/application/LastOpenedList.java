@@ -28,9 +28,11 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.StringTokenizer;
 
 import javax.swing.JMenuItem;
@@ -228,27 +230,43 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 
 	public void openMapsOnStart() {
 		final boolean loadLastMap = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAP);
-		final String lastMap;
-		if (loadLastMap && !lastOpenedList.isEmpty()) {
-			//DOCEAR - decode url string
-			lastMap = sun.net.www.ParseUtil.decode(lastOpenedList.get(0));
-		}
-		else {
-			lastMap = null;
-		}
 		final boolean loadLastMaps = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAPS);
+		String lastMap = null;
+		if (!lastOpenedList.isEmpty()) {
+			lastMap = decodeRestoreable(lastOpenedList.get(0));
+		}
 		if (loadLastMaps) {
 			final List<String> startList = new LinkedList<String>();
 			restoreList(OPENED_NOW, startList);
+			filterNonRestorableMaps(startList);
+			if (startList.isEmpty()) {
+				appendMostRecentRestorableMap(startList);
+			}
 			safeOpen(startList);
-			if (!lastOpenedList.isEmpty()) {
+			if (lastMap != null) {
 				tryToChangeToMapView(lastMap);
 			}
 			return;
 		}
-		if (loadLastMap && !lastOpenedList.isEmpty()) {
+		if (loadLastMap && lastMap != null && isSessionRestorableMap(lastMap)) {
 			safeOpen(lastMap);
 		}
+	}
+
+	public boolean hasRestorableSessionMaps() {
+		final List<String> openedNow = new LinkedList<String>();
+		restoreList(OPENED_NOW, openedNow);
+		for (int i = 0; i < openedNow.size(); i++) {
+			if (isSessionRestorableMap(decodeRestoreable(openedNow.get(i)))) {
+				return true;
+			}
+		}
+		for (int i = 0; i < lastOpenedList.size(); i++) {
+			if (isSessionRestorableMap(decodeRestoreable(lastOpenedList.get(i)))) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 
@@ -295,10 +313,89 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public void saveProperties() {
+		syncCurrentlyOpenedFromViews();
 		ResourceController.getResourceController().setProperty(LAST_OPENED,
 		    ConfigurationUtils.encodeListValue(lastOpenedList, true));
 		ResourceController.getResourceController().setProperty(OPENED_NOW,
 		    ConfigurationUtils.encodeListValue(currenlyOpenedList, true));
+	}
+
+	private void syncCurrentlyOpenedFromViews() {
+		try {
+			final Controller controller = Controller.getCurrentController();
+			if (controller == null) {
+				return;
+			}
+			final IMapViewManager mapViewManager = controller.getMapViewManager();
+			if (mapViewManager == null) {
+				return;
+			}
+			final List<? extends Component> views = mapViewManager.getMapViewVector();
+			if (views == null || views.isEmpty()) {
+				return;
+			}
+			final Set<String> openRestoreables = new LinkedHashSet<String>();
+			for (int i = 0; i < views.size(); i++) {
+				final String restoreable = getRestoreable(views.get(i));
+				if (restoreable != null && isSessionRestorableMap(restoreable)) {
+					openRestoreables.add(restoreable);
+				}
+			}
+			if (!openRestoreables.isEmpty()) {
+				currenlyOpenedList.clear();
+				currenlyOpenedList.addAll(openRestoreables);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Could not sync open maps before save: " + e.getMessage(), e);
+		}
+	}
+
+	private void appendMostRecentRestorableMap(final List<String> startList) {
+		for (int i = 0; i < lastOpenedList.size(); i++) {
+			final String restoreable = decodeRestoreable(lastOpenedList.get(i));
+			if (isSessionRestorableMap(restoreable)) {
+				startList.add(restoreable);
+				return;
+			}
+		}
+	}
+
+	private static void filterNonRestorableMaps(final List<String> maps) {
+		for (int i = maps.size() - 1; i >= 0; i--) {
+			if (!isSessionRestorableMap(decodeRestoreable(maps.get(i)))) {
+				maps.remove(i);
+			}
+		}
+	}
+
+	private static boolean isSessionRestorableMap(final String restoreable) {
+		if (restoreable == null || restoreable.length() == 0) {
+			return false;
+		}
+		final String lower = restoreable.toLowerCase();
+		if (lower.indexOf("docear-welcome.mm") >= 0) {
+			return false;
+		}
+		if (lower.indexOf("freeplaneapplications.mm") >= 0) {
+			return false;
+		}
+		if (lower.indexOf("doceardist") >= 0 && lower.indexOf("\\doc\\") >= 0) {
+			return false;
+		}
+		return true;
+	}
+
+	private static String decodeRestoreable(final String restoreable) {
+		if (restoreable == null) {
+			return null;
+		}
+		try {
+			return sun.net.www.ParseUtil.decode(restoreable);
+		}
+		catch (Exception e) {
+			return restoreable;
+		}
 	}
 
 	private boolean tryToChangeToMapView(final String restoreable) {
@@ -309,6 +406,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		//ignore documentation maps loaded using documentation actions
 		if(map.containsExtension(DocuMapAttribute.class))
 			return;
+		if (restoreString != null && !isSessionRestorableMap(restoreString)) {
+			return;
+		}
 		if (restoreString != null) {
 			String str = restoreString;
 			if (lastOpenedList.contains(str)) {

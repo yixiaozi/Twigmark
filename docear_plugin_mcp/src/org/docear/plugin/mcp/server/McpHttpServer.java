@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
+import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
@@ -70,6 +71,7 @@ public final class McpHttpServer {
 			}
 			final String body = readBody(exchange);
 			try {
+				McpRequestContext.begin(exchange);
 				final JsonValue request = JsonParser.parse(body);
 				final String response = protocol.handle(request);
 				writeJson(exchange, 200, response);
@@ -78,6 +80,9 @@ public final class McpHttpServer {
 				LogUtils.warn("Docear MCP request failed: " + e.getMessage(), e);
 				writeJson(exchange, 500, errorBody(-32603, e.getMessage()));
 			}
+			finally {
+				McpRequestContext.end();
+			}
 		}
 	}
 
@@ -85,7 +90,8 @@ public final class McpHttpServer {
 		final Map<String, String> headers = new LinkedHashMap<String, String>();
 		headers.put("Access-Control-Allow-Origin", "*");
 		headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-		headers.put("Access-Control-Allow-Headers", "Content-Type, Accept, Mcp-Session-Id");
+		headers.put("Access-Control-Allow-Headers",
+		    "Content-Type, Accept, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
 		for (final Map.Entry<String, String> entry : headers.entrySet()) {
 			exchange.getResponseHeaders().set(entry.getKey(), entry.getValue());
 		}

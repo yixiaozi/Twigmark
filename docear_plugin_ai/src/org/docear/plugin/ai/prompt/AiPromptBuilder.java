@@ -306,7 +306,8 @@ public class AiPromptBuilder {
         sb.append("3. \u5199\uff1aadd_node\u3001change_node_text\u3001create_todo\u3001set_reminder\u3001move_node\u3001set_node_note\u3001set_node_tags \u7b49\uff08\u53ef\u9009 filePath \u6307\u5b9a .mm\uff09\u3002\n");
         sb.append("4. \u641c\u7d22\u7528 search_nodes\uff08\u53ef\u4f20 filePath / projectId / modifiedWithinDays\uff09\uff1b\u9759\u9ed8\u8bfb\u7528 get_mindmap_json\u3002\n");
         sb.append("5. \u7981\u6b62\u8c03\u7528 open_mindmap / navigate_to_node\uff0c\u9664\u975e\u7528\u6237\u660e\u786e\u8981\u6c42\u6253\u5f00\u6216\u8df3\u8f6c\u3002\n");
-        sb.append("6. \u4e0b\u65b9 MAP_CONTENT / WORKSPACE_PLANS \u662f\u672c\u5730\u9884\u8bfb\u6458\u8981\uff1b\u4e0d\u8db3\u65f6\u5fc5\u987b\u8c03\u7528 MCP \u6216\u76f4\u63a5\u8bfb\u53d6\u5de5\u4f5c\u533a\u6587\u4ef6\u83b7\u53d6\u6700\u65b0\u6570\u636e\u5e76\u6267\u884c\u64cd\u4f5c\u3002");
+        sb.append("6. \u4e0b\u65b9 MAP_CONTENT / WORKSPACE_PLANS \u662f\u672c\u5730\u9884\u8bfb\u6458\u8981\uff1b\u4e0d\u8db3\u65f6\u5fc5\u987b\u8c03\u7528 MCP \u6216\u76f4\u63a5\u8bfb\u53d6\u5de5\u4f5c\u533a\u6587\u4ef6\u83b7\u53d6\u6700\u65b0\u6570\u636e\u5e76\u6267\u884c\u64cd\u4f5c\u3002\n");
+        sb.append("7. \u6bcf\u6b21 MCP \u8c03\u7528\u5728 arguments \u91cc\u9644\u5e26 _audit\uff1acaller\u3001traceId\u3001questionSummary\u3001operationGoal\uff08\u540c\u4e00\u7528\u6237\u95ee\u9898\u5171\u7528 traceId \u4e0e questionSummary\uff0c\u6bcf\u6b21\u8c03\u7528\u5404\u5199 operationGoal\uff09\u3002");
         return sb.toString();
     }
 

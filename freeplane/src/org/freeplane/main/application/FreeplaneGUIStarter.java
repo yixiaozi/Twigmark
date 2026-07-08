@@ -336,14 +336,18 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			applicationResourceController.getLastOpenedList().openMapsOnStart();
 			addonsController.setAutoInstallEnabled(true);
 		}
-		// opening a new map will result in a question which project the map should be attached to
-		// --> open tutorial map by default
-		if((firstRun && ! dontLoadLastMaps) || null == controller.getMap()){
-			final File baseDir = new File(FreeplaneGUIStarter.getResourceBaseDir()).getAbsoluteFile().getParentFile();
-			final String map = ResourceController.getResourceController().getProperty("first_start_map");
-			final File absolutFile = ConfigurationUtils.getLocalizedFile(new File[]{baseDir}, map, Locale.getDefault().getLanguage());
-			if(absolutFile != null)
-				loadMaps(controller, new String[]{absolutFile.getAbsolutePath()});
+		// Open welcome map only on first run, or when there is no restorable session.
+		if (!dontLoadLastMaps && null == controller.getMap()) {
+			final boolean hasRestorableSession = applicationResourceController.getLastOpenedList()
+			    .hasRestorableSessionMaps();
+			if (firstRun || !hasRestorableSession) {
+				final File baseDir = new File(FreeplaneGUIStarter.getResourceBaseDir()).getAbsoluteFile().getParentFile();
+				final String map = ResourceController.getResourceController().getProperty("first_start_map");
+				final File absolutFile = ConfigurationUtils.getLocalizedFile(new File[]{baseDir}, map, Locale.getDefault().getLanguage());
+				if (absolutFile != null) {
+					loadMaps(controller, new String[]{absolutFile.getAbsolutePath()});
+				}
+			}
 		}
 //		if (null != controller.getMap()) {
 //			return;

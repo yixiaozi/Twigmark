@@ -16,7 +16,7 @@
 	<property name="java_source_version" value="1.6" />
 	<property name="java_target_version" value="1.6" />
 	<property name="build.compiler" value="modern" />
-    <property name="classpath" value="${framework.jar}:${freeplane.jars}:${external.jars}:${jhall.jar}:${swingworker.jar}:${core.jar}:${workspace.jar}:${jhyperlink.jar}:${jgoodies.jar}:${ai.jar}"/>
+    <property name="classpath" value="${framework.jar}:${freeplane.jars}:${external.jars}:${jhall.jar}:${swingworker.jar}:${core.jar}:${workspace.jar}:${jhyperlink.jar}:${jgoodies.jar}:${ai.jar}:lib/sqlite-jdbc-3.21.0.jar"/>
 
 	<target name="build">
 		<mkdir dir="${build}" />
@@ -25,9 +25,33 @@
 		</javac>
 	</target>
 
-	<target name="dist" depends="build">
+	<target name="prepare_cursor_plugin_version">
+		<property file="${workspace}/docear_plugin_core/resources/version.properties"/>
+		<property file="${workspace}/docear_plugin_core/resources/build.number"/>
+		<property name="cursor.plugin.version"
+			value="${docear_version}.${docear_version_status_number}_${docear_version_status}_build${build.number}"/>
+		<delete dir="${build}/cursor-plugin" quiet="true"/>
+		<mkdir dir="${build}/cursor-plugin"/>
+		<copy todir="${build}/cursor-plugin">
+			<fileset dir="${root}/cursor-plugin">
+				<exclude name="README.md"/>
+			</fileset>
+		</copy>
+		<copy file="${build}/cursor-plugin/.cursor-plugin/plugin.json"
+			tofile="${build}/cursor-plugin/.cursor-plugin/plugin.json.tmp" overwrite="true"/>
+		<replace file="${build}/cursor-plugin/.cursor-plugin/plugin.json.tmp"
+			token="@DOCEAR_CURSOR_PLUGIN_VERSION@"
+			value="${cursor.plugin.version}"/>
+		<move file="${build}/cursor-plugin/.cursor-plugin/plugin.json.tmp"
+			tofile="${build}/cursor-plugin/.cursor-plugin/plugin.json"/>
+		<echo file="${build}/cursor-plugin/VERSION">${cursor.plugin.version}</echo>
+	</target>
+
+	<target name="dist" depends="build,prepare_cursor_plugin_version">
 		<jar jarfile="lib/plugin.jar">
-			<fileset dir="${build}"/>
+			<fileset dir="${build}">
+				<exclude name="cursor-plugin/**"/>
+			</fileset>
 			<fileset dir="${resources}" erroronmissingdir="false"/>
 			<fileset dir="${src}">
                 <include name="**/*.xml"/>
@@ -40,6 +64,9 @@
 			<fileset dir="${root}">
 				<include name="lib/**"/>
 			</fileset>
+		</copy>
+		<copy todir="${dist.osgi.dir}/cursor-plugin">
+			<fileset dir="${build}/cursor-plugin"/>
 		</copy>
 		<mkdir dir="${dist.osgi.dir}/META-INF" />
 		<copy tofile="${dist.osgi.dir}/META-INF/MANIFEST.MF" file="${osgimanifest}"/>

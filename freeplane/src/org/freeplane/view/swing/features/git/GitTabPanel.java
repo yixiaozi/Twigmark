@@ -11,7 +11,9 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -54,19 +56,26 @@ public class GitTabPanel extends JPanel {
 	private File repoDir;
 	private GitSyncStatus lastSyncStatus;
 	private Timer syncTimer;
+	private Timer changesRefreshTimer;
 	private volatile boolean syncCheckRunning;
+	private volatile boolean changesRefreshRunning;
 	private volatile boolean remoteActionRunning;
 	private volatile boolean autoSyncRunning;
+	private int secondsUntilAutoRefresh;
+
+	private static final int CHANGES_REFRESH_INTERVAL_MS = 60000;
 
 	private static final String LABEL_PULL = "拉取";
 	private static final String LABEL_PUSH = "推送";
+	private static final String LABEL_REFRESH = "刷新";
 
 	public GitTabPanel() {
 		super(new BorderLayout(4, 4));
 		buildUi();
 		wireEvents();
 		startSyncTimer();
-		refreshChanges();
+		startChangesRefreshTimer();
+		refreshLocalChanges(false);
 	}
 
 	private void buildUi() {
@@ -105,6 +114,33 @@ public class GitTabPanel extends JPanel {
 		});
 		syncTimer.setInitialDelay(intervalMs);
 		syncTimer.start();
+	}
+
+	private void startChangesRefreshTimer() {
+		secondsUntilAutoRefresh = CHANGES_REFRESH_INTERVAL_MS / 1000;
+		updateRefreshButtonCountdown();
+		changesRefreshTimer = new Timer(1000, new ActionListener() {
+			@Override
+			public void actionPerformed(final ActionEvent e) {
+				secondsUntilAutoRefresh--;
+				if (secondsUntilAutoRefresh <= 0) {
+					secondsUntilAutoRefresh = CHANGES_REFRESH_INTERVAL_MS / 1000;
+					refreshLocalChanges(true);
+				}
+				updateRefreshButtonCountdown();
+			}
+		});
+		changesRefreshTimer.start();
+	}
+
+	private void resetRefreshCountdown() {
+		secondsUntilAutoRefresh = CHANGES_REFRESH_INTERVAL_MS / 1000;
+		updateRefreshButtonCountdown();
+	}
+
+	private void updateRefreshButtonCountdown() {
+		refreshButton.setText(LABEL_REFRESH + " (" + secondsUntilAutoRefresh + "s)");
+		refreshButton.setToolTipText("刷新本地修改列表（" + secondsUntilAutoRefresh + " 秒后自动刷新）");
 	}
 
 	private void checkRemoteSync(final boolean triggeredByRefresh) {
@@ -261,7 +297,7 @@ public class GitTabPanel extends JPanel {
 		refreshButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(final ActionEvent e) {
-				refreshChanges();
+				refreshLocalChanges(false);
 			}
 		});
 		pullButton.addActionListener(new ActionListener() {
@@ -434,7 +470,7 @@ public class GitTabPanel extends JPanel {
 					public void run() {
 						if (finalResult.exitCode == 0) {
 							statusLabel.setText("已撤销: " + change.getDisplayName());
-							refreshChanges();
+							refreshLocalChanges(false);
 						} else {
 							statusLabel.setText("撤销失败: " + finalResult.errorText());
 						}
@@ -516,34 +552,87 @@ public class GitTabPanel extends JPanel {
 		commitButton.setEnabled(repoDir != null && selectedCount > 0);
 	}
 
-	private void refreshChanges() {
-		statusLabel.setText("正在扫描...");
-		commitButton.setEnabled(false);
+	private void refreshLocalChanges(final boolean silent) {
+		if (changesRefreshRunning) {
+			return;
+		}
+		changesRefreshRunning = true;
+		if (!silent) {
+			resetRefreshCountdown();
+			statusLabel.setText("正在扫描...");
+			commitButton.setEnabled(false);
+		}
 
+		final Map<String, Boolean> previousSelection = captureSelectionState();
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
 				final File repository = GitConfig.locateRepository();
 				final List<GitFileChange> loaded = loadGitChanges(repository);
+				restoreSelectionState(loaded, previousSelection);
 				SwingUtilities.invokeLater(new Runnable() {
 					@Override
 					public void run() {
+						changesRefreshRunning = false;
+						final boolean unchanged = repository != null && repository.equals(repoDir)
+						    && sameChanges(changes, loaded);
 						repoDir = repository;
-						changes.clear();
-						changes.addAll(loaded);
-						((ChangesTableModel) changesTable.getModel()).fireTableDataChanged();
-						if (repository != null) {
-							statusLabel.setText("仓库: " + repository.getAbsolutePath() + " - 发现 " + loaded.size() + " 个修改");
-						} else {
-							statusLabel.setText("未找到 Git 仓库，请在 %APPDATA%\\Docear\\git.local.properties 中设置 git.repo.path=E:\\yixiaozi");
+						if (!unchanged) {
+							changes.clear();
+							changes.addAll(loaded);
+							((ChangesTableModel) changesTable.getModel()).fireTableDataChanged();
+							updateSelectAllState();
 						}
-						selectAllCheckBox.setSelected(!loaded.isEmpty());
+						if (!silent) {
+							if (repository != null) {
+								statusLabel.setText("仓库: " + repository.getAbsolutePath() + " - 发现 " + loaded.size() + " 个修改");
+							} else {
+								statusLabel.setText("未找到 Git 仓库，请在 %APPDATA%\\Docear\\git.local.properties 中设置 git.repo.path=E:\\yixiaozi");
+							}
+							if (unchanged) {
+								selectAllCheckBox.setSelected(!loaded.isEmpty());
+							}
+						} else if (!unchanged && lastSyncStatus != null) {
+							updateStatusWithSync(lastSyncStatus);
+						}
 						updateCommitButtonState();
-						checkRemoteSync(true);
 					}
 				});
 			}
 		}).start();
+	}
+
+	private Map<String, Boolean> captureSelectionState() {
+		final Map<String, Boolean> selection = new HashMap<String, Boolean>();
+		for (int i = 0; i < changes.size(); i++) {
+			final GitFileChange change = changes.get(i);
+			selection.put(change.getRelativePath(), Boolean.valueOf(change.isSelected()));
+		}
+		return selection;
+	}
+
+	private static void restoreSelectionState(final List<GitFileChange> loaded, final Map<String, Boolean> previousSelection) {
+		for (int i = 0; i < loaded.size(); i++) {
+			final GitFileChange change = loaded.get(i);
+			final Boolean selected = previousSelection.get(change.getRelativePath());
+			if (selected != null) {
+				change.setSelected(selected.booleanValue());
+			}
+		}
+	}
+
+	private static boolean sameChanges(final List<GitFileChange> current, final List<GitFileChange> loaded) {
+		if (current.size() != loaded.size()) {
+			return false;
+		}
+		for (int i = 0; i < current.size(); i++) {
+			final GitFileChange a = current.get(i);
+			final GitFileChange b = loaded.get(i);
+			if (!a.getRelativePath().equals(b.getRelativePath()) || a.getStatus() != b.getStatus()) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	private List<GitFileChange> loadGitChanges(final File repository) {
@@ -645,7 +734,7 @@ public class GitTabPanel extends JPanel {
 							summaryField.setText("");
 							descriptionArea.setText("");
 							GitPostCommitScriptRunner.scheduleAfterSuccessfulCommit();
-							refreshChanges();
+							refreshLocalChanges(false);
 						} else {
 							statusLabel.setText(finalFailureMessage);
 							updateCommitButtonState();
@@ -701,7 +790,7 @@ public class GitTabPanel extends JPanel {
 						pushButton.setEnabled(true);
 						refreshButton.setEnabled(true);
 						if (success) {
-							refreshChanges();
+							refreshLocalChanges(false);
 							historyPanel.refresh(repoDir);
 						} else {
 							checkRemoteSync(false);

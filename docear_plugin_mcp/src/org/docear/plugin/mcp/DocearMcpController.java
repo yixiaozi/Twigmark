@@ -1,5 +1,6 @@
 package org.docear.plugin.mcp;
 
+import org.docear.plugin.mcp.client.CursorAiClientSync;
 import org.freeplane.features.mode.ModeController;
 
 public final class DocearMcpController {
@@ -12,6 +13,7 @@ public final class DocearMcpController {
 	public static void install(final ModeController modeController) {
 		if (instance == null) {
 			instance = new DocearMcpController();
+			CursorAiClientSync.install();
 		}
 	}
 
