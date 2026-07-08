@@ -47,6 +47,7 @@ import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.main.application.ApplicationResourceController;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.features.WorkspaceMapModelExtension;
@@ -134,7 +135,14 @@ public class DocearController implements IDocearEventListener {
 		DocearController.getPropertiesController().setProperty(DOCEAR_FIRST_RUN_PROPERTY, true);
 		DocearController.getPropertiesController().setProperty(DOCEAR_VERSION_NUMBER, "" + applicationBuildNumber);
 		try {
-			DocearController.getPropertiesController().saveProperties();
+			// Version flags only — keep openedNow from disk until session maps are loaded.
+			final ResourceController propsController = DocearController.getPropertiesController();
+			if (propsController instanceof ApplicationResourceController) {
+				((ApplicationResourceController) propsController).saveApplicationFlagsOnly();
+			}
+			else {
+				propsController.saveProperties();
+			}
 		}
 		catch (final Exception e) {
 			DocearLogger.warn(e);

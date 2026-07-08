@@ -36,6 +36,8 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
@@ -84,6 +86,15 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		setPreferredSize(new Dimension(260, 400));
 
 		wireCanvasListeners();
+	}
+
+	/** Background scan for tab subtitle counts without activating the graph viewport. */
+	public void preloadMetrics() {
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				refreshGraphAsync();
+			}
+		});
 	}
 
 	private ModeTabPanel activeTab() {
@@ -332,10 +343,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		tab.updateStats(tab.displayIndex);
 		tab.updateResultList();
 		svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
-		if (deferViewportUntilDone || !svc.isGraphInViewport()) {
-			presentGraphInViewport(tab.displayIndex, false);
-		}
-		else {
+		if (svc.isGraphInViewport()) {
 			SwingUtilities.invokeLater(new Runnable() {
 				public void run() {
 					if (tab.displayIndex != null) {
@@ -345,6 +353,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					svc.getCanvas().requestFocusInWindow();
 				}
 			});
+		}
+		else if (deferViewportUntilDone) {
+			presentGraphInViewport(tab.displayIndex, false);
 		}
 	}
 
@@ -411,15 +422,18 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 								activeFilterThread = null;
 								tab.displayIndex = built;
 								if (svc != null) {
-									if (deferViewportUntilReady || !svc.isGraphInViewport()) {
-										presentGraphInViewport(tab.displayIndex, preserveView);
-									}
-									else {
+									if (svc.isGraphInViewport()) {
 										svc.getCanvas().setLoading(false, null);
 										svc.loadPreparedGraph(tab.displayIndex, preserveView);
 										svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
 										tab.updateStats(tab.displayIndex);
 										tab.updateResultList();
+									}
+									else if (deferViewportUntilReady) {
+										presentGraphInViewport(tab.displayIndex, preserveView);
+									}
+									else {
+										tab.updateStats(tab.displayIndex);
 									}
 								}
 							}
@@ -707,8 +721,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		private void updateStats(final RelationshipGraphIndex index) {
 			if (index == null) {
 				statsLabel.setText(" ");
+				SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GRAPH, 0);
 				return;
 			}
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GRAPH, index.getEdgeCount());
 			final String unit = index.getGraphMode() == RelationshipGraphScanner.MODE_MAP_NODES ? "\u8282\u70b9" : "\u5bfc\u56fe";
 			String text = index.getNodeCount() + " " + unit + " \u00b7 " + index.getEdgeCount() + " \u8fde\u63a5";
 			if (index.getTotalNodeCount() > index.getNodeCount()) {

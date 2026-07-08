@@ -39,6 +39,8 @@ import org.pushingpixels.flamingo.internal.ui.ribbon.appmenu.JRibbonApplicationM
 
 public class RibbonBuilder {
 	
+	public static final String RIBBON_MINIMIZED = "ribbon_minimized";
+
 	private final HashMap<String, IRibbonContributorFactory> contributorFactories = new HashMap<String, IRibbonContributorFactory>();
 	
 	final StructureTree structure;
@@ -207,10 +209,25 @@ public class RibbonBuilder {
 		if(otcr != null) {
 			otcr.recalibrate();
 		}
+		persistMinimizedState();
 	}
 	
 	public boolean isMinimized() {
 		return ribbon.isMinimized();
+	}
+
+	public void applyMinimizedFromPreferences() {
+		final boolean minimized = ResourceController.getResourceController().getBooleanProperty(RIBBON_MINIMIZED);
+		ribbon.setMinimized(minimized);
+		OneTouchCollapseResizer otcr = OneTouchCollapseResizer.findResizerFor(ribbon);
+		if (otcr != null) {
+			otcr.recalibrate();
+		}
+	}
+
+	private void persistMinimizedState() {
+		ResourceController.getResourceController().setProperty(RIBBON_MINIMIZED,
+		    String.valueOf(ribbon.isMinimized()));
 	}
 	
 	public void updateRibbon(URL xmlResource) {

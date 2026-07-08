@@ -45,6 +45,7 @@ import org.freeplane.core.ui.components.OneTouchCollapseResizer;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.CollapseDirection;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollapseListener;
 import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
+import org.freeplane.core.ui.components.SideTabTitleUpdater;
 import org.freeplane.core.ui.components.ResizeEvent;
 import org.freeplane.core.ui.components.ResizerListener;
 import org.freeplane.core.ui.components.UITools;
@@ -173,6 +174,7 @@ public class MModeControllerFactory {
 	private MUIFactory uiFactory;
 	public static final String TABBEDPANE_VIEW_COLLAPSED = "tabbed_pane.collapsed";
 	public static final String TABBEDPANE_VIEW_WIDTH = "tabbed_pane.width";
+	private static SideTabTitleUpdater formatTabTitleUpdater;
 
 	private void createAddIns() {
 		LastSelectionMapExtensionIO.install(modeController);
@@ -188,7 +190,7 @@ public class MModeControllerFactory {
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
 		if (tabs instanceof JTabbedPane) {
-			applyFormatTabbedPaneWidth((JTabbedPane) tabs);
+			installFormatTabTitleUpdater((JTabbedPane) tabs);
 		}
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
@@ -340,17 +342,7 @@ public class MModeControllerFactory {
 				}
 			}
 		});
-		tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
-		try {
-			int width = Integer.parseInt(ResourceController.getResourceController().getProperty(TABBEDPANE_VIEW_WIDTH, "0"));
-			if (width <= 10) {
-				width = 350;
-			}
-			tabs.setPreferredSize(new Dimension(width, 40));
-		}
-		catch (Exception e) {
-			// blindly accept
-		}
+		tabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 		otcr.setExpanded(expanded);
 		resisableTabs.putClientProperty(ViewController.VISIBLE_PROPERTY_KEY, "styleScrollPaneVisible");
 		modeController.getUserInputListenerFactory().addToolBar("/format", ViewController.RIGHT, resisableTabs);
@@ -432,6 +424,39 @@ public class MModeControllerFactory {
 		if (tabs == null) {
 			return;
 		}
+		if (ResourceController.getResourceController().getBooleanProperty(TABBEDPANE_VIEW_COLLAPSED)) {
+			return;
+		}
 		TabbedPaneWidthUtils.applyPreferredWidth(tabs, TABBEDPANE_VIEW_WIDTH, TabbedPaneWidthUtils.computeMinimumWidth(tabs));
+	}
+
+	public static void installFormatTabTitleUpdater(final JTabbedPane tabs) {
+		if (tabs == null) {
+			return;
+		}
+		if (formatTabTitleUpdater == null) {
+			formatTabTitleUpdater = SideTabTitleUpdater.install(tabs, new Runnable() {
+				public void run() {
+					applyFormatTabbedPaneWidth(tabs);
+				}
+			});
+		}
+		formatTabTitleUpdater.bindRightTabs();
+		applyFormatTabbedPaneWidth(tabs);
+	}
+
+	public static void refreshFormatTabTitles(final JTabbedPane tabs) {
+		if (tabs == null) {
+			return;
+		}
+		if (formatTabTitleUpdater == null) {
+			formatTabTitleUpdater = SideTabTitleUpdater.install(tabs, new Runnable() {
+				public void run() {
+					applyFormatTabbedPaneWidth(tabs);
+				}
+			});
+		}
+		formatTabTitleUpdater.bindRightTabs();
+		applyFormatTabbedPaneWidth(tabs);
 	}
 }

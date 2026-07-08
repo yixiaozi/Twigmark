@@ -37,6 +37,7 @@ import java.util.StringTokenizer;
 
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.Timer;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
@@ -61,6 +62,7 @@ import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.UrlManager;
 import org.freeplane.n3.nanoxml.XMLException;
+import org.freeplane.view.swing.map.MapView;
 
 /**
  * This class manages a list of the maps that were opened last. It aims to
@@ -87,10 +89,12 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	 * Contains Restore string => map name (map.toString()).
 	 */
 	final private Map<String, String> mRestorableToMapName = new HashMap<String, String>();
+	private Timer persistOpenedNowTimer;
 
 	LastOpenedList() {
 //		this.controller = controller;
 		restoreList(LAST_OPENED, lastOpenedList);
+		restoreList(OPENED_NOW, currenlyOpenedList);
 	}
 
 	public void afterViewChange(final Component oldView, final Component newView) {
@@ -105,27 +109,11 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public void afterViewClose(final Component oldView) {
-		final String restoreable = getRestoreable(oldView);
-		if (restoreable == null) {
-			return;
-		}
-		if(!currenlyOpenedList.remove(restoreable)) {
-			try {
-				//DOCEAR - decode url string
-				currenlyOpenedList.remove(sun.net.www.ParseUtil.decode(restoreable));
-			}
-			catch (Exception e) {
-				//just try and ignore if it fails
-			}
-		}
+		schedulePersistOpenedNow();
 	}
 
 	public void afterViewCreated(final Component mapView) {
-		final String restoreable = getRestoreable(mapView);
-		if (restoreable == null) {
-			return;
-		}
-		currenlyOpenedList.add(restoreable);
+		schedulePersistOpenedNow();
 	}
 
 	public void beforeViewChange(final Component oldView, final Component newView) {
@@ -164,11 +152,10 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		//ignore documentation maps loaded using documentation actions
 		if(map.containsExtension(DocuMapAttribute.class))
 			return null;
-		final ModeController modeController = Controller.getCurrentModeController();
-		if (!modeController.getModeName().equals(MModeController.MODENAME)) {
+		final File file = map.getFile();
+		if (file == null) {
 			return null;
 		}
-		final File file = map.getFile();
 		return getRestorable(file);
 	}
 
@@ -242,6 +229,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			if (startList.isEmpty()) {
 				appendMostRecentRestorableMap(startList);
 			}
+			if (!startList.isEmpty()) {
+				LogUtils.info("Restoring " + startList.size() + " map(s) from session list");
+			}
 			safeOpen(startList);
 			if (lastMap != null) {
 				tryToChangeToMapView(lastMap);
@@ -313,11 +303,39 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public void saveProperties() {
+		if (persistOpenedNowTimer != null) {
+			persistOpenedNowTimer.stop();
+			persistOpenedNowTimer = null;
+		}
 		syncCurrentlyOpenedFromViews();
+		persistOpenedNowNow();
 		ResourceController.getResourceController().setProperty(LAST_OPENED,
 		    ConfigurationUtils.encodeListValue(lastOpenedList, true));
-		ResourceController.getResourceController().setProperty(OPENED_NOW,
-		    ConfigurationUtils.encodeListValue(currenlyOpenedList, true));
+	}
+
+	private void schedulePersistOpenedNow() {
+		if (persistOpenedNowTimer == null) {
+			persistOpenedNowTimer = new Timer(400, new java.awt.event.ActionListener() {
+				public void actionPerformed(final java.awt.event.ActionEvent e) {
+					((Timer) e.getSource()).stop();
+					syncCurrentlyOpenedFromViews();
+					persistOpenedNowNow();
+				}
+			});
+			persistOpenedNowTimer.setRepeats(false);
+		}
+		persistOpenedNowTimer.restart();
+	}
+
+	private void persistOpenedNowNow() {
+		final String encoded = ConfigurationUtils.encodeListValue(currenlyOpenedList, true);
+		ResourceController.getResourceController().setProperty(OPENED_NOW, encoded);
+		if (currenlyOpenedList.isEmpty()) {
+			LogUtils.info("Session restore list (openedNow) is empty");
+		}
+		else {
+			LogUtils.info("Session restore list (openedNow): " + currenlyOpenedList.size() + " map(s)");
+		}
 	}
 
 	private void syncCurrentlyOpenedFromViews() {
@@ -330,24 +348,34 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			if (mapViewManager == null) {
 				return;
 			}
-			final List<? extends Component> views = mapViewManager.getMapViewVector();
-			if (views == null || views.isEmpty()) {
-				return;
-			}
-			final Set<String> openRestoreables = new LinkedHashSet<String>();
-			for (int i = 0; i < views.size(); i++) {
-				final String restoreable = getRestoreable(views.get(i));
-				if (restoreable != null && isSessionRestorableMap(restoreable)) {
-					openRestoreables.add(restoreable);
+			final List<String> openRestoreables = new LinkedList<String>();
+			final Set<String> seen = new LinkedHashSet<String>();
+			final MapViewTabs bottomTabs = MapViewTabs.getInstance();
+			if (bottomTabs != null) {
+				final List tabOrder = bottomTabs.getMindMapViewsInTabOrder();
+				for (int i = 0; i < tabOrder.size(); i++) {
+					addRestoreable(openRestoreables, seen, getRestoreable((MapView) tabOrder.get(i)));
 				}
 			}
-			if (!openRestoreables.isEmpty()) {
-				currenlyOpenedList.clear();
-				currenlyOpenedList.addAll(openRestoreables);
+			final List<? extends Component> views = mapViewManager.getMapViewVector();
+			if (views != null) {
+				for (int i = 0; i < views.size(); i++) {
+					addRestoreable(openRestoreables, seen, getRestoreable(views.get(i)));
+				}
 			}
+			currenlyOpenedList.clear();
+			currenlyOpenedList.addAll(openRestoreables);
 		}
 		catch (Exception e) {
 			LogUtils.warn("Could not sync open maps before save: " + e.getMessage(), e);
+		}
+	}
+
+	private static void addRestoreable(final List<String> openRestoreables, final Set<String> seen,
+	        final String restoreable) {
+		if (restoreable != null && isSessionRestorableMap(restoreable) && !seen.contains(restoreable)) {
+			openRestoreables.add(restoreable);
+			seen.add(restoreable);
 		}
 	}
 

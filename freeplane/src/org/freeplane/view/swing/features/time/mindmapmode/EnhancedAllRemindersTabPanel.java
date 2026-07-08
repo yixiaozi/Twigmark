@@ -47,6 +47,8 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -620,6 +622,7 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 					false, null));
 		}
 		WorkspaceSideTabSnapshotRegistry.updateOneTimeReminders(entries);
+		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_ALL_REMINDERS, entries.size());
 	}
 
 	private String getSelectedReminderKey() {

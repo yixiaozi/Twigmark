@@ -24,6 +24,7 @@ import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
 import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
+import org.docear.plugin.ai.ui.AiChatTabMetrics;
 import org.docear.plugin.ai.snapshot.AiWorkspaceSnapshotAutoSync;
 import org.docear.plugin.ai.ui.AiMarkdownRenderer;
 import org.docear.plugin.ai.usage.AiUsageCounter;
@@ -142,6 +143,7 @@ public class DocearAiController {
 
         session.addMessage(new AiChatMessage(AiChatMessage.Role.ASSISTANT, response));
         chatSessionManager.saveSession(map, session);
+        publishChatTabMetric(map);
         logInteraction(AiInteractionRecord.TYPE_CHAT, userInput, prompt, response, map);
         return response;
     }
@@ -208,6 +210,7 @@ public class DocearAiController {
                 }
                 session.addMessage(new AiChatMessage(AiChatMessage.Role.ASSISTANT, response));
                 chatSessionManager.saveSession(map, session);
+                publishChatTabMetric(map);
                 logInteraction(AiInteractionRecord.TYPE_CHAT, userInput, prompt, response, map);
                 if (uiListener != null) {
                     uiListener.onComplete(response);
@@ -240,11 +243,17 @@ public class DocearAiController {
             AiChatMessage last = messages.get(messages.size() - 1);
             if (last.getRole() == AiChatMessage.Role.USER && userInput.equals(last.getContent())) {
                 chatSessionManager.saveSession(map, session);
+                publishChatTabMetric(map);
                 return;
             }
         }
         session.addMessage(new AiChatMessage(AiChatMessage.Role.USER, userInput));
         chatSessionManager.saveSession(map, session);
+        publishChatTabMetric(map);
+    }
+
+    private void publishChatTabMetric(final MapModel map) {
+        AiChatTabMetrics.publishForMap(map, chatSessionManager);
     }
 
     public boolean isStreamingForMap(MapModel map) {
@@ -288,6 +297,7 @@ public class DocearAiController {
 
     public void clearChatSession(MapModel map) {
         chatSessionManager.clearSession(map);
+        publishChatTabMetric(map);
     }
 
     public void insertContentAsChild(String content) {
@@ -379,6 +389,7 @@ public class DocearAiController {
 
             public void afterMapChange(MapModel oldMap, MapModel newMap) {
                 chatSidebar.switchToMap(newMap);
+                publishChatTabMetric(newMap);
             }
         });
     }
@@ -442,6 +453,7 @@ public class DocearAiController {
 
     private void installAiChatTab() {
         AiChatTabInstaller.install(modeController, chatSidebar);
+        publishChatTabMetric(Controller.getCurrentController().getMap());
     }
 
     private void showAiChatSidebar() {

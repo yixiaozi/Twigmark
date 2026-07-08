@@ -25,6 +25,8 @@ import javax.swing.table.DefaultTableModel;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
@@ -228,6 +230,7 @@ public class ReminderTimelineTabPanel extends JPanel {
 		}
 		tableRows.clear();
 		if (occurrences == null || occurrences.isEmpty()) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_TIMELINE_TODAY, 0);
 			statusLabel.setText("\u5f53\u65e5\u4efb\u52a1: 0");
 			return;
 		}
@@ -242,6 +245,7 @@ public class ReminderTimelineTabPanel extends JPanel {
 					entry.file.getName() });
 			tableRows.add(item);
 		}
+		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_TIMELINE_TODAY, occurrences.size());
 		statusLabel.setText("\u5f53\u65e5\u4efb\u52a1: " + occurrences.size());
 	}
 

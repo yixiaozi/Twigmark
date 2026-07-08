@@ -43,6 +43,10 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.core.util.WorkspaceSideTabSnapshot;
+import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -233,10 +237,12 @@ public class EnhancedAllRecentlyModified extends JPanel {
 					mergeChunk(chunk);
 				}
 				rebuildTreeFromCache();
+				publishRecentlyModifiedMetric(nodesByKey.size());
 			}
 
 			protected void done() {
 				statusLabel.setText("最近修改: " + nodesByKey.size());
+				publishRecentlyModifiedMetric(nodesByKey.size());
 				if (rescanRequested) {
 					rescanRequested = false;
 					refreshInBackground();
@@ -746,5 +752,20 @@ public class EnhancedAllRecentlyModified extends JPanel {
 				}
 			}
 		});
+	}
+
+	private void publishRecentlyModifiedMetric(final int count) {
+		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_RECENT_MODIFIED, count);
+		final List entries = new ArrayList();
+		for (final Object key : nodesByKey.keySet()) {
+			final ModifiedNode record = (ModifiedNode) nodesByKey.get(key);
+			if (record == null || record.isGrouped) {
+				continue;
+			}
+			String text = record.nodeText == null ? "" : HtmlUtils.removeHtmlTagsFromString(record.nodeText)
+					.replaceAll("\\s+", " ").trim();
+			entries.add(new WorkspaceSideTabSnapshot.ModifiedEntry(record.file, record.nodeId, text, record.modifiedAt));
+		}
+		WorkspaceSideTabSnapshotRegistry.updateRecentlyModifiedEntries(entries);
 	}
 }

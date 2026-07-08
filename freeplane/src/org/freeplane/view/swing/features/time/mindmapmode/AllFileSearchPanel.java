@@ -36,6 +36,8 @@ import javax.swing.border.Border;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.core.util.WorkspaceSearchFileMenuBridge;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
 
@@ -241,6 +243,7 @@ public class AllFileSearchPanel extends JPanel {
 						allFiles.clear();
 						allFiles.addAll(finalFiles);
 						performSearch();
+						SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FILES, allFiles.size());
 						statusLabel.setText("就绪 (共 " + allFiles.size() + " 个文件)");
 					}
 				});

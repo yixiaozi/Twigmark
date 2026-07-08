@@ -8,6 +8,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.ui.components.TabCountLabels;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.ModeController;
 
@@ -66,14 +67,14 @@ public final class PinnedNodesTabInstaller {
 		try {
 			final String title = TextUtils.getText("workspace.nodepins.tab.title");
 			for (int i = 0; i < tabs.getTabCount(); i++) {
-				if (title.equals(tabs.getTitleAt(i))) {
+				if (title.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
 					installed = true;
 					return true;
 				}
 			}
 			int insertIndex = tabs.getTabCount();
 			for (int i = 0; i < tabs.getTabCount(); i++) {
-				if (ALL_TODOS_TAB_TITLE.equals(tabs.getTitleAt(i))) {
+				if (ALL_TODOS_TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
 					insertIndex = i + 1;
 					break;
 				}
@@ -83,7 +84,7 @@ public final class PinnedNodesTabInstaller {
 			tabs.repaint();
 			try {
 				final Class factoryClass = Class.forName("org.freeplane.main.mindmapmode.MModeControllerFactory");
-				factoryClass.getMethod("applyFormatTabbedPaneWidth", JTabbedPane.class).invoke(null, tabs);
+				factoryClass.getMethod("refreshFormatTabTitles", JTabbedPane.class).invoke(null, tabs);
 			}
 			catch (final Exception ignored) {
 			}

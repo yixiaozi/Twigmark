@@ -39,6 +39,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.FileUtils;
 import org.freeplane.core.util.FreeplaneVersion;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.UserProfileDataMigration;
 import org.freeplane.features.filter.FilterController;
 
@@ -195,6 +196,16 @@ public class ApplicationResourceController extends ResourceController {
 	@Override
 	public void init() {
 		lastOpened = new LastOpenedList();
+		Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
+			public void run() {
+				try {
+					saveProperties(true);
+				}
+				catch (final Exception e) {
+					LogUtils.warn("Could not persist session on shutdown hook: " + e.getMessage());
+				}
+			}
+		}, "Docear-session-save"));
 		super.init();
 	}
 
@@ -239,7 +250,18 @@ public class ApplicationResourceController extends ResourceController {
 
 	@Override
 	public void saveProperties() {
-		lastOpened.saveProperties();
+		saveProperties(true);
+	}
+
+	/** Writes user preferences without recomputing the session map list (safe during early startup). */
+	public void saveApplicationFlagsOnly() {
+		saveProperties(false);
+	}
+
+	private void saveProperties(final boolean includeSessionState) {
+		if (includeSessionState && lastOpened != null) {
+			lastOpened.saveProperties();
+		}
 		OutputStream out = null;
 		try {
 			out = new FileOutputStream(autoPropertiesFile);

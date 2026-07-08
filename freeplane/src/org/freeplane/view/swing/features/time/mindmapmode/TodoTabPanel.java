@@ -25,6 +25,8 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
 import org.freeplane.core.util.HtmlUtils;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.IconNotFound;
 import org.freeplane.features.icon.IconStore;
@@ -276,6 +278,7 @@ public class TodoTabPanel extends JPanel {
 	private void reloadTodos() {
 		MapModel map = Controller.getCurrentController().getMap();
 		if (map == null || map.getRootNode() == null) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_CURRENT_TODOS, 0);
 			return;
 		}
 
@@ -285,6 +288,8 @@ public class TodoTabPanel extends JPanel {
 		attachTodosByParentId(root, records);
 
 		tree.setModel(new DefaultTreeModel(root));
+
+		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_CURRENT_TODOS, records.size());
 
 		for (int i = 0; i < tree.getRowCount(); i++) {
 			tree.expandRow(i);

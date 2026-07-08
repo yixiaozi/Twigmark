@@ -33,6 +33,8 @@ import java.awt.event.MouseListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import java.util.Vector;
+import java.util.LinkedList;
+import java.util.List;
 
 import javax.swing.InputMap;
 import javax.swing.JComponent;
@@ -87,6 +89,17 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	static MapViewTabs getInstance() {
 		return instance;
+	}
+
+	List getMindMapViewsInTabOrder() {
+		final List result = new LinkedList();
+		for (int i = 0; i < mTabbedPaneMapViews.size(); i++) {
+			final Component component = mTabbedPaneMapViews.get(i);
+			if (component instanceof MapView) {
+				result.add(component);
+			}
+		}
+		return result;
 	}
 
 	void setNextTabInsertIndex(final int index) {

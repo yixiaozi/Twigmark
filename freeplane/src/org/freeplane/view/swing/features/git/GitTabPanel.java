@@ -38,6 +38,8 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 
 public class GitTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
@@ -583,6 +585,7 @@ public class GitTabPanel extends JPanel {
 							((ChangesTableModel) changesTable.getModel()).fireTableDataChanged();
 							updateSelectAllState();
 						}
+						SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GIT, changes.size());
 						if (!silent) {
 							if (repository != null) {
 								statusLabel.setText("仓库: " + repository.getAbsolutePath() + " - 发现 " + loaded.size() + " 个修改");

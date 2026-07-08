@@ -48,6 +48,8 @@ import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
@@ -302,6 +304,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 					mergeChunk(chunk);
 					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size() + " (" + chunk.scanned + "/"
 							+ chunk.total + ")");
+					publishItemCountMetric(itemsByKey.size());
 				}
 			}
 
@@ -310,6 +313,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				purgeStaleItems(lastActiveFileKeys);
 				rebuildTreeFromCache();
 				statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
+				publishItemCountMetric(itemsByKey.size());
 				if (rescanRequested) {
 					triggerRescan();
 				}
@@ -803,6 +807,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				entries.add(new WorkspaceSideTabSnapshot.TodoEntry(record.file, record.nodeId, text));
 			}
 			WorkspaceSideTabSnapshotRegistry.updateTodos(entries);
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_ALL_TODOS, entries.size());
 			return;
 		}
 		if ("\u5168\u90e8\u53d1\u5e03".equals(getRootLabel())) {
@@ -817,6 +822,16 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				entries.add(new WorkspaceSideTabSnapshot.ItemEntry(record.file, record.nodeId, text));
 			}
 			WorkspaceSideTabSnapshotRegistry.updatePublishedEntries(entries);
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_PUBLISHED, entries.size());
+		}
+	}
+
+	private void publishItemCountMetric(final int count) {
+		if ("\u5168\u90e8\u5f85\u529e".equals(getRootLabel())) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_ALL_TODOS, count);
+		}
+		else if ("\u5168\u90e8\u53d1\u5e03".equals(getRootLabel())) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_PUBLISHED, count);
 		}
 	}
 

@@ -84,6 +84,8 @@ import org.freeplane.features.time.TimeComboBoxEditor;
  * @author Dimitry Polivaev
  */
 abstract public class FrameController implements ViewController {
+	public static final String RIBBON_BAND_COLLAPSED = "ribbon_band_collapsed";
+
 	private final class HorizontalToolbarPanel extends JPanel {
 		/**
 		 * 
@@ -245,6 +247,9 @@ abstract public class FrameController implements ViewController {
 			final OneTouchCollapseResizer otcr = new OneTouchCollapseResizer(Direction.UP, CollapseDirection.COLLAPSE_UP);
 			otcr.setSliderLocked(true);
 			resizableTabs.add(otcr);
+			final boolean ribbonCollapsed = ResourceController.getResourceController().getBooleanProperty(
+			    RIBBON_BAND_COLLAPSED);
+			otcr.setExpanded(!ribbonCollapsed);
 			otcr.addResizerListener(new ResizerListener() {
 				
 				public void componentResized(ResizeEvent event) {
@@ -258,9 +263,11 @@ abstract public class FrameController implements ViewController {
 				public void componentExpanded(ResizeEvent event) {
 					comp.setPreferredSize(null);
 					otcr.recalibrate();
+					ResourceController.getResourceController().setProperty(RIBBON_BAND_COLLAPSED, "false");
 				}
 				
 				public void componentCollapsed(ResizeEvent event) {
+					ResourceController.getResourceController().setProperty(RIBBON_BAND_COLLAPSED, "true");
 				}
 			});
 			

@@ -4,6 +4,9 @@ import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
 import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
+import org.freeplane.core.ui.components.SideTabTitleUpdater;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.dnd.DropTarget;
@@ -99,6 +102,7 @@ import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstalle
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
+import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
@@ -123,7 +127,6 @@ import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.git.GitTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
-import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.MindMapFileSearchPanel;
@@ -143,7 +146,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
 	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
 	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
-			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
+			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH, TAB_GIT
@@ -155,6 +158,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private FileReadManager fileTypeManager;
 	private TreeView view;
 	private DraggableTabbedPane sideTabs;
+	private SideTabTitleUpdater sideTabTitleUpdater;
 	private final List<String> sideTabOrder = new ArrayList<String>();
 	private final Map<String, Boolean> sideTabLoaded = new HashMap<String, Boolean>();
 	private final Map<String, JComponent> sideTabComponents = new HashMap<String, JComponent>();
@@ -317,6 +321,18 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 //	}
 	
 	private void setupModel(ModeController modeController) {
+		NodePinsMetricsPublisher.install();
+		FavoritesAndTagsStore.getInstance().addChangeListener(new Runnable() {
+			public void run() {
+				try {
+					SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FAVORITES,
+					    FavoritesAndTagsStore.getInstance().getFavorites().size());
+				}
+				catch (final Exception e) {
+					// ignore
+				}
+			}
+		});
 		FavoritesAndTagsStore.getInstance().reloadAllProjects();
 		NodePinsIndex.getInstance().rescan();
 	}
@@ -357,7 +373,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
-		sideTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 		for (final String tabId : sideTabOrder) {
 			final JComponent component = createSideTabPlaceholder(tabId);
 			sideTabComponents.put(tabId, component);
@@ -390,8 +406,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		resizableTools.add(sideTabs);
 		this.viewUpdater = new Runnable() {
 			public void run() {
-				boolean expanded = true;
 				try {
+					if (Boolean.parseBoolean(getWorkspaceSettings().getProperty(
+					    WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "false"))) {
+						return;
+					}
 					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "0"));
 					if (width <= 10) {
 						width = TabbedPaneWidthUtils.computeMinimumWidth(sideTabs);
@@ -400,21 +419,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
 				catch (Exception e) {
-					// blindly accept
+					// ignore
 				}
-				try {
-					expanded = !Boolean.parseBoolean(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "false"));
-				}
-				catch (Exception e) {
-					// default is set true -> ignore exception
-				}
-				otcr.setExpanded(expanded);
 			}
 		};
 		resizableTools.add(otcr);
 		
 		modeController.getUserInputListenerFactory().addToolBar("workspace", ViewController.LEFT, resizableTools);
-		this.viewUpdater.run();
 		
 		getWorkspaceView().setModel(getModel());
 		// Expand workspace root only so top-level entries are visible; leave folders collapsed.
@@ -423,7 +434,26 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(LinkTypeFileNode.class, new LinkTypeFileIconHandler());
 		getView().getNodeTypeIconManager().addNodeTypeIconHandler(DefaultFileNode.class, new DefaultFileNodeIconHandler());
 		getView().refreshView();
-		applySideTabsWidth();
+		sideTabTitleUpdater = SideTabTitleUpdater.install(sideTabs, new Runnable() {
+			public void run() {
+				applySideTabsWidth();
+			}
+		});
+		SideTabTitleUpdater.setLeftMetricsRefreshHook(new Runnable() {
+			public void run() {
+				refreshLeftTabMetrics();
+				applySideTabsWidth();
+			}
+		});
+		bindSideTabTitles();
+		try {
+			otcr.setExpanded(!Boolean.parseBoolean(getWorkspaceSettings().getProperty(
+			    WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "false")));
+		}
+		catch (Exception e) {
+			otcr.setExpanded(true);
+		}
+		this.viewUpdater.run();
 		scheduleScanCachePreload();
 		scheduleSideTabBackgroundPreload();
 	}
@@ -445,11 +475,24 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		final Timer timer = new Timer(SIDE_TAB_PRELOAD_DELAY_MS, new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				((Timer) e.getSource()).stop();
+				scheduleRelationshipGraphMetricsPreload();
 				preloadSideTabsSequentially(0);
 			}
 		});
 		timer.setRepeats(false);
 		timer.start();
+	}
+
+	private void scheduleRelationshipGraphMetricsPreload() {
+		if (!RelationshipGraphTabBridge.isAvailable()) {
+			return;
+		}
+		try {
+			RelationshipGraphTabBridge.getProvider().preloadMetrics();
+		}
+		catch (final Exception e) {
+			LogUtils.warn(e);
+		}
 	}
 
 	private void preloadSideTabsSequentially(final int preloadIndex) {
@@ -675,6 +718,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private String getSideTabTitle(final String tabId) {
+		return getSideTabBaseTitle(tabId);
+	}
+
+	private String getSideTabBaseTitle(final String tabId) {
 		if (TAB_WORKSPACE.equals(tabId)) {
 			return "\u5de5\u4f5c\u533a";
 		}
@@ -700,6 +747,79 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return "\u5173\u7cfb\u56fe";
 		}
 		return tabId;
+	}
+
+	private String getSideTabMetricKey(final String tabId) {
+		if (TAB_WORKSPACE.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_WORKSPACE;
+		}
+		if (TAB_FAVORITES.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_FAVORITES;
+		}
+		if (TAB_SEARCH.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_NODES;
+		}
+		if (TAB_FILE_SEARCH.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_MINDMAP;
+		}
+		if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_FILES;
+		}
+		if (TAB_ACTIVITY.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_ACTIVITY;
+		}
+		if (TAB_GIT.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_GIT;
+		}
+		if (TAB_GRAPH.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_GRAPH;
+		}
+		return "";
+	}
+
+	private void bindSideTabTitles() {
+		if (sideTabTitleUpdater == null) {
+			return;
+		}
+		refreshLeftTabMetrics();
+		sideTabTitleUpdater.bindLeftTabs(new SideTabTitleUpdater.LeftTabSource() {
+			public String getTabId(final int index) {
+				return sideTabOrder.get(index);
+			}
+
+			public String getBaseTitle(final String tabId) {
+				return getSideTabBaseTitle(tabId);
+			}
+
+			public String getMetricKey(final String tabId) {
+				return getSideTabMetricKey(tabId);
+			}
+
+			public int getTabCount() {
+				return sideTabOrder.size();
+			}
+		});
+	}
+
+	private void refreshLeftTabMetrics() {
+		try {
+			FavoritesAndTagsStore.getInstance().reloadIfChanged();
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FAVORITES,
+			    FavoritesAndTagsStore.getInstance().getFavorites().size());
+		}
+		catch (final Exception e) {
+			// ignore
+		}
+		try {
+			final Controller controller = Controller.getCurrentController();
+			final int openMaps = controller != null && controller.getMapViewManager() != null
+			    ? controller.getMapViewManager().getMapViewVector().size()
+			    : 0;
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_WORKSPACE, openMaps);
+		}
+		catch (final Exception e) {
+			// ignore
+		}
 	}
 
 	private JComponent createSideTabPlaceholder(final String tabId) {
@@ -743,6 +863,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			sideTabs.setSelectedIndex(0);
 		}
 		applySideTabsWidth();
+		bindSideTabTitles();
 		ensureSideTabLoaded(sideTabs.getSelectedIndex());
 	}
 
@@ -839,9 +960,12 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 						final RibbonMapChangeAdapter adapter = Controller.getCurrentModeController().getUserInputListenerFactory().getRibbonBuilder().getMapChangeAdapter();
 						adapter.selectionChanged(selectedProject);
 					}
+					refreshLeftTabMetrics();
 				}
 				
-				public void projectAdded(WorkspaceModelEvent event) {}
+				public void projectAdded(WorkspaceModelEvent event) {
+					refreshLeftTabMetrics();
+				}
 			});
 		}
 	}
@@ -938,6 +1062,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (getModel().getRoot() != null) {
 			getView().expandPath(getModel().getRoot().getTreePath());
 		}
+		FavoritesAndTagsStore.getInstance().reloadAllProjects();
+		NodePinsIndex.getInstance().rescan();
+		refreshLeftTabMetrics();
 	}
 
 	private void loadFixedDataRootProject() {

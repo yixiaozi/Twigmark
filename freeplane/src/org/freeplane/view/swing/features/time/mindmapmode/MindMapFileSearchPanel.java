@@ -36,6 +36,8 @@ import javax.swing.border.Border;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.core.util.WorkspaceSearchFileMenuBridge;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.features.map.MapModel;
@@ -237,6 +239,7 @@ public class MindMapFileSearchPanel extends JPanel {
 						allMindMapFiles.clear();
 						allMindMapFiles.addAll(finalFiles);
 						performSearch();
+						SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_MINDMAP, allMindMapFiles.size());
 						statusLabel.setText("就绪 (共 " + allMindMapFiles.size() + " 个文件)");
 					}
 				});

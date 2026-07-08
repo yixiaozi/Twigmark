@@ -52,6 +52,15 @@ public final class RelationshipGraphIntegration {
 					sideTabPanel.onTabDeactivated();
 				}
 			}
+
+			public void preloadMetrics() {
+				if (sideTabPanel != null) {
+					sideTabPanel.preloadMetrics();
+				}
+				else {
+					RelationshipGraphMetricsPreloader.preload();
+				}
+			}
 		});
 	}
 

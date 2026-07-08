@@ -25,6 +25,8 @@ import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
 import org.freeplane.core.util.HtmlUtils;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.INodeChangeListener;
@@ -194,6 +196,7 @@ public class ReminderTabPanel extends JPanel {
 		items.clear();
 		MapModel map = Controller.getCurrentController().getMap();
 		if (map == null || map.getRootNode() == null) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_CURRENT_REMINDERS, 0);
 			return;
 		}
 		List<ReminderItem> reminders = new ArrayList<ReminderItem>();
@@ -206,6 +209,7 @@ public class ReminderTabPanel extends JPanel {
 		for (ReminderItem item : reminders) {
 			items.addElement(item);
 		}
+		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_CURRENT_REMINDERS, items.size());
 	}
 
 	private void collectReminderItems(NodeModel node, List<ReminderItem> out) {

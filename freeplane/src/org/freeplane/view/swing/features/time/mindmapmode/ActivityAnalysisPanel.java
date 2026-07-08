@@ -35,6 +35,8 @@ import javax.swing.table.DefaultTableModel;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
@@ -126,6 +128,7 @@ public class ActivityAnalysisPanel extends JPanel {
                         @Override
                         public void run() {
                             updateTabs();
+                            SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_ACTIVITY, fileNodeCount.size());
                             statusLabel.setText("分析完成 - 共 " + fileNodeCount.size() + " 个导图");
                         }
                     });

@@ -44,6 +44,8 @@ import javax.swing.border.Border;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.SideTabMetricKeys;
+import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -362,6 +364,7 @@ public class GlobalSearchTabPanel extends JPanel {
 				for (List<NodeInfo> nodes : fileNodesCache.values()) {
 					cacheNodes += nodes.size();
 				}
+				publishNodeMetric(cacheNodes);
 				if (cacheFiles > 0) {
 					totalInfo = String.format("（共 %d 个导图，%d 个节点）", cacheFiles, cacheNodes);
 				}
@@ -390,7 +393,12 @@ public class GlobalSearchTabPanel extends JPanel {
 		for (List<NodeInfo> nodes : fileNodesCache.values()) {
 			nodeCount += nodes.size();
 		}
+		publishNodeMetric(nodeCount);
 		return "就绪（共 " + fileCount + " 个导图，" + nodeCount + " 个节点）";
+	}
+
+	private void publishNodeMetric(final int nodeCount) {
+		SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_NODES, nodeCount);
 	}
 	
 	private void scanDirectory(File dir, List<String> keywords, List<SearchResult> results, 
@@ -754,6 +762,13 @@ public class GlobalSearchTabPanel extends JPanel {
 									final int currentCompleted = completed;
 									SwingUtilities.invokeLater(new Runnable() {
 										public void run() {
+											int cacheNodes = 0;
+											synchronized (fileNodesCache) {
+												for (List<NodeInfo> nodes : fileNodesCache.values()) {
+													cacheNodes += nodes.size();
+												}
+											}
+											publishNodeMetric(cacheNodes);
 											if (currentCompleted == totalFiles) {
 												updateStatus("就绪");
 											} else {

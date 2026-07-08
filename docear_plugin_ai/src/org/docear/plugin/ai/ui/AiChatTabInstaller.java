@@ -7,7 +7,9 @@ import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
+import org.docear.plugin.ai.DocearAiController;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.ui.components.TabCountLabels;
 import org.freeplane.main.mindmapmode.MModeControllerFactory;
 import org.freeplane.features.mode.ModeController;
 
@@ -66,14 +68,14 @@ public final class AiChatTabInstaller {
         }
         try {
             for (int i = 0; i < tabs.getTabCount(); i++) {
-                if (TAB_TITLE.equals(tabs.getTitleAt(i))) {
+                if (TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
                     installed = true;
                     return true;
                 }
             }
             int insertIndex = tabs.getTabCount();
             for (int i = 0; i < tabs.getTabCount(); i++) {
-                if (RECENTLY_MODIFIED_TAB_TITLE.equals(tabs.getTitleAt(i))) {
+                if (RECENTLY_MODIFIED_TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
                     insertIndex = i + 1;
                     break;
                 }
@@ -81,7 +83,11 @@ public final class AiChatTabInstaller {
             tabs.insertTab(TAB_TITLE, null, chatSidebar, null, insertIndex);
             tabs.revalidate();
             tabs.repaint();
-            MModeControllerFactory.applyFormatTabbedPaneWidth(tabs);
+            MModeControllerFactory.refreshFormatTabTitles(tabs);
+            final DocearAiController controller = DocearAiController.getController();
+            if (controller != null) {
+                AiChatTabMetrics.publishForCurrentMap(controller.getChatSessionManager());
+            }
             installed = true;
             LogUtils.info("AI chat tab installed at index " + insertIndex);
             return true;

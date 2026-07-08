@@ -13,6 +13,8 @@ public final class RelationshipGraphTabBridge {
 		void onTabSelected();
 
 		void onTabDeselected();
+
+		void preloadMetrics();
 	}
 
 	private static Provider provider;
