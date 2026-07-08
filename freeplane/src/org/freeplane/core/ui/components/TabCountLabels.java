@@ -7,6 +7,7 @@ import java.awt.Font;
 import java.awt.FontMetrics;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Insets;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -14,8 +15,8 @@ import javax.swing.SwingConstants;
 
 public final class TabCountLabels {
 
-	private static final int HORIZONTAL_PADDING = 12;
-	private static final int VERTICAL_PADDING = 4;
+	private static final int HORIZONTAL_PADDING = 8;
+	private static final int VERTICAL_PADDING = 1;
 
 	private TabCountLabels() {
 	}
@@ -36,8 +37,9 @@ public final class TabCountLabels {
 		final String countText = count >= 0 ? String.valueOf(count) : "";
 		final int textWidth = Math.max(titleFm.stringWidth(safeTitle),
 		    countText.length() > 0 ? countFm.stringWidth(countText) : 0);
-		final int width = Math.max(36, textWidth + HORIZONTAL_PADDING);
-		final int height = titleFm.getHeight() + countFm.getHeight() + VERTICAL_PADDING;
+		final int width = textWidth + HORIZONTAL_PADDING;
+		final int height = titleFm.getAscent() + titleFm.getDescent() + countFm.getAscent() + countFm.getDescent()
+		    + VERTICAL_PADDING;
 		return new Dimension(width, height);
 	}
 
@@ -57,17 +59,18 @@ public final class TabCountLabels {
 		final JPanel panel = new JPanel(new GridBagLayout());
 		panel.setOpaque(false);
 		final Dimension size = computeTabComponentSize(panel.getFont(), title, count);
-		panel.setMinimumSize(size);
 		panel.setPreferredSize(size);
 		final GridBagConstraints gbc = new GridBagConstraints();
 		gbc.gridx = 0;
 		gbc.gridy = 0;
 		gbc.weightx = 1;
+		gbc.insets = new Insets(0, 0, 0, 0);
 		gbc.anchor = GridBagConstraints.CENTER;
 		final JLabel titleLabel = new JLabel(title);
 		titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
 		panel.add(titleLabel, gbc);
 		gbc.gridy = 1;
+		gbc.insets = new Insets(0, 0, 0, 0);
 		final JLabel countLabel = new JLabel(String.valueOf(count));
 		final Font font = countLabel.getFont();
 		countLabel.setFont(font.deriveFont(Font.PLAIN, Math.max(9f, font.getSize2D() - 2f)));

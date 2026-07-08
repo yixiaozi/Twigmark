@@ -32,6 +32,8 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 	private static final long serialVersionUID = 1L;
 	
 	private static WorkspacePopupMenu popupMenu = null;
+	
+	private boolean includeAllEntries = false;
 	private boolean inRefresh = false;
 	
 	/***********************************************************************************
@@ -44,6 +46,14 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 	 */
 	public FolderFileNode(String name, File file) {
 		super(name, file);
+	}
+
+	public void includeAllEntries(final boolean includeAllEntries) {
+		this.includeAllEntries = includeAllEntries;
+	}
+
+	public boolean includeAllEntries() {
+		return includeAllEntries;
 	}
 
 	/***********************************************************************************
@@ -138,7 +148,12 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 	
 	private void loadDirectoryFiles(File folder) {
 		if (folder != null && folder.isDirectory()) {
-			WorkspaceController.getFileSystemMgr().scanFileSystem(this, getFile(), false);
+			if (includeAllEntries) {
+				WorkspaceController.getFileSystemMgr().scanFileSystemAllEntries(this, getFile(), false);
+			}
+			else {
+				WorkspaceController.getFileSystemMgr().scanFileSystem(this, getFile(), false);
+			}
 		}
 	}
 		

@@ -11,6 +11,7 @@ public final class SideTabMetricKeys {
 	public static final String LEFT_GIT = "left.git";
 
 	public static final String RIGHT_CURRENT_REMINDERS = "right.current_reminders";
+	public static final String RIGHT_CURRENT_FOLDER = "right.current_folder";
 	public static final String RIGHT_ALL_REMINDERS = "right.all_reminders";
 	public static final String RIGHT_RECURRING_REMINDERS = "right.recurring_reminders";
 	public static final String RIGHT_TIMELINE_TODAY = "right.timeline_today";

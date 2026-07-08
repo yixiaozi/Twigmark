@@ -98,6 +98,7 @@ import org.freeplane.plugin.workspace.components.RelationshipGraphTabBridge;
 import org.freeplane.plugin.workspace.components.IWorkspaceView;
 import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
+import org.freeplane.plugin.workspace.components.currentmapfolder.CurrentMapFolderTabInstaller;
 import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
@@ -178,6 +179,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		setupModel(modeController);
 		setupView(modeController);
 		setupPinnedNodesTab(modeController);
+		setupCurrentMapFolderTab(modeController);
 		scheduleLoadAfterFrameVisible();
 	}
 
@@ -341,6 +343,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		PinnedNodesTabInstaller.install(modeController);
 	}
 
+	private void setupCurrentMapFolderTab(final ModeController modeController) {
+		CurrentMapFolderTabInstaller.install(modeController);
+	}
+
 	private void setupView(ModeController modeController) {
 		FileSystemManager.setDirectoryConflictHandler(new DirectoryMergeConflictDialog());
 		FileSystemManager.setFileConflictHandler(new FileExistsConflictDialog());
@@ -415,7 +421,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 					if (width <= 10) {
 						width = TabbedPaneWidthUtils.computeMinimumWidth(sideTabs);
 					}
-					width = Math.max(width, TabbedPaneWidthUtils.computeMinimumWidth(sideTabs));
 					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
 				catch (Exception e) {

@@ -76,22 +76,18 @@ public final class TabbedPaneWidthUtils {
 		if (tabs == null) {
 			return;
 		}
-		final int oneRowWidth = computeMinimumWidth(tabs);
 		int width = fallbackDefault;
 		try {
 			width = Integer.parseInt(ResourceController.getResourceController().getProperty(widthPropertyKey,
 			    String.valueOf(fallbackDefault)));
 			if (width <= 10) {
-				width = oneRowWidth;
+				width = computeMinimumWidth(tabs);
 			}
 		}
 		catch (final Exception e) {
-			width = oneRowWidth;
+			width = computeMinimumWidth(tabs);
 		}
-		if (oneRowWidth > 0) {
-			width = Math.max(width, oneRowWidth);
-		}
-		final int height = tabs.getPreferredSize().height > 0 ? tabs.getPreferredSize().height : 40;
+		final int height = tabs.getPreferredSize().height > 0 ? tabs.getPreferredSize().height : 32;
 		tabs.setPreferredSize(new Dimension(width, height));
 		tabs.revalidate();
 	}

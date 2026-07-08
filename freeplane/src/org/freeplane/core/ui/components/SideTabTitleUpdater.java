@@ -147,6 +147,9 @@ public final class SideTabTitleUpdater {
 	}
 
 	private static String metricKeyForRightTitle(final String title) {
+		if ("\u6587\u4ef6".equals(title)) {
+			return SideTabMetricKeys.RIGHT_CURRENT_FOLDER;
+		}
 		if ("\u63d0\u9192".equals(title)) {
 			return SideTabMetricKeys.RIGHT_CURRENT_REMINDERS;
 		}

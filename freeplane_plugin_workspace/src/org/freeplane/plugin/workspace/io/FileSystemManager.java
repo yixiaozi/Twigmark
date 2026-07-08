@@ -20,6 +20,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
+import org.freeplane.plugin.workspace.nodes.FolderFileNode;
 
 public class FileSystemManager {
 
@@ -59,13 +60,24 @@ public class FileSystemManager {
 	}
 		
 	public void scanFileSystem(AWorkspaceTreeNode node, File file, boolean recursive, FileFilter filter) {
+		scanFileSystemInternal(node, file, recursive, filter, true);
+	}
+
+	/** Lists every file and directory, including hidden and dot-prefixed entries. */
+	public void scanFileSystemAllEntries(AWorkspaceTreeNode node, File file, boolean recursive) {
+		scanFileSystemInternal(node, file, recursive, null, false);
+	}
+
+	private void scanFileSystemInternal(AWorkspaceTreeNode node, File file, boolean recursive, FileFilter filter,
+	        final boolean applyDefaultFilters) {
 		if (file != null && file.exists()) {
 			if (file.isDirectory()) {
 					if(node instanceof IFileSystemRepresentation) {
-						iterateDirectory(node, file, filter, recursive, ((IFileSystemRepresentation) node).orderDescending());
+						iterateDirectory(node, file, filter, recursive, ((IFileSystemRepresentation) node).orderDescending(),
+						    applyDefaultFilters);
 					} 
 					else {
-						iterateDirectory(node, file, filter, recursive, false);
+						iterateDirectory(node, file, filter, recursive, false, applyDefaultFilters);
 					}
 			}
 			else {
@@ -438,20 +450,21 @@ public class FileSystemManager {
 		return typeManager.getFileTypeHandlers();
 	}
 
-	private void iterateDirectory(AWorkspaceTreeNode parent, File directory, FileFilter filter, boolean recursive,  final boolean orderDescending) {
+	private void iterateDirectory(AWorkspaceTreeNode parent, File directory, FileFilter filter, boolean recursive,
+	        final boolean orderDescending, final boolean applyDefaultFilters) {
 		boolean orderDesc = orderDescending;
 //		if(parent instanceof IFileSystemRepresentation) {
 //			orderDesc = ((IFileSystemRepresentation) parent).orderDescending();
 //		}
 		
-		for (File file : sortFiles(directory.listFiles(new DirectoryFilter(filter)), orderDesc, true)) {
+		for (File file : sortFiles(directory.listFiles(new DirectoryFilter(filter, applyDefaultFilters)), orderDesc, true)) {
 			AWorkspaceTreeNode newParent = createFileNode(parent, FileReadManager.DIRECTORY_HANDLE, file);
 			if(recursive) {
-				iterateDirectory(newParent, file, filter, recursive, orderDesc);
+				iterateDirectory(newParent, file, filter, recursive, orderDesc, applyDefaultFilters);
 			}
 
 		}
-		for (File file : sortFiles(directory.listFiles(new FilesOnlyFilter(filter)), orderDesc, true)) {
+		for (File file : sortFiles(directory.listFiles(new FilesOnlyFilter(filter, applyDefaultFilters)), orderDesc, true)) {
 			createFileNode(parent, file);
 		}
 	}
@@ -500,10 +513,18 @@ public class FileSystemManager {
 		if (handlers != null && handlers.size() == 1) { //WORKSPACE - ToDo: what if there is more than one handler for a single type?
 			IFileTypeHandler nodeCreator = handlers.get(0);
 			AWorkspaceTreeNode newParent = nodeCreator.createFileNode(parent, fileExtension, file);
+			inheritIncludeAllEntries(parent, newParent);
 			return newParent;
 		}
 		return parent;
-	}	
+	}
+
+	private void inheritIncludeAllEntries(final AWorkspaceTreeNode parent, final AWorkspaceTreeNode child) {
+		if (parent instanceof FolderFileNode && child instanceof FolderFileNode
+		        && ((FolderFileNode) parent).includeAllEntries()) {
+			((FolderFileNode) child).includeAllEntries(true);
+		}
+	}
 	
 	
 	/***********************************************************************************
@@ -511,11 +532,16 @@ public class FileSystemManager {
 	 **********************************************************************************/
 	
 	private class DirectoryFilter implements FileFilter  {
-		private boolean filtering = true;
+		private final boolean filtering;
 		private FileFilter extraFilter;
 		
-		public DirectoryFilter(FileFilter filter) {
+		public DirectoryFilter(final FileFilter filter) {
+			this(filter, true);
+		}
+
+		public DirectoryFilter(final FileFilter filter, final boolean filtering) {
 			this.extraFilter = filter;
+			this.filtering = filtering;
 		}
 
 		public boolean accept(File pathname) {
@@ -542,11 +568,16 @@ public class FileSystemManager {
 	}
 	
 	private class FilesOnlyFilter implements FileFilter {
-		private boolean filtering = true;
+		private final boolean filtering;
 		private FileFilter extraFilter;
 		
-		public FilesOnlyFilter(FileFilter filter) {
+		public FilesOnlyFilter(final FileFilter filter) {
+			this(filter, true);
+		}
+
+		public FilesOnlyFilter(final FileFilter filter, final boolean filtering) {
 			this.extraFilter = filter;
+			this.filtering = filtering;
 		}
 
 		public boolean accept(File pathname) {
