@@ -37,3 +37,10 @@ desktop.ini
 folderhighlight-*.ico
 **/.project
 /install
+
+# Ant auto-bumps these on every build (local only; seeds are *.template)
+docear_plugin_core/resources/build.number
+docear_plugin_core/resources/version.properties
+docear_framework/docear.version.properties
+Jabref_Beta_2_7_Docear/build.number
+Jabref_Beta_2_7_Docear/src/resource/build.properties

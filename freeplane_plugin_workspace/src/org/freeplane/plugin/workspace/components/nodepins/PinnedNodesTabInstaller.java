@@ -81,6 +81,12 @@ public final class PinnedNodesTabInstaller {
 			tabs.insertTab(title, null, new PinnedNodesTabPanel(modeController), null, insertIndex);
 			tabs.revalidate();
 			tabs.repaint();
+			try {
+				final Class factoryClass = Class.forName("org.freeplane.main.mindmapmode.MModeControllerFactory");
+				factoryClass.getMethod("applyFormatTabbedPaneWidth", JTabbedPane.class).invoke(null, tabs);
+			}
+			catch (final Exception ignored) {
+			}
 			installed = true;
 			return true;
 		}

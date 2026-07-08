@@ -8,6 +8,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.main.mindmapmode.MModeControllerFactory;
 import org.freeplane.features.mode.ModeController;
 
 /**
@@ -80,6 +81,7 @@ public final class AiChatTabInstaller {
             tabs.insertTab(TAB_TITLE, null, chatSidebar, null, insertIndex);
             tabs.revalidate();
             tabs.repaint();
+            MModeControllerFactory.applyFormatTabbedPaneWidth(tabs);
             installed = true;
             LogUtils.info("AI chat tab installed at index " + insertIndex);
             return true;

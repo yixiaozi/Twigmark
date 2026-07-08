@@ -3,7 +3,7 @@ package org.freeplane.plugin.workspace.mindmapmode;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
-import java.awt.FontMetrics;
+import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.dnd.DropTarget;
@@ -123,6 +123,7 @@ import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.git.GitTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
+import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.MindMapFileSearchPanel;
@@ -145,7 +146,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
-			TAB_WORKSPACE, TAB_FAVORITES, TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GRAPH, TAB_GIT
+			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH, TAB_GIT
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -391,8 +392,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			public void run() {
 				boolean expanded = true;
 				try {
-					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "250"));
-					width = Math.max(width, computeMinimumSideTabsWidth());
+					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "0"));
+					if (width <= 10) {
+						width = TabbedPaneWidthUtils.computeMinimumWidth(sideTabs);
+					}
+					width = Math.max(width, TabbedPaneWidthUtils.computeMinimumWidth(sideTabs));
 					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
 				catch (Exception e) {
@@ -596,7 +600,28 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				sideTabOrder.add(tabId);
 			}
 		}
+		normalizeSearchTabOrder();
 		normalizeSideTabOrder();
+	}
+
+	private void normalizeSearchTabOrder() {
+		if (!sideTabOrder.contains(TAB_SEARCH)) {
+			return;
+		}
+		sideTabOrder.remove(TAB_SEARCH);
+		int insertIndex = sideTabOrder.indexOf(TAB_ALL_FILE_SEARCH);
+		if (insertIndex < 0) {
+			insertIndex = sideTabOrder.indexOf(TAB_FILE_SEARCH);
+		}
+		if (insertIndex < 0) {
+			insertIndex = sideTabOrder.indexOf(TAB_FAVORITES);
+		}
+		if (insertIndex < 0) {
+			sideTabOrder.add(TAB_SEARCH);
+		}
+		else {
+			sideTabOrder.add(insertIndex + 1, TAB_SEARCH);
+		}
 	}
 
 	private void normalizeSideTabOrder() {
@@ -657,13 +682,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return "\u6536\u85cf";
 		}
 		if (TAB_SEARCH.equals(tabId)) {
-			return "\u641c\u7d22";
+			return "\u8282\u70b9";
 		}
 		if (TAB_FILE_SEARCH.equals(tabId)) {
-			return "\u6587\u4ef6\u641c\u7d22";
+			return "\u5bfc\u56fe";
 		}
 		if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
-			return "\u5168\u90e8\u6587\u4ef6\u641c\u7d22";
+			return "\u6587\u4ef6";
 		}
 		if (TAB_ACTIVITY.equals(tabId)) {
 			return "\u6d3b\u52a8\u5206\u6790";
@@ -690,18 +715,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return sideTabOrder.get(selectedIndex);
 		}
 		return TAB_WORKSPACE;
-	}
-
-	private int computeMinimumSideTabsWidth() {
-		if (sideTabs == null || sideTabs.getTabCount() == 0) {
-			return 360;
-		}
-		final FontMetrics fm = sideTabs.getFontMetrics(sideTabs.getFont());
-		int total = 12;
-		for (int i = 0; i < sideTabs.getTabCount(); i++) {
-			total += fm.stringWidth(sideTabs.getTitleAt(i)) + 28;
-		}
-		return Math.max(360, total);
 	}
 
 	private void applySideTabsWidth() {

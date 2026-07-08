@@ -44,6 +44,7 @@ import org.freeplane.core.ui.components.JResizer.Direction;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.CollapseDirection;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollapseListener;
+import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import org.freeplane.core.ui.components.ResizeEvent;
 import org.freeplane.core.ui.components.ResizerListener;
 import org.freeplane.core.ui.components.UITools;
@@ -170,6 +171,8 @@ public class MModeControllerFactory {
 // // 	private Controller controller;
  	private MModeController modeController;
 	private MUIFactory uiFactory;
+	public static final String TABBEDPANE_VIEW_COLLAPSED = "tabbed_pane.collapsed";
+	public static final String TABBEDPANE_VIEW_WIDTH = "tabbed_pane.width";
 
 	private void createAddIns() {
 		LastSelectionMapExtensionIO.install(modeController);
@@ -184,6 +187,9 @@ public class MModeControllerFactory {
 		installWorkspacePinnedNodesTab(modeController, tabs);
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
+		if (tabs instanceof JTabbedPane) {
+			applyFormatTabbedPaneWidth((JTabbedPane) tabs);
+		}
 		new AttributePanelManager(modeController);
 		new HierarchicalIcons();
 		new AutomaticLayoutController();
@@ -302,8 +308,6 @@ public class MModeControllerFactory {
 		final JTabbedPane tabs = new JTabbedPane();
 		Box resisableTabs = Box.createHorizontalBox();
 		//DOCEAR - new OneTouchCollapseResizer
-		final String TABBEDPANE_VIEW_COLLAPSED = "tabbed_pane.collapsed";
-		final String TABBEDPANE_VIEW_WIDTH = "tabbed_pane.width";
 		boolean expanded = true;
 		try {
 			expanded = !Boolean.parseBoolean(ResourceController.getResourceController().getProperty(TABBEDPANE_VIEW_COLLAPSED, "false"));
@@ -336,9 +340,10 @@ public class MModeControllerFactory {
 				}
 			}
 		});
+		tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 		try {
-			int width = Integer.parseInt(ResourceController.getResourceController().getProperty(TABBEDPANE_VIEW_WIDTH, "350"));
-			if(width <= 10) {
+			int width = Integer.parseInt(ResourceController.getResourceController().getProperty(TABBEDPANE_VIEW_WIDTH, "0"));
+			if (width <= 10) {
 				width = 350;
 			}
 			tabs.setPreferredSize(new Dimension(width, 40));
@@ -421,5 +426,12 @@ public class MModeControllerFactory {
 		catch (final Exception e) {
 			LogUtils.warn(e);
 		}
+	}
+
+	public static void applyFormatTabbedPaneWidth(final JTabbedPane tabs) {
+		if (tabs == null) {
+			return;
+		}
+		TabbedPaneWidthUtils.applyPreferredWidth(tabs, TABBEDPANE_VIEW_WIDTH, TabbedPaneWidthUtils.computeMinimumWidth(tabs));
 	}
 }

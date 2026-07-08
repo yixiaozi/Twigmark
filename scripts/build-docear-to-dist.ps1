@@ -21,6 +21,11 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $antPath = Join-Path $repoRoot "tools\apache-ant-1.10.14\bin\ant.bat"
 $buildFile = Join-Path $repoRoot "docear_framework\ant\build.xml"
 $distDir = Join-Path $repoRoot "docear_framework\dist"
+$runtimeScript = Join-Path $PSScriptRoot "docear-runtime.ps1"
+
+. $runtimeScript
+
+& powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "ensure-build-metadata.ps1") | Out-Null
 
 $candidates = @(
     "C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot",
@@ -70,6 +75,8 @@ if (!(Test-Path $windowsZip)) {
 }
 
 $extractDir = Join-Path $TargetDir "docear_windows"
+Write-Output "Stopping running Docear before deploy ..."
+Stop-RunningDocear
 Write-Output "Extracting $windowsZip to $extractDir ..."
 
 if (Test-Path $extractDir) {
@@ -87,15 +94,7 @@ if (Test-Path $extractDir) {
 Expand-Archive -Path $windowsZip -DestinationPath $extractDir -Force
 Write-Output "Extraction completed."
 
-$installDir = $null
-$subDirs = Get-ChildItem -Path $extractDir -Directory -ErrorAction SilentlyContinue
-foreach ($subDir in $subDirs) {
-    if (Test-Path (Join-Path $subDir.FullName "freeplanelauncher.jar")) {
-        $installDir = $subDir.FullName
-        break
-    }
-}
-
+$installDir = Find-DocearInstallDir -RootDir $extractDir
 if ($null -eq $installDir) {
     throw "Could not find Docear install folder under $extractDir"
 }
@@ -103,23 +102,6 @@ if ($null -eq $installDir) {
 Write-Output "Published Docear packages to $TargetDir"
 Write-Output "Install folder: $installDir"
 
-$launcherPath = Join-Path $installDir "docear.exe"
-if (-not (Test-Path $launcherPath)) {
-    $launcherPath = Join-Path $installDir "Docear.exe"
-}
-
 if (-not $NoLaunch) {
-    if (Test-Path $launcherPath) {
-        Write-Output "Stopping existing Docear instances ..."
-        Get-CimInstance Win32_Process -Filter "Name='javaw.exe'" -ErrorAction SilentlyContinue |
-            Where-Object { $_.CommandLine -match 'freeplanelauncher\.jar' } |
-            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-        Start-Sleep -Seconds 2
-        Remove-Item "$env:APPDATA\Docear\single_instance.lock" -Force -ErrorAction SilentlyContinue
-        Write-Output "Launching Docear from $launcherPath ..."
-        Start-Process -FilePath $launcherPath
-    }
-    else {
-        Write-Warning "Docear.exe not found in $installDir"
-    }
+    Start-DocearFromInstallDir -InstallDir $installDir | Out-Null
 }
