@@ -198,7 +198,16 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 
 		public void selectAsTheOnlyOneSelected(final NodeModel node) {
-			final NodeView nodeView = getNodeView(node);
+			if (node == null) {
+				return;
+			}
+			getModeController().getMapController().displayNode(node);
+			NodeView nodeView = getNodeView(node);
+			if (nodeView == null) {
+				revalidate();
+				validate();
+				nodeView = getNodeView(node);
+			}
 			if (nodeView != null) {
 				MapView.this.selectAsTheOnlyOneSelected(nodeView);
 			}
@@ -1919,23 +1928,19 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		if (node == null) {
 			return false;
 		}
-		unfoldAncestorsOf(node);
-		final NodeView nodeView = getNodeView(node);
+		getModeController().getMapController().displayNode(node);
+		NodeView nodeView = getNodeView(node);
+		if (nodeView == null) {
+			revalidate();
+			validate();
+			nodeView = getNodeView(node);
+		}
 		if (nodeView == null) {
 			return false;
 		}
 		selectAsTheOnlyOneSelected(nodeView);
 		centerNode(nodeView, false);
 		return true;
-	}
-
-	private void unfoldAncestorsOf(final NodeModel node) {
-		final MapController mapController = getModeController().getMapController();
-		for (NodeModel parent = node.getParentNode(); parent != null; parent = parent.getParentNode()) {
-			if (mapController.isFolded(parent)) {
-				mapController.setFolded(parent, false);
-			}
-		}
 	}
 
 	/*

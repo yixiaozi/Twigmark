@@ -60,8 +60,7 @@ public final class NodePinNavigator {
 				if (openFile != null && openFile.equals(mapFile)) {
 					final NodeModel node = map.getNodeForID(nodeId);
 					if (node != null) {
-						Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(node);
-						Controller.getCurrentModeController().getMapController().centerNode(node);
+						Controller.getCurrentModeController().getMapController().select(node);
 						return;
 					}
 				}

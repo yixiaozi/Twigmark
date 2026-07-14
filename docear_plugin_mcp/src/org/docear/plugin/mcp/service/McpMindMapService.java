@@ -320,8 +320,7 @@ public final class McpMindMapService {
 					if (isSameFile(map.getFile(), file)) {
 						final NodeModel node = map.getNodeForID(nodeId);
 						if (node != null) {
-							Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(node);
-							Controller.getCurrentModeController().getMapController().centerNode(node);
+							Controller.getCurrentModeController().getMapController().select(node);
 							final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 							result.put("navigated", JsonValue.ofBoolean(true));
 							result.put("nodeText",
