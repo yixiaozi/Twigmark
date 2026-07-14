@@ -104,6 +104,7 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 import org.freeplane.plugin.workspace.features.nodepins.TagChipContentTransformer;
+import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
