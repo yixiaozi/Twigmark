@@ -61,6 +61,8 @@ public class UsageStatsManager {
     
     public static File getStatsRootDir() {
         try {
+            // Shared project metadata: _data/{projectId}/.docear_stats
+            // Per-computer isolation is under data/{deviceId}/ — see DeviceIdentifier.
             File baseDir = org.freeplane.core.util.MindMapDataRootResolver.getProjectDataDirectory();
             if (baseDir == null) {
                 baseDir = new File(org.freeplane.core.util.Compat.getApplicationUserDirectory());
