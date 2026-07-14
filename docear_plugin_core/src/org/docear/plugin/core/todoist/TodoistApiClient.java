@@ -449,13 +449,16 @@ final class TodoistApiClient {
 	}
 
 	private void appendDueFields(StringBuilder sb, TodoistReminderRecord record) {
+		if (record.remindAt <= 0 && !record.recurring) {
+			return;
+		}
 		if (record.recurring) {
 			String dueString = toRecurringDueString(record);
 			if (dueString != null && dueString.length() > 0) {
 				sb.append(",\"due_string\":\"").append(TodoistJson.escape(dueString)).append("\"");
 				sb.append(",\"due_lang\":\"en\"");
 			}
-			else {
+			else if (record.remindAt > 0) {
 				sb.append(",\"due_datetime\":\"").append(TodoistJson.escape(formatUtcDateTime(record.remindAt)))
 						.append("\"");
 			}
