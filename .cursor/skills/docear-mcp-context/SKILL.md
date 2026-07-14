@@ -48,6 +48,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | `TASK` | McpTaskService |
 | `WORKSPACE` | McpWorkspaceService |
 | `GRAPH` | McpRelationshipGraphService |
+| `TAG` | McpTagService |
 | `RESOURCE` / `PROMPT` | 资源读取 / 提示词 |
 
 查询已记录日志：
@@ -94,6 +95,22 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 
 钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别等）。
 
+## 标签 / 分组 / 收藏（侧栏）
+
+与 UI「标签」「收藏」共用 `NodePinsIndex` / `TagGroupStore` / `FavoritesAndTagsStore`（**不是**全库无索引扫描）。
+
+| 场景 | 推荐调用 |
+|------|----------|
+| 一次拿到组→标签→计数/颜色 | `get_tag_catalog` 或资源 `docear://tags/catalog` |
+| 只要分组 Tab | `list_tag_groups` |
+| 所有/某组标签 | `list_tags`（`scope`: `pins`\|`favorites`\|`all`，可选 `groupId`） |
+| 某标签有哪些节点 | `list_nodes_by_tag`（`tag` 必填；`scope` 默认 `pins`） |
+| 收藏列表 | `list_favorites`（可选 `tag`） |
+| 建/改/删组、移标签、设色 | `create_tag_group` / `rename_tag_group` / `delete_tag_group` / `set_tag_group` / `set_tag_color` |
+| 给节点打标签 | 仍用 `set_node_tags` |
+
+**注意**：`list_nodes_by_tag` 的 pins 范围 = 侧栏标签索引中的节点；收藏 scope 返回 `kind:favorite`（文件级 URI，无 nodeId）。
+
 ## 第二步：决定写入位置
 
 | 情况 | 父节点 |
@@ -110,6 +127,35 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 - 只读查询禁止调用 `open_mindmap`
 - `parentNodeId` / `nodeId` 必须来自上一步，不能来自旧会话
 - 写入后检查返回的 `mapFile`、`saved`、`headlessLoad`
+- **批量写节点用 `add_nodes`（一次保存）**，禁止为同一父节点连续多次 `add_node`
+
+### `add_nodes` 约定（支持多层）
+
+`nodes` 为 JSON 数组；每项可以是字符串，或对象 `{ "text", "todo"?, "children"? }`。
+
+```json
+{
+  "parentNodeId": "ID_xxx",
+  "filePath": "可选.mm",
+  "nodes": [
+    "概览：本批说明",
+    {
+      "text": "工具",
+      "children": [
+        { "text": "查询类", "children": ["search_nodes", "list_tags"] },
+        { "text": "写入类", "todo": true }
+      ]
+    }
+  ]
+}
+```
+
+| 规则 | 说明 |
+|------|------|
+| 单层 | `["a","b","c"]` 或 `[{"text":"a"},{"text":"b"}]` |
+| 多层 | 用 `children` 递归；深度 ≤ 20，总节点 ≤ 300 |
+| 返回 | 镜像树，含各层 `nodeId` / `nodeText` / `children`，以及 `createdCount` |
+| 与 `add_node` | 只加 1 个节点时可用 `add_node`；≥2 或有层级时用 `add_nodes` |
 
 ## 回复用户时
 
@@ -213,8 +259,9 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - 读上下文：`get_selection_context`、`get_active_map_json`、`get_mindmap_json`（含 note/link/icons/tags/MODIFIED）
 - **关系图**：`get_relationship_graph`、`get_node_relationships`；资源 `docear://graph/summary`
 - 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
+- **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`、`rename_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
-- 写节点：`add_node`、`create_todo`、`set_reminder`、`set_recurring_reminder`
+- 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`
 - 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`create_mindmap`
 - 打开导图：`open_mindmap`（`filePath` 来自上下文 `mapFile`）
 - 审计日志：`list_audit_log`、`list_audit_traces`、`get_audit_stats`

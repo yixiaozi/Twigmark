@@ -25,6 +25,7 @@ import org.docear.plugin.core.features.DocearNodePrivacyExtensionController;
 import org.docear.plugin.core.features.DocearNodePrivacyExtensionController.DocearPrivacyLevel;
 import org.docear.plugin.core.todoist.TodoistSyncService;
 import org.docear.plugin.mcp.DocearMcpConfig;
+import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.util.EdtRunner;
 import org.docear.plugin.mcp.util.EdtRunner.Task;
@@ -62,6 +63,9 @@ public final class McpMindMapService {
 	private static final String TODO_ICON = "hourglass";
 	private static final SimpleDateFormat MODIFIED_DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
 	private static final long MILLIS_PER_DAY = 24L * 60L * 60L * 1000L;
+	/** Caps for {@link #addNodes} to keep one MCP call bounded. */
+	private static final int ADD_NODES_MAX_COUNT = 300;
+	private static final int ADD_NODES_MAX_DEPTH = 20;
 
 	private static final class SearchMatch {
 		private final File mapFile;
@@ -348,6 +352,136 @@ public final class McpMindMapService {
 				return JsonValue.ofMap(result).toJson();
 			}
 		});
+	}
+
+	/**
+	 * Batch-create a node tree under {@code parentNodeId} in one EDT pass and one save.
+	 * <p>
+	 * {@code nodesValue} is a JSON array. Each item may be:
+	 * <ul>
+	 * <li>a string → one child with that text</li>
+	 * <li>an object {@code { "text": "...", "todo"?: bool, "children"?: [...] }}</li>
+	 * </ul>
+	 * Nested {@code children} builds multiple levels. Prefer this over repeated {@link #addNode}.
+	 */
+	public static String addNodes(final String filePath, final String parentNodeId, final JsonValue nodesValue)
+			throws Exception {
+		ensureWritable();
+		final List specs = normalizeNodeSpecs(nodesValue);
+		if (specs.isEmpty()) {
+			throw new IllegalArgumentException("nodes must be a non-empty JSON array");
+		}
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final McpMapWriteSession session = McpMapWriteSession.open(filePath);
+				final MMapController mapController = getMapController();
+				final MTextController textController = (MTextController) TextController.getController();
+				final MIconController iconController = (MIconController) IconController.getController();
+				final NodeModel parent = session.requireNode(parentNodeId);
+				final int[] created = new int[] { 0 };
+				final List<JsonValue> createdTree = new ArrayList<JsonValue>();
+				for (int i = 0; i < specs.size(); i++) {
+					createdTree.add(createNodeSpecRecursive(mapController, textController, iconController, parent,
+							(JsonValue) specs.get(i), 1, created));
+				}
+				session.save();
+				final Map<String, JsonValue> result = writeResult(session);
+				result.put("parentNodeId", JsonValue.ofString(parentNodeId));
+				result.put("createdCount", JsonValue.ofNumber(Integer.valueOf(created[0])));
+				result.put("nodes", JsonValue.ofList(createdTree));
+				return JsonValue.ofMap(result).toJson();
+			}
+		});
+	}
+
+	@SuppressWarnings("rawtypes")
+	private static List normalizeNodeSpecs(final JsonValue nodesValue) {
+		if (nodesValue == null || nodesValue.isNull()) {
+			return Collections.EMPTY_LIST;
+		}
+		JsonValue root = nodesValue;
+		final Object raw = nodesValue.raw();
+		if (raw instanceof String) {
+			final String text = ((String) raw).trim();
+			if (text.length() == 0) {
+				return Collections.EMPTY_LIST;
+			}
+			root = JsonParser.parse(text);
+		}
+		final List list = root.asList();
+		if (list == null || list.isEmpty()) {
+			// Allow a single object / string as a one-item batch.
+			if (raw instanceof Map || (root.raw() instanceof Map)) {
+				final List one = new ArrayList();
+				one.add(root);
+				return one;
+			}
+			final String asText = root.asString();
+			if (asText != null && asText.length() > 0 && !asText.startsWith("[") && !asText.startsWith("{")) {
+				final List one = new ArrayList();
+				one.add(JsonValue.ofString(asText));
+				return one;
+			}
+			return Collections.EMPTY_LIST;
+		}
+		return list;
+	}
+
+	private static JsonValue createNodeSpecRecursive(final MMapController mapController,
+			final MTextController textController, final MIconController iconController, final NodeModel parent,
+			final JsonValue spec, final int depth, final int[] created) {
+		if (depth > ADD_NODES_MAX_DEPTH) {
+			throw new IllegalArgumentException("nodes tree exceeds max depth " + ADD_NODES_MAX_DEPTH);
+		}
+		if (created[0] >= ADD_NODES_MAX_COUNT) {
+			throw new IllegalArgumentException("nodes exceeds max count " + ADD_NODES_MAX_COUNT);
+		}
+		final String text;
+		boolean todo = false;
+		List children = Collections.EMPTY_LIST;
+		final Object raw = spec != null ? spec.raw() : null;
+		if (raw instanceof String || (spec != null && !(raw instanceof Map) && !(raw instanceof List))) {
+			text = spec.asString();
+		}
+		else if (raw instanceof Map) {
+			final Map map = spec.asMap();
+			if (!map.containsKey("text") || map.get("text") == null || ((JsonValue) map.get("text")).isNull()) {
+				throw new IllegalArgumentException("each node object requires text");
+			}
+			text = ((JsonValue) map.get("text")).asString();
+			todo = map.containsKey("todo") && ((JsonValue) map.get("todo")).asBoolean();
+			if (map.containsKey("children") && map.get("children") != null) {
+				children = ((JsonValue) map.get("children")).asList();
+			}
+		}
+		else {
+			throw new IllegalArgumentException("invalid node spec; use string or {text, children?, todo?}");
+		}
+		if (text == null || text.trim().length() == 0) {
+			throw new IllegalArgumentException("node text must not be empty");
+		}
+		final NodeModel node = mapController.addNewNode(parent, parent.getChildCount(), parent.isNewChildLeft());
+		textController.setNodeText(node, text);
+		final String nodeId = node.createID();
+		if (todo) {
+			iconController.addIcon(node, MindIconFactory.create(TODO_ICON));
+		}
+		created[0]++;
+		final List<JsonValue> childResults = new ArrayList<JsonValue>();
+		for (int i = 0; i < children.size(); i++) {
+			childResults.add(createNodeSpecRecursive(mapController, textController, iconController, node,
+					(JsonValue) children.get(i), depth + 1, created));
+		}
+		final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
+		row.put("nodeId", JsonValue.ofString(nodeId));
+		row.put("nodeText", JsonValue.ofString(text));
+		if (todo) {
+			row.put("todo", JsonValue.ofBoolean(true));
+		}
+		if (!childResults.isEmpty()) {
+			row.put("children", JsonValue.ofList(childResults));
+		}
+		return JsonValue.ofMap(row);
 	}
 
 	public static String changeNodeText(final String filePath, final String nodeId, final String text) throws Exception {

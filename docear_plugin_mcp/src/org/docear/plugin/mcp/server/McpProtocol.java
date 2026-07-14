@@ -13,6 +13,7 @@ import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeService;
 import org.docear.plugin.mcp.service.McpRelationshipGraphService;
+import org.docear.plugin.mcp.service.McpTagService;
 import org.docear.plugin.mcp.service.McpTaskService;
 import org.docear.plugin.mcp.service.McpWorkspaceService;
 
@@ -93,6 +94,33 @@ public final class McpProtocol {
 				schema("limit", "number", false)));
 		tools.add(tool("list_published", "List nodes marked with the published icon.",
 				schema("limit", "number", false)));
+		tools.add(tool("list_tag_groups",
+				"List sidebar tag groups (tabs): groupId, name, tagCount, nodeCount. Default group is ungrouped."));
+		tools.add(tool("list_tags",
+				"List tags with counts/colors/group. scope: pins (default) | favorites | all. Optional groupId filter.",
+				schema("scope", "string", false), schema("groupId", "string", false),
+				schema("includeEmpty", "boolean", false)));
+		tools.add(tool("list_nodes_by_tag",
+				"List nodes/favorites that carry a tag. scope: pins (default) | favorites | all.",
+				schema("tag", "string", true), schema("scope", "string", false), schema("limit", "number", false)));
+		tools.add(tool("list_favorites",
+				"List workspace favorites (sidebar). Optional tag filter.",
+				schema("tag", "string", false), schema("limit", "number", false)));
+		tools.add(tool("get_tag_catalog",
+				"One-shot tag catalog: pin groups→tags→counts/colors, plus favorite tags."));
+		tools.add(tool("create_tag_group", "Create a sidebar tag group (tab).",
+				schema("name", "string", true)));
+		tools.add(tool("rename_tag_group", "Rename a custom tag group (not ungrouped).",
+				schema("groupId", "string", true), schema("name", "string", true)));
+		tools.add(tool("delete_tag_group",
+				"Delete a custom tag group; its tags move to ungrouped.",
+				schema("groupId", "string", true)));
+		tools.add(tool("set_tag_group", "Assign a tag to a group (use groupId=ungrouped to clear).",
+				schema("tag", "string", true), schema("groupId", "string", true)));
+		tools.add(tool("set_tag_color",
+				"Set tag chip color (#RRGGBB) or clear=true to restore auto palette.",
+				schema("tag", "string", true), schema("color", "string", false),
+				schema("clear", "boolean", false)));
 		tools.add(tool("get_selection_context", "Get current selection context in Docear."));
 		tools.add(tool("search_nodes",
 				"Search nodes by keyword via silent SAX. Filters by node MODIFIED (not global Top-N). "
@@ -129,6 +157,12 @@ public final class McpProtocol {
 				"Add a child node. Optional filePath targets any .mm without opening it in UI; omit to use the current map.",
 				schema("filePath", "string", false), schema("parentNodeId", "string", true),
 				schema("text", "string", true)));
+		tools.add(tool("add_nodes",
+				"Batch-create a node tree under parentNodeId in ONE save (prefer over many add_node calls). "
+						+ "nodes: JSON array. Item = string OR {text, todo?, children?}. "
+						+ "Flat example: [\"a\",\"b\"]. Nested via children. Max 300 nodes / depth 20.",
+				schema("filePath", "string", false), schema("parentNodeId", "string", true),
+				schema("nodes", "array", true)));
 		tools.add(tool("change_node_text",
 				"Change node text. Optional filePath targets any .mm without opening it in UI.",
 				schema("filePath", "string", false), schema("nodeId", "string", true),
@@ -265,6 +299,39 @@ public final class McpProtocol {
 		else if ("list_published".equals(name)) {
 			textResult = McpNodeService.listPublished(argInt(args, "limit", 100));
 		}
+		else if ("list_tag_groups".equals(name)) {
+			textResult = McpTagService.listTagGroups();
+		}
+		else if ("list_tags".equals(name)) {
+			textResult = McpTagService.listTags(argString(args, "scope", "pins"), argString(args, "groupId", ""),
+					argBool(args, "includeEmpty", false));
+		}
+		else if ("list_nodes_by_tag".equals(name)) {
+			textResult = McpTagService.listNodesByTag(required(args, "tag"), argString(args, "scope", "pins"),
+					argInt(args, "limit", 200));
+		}
+		else if ("list_favorites".equals(name)) {
+			textResult = McpTagService.listFavorites(argString(args, "tag", ""), argInt(args, "limit", 200));
+		}
+		else if ("get_tag_catalog".equals(name)) {
+			textResult = McpTagService.getTagCatalog();
+		}
+		else if ("create_tag_group".equals(name)) {
+			textResult = McpTagService.createTagGroup(required(args, "name"));
+		}
+		else if ("rename_tag_group".equals(name)) {
+			textResult = McpTagService.renameTagGroup(required(args, "groupId"), required(args, "name"));
+		}
+		else if ("delete_tag_group".equals(name)) {
+			textResult = McpTagService.deleteTagGroup(required(args, "groupId"));
+		}
+		else if ("set_tag_group".equals(name)) {
+			textResult = McpTagService.setTagGroup(required(args, "tag"), required(args, "groupId"));
+		}
+		else if ("set_tag_color".equals(name)) {
+			textResult = McpTagService.setTagColor(required(args, "tag"), argString(args, "color", ""),
+					argBool(args, "clear", false));
+		}
 		else if ("get_selection_context".equals(name)) {
 			textResult = McpContextService.getSelectionContext();
 		}
@@ -297,6 +364,13 @@ public final class McpProtocol {
 		else if ("add_node".equals(name)) {
 			textResult = McpMindMapService.addNode(argString(args, "filePath", ""), required(args, "parentNodeId"),
 					required(args, "text"));
+		}
+		else if ("add_nodes".equals(name)) {
+			if (!args.containsKey("nodes") || args.get("nodes").isNull()) {
+				throw new IllegalArgumentException("Missing required argument: nodes");
+			}
+			textResult = McpMindMapService.addNodes(argString(args, "filePath", ""), required(args, "parentNodeId"),
+					args.get("nodes"));
 		}
 		else if ("change_node_text".equals(name)) {
 			textResult = McpMindMapService.changeNodeText(argString(args, "filePath", ""), required(args, "nodeId"),
@@ -402,6 +476,7 @@ public final class McpProtocol {
 		resources.add(resource("docear://context/active-map", "Active mind map JSON", "application/json"));
 		resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
 		resources.add(resource("docear://graph/summary", "Relationship graph summary (file + node modes)", "application/json"));
+		resources.add(resource("docear://tags/catalog", "Tag groups + tags + favorite tags catalog", "application/json"));
 		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
 		return resources;
 	}
@@ -489,6 +564,10 @@ public final class McpProtocol {
 			mimeType = "application/json";
 			text = McpRelationshipGraphService.getGraphSummary(false);
 		}
+		else if ("docear://tags/catalog".equals(uri)) {
+			mimeType = "application/json";
+			text = McpTagService.getTagCatalog();
+		}
 		else if ("docear://inbox".equals(uri)) {
 			mimeType = "application/json";
 			text = McpContextService.getInboxContext();
@@ -542,7 +621,7 @@ public final class McpProtocol {
 			instructions = "Read docear://tasks/today and docear://tasks/todos. Propose a realistic schedule for today with time blocks. Offer to create todos or reminders via MCP tools if helpful.";
 		}
 		else if ("break-down-task".equals(name)) {
-			instructions = "Read docear://context/selection. Break the selected task into 3-7 concrete subtasks. Use create_todo or add_node tools when the user agrees.";
+			instructions = "Read docear://context/selection. Break the selected task into 3-7 concrete subtasks. Prefer add_nodes (one batch) or create_todo when the user agrees.";
 		}
 		else if ("project-status".equals(name)) {
 			instructions = "Read docear://workspace/overview and search_nodes for the target project. Summarize open todos, reminders and recent changes.";

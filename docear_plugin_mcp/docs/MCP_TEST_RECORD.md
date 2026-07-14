@@ -9,7 +9,7 @@
 ## 1. 协议与工具列表
 - initialize: docear-mcp v1.0.0
 - tools/list: 34 tools
-- 工具名: list_todos, list_reminders, list_overdue, get_workspace_plan, get_active_map_json, get_mindmap_json, get_node_details, list_pinned, list_published, get_selection_context, search_nodes, list_recently_modified, open_mindmap, navigate_to_node, add_node, change_node_text, remove_node, create_todo, complete_todo, set_reminder, set_priority, move_node, set_node_folded, set_node_link, set_node_note, set_node_tags, toggle_pin, set_node_icon, set_recurring_reminder, create_mindmap, list_projects, quick_capture, sync_todoist, export_workspace_snapshot
+- 工具名: list_todos, list_reminders, list_overdue, get_workspace_plan, get_active_map_json, get_mindmap_json, get_node_details, list_pinned, list_published, list_tag_groups, list_tags, list_nodes_by_tag, list_favorites, get_tag_catalog, create_tag_group, rename_tag_group, delete_tag_group, set_tag_group, set_tag_color, get_selection_context, search_nodes, list_recently_modified, open_mindmap, navigate_to_node, add_node, change_node_text, remove_node, create_todo, complete_todo, set_reminder, set_priority, move_node, set_node_folded, set_node_link, set_node_note, set_node_tags, toggle_pin, set_node_icon, set_recurring_reminder, create_mindmap, list_projects, quick_capture, sync_todoist, export_workspace_snapshot
 
 ## 2. 读：上下文与当前导图
 ### get_selection_context

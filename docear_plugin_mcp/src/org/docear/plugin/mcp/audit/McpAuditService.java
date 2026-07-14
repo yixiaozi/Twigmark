@@ -118,12 +118,20 @@ public final class McpAuditService {
 		if ("get_relationship_graph".equals(toolName) || "get_node_relationships".equals(toolName)) {
 			return McpOperationIntent.GRAPH;
 		}
+		if ("list_tag_groups".equals(toolName) || "list_tags".equals(toolName) || "list_nodes_by_tag".equals(toolName)
+		    || "list_favorites".equals(toolName) || "get_tag_catalog".equals(toolName)
+		    || "create_tag_group".equals(toolName) || "rename_tag_group".equals(toolName)
+		    || "delete_tag_group".equals(toolName) || "set_tag_group".equals(toolName)
+		    || "set_tag_color".equals(toolName)) {
+			return McpOperationIntent.TAG;
+		}
 		if ("get_active_map_json".equals(toolName) || "get_mindmap_json".equals(toolName) || "search_nodes".equals(toolName)
 		    || "list_recently_modified".equals(toolName) || "open_mindmap".equals(toolName)
-		    || "navigate_to_node".equals(toolName) || "add_node".equals(toolName) || "change_node_text".equals(toolName)
-		    || "remove_node".equals(toolName) || "create_todo".equals(toolName) || "complete_todo".equals(toolName)
-		    || "set_reminder".equals(toolName) || "set_priority".equals(toolName) || "quick_capture".equals(toolName)
-		    || "sync_todoist".equals(toolName) || "export_workspace_snapshot".equals(toolName)) {
+		    || "navigate_to_node".equals(toolName) || "add_node".equals(toolName) || "add_nodes".equals(toolName)
+		    || "change_node_text".equals(toolName) || "remove_node".equals(toolName) || "create_todo".equals(toolName)
+		    || "complete_todo".equals(toolName) || "set_reminder".equals(toolName) || "set_priority".equals(toolName)
+		    || "quick_capture".equals(toolName) || "sync_todoist".equals(toolName)
+		    || "export_workspace_snapshot".equals(toolName)) {
 			return McpOperationIntent.MINDMAP;
 		}
 		return McpOperationIntent.UNKNOWN;
@@ -150,6 +158,9 @@ public final class McpAuditService {
 		}
 		if ("docear://graph/summary".equals(uri)) {
 			return McpOperationIntent.GRAPH;
+		}
+		if ("docear://tags/catalog".equals(uri)) {
+			return McpOperationIntent.TAG;
 		}
 		return McpOperationIntent.RESOURCE;
 	}

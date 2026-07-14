@@ -202,18 +202,21 @@ public final class McpContextService {
 		model.put("todo", JsonValue.ofString("node with hourglass icon"));
 		model.put("reminder", JsonValue.ofString("ReminderExtension with REMINDUSERAT"));
 		model.put("priority", JsonValue.ofString("full-1 to full-7 icons"));
-		model.put("tags", JsonValue.ofString("#待办 #高优先级 #钉选 in node details"));
+		model.put("tags", JsonValue.ofString(
+				"sidebar pin tags + TagGroupStore groups + favorites tags; node details tags string"));
 		model.put("relationshipGraph", JsonValue.ofString("file-level .mm hyperlinks + node LINK/arrowlink edges"));
 		return model;
 	}
 
 	private static Map<String, JsonValue> buildCapabilities() {
 		final Map<String, JsonValue> caps = new LinkedHashMap<String, JsonValue>();
-		caps.put("mindmap", JsonValue.ofList(stringList(new String[] { "read", "write", "search", "navigate" })));
+		caps.put("mindmap", JsonValue.ofList(stringList(new String[] { "read", "write", "batch_write", "search", "navigate" })));
 		caps.put("tasks", JsonValue.ofList(stringList(new String[] { "list", "create", "complete", "prioritize" })));
 		caps.put("reminders", JsonValue.ofList(stringList(new String[] { "list", "set", "timeline", "overdue" })));
 		caps.put("workspace", JsonValue.ofList(stringList(new String[] { "projects", "plan", "snapshot", "inbox" })));
 		caps.put("graph", JsonValue.ofList(stringList(new String[] { "map_files", "map_nodes", "neighbors", "search" })));
+		caps.put("tags", JsonValue.ofList(stringList(new String[] { "groups", "list", "nodes_by_tag", "favorites",
+				"catalog", "set_group", "set_color" })));
 		caps.put("integrations", JsonValue.ofList(stringList(new String[] { "todoist" })));
 		return caps;
 	}
