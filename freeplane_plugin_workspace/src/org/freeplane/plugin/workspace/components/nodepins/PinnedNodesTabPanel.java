@@ -524,8 +524,6 @@ public class PinnedNodesTabPanel extends JPanel {
 					final boolean clearActive = groupId.equals(activeGroupId)
 							|| groupStore.isDescendantOf(activeGroupId, groupId);
 					if (groupStore.removeGroup(groupId)) {
-						collapsedGroupIds.remove(groupId);
-						saveCollapsedGroups();
 						if (clearActive) {
 							selectGroup(TagGroupStore.UNGROUPED_ID);
 						}
@@ -577,8 +575,6 @@ public class PinnedNodesTabPanel extends JPanel {
 			item.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent event) {
 					if (groupStore.moveGroup(groupId, targetId)) {
-						collapsedGroupIds.remove(targetId);
-						saveCollapsedGroups();
 						rebuildGroupTabs();
 					}
 				}
