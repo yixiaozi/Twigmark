@@ -2,8 +2,12 @@ package org.freeplane.plugin.workspace.components.nodepins;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -25,6 +29,8 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
+import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
 import javax.swing.Timer;
 
 import org.freeplane.core.resources.ResourceController;
@@ -61,8 +67,9 @@ public class PinnedNodesTabPanel extends JPanel {
 	private final NodePinsIndex index = NodePinsIndex.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList entryList = new JList(listModel);
-	private final JPanel tagFilterPanel = new JPanel(new WrapFlowLayout());
+	private final TagFilterPanel tagFilterPanel = new TagFilterPanel();
 	private JSplitPane splitPane;
+	private JScrollPane tagScrollPane;
 	private String activeFilter = null;
 	private final Timer refreshDebounceTimer;
 
@@ -129,12 +136,18 @@ public class PinnedNodesTabPanel extends JPanel {
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		buildTagFilterPanel();
 		buildEntryList();
-		final JScrollPane tagScrollPane = new JScrollPane(tagFilterPanel);
+		tagScrollPane = new JScrollPane(tagFilterPanel);
 		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		tagScrollPane.setMinimumSize(new java.awt.Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		tagScrollPane.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		tagScrollPane.getViewport().addComponentListener(new ComponentAdapter() {
+			public void componentResized(final ComponentEvent e) {
+				tagFilterPanel.revalidate();
+				tagFilterPanel.repaint();
+			}
+		});
 		final JScrollPane listScrollPane = new JScrollPane(entryList);
-		listScrollPane.setMinimumSize(new java.awt.Dimension(80, 80));
+		listScrollPane.setMinimumSize(new Dimension(80, 80));
 		splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tagScrollPane, listScrollPane);
 		splitPane.setResizeWeight(0);
 		splitPane.setContinuousLayout(true);
@@ -151,6 +164,8 @@ public class PinnedNodesTabPanel extends JPanel {
 						ResourceController.getResourceController().setProperty(PROP_FILTER_DIVIDER,
 								String.valueOf(location));
 					}
+					tagFilterPanel.revalidate();
+					tagFilterPanel.repaint();
 				}
 			}
 		});
@@ -314,11 +329,9 @@ public class PinnedNodesTabPanel extends JPanel {
 		for (int i = 0; i < entries.size(); i++) {
 			listModel.addElement(resolveDisplayEntry((NodePinEntry) entries.get(i)));
 		}
-		publishPinnedSnapshot(entries);
-	}
-
-	private void publishPinnedSnapshot(final List entries) {
-		NodePinsMetricsPublisher.publishFromEntries(entries);
+		// Always publish the full index so the side-tab badge stays "全部" count,
+		// not the currently filtered subset.
+		NodePinsMetricsPublisher.publishFromIndex();
 	}
 
 	private NodePinEntry resolveDisplayEntry(final NodePinEntry entry) {
@@ -437,6 +450,39 @@ public class PinnedNodesTabPanel extends JPanel {
 				return "";
 			}
 			return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+		}
+	}
+
+	/**
+	 * Tag chip container that tracks the viewport width so chips reflow when
+	 * the split pane or window is resized.
+	 */
+	private static final class TagFilterPanel extends JPanel implements Scrollable {
+		private static final long serialVersionUID = 1L;
+
+		TagFilterPanel() {
+			super(new WrapFlowLayout());
+		}
+
+		public Dimension getPreferredScrollableViewportSize() {
+			return getPreferredSize();
+		}
+
+		public int getScrollableUnitIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+			return 16;
+		}
+
+		public int getScrollableBlockIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+			return orientation == SwingConstants.VERTICAL ? Math.max(16, visibleRect.height - 16)
+					: Math.max(16, visibleRect.width - 16);
+		}
+
+		public boolean getScrollableTracksViewportWidth() {
+			return true;
+		}
+
+		public boolean getScrollableTracksViewportHeight() {
+			return false;
 		}
 	}
 }
