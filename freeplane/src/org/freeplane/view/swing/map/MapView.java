@@ -1884,9 +1884,11 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	private void selectSavedOrLastModifiedOrRoot() {
 		final MapModel map = getModel();
 		String savedId = null;
+		boolean fromSessionStore = false;
 		final File mapFile = map != null ? map.getFile() : null;
 		if (mapFile != null) {
 			savedId = SessionViewStateStore.getInstance().getLastSelectedNodeId(mapFile);
+			fromSessionStore = savedId != null && !savedId.isEmpty();
 		}
 		if (savedId == null || savedId.isEmpty()) {
 			final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(map);
@@ -1894,10 +1896,11 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 				savedId = lastSelection.getLastSelectedNodeId();
 			}
 		}
-		else if (map != null) {
+		if (savedId != null && !savedId.isEmpty() && map != null) {
 			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
-		}
-		if (savedId != null && !savedId.isEmpty()) {
+			if (!fromSessionStore && mapFile != null) {
+				SessionViewStateStore.getInstance().setLastSelectedNode(mapFile, savedId);
+			}
 			final NodeModel savedNode = map.getNodeForID(savedId);
 			if (savedNode != null && selectNodeIfPossible(savedNode)) {
 				return;
