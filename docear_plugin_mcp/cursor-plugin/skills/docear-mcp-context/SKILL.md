@@ -245,7 +245,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 
 **参数要点**
 
-- `mode`: `map_files`（导图级，快）| `map_nodes`（节点级，慢，112k+ 节点时务必加 `query` / `filePath` / 小 `maxNodes`）
+- `mode`: `map_files`（导图级，快）| `map_nodes`（节点级，慢，务必加 `query` / `filePath` / 小 `maxNodes`）| `tags`（标签枢纽↔节点）| `favorites`（收藏标签↔收藏导图）
 - `filePath` + `nodeId` + `hops`: 以该点为中心的 N 跳邻域
 - `query`: 按 label / mapLabel / 路径过滤，并包含匹配节点的直接邻居
 - `showIsolated`: 默认 false（隐藏无连接项）

@@ -173,13 +173,69 @@ public final class RelationshipGraphIndex {
 		return copyWith(nodes, keptEdges, index.getTotalNodeCount(), index.getGraphMode());
 	}
 
+	/**
+	 * Keep tag hubs in {@code allowedTagNames} plus any nodes directly connected to those hubs.
+	 * Pass {@code null} to skip filtering. Pass an empty set to show an empty graph.
+	 */
+	public static RelationshipGraphIndex filterByAllowedTags(final RelationshipGraphIndex index,
+	        final Set allowedTagNames) {
+		if (index == null || allowedTagNames == null) {
+			return index;
+		}
+		final Set<String> visibleKeys = new HashSet<String>();
+		final List<RelationshipGraphNode> allNodes = index.getNodes();
+		for (int i = 0; i < allNodes.size(); i++) {
+			final RelationshipGraphNode node = allNodes.get(i);
+			if (node.isTagNode() && allowedTagNames.contains(node.getTagName())) {
+				visibleKeys.add(node.getPathKey());
+			}
+		}
+		final List<RelationshipGraphEdge> edges = index.getEdges();
+		for (int i = 0; i < edges.size(); i++) {
+			final RelationshipGraphEdge edge = edges.get(i);
+			final String sourceKey = edge.getSource().getPathKey();
+			final String targetKey = edge.getTarget().getPathKey();
+			if (visibleKeys.contains(sourceKey)) {
+				visibleKeys.add(targetKey);
+			}
+			if (visibleKeys.contains(targetKey)) {
+				visibleKeys.add(sourceKey);
+			}
+		}
+		final List<RelationshipGraphNode> nodes = new ArrayList<RelationshipGraphNode>();
+		for (int i = 0; i < allNodes.size(); i++) {
+			final RelationshipGraphNode node = allNodes.get(i);
+			if (visibleKeys.contains(node.getPathKey())) {
+				nodes.add(node);
+			}
+		}
+		final List<RelationshipGraphEdge> keptEdges = new ArrayList<RelationshipGraphEdge>();
+		for (int i = 0; i < edges.size(); i++) {
+			final RelationshipGraphEdge edge = edges.get(i);
+			if (visibleKeys.contains(edge.getSource().getPathKey()) && visibleKeys.contains(edge.getTarget().getPathKey())) {
+				keptEdges.add(edge);
+			}
+		}
+		return copyWith(nodes, keptEdges, index.getTotalNodeCount(), index.getGraphMode());
+	}
+
 	/** Applies sidebar filters; safe to call off the EDT for large graphs. */
 	public static RelationshipGraphIndex buildDisplayIndex(final RelationshipGraphIndex base, final boolean showIsolated,
 	        final String rawSearchQuery, final String focusCenterKey) {
+		return buildDisplayIndex(base, showIsolated, rawSearchQuery, focusCenterKey, 1, null);
+	}
+
+	public static RelationshipGraphIndex buildDisplayIndex(final RelationshipGraphIndex base, final boolean showIsolated,
+	        final String rawSearchQuery, final String focusCenterKey, final int focusHops,
+	        final Set allowedTagNames) {
 		if (base == null) {
 			return null;
 		}
 		RelationshipGraphIndex index = base;
+		if (allowedTagNames != null && (base.getGraphMode() == RelationshipGraphScanner.MODE_TAGS
+		        || base.getGraphMode() == RelationshipGraphScanner.MODE_FAVORITES)) {
+			index = filterByAllowedTags(index, allowedTagNames);
+		}
 		if (!showIsolated) {
 			index = withoutIsolatedNodes(index);
 		}
@@ -187,7 +243,7 @@ public final class RelationshipGraphIndex {
 			index = filterBySearch(index, rawSearchQuery, true);
 		}
 		if (focusCenterKey != null && focusCenterKey.length() > 0) {
-			index = filterEgoNetwork(index, focusCenterKey, 1);
+			index = filterEgoNetwork(index, focusCenterKey, Math.max(1, focusHops));
 		}
 		return index;
 	}

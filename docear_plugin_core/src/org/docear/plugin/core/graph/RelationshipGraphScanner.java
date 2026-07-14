@@ -14,6 +14,8 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
+import org.freeplane.plugin.workspace.features.favorites.FavoriteEntry;
+import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.nodepins.NodeDetailsTagScanner;
 import org.freeplane.plugin.workspace.features.nodepins.NodeDetailsTagUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinEntry;
@@ -31,6 +33,7 @@ public final class RelationshipGraphScanner {
 	public static final int MODE_MAP_FILES = 0;
 	public static final int MODE_MAP_NODES = 1;
 	public static final int MODE_TAGS = 2;
+	public static final int MODE_FAVORITES = 3;
 	private static final int MAX_NODE_GRAPH_NODES = 3000;
 	private static final int YIELD_EVERY_N_FILES = 20;
 	private static final int CACHE_WAIT_MS = 120000;
@@ -56,6 +59,9 @@ public final class RelationshipGraphScanner {
 		}
 		if (mode == MODE_TAGS) {
 			return scanTagLinks(progress);
+		}
+		if (mode == MODE_FAVORITES) {
+			return scanFavoriteLinks(progress);
 		}
 		return scanMapFiles(progress);
 	}
@@ -246,6 +252,78 @@ public final class RelationshipGraphScanner {
 		nodes.addAll(tagNodes.values());
 		nodes.addAll(mindNodes.values());
 		return new RelationshipGraphIndex(nodes, edges, taggedNodeCount + tagNodes.size(), MODE_TAGS);
+	}
+
+	/**
+	 * Bipartite graph: favorite-tag hubs ↔ favorited mind-map files that carry those tags.
+	 */
+	public static RelationshipGraphIndex scanFavoriteLinks() {
+		return scanFavoriteLinks(null);
+	}
+
+	public static RelationshipGraphIndex scanFavoriteLinks(final ProgressListener progress) {
+		if (isCancelled()) {
+			return emptyIndex(MODE_FAVORITES);
+		}
+		reportProgress(progress, 1, 2);
+		final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
+		store.reloadIfChanged();
+		final List favorites = store.getFavorites();
+		if (isCancelled()) {
+			return emptyIndex(MODE_FAVORITES);
+		}
+		reportProgress(progress, 2, 2);
+
+		final Map tagNodes = new HashMap();
+		final Map fileNodes = new HashMap();
+		final List edges = new ArrayList();
+		final Set edgeKeys = new HashSet();
+		int favoriteFileCount = 0;
+
+		for (int i = 0; i < favorites.size(); i++) {
+			if (isCancelled()) {
+				return emptyIndex(MODE_FAVORITES);
+			}
+			final FavoriteEntry entry = (FavoriteEntry) favorites.get(i);
+			final File mapFile = entry.getFile();
+			if (mapFile == null) {
+				continue;
+			}
+			final String fileKey = pathKey(mapFile);
+			if (fileKey == null) {
+				continue;
+			}
+			RelationshipGraphNode fileNode = (RelationshipGraphNode) fileNodes.get(fileKey);
+			if (fileNode == null) {
+				fileNode = RelationshipGraphNode.forMapFile(mapFile);
+				fileNodes.put(fileKey, fileNode);
+				favoriteFileCount++;
+			}
+			final Set tags = entry.getTags();
+			if (tags == null || tags.isEmpty()) {
+				continue;
+			}
+			for (final Iterator it = tags.iterator(); it.hasNext();) {
+				final String tag = (String) it.next();
+				if (tag == null || tag.length() == 0) {
+					continue;
+				}
+				RelationshipGraphNode tagNode = (RelationshipGraphNode) tagNodes.get(tag);
+				if (tagNode == null) {
+					tagNode = RelationshipGraphNode.forFavoriteTag(tag);
+					tagNodes.put(tag, tagNode);
+				}
+				final String edgeKey = tagNode.getPathKey() + "->" + fileNode.getPathKey();
+				if (edgeKeys.add(edgeKey)) {
+					edges.add(new RelationshipGraphEdge(tagNode, fileNode));
+				}
+			}
+		}
+
+		final List nodes = new ArrayList();
+		nodes.addAll(tagNodes.values());
+		nodes.addAll(fileNodes.values());
+		return new RelationshipGraphIndex(nodes, edges, favoriteFileCount + tagNodes.size(), MODE_FAVORITES);
 	}
 
 	private static void reportProgress(final ProgressListener progress, final int scanned, final int total) {

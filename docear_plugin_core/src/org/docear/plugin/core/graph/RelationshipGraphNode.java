@@ -58,6 +58,12 @@ public final class RelationshipGraphNode {
 		return new RelationshipGraphNode(null, null, name, "\u6807\u7b7e", name);
 	}
 
+	/** Virtual hub node for a favorites tag. */
+	public static RelationshipGraphNode forFavoriteTag(final String tag) {
+		final String name = tag == null ? "" : tag.trim();
+		return new RelationshipGraphNode(null, null, name, "\u6536\u85cf", name);
+	}
+
 	private static String decodeLabel(final String raw) {
 		if (raw == null) {
 			return "";

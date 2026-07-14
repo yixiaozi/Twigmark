@@ -26,6 +26,7 @@ import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -43,18 +44,26 @@ import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
+import org.freeplane.plugin.workspace.components.tagfilter.TagGroupCascadeBar;
+import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
 /**
- * Left sidebar: three mode tabs (map links / node links / tags), each with search and related-item list.
+ * Left sidebar: mode tabs (map links / node links / tags / favorites), search and related-item list.
  */
 public class RelationshipGraphSideTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final Color MUTED = new Color(110, 110, 115);
 	private static final Color BORDER = new Color(198, 200, 205);
+	private static final Color TIP_BG = new Color(0xF7F9FB);
 	private static final int RESULT_LIST_CAP = 200;
 	private static final int ASYNC_DISPLAY_INDEX_THRESHOLD = 80;
-	private static final int MODE_COUNT = 3;
+	private static final int MODE_COUNT = 4;
+	private static final String PROP_TAGS_GROUP = "workspace.graph.tags.filter.active.group";
+	private static final String PROP_TAGS_DIRECT = "workspace.graph.tags.filter.direct.only";
+	private static final String PROP_FAV_GROUP = "workspace.graph.favorites.filter.active.group";
+	private static final String PROP_FAV_DIRECT = "workspace.graph.favorites.filter.direct.only";
+
 	private static final Comparator TAG_FIRST_COMPARATOR = new Comparator() {
 		public int compare(final Object o1, final Object o2) {
 			final RelationshipGraphNode a = (RelationshipGraphNode) o1;
@@ -71,6 +80,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private final ModeTabPanel mapFilesTab;
 	private final ModeTabPanel mapNodesTab;
 	private final ModeTabPanel tagsTab;
+	private final ModeTabPanel favoritesTab;
 	private final JTabbedPane subTabs;
 
 	private final RelationshipGraphIndex[] cachedBaseIndex = new RelationshipGraphIndex[MODE_COUNT];
@@ -88,12 +98,14 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		mapFilesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_FILES);
 		mapNodesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_NODES);
 		tagsTab = new ModeTabPanel(RelationshipGraphScanner.MODE_TAGS);
+		favoritesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_FAVORITES);
 
 		subTabs = new JTabbedPane(JTabbedPane.TOP);
 		subTabs.setFont(subTabs.getFont().deriveFont(Font.PLAIN, 12f));
 		subTabs.addTab("\u5bfc\u56fe\u5173\u8054", mapFilesTab);
 		subTabs.addTab("\u8282\u70b9\u5173\u8054", mapNodesTab);
 		subTabs.addTab("\u6807\u7b7e", tagsTab);
+		subTabs.addTab("\u6536\u85cf", favoritesTab);
 		subTabs.addChangeListener(new ChangeListener() {
 			public void stateChanged(final ChangeEvent e) {
 				onSubTabChanged();
@@ -101,7 +113,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		});
 		add(subTabs, BorderLayout.CENTER);
 		setMinimumSize(new Dimension(220, 320));
-		setPreferredSize(new Dimension(260, 400));
+		setPreferredSize(new Dimension(280, 420));
 
 		wireCanvasListeners();
 	}
@@ -122,6 +134,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (mode == RelationshipGraphScanner.MODE_TAGS) {
 			return tagsTab;
 		}
+		if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			return favoritesTab;
+		}
 		return mapFilesTab;
 	}
 
@@ -136,6 +151,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (index == 2) {
 			return RelationshipGraphScanner.MODE_TAGS;
 		}
+		if (index == 3) {
+			return RelationshipGraphScanner.MODE_FAVORITES;
+		}
 		return RelationshipGraphScanner.MODE_MAP_FILES;
 	}
 
@@ -146,7 +164,14 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (mode == RelationshipGraphScanner.MODE_TAGS) {
 			return 2;
 		}
+		if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			return 3;
+		}
 		return 0;
+	}
+
+	private static boolean isTagStyleMode(final int mode) {
+		return mode == RelationshipGraphScanner.MODE_TAGS || mode == RelationshipGraphScanner.MODE_FAVORITES;
 	}
 
 	private void onSubTabChanged() {
@@ -155,11 +180,16 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		graphMode = newMode;
-		activeTab().focusCenterKey = null;
-		activeTab().focusSelectedCheck.setSelected(false);
+		final ModeTabPanel tab = activeTab();
 		if (dataLoadedForMode[graphMode] && cachedBaseIndex[graphMode] != null) {
-			final ModeTabPanel tab = activeTab();
-			if (tab.displayIndex != null) {
+			if (tab.focusCenterKey != null && cachedBaseIndex[graphMode] != null
+			        && !containsPathKey(cachedBaseIndex[graphMode], tab.focusCenterKey)) {
+				tab.focusCenterKey = null;
+				tab.focusSelectedCheck.setSelected(false);
+			}
+			if (tab.displayIndex != null && tab.focusCenterKey == null
+			        && (tab.activeSearchQuery == null || tab.activeSearchQuery.trim().length() == 0)
+			        && !isTagStyleMode(graphMode)) {
 				applyDisplayIndex(false);
 			}
 			else {
@@ -169,6 +199,40 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		else {
 			refreshGraphAsync();
 		}
+		updateCanvasModeHint();
+	}
+
+	private static boolean containsPathKey(final RelationshipGraphIndex index, final String key) {
+		if (index == null || key == null) {
+			return false;
+		}
+		final List nodes = index.getNodes();
+		for (int i = 0; i < nodes.size(); i++) {
+			if (key.equals(((RelationshipGraphNode) nodes.get(i)).getPathKey())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private void updateCanvasModeHint() {
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service != null) {
+			service.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
+		}
+	}
+
+	private static String modeHelpHint(final int mode) {
+		if (mode == RelationshipGraphScanner.MODE_MAP_NODES) {
+			return "\u8282\u70b9\u7bad\u5934/\u94fe\u63a5 \u00b7 \u70b9\u9009 \u00b7 \u53cc\u51fb\u6253\u5f00 \u00b7 \u5de6\u4fa7\u53ef\u641c\u7d22/\u90bb\u57df";
+		}
+		if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			return "\u6807\u7b7e\u67a2\u7ebd\u2194\u8282\u70b9 \u00b7 \u53cc\u51fb\u6807\u7b7e=\u805a\u7126\u5173\u8054 \u00b7 \u53cc\u51fb\u8282\u70b9=\u6253\u5f00";
+		}
+		if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			return "\u6536\u85cf\u6807\u7b7e\u2194\u6536\u85cf\u5bfc\u56fe \u00b7 \u53cc\u51fb\u6807\u7b7e=\u805a\u7126 \u00b7 \u53cc\u51fb\u5bfc\u56fe=\u6253\u5f00";
+		}
+		return "\u5bfc\u56fe\u95f4\u8d85\u94fe\u63a5 \u00b7 \u62d6\u62fd\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u53cc\u51fb\u6253\u5f00";
 	}
 
 	private void wireCanvasListeners() {
@@ -179,25 +243,34 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		final RelationshipGraphCanvas canvas = service.getCanvas();
 		canvas.setNodeOpenListener(new RelationshipGraphCanvas.NodeOpenListener() {
 			public void onOpenNode(final RelationshipGraphNode node) {
-				openMindMapAndExit(node);
+				openOrExploreNode(node);
 			}
 		});
 		canvas.setNodeContextListener(new RelationshipGraphCanvas.NodeContextListener() {
 			public void onOpenNode(final RelationshipGraphNode node) {
-				openMindMapAndExit(node);
+				openOrExploreNode(node);
 			}
 
 			public void onOpenFolder(final RelationshipGraphNode node) {
 				openFolder(node);
+			}
+
+			public void onFocusNeighbors(final RelationshipGraphNode node) {
+				focusNeighbors(node);
 			}
 		});
 		canvas.setSelectionListener(new RelationshipGraphCanvas.SelectionListener() {
 			public void onSelectionChanged(final RelationshipGraphNode node) {
 				final ModeTabPanel tab = activeTab();
 				if (node == null) {
-					tab.focusSelectedCheck.setSelected(false);
-					tab.focusCenterKey = null;
-					rebuildDisplayIndex(true);
+					if (tab.focusSelectedCheck.isSelected()) {
+						tab.focusSelectedCheck.setSelected(false);
+						tab.focusCenterKey = null;
+						rebuildDisplayIndex(true);
+					}
+					else {
+						tab.updateResultList();
+					}
 				}
 				else if (tab.focusSelectedCheck.isSelected()) {
 					tab.focusCenterKey = node.getPathKey();
@@ -209,6 +282,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				}
 			}
 		});
+		updateCanvasModeHint();
 	}
 
 	void onTabActivated() {
@@ -217,6 +291,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		subTabs.setSelectedIndex(tabIndexFromMode(graphMode));
+		updateCanvasModeHint();
 		final boolean needsScan = !dataLoadedForMode[graphMode] || cachedBaseIndex[graphMode] == null;
 		if (needsScan) {
 			refreshGraphAsync(true);
@@ -268,6 +343,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		svc.getCanvas().setSearchQuery(activeTab().activeSearchQuery);
+		svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
 		svc.showInViewport();
 		svc.loadPreparedGraph(index, preserveView);
 		svc.getCanvas().setLoading(false, null);
@@ -309,6 +385,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		final ModeTabPanel scanTab = tabForMode(scanMode);
 		final boolean showIsolated = scanTab.showIsolatedCheck.isSelected();
 		final String scanSearchQuery = scanTab.activeSearchQuery;
+		final int focusHops = scanTab.getFocusHops();
 
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
@@ -331,15 +408,23 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					if (Thread.currentThread().isInterrupted()) {
 						return;
 					}
-					SwingUtilities.invokeLater(new Runnable() {
-						public void run() {
-							if (scanMode == graphMode && activeScanThread == scanThread) {
-								scanTab.statsLabel.setText("\u6574\u7406\u4e2d\u2026");
+					final Set[] tagsBox = new Set[1];
+					try {
+						SwingUtilities.invokeAndWait(new Runnable() {
+							public void run() {
+								if (scanMode == graphMode && activeScanThread == scanThread) {
+									scanTab.statsLabel.setText("\u6574\u7406\u4e2d\u2026");
+									scanTab.refreshGroupCascade(baseIndex);
+								}
+								tagsBox[0] = isTagStyleMode(scanMode) ? scanTab.collectAllowedTags(baseIndex) : null;
 							}
-						}
-					});
+						});
+					}
+					catch (final Exception waitError) {
+						tagsBox[0] = isTagStyleMode(scanMode) ? scanTab.collectAllowedTags(baseIndex) : null;
+					}
 					final RelationshipGraphIndex preparedDisplay = RelationshipGraphIndex.buildDisplayIndex(baseIndex,
-					        showIsolated, scanSearchQuery, null);
+					        showIsolated, scanSearchQuery, null, focusHops, tagsBox[0]);
 					if (preparedDisplay != null && preparedDisplay.getNodeCount() > 0) {
 						RelationshipGraphLayout.initializePositions(preparedDisplay, 1200, 800);
 					}
@@ -379,8 +464,11 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		final ModeTabPanel tab = activeTab();
-		tab.focusCenterKey = null;
-		tab.focusSelectedCheck.setSelected(false);
+		tab.refreshGroupCascade(baseIndex);
+		if (tab.focusCenterKey != null && !containsPathKey(baseIndex, tab.focusCenterKey)) {
+			tab.focusCenterKey = null;
+			tab.focusSelectedCheck.setSelected(false);
+		}
 		tab.displayIndex = preparedDisplayIndex;
 
 		final RelationshipGraphService svc = RelationshipGraphService.getService();
@@ -390,6 +478,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		tab.updateStats(tab.displayIndex);
 		tab.updateResultList();
 		svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
+		svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
 		if (svc.isGraphInViewport()) {
 			SwingUtilities.invokeLater(new Runnable() {
 				public void run() {
@@ -417,15 +506,11 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		}
 		final ModeTabPanel tab = activeTab();
 		tab.displayIndex = RelationshipGraphIndex.buildDisplayIndex(base, tab.showIsolatedCheck.isSelected(),
-		        tab.activeSearchQuery, tab.focusCenterKey);
+		        tab.activeSearchQuery, tab.focusCenterKey, tab.getFocusHops(), tab.collectAllowedTags(base));
 		if (tab.displayIndex != null && tab.displayIndex.getNodeCount() > 0 && !preserveView) {
 			RelationshipGraphLayout.initializePositions(tab.displayIndex, 1200, 800);
 		}
 		applyDisplayIndex(preserveView);
-	}
-
-	private void rebuildDisplayIndexAsync(final boolean preserveView) {
-		rebuildDisplayIndexAsync(preserveView, false);
 	}
 
 	private void rebuildDisplayIndexAsync(final boolean preserveView, final boolean deferViewportUntilReady) {
@@ -437,6 +522,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		final boolean showIsolated = tab.showIsolatedCheck.isSelected();
 		final String searchQuery = tab.activeSearchQuery;
 		final String focusKey = tab.focusCenterKey;
+		final int focusHops = tab.getFocusHops();
+		final Set allowedTags = tab.collectAllowedTags(base);
 		final int mode = graphMode;
 		tab.statsLabel.setText("\u66f4\u65b0\u4e2d\u2026");
 		final RelationshipGraphService svc = RelationshipGraphService.getService();
@@ -450,7 +537,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				final Thread filterThread = Thread.currentThread();
 				try {
 					final RelationshipGraphIndex built = RelationshipGraphIndex.buildDisplayIndex(base, showIsolated,
-					        searchQuery, focusKey);
+					        searchQuery, focusKey, focusHops, allowedTags);
 					if (Thread.currentThread().isInterrupted()) {
 						return;
 					}
@@ -473,6 +560,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 										svc.getCanvas().setLoading(false, null);
 										svc.loadPreparedGraph(tab.displayIndex, preserveView);
 										svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
+										svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
 										tab.updateStats(tab.displayIndex);
 										tab.updateResultList();
 									}
@@ -522,6 +610,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (service != null) {
 			service.loadPreparedGraph(tab.displayIndex, preserveView);
 			service.getCanvas().setSearchQuery(tab.activeSearchQuery);
+			service.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
 			if (!preserveView && tab.activeSearchQuery != null && tab.activeSearchQuery.trim().length() > 0) {
 				service.getCanvas().focusOnMatches();
 			}
@@ -534,6 +623,32 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private RelationshipGraphNode selectedNodeFromService() {
 		final RelationshipGraphService svc = RelationshipGraphService.getService();
 		return svc != null ? svc.getCanvas().getSelectedNode() : null;
+	}
+
+	private void focusNeighbors(final RelationshipGraphNode node) {
+		if (node == null) {
+			return;
+		}
+		final ModeTabPanel tab = activeTab();
+		tab.focusSelectedCheck.setSelected(true);
+		tab.hopCombo.setEnabled(true);
+		tab.focusCenterKey = node.getPathKey();
+		rebuildDisplayIndex(true);
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service != null) {
+			service.getCanvas().selectAndFocusNode(node);
+		}
+	}
+
+	private void openOrExploreNode(final RelationshipGraphNode node) {
+		if (node == null) {
+			return;
+		}
+		if (node.isTagNode()) {
+			focusNeighbors(node);
+			return;
+		}
+		openMindMapAndExit(node);
 	}
 
 	private void openMindMapAndExit(final RelationshipGraphNode node) {
@@ -571,12 +686,15 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		private final int mode;
 		private final JTextField searchField;
+		private final JLabel tipLabel;
 		private final JLabel statsLabel;
 		private final JLabel resultHeader;
 		private final DefaultListModel resultListModel;
 		private final JList resultList;
 		private final JCheckBox showIsolatedCheck;
 		private final JCheckBox focusSelectedCheck;
+		private final JComboBox hopCombo;
+		private final TagGroupCascadeBar groupCascade;
 
 		private String activeSearchQuery = "";
 		private String focusCenterKey;
@@ -587,9 +705,43 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			this.mode = mode;
 			setBorder(BorderFactory.createEmptyBorder(6, 2, 4, 2));
 
+			tipLabel = new JLabel("<html><body style='width:220px'>" + tipHtmlForMode(mode) + "</body></html>");
+			tipLabel.setForeground(MUTED);
+			tipLabel.setFont(tipLabel.getFont().deriveFont(Font.PLAIN, 11f));
+			tipLabel.setOpaque(true);
+			tipLabel.setBackground(TIP_BG);
+			tipLabel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
+			        BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+
+			if (isTagStyleMode(mode)) {
+				final TagGroupStore store = mode == RelationshipGraphScanner.MODE_FAVORITES
+				        ? TagGroupStore.getFavoritesInstance()
+				        : TagGroupStore.getInstance();
+				final String propGroup = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_GROUP
+				        : PROP_TAGS_GROUP;
+				final String propDirect = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_DIRECT
+				        : PROP_TAGS_DIRECT;
+				groupCascade = new TagGroupCascadeBar(store, propGroup, propDirect, true);
+				groupCascade.setListener(new TagGroupCascadeBar.Listener() {
+					public void selectionChanged() {
+						if (RelationshipGraphSideTabPanel.this.graphMode == ModeTabPanel.this.mode) {
+							rebuildDisplayIndex(true);
+						}
+					}
+
+					public Set getAvailableTags() {
+						return collectTagNamesFromBase(cachedBaseIndex[ModeTabPanel.this.mode]);
+					}
+				});
+				groupCascade.rebuild();
+			}
+			else {
+				groupCascade = null;
+			}
+
 			searchField = new JTextField();
-			searchField.setBorder(BorderFactory.createCompoundBorder(
-			        BorderFactory.createLineBorder(BORDER),
+			searchField.setToolTipText("\u6309\u6807\u7b7e/\u540d\u79f0\u641c\u7d22\uff0cEnter \u5e94\u7528\uff0cEsc \u6e05\u9664");
+			searchField.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
 			        BorderFactory.createEmptyBorder(3, 6, 3, 6)));
 			searchField.addKeyListener(new KeyAdapter() {
 				public void keyPressed(final KeyEvent e) {
@@ -621,7 +773,21 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			searchButtons.add(searchButton);
 			searchButtons.add(clearButton);
 			searchRow.add(searchButtons, BorderLayout.EAST);
-			add(searchRow, BorderLayout.NORTH);
+
+			final JPanel north = new JPanel(new BorderLayout(0, 6));
+			north.add(tipLabel, BorderLayout.NORTH);
+			if (groupCascade != null) {
+				final JPanel cascadeWrap = new JPanel(new BorderLayout());
+				cascadeWrap.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
+				        BorderFactory.createEmptyBorder(4, 4, 4, 4)));
+				cascadeWrap.add(groupCascade, BorderLayout.CENTER);
+				north.add(cascadeWrap, BorderLayout.CENTER);
+				north.add(searchRow, BorderLayout.SOUTH);
+			}
+			else {
+				north.add(searchRow, BorderLayout.CENTER);
+			}
+			add(north, BorderLayout.NORTH);
 
 			statsLabel = new JLabel(" ");
 			statsLabel.setForeground(MUTED);
@@ -656,13 +822,13 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					}
 					final NodeListEntry entry = (NodeListEntry) resultList.getSelectedValue();
 					if (entry != null) {
-						openMindMapAndExit(entry.node);
+						openOrExploreNode(entry.node);
 					}
 				}
 			});
 
 			final JScrollPane resultScroll = new JScrollPane(resultList);
-			resultScroll.setPreferredSize(new Dimension(100, 220));
+			resultScroll.setPreferredSize(new Dimension(100, 180));
 			resultScroll.setBorder(BorderFactory.createLineBorder(BORDER));
 
 			final JPanel listPanel = new JPanel(new BorderLayout(0, 4));
@@ -671,6 +837,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			add(listPanel, BorderLayout.CENTER);
 
 			showIsolatedCheck = new JCheckBox("\u663e\u793a\u65e0\u8fde\u63a5\u9879", false);
+			showIsolatedCheck.setToolTipText("\u663e\u793a\u6ca1\u6709\u4efb\u4f55\u5173\u8054\u8fb9\u7684\u72ec\u7acb\u9879");
 			showIsolatedCheck.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					if (mode == graphMode) {
@@ -678,7 +845,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					}
 				}
 			});
-			focusSelectedCheck = new JCheckBox("\u53ea\u770b\u9009\u4e2d\u7684\u76f4\u63a5\u5173\u8054", false);
+			focusSelectedCheck = new JCheckBox("\u53ea\u770b\u9009\u4e2d\u90bb\u57df", false);
+			focusSelectedCheck.setToolTipText("\u5148\u5728\u56fe\u4e2d\u9009\u4e2d\u4e00\u4e2a\u70b9\uff0c\u518d\u52fe\u9009\u4ee5\u53ea\u663e\u793a\u5176\u90bb\u57df");
 			focusSelectedCheck.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					if (mode == graphMode) {
@@ -686,9 +854,21 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					}
 				}
 			});
+			hopCombo = new JComboBox(new Object[] { "1 \u8df3", "2 \u8df3" });
+			hopCombo.setSelectedIndex(0);
+			hopCombo.setToolTipText("\u90bb\u57df\u89c6\u56fe\u7684\u8df3\u6570\uff1a1=\u76f4\u63a5\u5173\u8054\uff0c2=\u518d\u6269\u4e00\u5c42");
+			hopCombo.setEnabled(false);
+			hopCombo.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					if (mode == graphMode && focusSelectedCheck.isSelected()) {
+						rebuildDisplayIndex(true);
+					}
+				}
+			});
 
 			final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 			final JButton refreshButton = new JButton("\u5237\u65b0");
+			refreshButton.setToolTipText("\u91cd\u65b0\u626b\u63cf\u5de5\u4f5c\u533a\u6570\u636e");
 			refreshButton.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					if (mode != graphMode) {
@@ -711,17 +891,81 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					}
 				}
 			});
+			final JButton clearFocusButton = new JButton("\u663e\u793a\u5168\u56fe");
+			clearFocusButton.setToolTipText("\u53d6\u6d88\u90bb\u57df/\u641c\u7d22\u7f29\u5c0f\uff0c\u56de\u5230\u5f53\u524d\u5206\u7ec4\u4e0b\u7684\u5168\u56fe");
+			clearFocusButton.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					if (mode != graphMode) {
+						return;
+					}
+					searchField.setText("");
+					activeSearchQuery = "";
+					focusCenterKey = null;
+					focusSelectedCheck.setSelected(false);
+					hopCombo.setEnabled(false);
+					rebuildDisplayIndex(false);
+				}
+			});
 			actions.add(refreshButton);
 			actions.add(resetViewButton);
+			actions.add(clearFocusButton);
+
+			final JPanel focusRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+			focusRow.add(focusSelectedCheck);
+			focusRow.add(new JLabel("\u8df3\u6570"));
+			focusRow.add(hopCombo);
 
 			final JPanel footer = new JPanel(new BorderLayout(0, 4));
 			footer.add(statsLabel, BorderLayout.NORTH);
 			final JPanel options = new JPanel(new BorderLayout(0, 2));
 			options.add(showIsolatedCheck, BorderLayout.NORTH);
-			options.add(focusSelectedCheck, BorderLayout.CENTER);
+			options.add(focusRow, BorderLayout.CENTER);
 			footer.add(options, BorderLayout.CENTER);
 			footer.add(actions, BorderLayout.SOUTH);
 			add(footer, BorderLayout.SOUTH);
+		}
+
+		private void refreshGroupCascade(final RelationshipGraphIndex base) {
+			if (groupCascade != null) {
+				groupCascade.rebuild();
+			}
+		}
+
+		private Set collectAllowedTags(final RelationshipGraphIndex base) {
+			if (!isTagStyleMode(mode) || groupCascade == null) {
+				return null;
+			}
+			if (groupCascade.isAllScope()) {
+				return null;
+			}
+			final Set names = collectTagNamesFromBase(base != null ? base : cachedBaseIndex[mode]);
+			final Set allowed = new HashSet();
+			for (final Object nameObj : names) {
+				final String tag = (String) nameObj;
+				if (groupCascade.tagMatchesActiveScope(tag)) {
+					allowed.add(tag);
+				}
+			}
+			return allowed;
+		}
+
+		private Set collectTagNamesFromBase(final RelationshipGraphIndex base) {
+			final Set names = new HashSet();
+			if (base == null) {
+				return names;
+			}
+			final List nodes = base.getNodes();
+			for (int i = 0; i < nodes.size(); i++) {
+				final RelationshipGraphNode node = (RelationshipGraphNode) nodes.get(i);
+				if (node.isTagNode() && node.getTagName() != null) {
+					names.add(node.getTagName());
+				}
+			}
+			return names;
+		}
+
+		private int getFocusHops() {
+			return hopCombo.getSelectedIndex() <= 0 ? 1 : 2;
 		}
 
 		private void runSearch() {
@@ -731,6 +975,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			activeSearchQuery = searchField.getText();
 			focusCenterKey = null;
 			focusSelectedCheck.setSelected(false);
+			hopCombo.setEnabled(false);
 			rebuildDisplayIndex(true);
 		}
 
@@ -739,12 +984,14 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			activeSearchQuery = "";
 			focusCenterKey = null;
 			focusSelectedCheck.setSelected(false);
+			hopCombo.setEnabled(false);
 			if (mode == graphMode) {
 				rebuildDisplayIndex(true);
 			}
 		}
 
 		private void applyFocusSelection() {
+			hopCombo.setEnabled(focusSelectedCheck.isSelected());
 			if (!focusSelectedCheck.isSelected()) {
 				focusCenterKey = null;
 				rebuildDisplayIndex(true);
@@ -753,11 +1000,14 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			final RelationshipGraphService service = RelationshipGraphService.getService();
 			if (service == null) {
 				focusSelectedCheck.setSelected(false);
+				hopCombo.setEnabled(false);
 				return;
 			}
 			final RelationshipGraphNode selected = service.getCanvas().getSelectedNode();
 			if (selected == null) {
 				focusSelectedCheck.setSelected(false);
+				hopCombo.setEnabled(false);
+				statsLabel.setText("\u5148\u5728\u56fe\u4e2d\u70b9\u9009\u4e00\u4e2a\u70b9");
 				return;
 			}
 			focusCenterKey = selected.getPathKey();
@@ -779,12 +1029,18 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			else if (index.getGraphMode() == RelationshipGraphScanner.MODE_TAGS) {
 				unit = "\u6807\u7b7e/\u8282\u70b9";
 			}
+			else if (index.getGraphMode() == RelationshipGraphScanner.MODE_FAVORITES) {
+				unit = "\u6807\u7b7e/\u6536\u85cf";
+			}
 			else {
 				unit = "\u5bfc\u56fe";
 			}
 			String text = index.getNodeCount() + " " + unit + " \u00b7 " + index.getEdgeCount() + " \u8fde\u63a5";
 			if (index.getTotalNodeCount() > index.getNodeCount()) {
-				text += " \u00b7 \u5171 " + index.getTotalNodeCount();
+				text += " \u00b7 \u5171 " + index.getTotalNodeCount() + "\uff08\u5df2\u7b5b\u9009\uff09";
+			}
+			if (focusCenterKey != null) {
+				text += " \u00b7 " + getFocusHops() + "\u8df3\u90bb\u57df";
 			}
 			statsLabel.setText(text);
 		}
@@ -805,7 +1061,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				resultHeader.setText("\u5339\u914d " + shown + (total > shown ? "/" + total : ""));
 			}
 			else if (focusCenterKey != null) {
-				resultHeader.setText("\u5173\u8054 " + shown + (total > shown ? "/" + total : ""));
+				resultHeader.setText("\u90bb\u57df " + shown + (total > shown ? "/" + total : ""));
 			}
 			else {
 				final RelationshipGraphNode selected = selectedNodeFromService();
@@ -843,7 +1099,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				return new ArrayList(ordered);
 			}
 			final List all = new ArrayList(allNodes);
-			if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			if (isTagStyleMode(mode)) {
 				Collections.sort(all, TAG_FIRST_COMPARATOR);
 			}
 			return all;
@@ -888,6 +1144,19 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				syncingListSelection = false;
 			}
 		}
+	}
+
+	private static String tipHtmlForMode(final int mode) {
+		if (mode == RelationshipGraphScanner.MODE_MAP_NODES) {
+			return "\u8282\u70b9\u95f4\u7684\u7bad\u5934\u4e0e\u94fe\u63a5\u3002\u5e93\u5927\u65f6\u5148\u7528\u641c\u7d22\u6216\u300c\u53ea\u770b\u90bb\u57df\u300d\u3002";
+		}
+		if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			return "\u5de6\uff1a\u6807\u7b7e\u67a2\u7ebd\uff1b\u53f3\uff1a\u5e26\u6807\u7b7e\u7684\u8282\u70b9\u3002\u7528\u5206\u7ec4\u7b5b\u9009\uff0c\u53cc\u51fb\u6807\u7b7e\u805a\u7126\u5173\u8054\u3002";
+		}
+		if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			return "\u6536\u85cf\u6807\u7b7e\u4e0e\u6536\u85cf\u5bfc\u56fe\u7684\u5173\u8054\u3002\u5206\u7ec4\u4e0e\u300c\u6536\u85cf\u300d\u4fa7\u680f\u72ec\u7acb\u3002";
+		}
+		return "\u5bfc\u56fe\u4e4b\u95f4\u7684\u8d85\u94fe\u63a5\u3002\u70b9\u9009\u67d0\u5bfc\u56fe\u540e\u53ef\u300c\u53ea\u770b\u90bb\u57df\u300d\u3002";
 	}
 
 	private static final class NodeListEntry {

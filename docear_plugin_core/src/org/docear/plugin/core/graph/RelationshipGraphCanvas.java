@@ -56,6 +56,8 @@ public class RelationshipGraphCanvas extends JPanel {
 		void onOpenNode(RelationshipGraphNode node);
 
 		void onOpenFolder(RelationshipGraphNode node);
+
+		void onFocusNeighbors(RelationshipGraphNode node);
 	}
 
 	public interface SelectionListener {
@@ -92,6 +94,7 @@ public class RelationshipGraphCanvas extends JPanel {
 	private boolean performanceMode;
 	private boolean loading;
 	private String loadingMessage = "";
+	private String modeHelpHint = "\u62d6\u62fd\u7a7a\u767d\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u53cc\u51fb\u6253\u5f00";
 
 	public RelationshipGraphCanvas() {
 		setBackground(COLOR_BACKGROUND);
@@ -112,6 +115,11 @@ public class RelationshipGraphCanvas extends JPanel {
 
 	public void setSelectionListener(final SelectionListener listener) {
 		this.selectionListener = listener;
+	}
+
+	public void setModeHelpHint(final String hint) {
+		this.modeHelpHint = hint != null ? hint : "";
+		repaint();
 	}
 
 	public RelationshipGraphNode getSelectedNode() {
@@ -526,20 +534,40 @@ public class RelationshipGraphCanvas extends JPanel {
 		}
 		final JPopupMenu menu = new JPopupMenu();
 		if (node != null) {
-			final JMenuItem openMap = new JMenuItem("\u6253\u5f00\u5bfc\u56fe");
-			openMap.addActionListener(new java.awt.event.ActionListener() {
-				public void actionPerformed(final java.awt.event.ActionEvent e) {
-					nodeContextListener.onOpenNode(node);
+			if (node.isTagNode()) {
+				final JMenuItem focusNeighbors = new JMenuItem("\u805a\u7126\u5173\u8054");
+				focusNeighbors.addActionListener(new java.awt.event.ActionListener() {
+					public void actionPerformed(final java.awt.event.ActionEvent e) {
+						nodeContextListener.onFocusNeighbors(node);
+					}
+				});
+				menu.add(focusNeighbors);
+			}
+			else {
+				final JMenuItem openMap = new JMenuItem(node.isMapNode() ? "\u6253\u5f00\u8282\u70b9" : "\u6253\u5f00\u5bfc\u56fe");
+				openMap.addActionListener(new java.awt.event.ActionListener() {
+					public void actionPerformed(final java.awt.event.ActionEvent e) {
+						nodeContextListener.onOpenNode(node);
+					}
+				});
+				menu.add(openMap);
+				final JMenuItem focusNeighbors = new JMenuItem("\u805a\u7126\u5173\u8054");
+				focusNeighbors.addActionListener(new java.awt.event.ActionListener() {
+					public void actionPerformed(final java.awt.event.ActionEvent e) {
+						nodeContextListener.onFocusNeighbors(node);
+					}
+				});
+				menu.add(focusNeighbors);
+				if (node.getFile() != null) {
+					final JMenuItem openFolder = new JMenuItem("\u6253\u5f00\u6240\u5728\u6587\u4ef6\u5939");
+					openFolder.addActionListener(new java.awt.event.ActionListener() {
+						public void actionPerformed(final java.awt.event.ActionEvent e) {
+							nodeContextListener.onOpenFolder(node);
+						}
+					});
+					menu.add(openFolder);
 				}
-			});
-			final JMenuItem openFolder = new JMenuItem("\u6253\u5f00\u6240\u5728\u6587\u4ef6\u5939");
-			openFolder.addActionListener(new java.awt.event.ActionListener() {
-				public void actionPerformed(final java.awt.event.ActionEvent e) {
-					nodeContextListener.onOpenFolder(node);
-				}
-			});
-			menu.add(openMap);
-			menu.add(openFolder);
+			}
 		}
 		menu.show(this, x, y);
 	}
@@ -775,8 +803,10 @@ public class RelationshipGraphCanvas extends JPanel {
 	private void drawHelpHint(final Graphics2D g2) {
 		g2.setColor(new Color(130, 135, 145));
 		g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
-		g2.drawString("\u62d6\u62fd\u7a7a\u767d\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u65b9\u5411\u952e\u9009\u62e9 \u00b7 \u53cc\u51fb\u6253\u5f00 \u00b7 Esc\u53d6\u6d88\u9009\u4e2d",
-		        12, getHeight() - 10);
+		final String hint = modeHelpHint != null && modeHelpHint.length() > 0
+		        ? modeHelpHint
+		        : "\u62d6\u62fd\u7a7a\u767d\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u53cc\u51fb\u6253\u5f00";
+		g2.drawString(hint, 12, getHeight() - 10);
 	}
 
 	private static Color resolveTagColor(final RelationshipGraphNode node) {
@@ -812,8 +842,19 @@ public class RelationshipGraphCanvas extends JPanel {
 	private void drawEmptyHint(final Graphics2D g2) {
 		g2.setColor(new Color(120, 120, 120));
 		g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
-		final String hint = searchQuery.length() > 0 ? "\u672a\u627e\u5230\u5339\u914d\u7684\u5bfc\u56fe"
-		        : "\u6682\u65e0\u53ef\u663e\u793a\u7684\u5bfc\u56fe\u8fde\u63a5";
+		final String hint;
+		if (searchQuery.length() > 0) {
+			hint = "\u672a\u627e\u5230\u5339\u914d\u9879\uff0c\u8bd5\u8bd5\u6e05\u9664\u641c\u7d22\u6216\u6362\u5206\u7ec4";
+		}
+		else if (index != null && index.getGraphMode() == RelationshipGraphScanner.MODE_TAGS) {
+			hint = "\u5f53\u524d\u5206\u7ec4\u4e0b\u6ca1\u6709\u6807\u7b7e\u5173\u8054\uff0c\u8bd5\u8bd5\u300c\u5168\u90e8\u300d\u6216\u6362\u5206\u7ec4";
+		}
+		else if (index != null && index.getGraphMode() == RelationshipGraphScanner.MODE_FAVORITES) {
+			hint = "\u6682\u65e0\u6536\u85cf\u6807\u7b7e\u5173\u8054\uff1a\u5148\u7ed9\u6536\u85cf\u6253\u6807\u7b7e\uff0c\u6216\u9009\u300c\u5168\u90e8\u300d";
+		}
+		else {
+			hint = "\u6682\u65e0\u53ef\u663e\u793a\u7684\u5173\u8054\uff0c\u70b9\u5de6\u4fa7\u300c\u5237\u65b0\u300d\u6216\u52fe\u9009\u300c\u663e\u793a\u65e0\u8fde\u63a5\u9879\u300d";
+		}
 		final FontMetrics fm = g2.getFontMetrics();
 		final int x = (getWidth() - fm.stringWidth(hint)) / 2;
 		final int y = getHeight() / 2;

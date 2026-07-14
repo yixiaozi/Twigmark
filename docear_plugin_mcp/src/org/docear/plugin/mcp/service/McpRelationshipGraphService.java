@@ -21,8 +21,8 @@ import org.docear.plugin.mcp.json.JsonValue;
 public final class McpRelationshipGraphService {
 
 	private static final long CACHE_TTL_MS = 10L * 60L * 1000L;
-	private static final RelationshipGraphIndex[] CACHED_BASE = new RelationshipGraphIndex[2];
-	private static final long[] CACHE_TIME = new long[2];
+	private static final RelationshipGraphIndex[] CACHED_BASE = new RelationshipGraphIndex[4];
+	private static final long[] CACHE_TIME = new long[4];
 
 	private McpRelationshipGraphService() {
 	}
@@ -36,7 +36,11 @@ public final class McpRelationshipGraphService {
 		if (filePath != null && filePath.trim().length() > 0) {
 			centerKey = resolveCenterKey(base, filePath.trim(), nodeId, mode);
 		}
-		RelationshipGraphIndex index = RelationshipGraphIndex.buildDisplayIndex(base, showIsolated, query, null);
+		else if (nodeId != null && nodeId.trim().startsWith("tag:")) {
+			centerKey = nodeId.trim();
+		}
+		RelationshipGraphIndex index = RelationshipGraphIndex.buildDisplayIndex(base, showIsolated, query, null,
+		        Math.max(1, hops), null);
 		if (centerKey != null && centerKey.length() > 0 && index != null) {
 			index = RelationshipGraphIndex.filterEgoNetwork(index, centerKey, Math.max(1, hops));
 		}
@@ -53,12 +57,14 @@ public final class McpRelationshipGraphService {
 		final Map<String, JsonValue> root = new LinkedHashMap<String, JsonValue>();
 		root.put("mapFiles", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_MAP_FILES, refresh)));
 		root.put("mapNodes", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_MAP_NODES, refresh)));
+		root.put("tags", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_TAGS, refresh)));
+		root.put("favorites", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_FAVORITES, refresh)));
 		return JsonValue.ofMap(root).toJson();
 	}
 
 	private static Map<String, JsonValue> buildModeSummary(final int mode, final boolean refresh) throws Exception {
 		final RelationshipGraphIndex base = loadBaseIndex(mode, refresh);
-		final RelationshipGraphIndex display = RelationshipGraphIndex.buildDisplayIndex(base, false, "", null);
+		final RelationshipGraphIndex display = RelationshipGraphIndex.buildDisplayIndex(base, false, "", null, 1, null);
 		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
 		item.put("mode", JsonValue.ofString(modeName(mode)));
 		item.put("totalScanned", JsonValue.ofNumber(base.getTotalNodeCount()));
@@ -123,6 +129,16 @@ public final class McpRelationshipGraphService {
 		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
 		item.put("key", JsonValue.ofString(node.getPathKey()));
 		item.put("label", JsonValue.ofString(node.getLabel()));
+		if (node.isTagNode()) {
+			item.put("kind", JsonValue.ofString("tag"));
+			item.put("tag", JsonValue.ofString(node.getTagName()));
+		}
+		else if (node.isMapNode()) {
+			item.put("kind", JsonValue.ofString("node"));
+		}
+		else {
+			item.put("kind", JsonValue.ofString("map"));
+		}
 		item.put("mapFile", JsonValue.ofString(pathOf(node.getFile())));
 		if (node.getNodeId() != null && node.getNodeId().length() > 0) {
 			item.put("nodeId", JsonValue.ofString(node.getNodeId()));
@@ -130,7 +146,10 @@ public final class McpRelationshipGraphService {
 		if (node.getMapLabel() != null && node.getMapLabel().length() > 0) {
 			item.put("mapLabel", JsonValue.ofString(node.getMapLabel()));
 		}
-		item.put("openUrl", JsonValue.ofString(node.getOpenUrl().toString()));
+		final java.net.URL openUrl = node.getOpenUrl();
+		if (openUrl != null) {
+			item.put("openUrl", JsonValue.ofString(openUrl.toString()));
+		}
 		return JsonValue.ofMap(item);
 	}
 
@@ -158,6 +177,15 @@ public final class McpRelationshipGraphService {
 
 	private static String resolveCenterKey(final RelationshipGraphIndex base, final String filePath, final String nodeId,
 	        final int mode) throws Exception {
+		if (mode == RelationshipGraphScanner.MODE_TAGS || mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			if (nodeId != null && nodeId.trim().length() > 0) {
+				final String tag = nodeId.trim();
+				if (tag.startsWith("tag:")) {
+					return tag;
+				}
+				return "tag:" + tag;
+			}
+		}
 		final File file = McpMindMapService.resolveMindMapFileForWrite(filePath);
 		if (file == null || !file.exists()) {
 			throw new IllegalArgumentException("Mind map not found: " + filePath);
@@ -177,6 +205,10 @@ public final class McpRelationshipGraphService {
 			if (wantNodeId.length() > 0 && wantNodeId.equals(node.getNodeId())) {
 				return node.getPathKey();
 			}
+			if ((mode == RelationshipGraphScanner.MODE_FAVORITES || mode == RelationshipGraphScanner.MODE_MAP_FILES)
+			        && wantNodeId.length() == 0 && !node.isTagNode() && !node.isMapNode()) {
+				return node.getPathKey();
+			}
 		}
 		if (wantNodeId.length() == 0) {
 			return pathOf(file);
@@ -192,6 +224,9 @@ public final class McpRelationshipGraphService {
 	}
 
 	private static String pathOf(final File file) {
+		if (file == null) {
+			return "";
+		}
 		return file.getAbsolutePath().replace('\\', '/');
 	}
 
@@ -203,10 +238,25 @@ public final class McpRelationshipGraphService {
 		if ("map_nodes".equals(lower) || "nodes".equals(lower) || "node".equals(lower)) {
 			return RelationshipGraphScanner.MODE_MAP_NODES;
 		}
+		if ("tags".equals(lower) || "tag".equals(lower)) {
+			return RelationshipGraphScanner.MODE_TAGS;
+		}
+		if ("favorites".equals(lower) || "favorite".equals(lower) || "fav".equals(lower)) {
+			return RelationshipGraphScanner.MODE_FAVORITES;
+		}
 		return RelationshipGraphScanner.MODE_MAP_FILES;
 	}
 
 	private static String modeName(final int mode) {
-		return mode == RelationshipGraphScanner.MODE_MAP_NODES ? "map_nodes" : "map_files";
+		if (mode == RelationshipGraphScanner.MODE_MAP_NODES) {
+			return "map_nodes";
+		}
+		if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			return "tags";
+		}
+		if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+			return "favorites";
+		}
+		return "map_files";
 	}
 }

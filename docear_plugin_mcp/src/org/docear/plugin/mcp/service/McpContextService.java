@@ -214,7 +214,7 @@ public final class McpContextService {
 		caps.put("tasks", JsonValue.ofList(stringList(new String[] { "list", "create", "complete", "prioritize" })));
 		caps.put("reminders", JsonValue.ofList(stringList(new String[] { "list", "set", "timeline", "overdue" })));
 		caps.put("workspace", JsonValue.ofList(stringList(new String[] { "projects", "plan", "snapshot", "inbox" })));
-		caps.put("graph", JsonValue.ofList(stringList(new String[] { "map_files", "map_nodes", "neighbors", "search" })));
+		caps.put("graph", JsonValue.ofList(stringList(new String[] { "map_files", "map_nodes", "tags", "favorites", "neighbors", "search" })));
 		caps.put("tags", JsonValue.ofList(stringList(new String[] { "groups", "list", "nodes_by_tag", "favorites",
 				"catalog", "set_group", "set_color" })));
 		caps.put("integrations", JsonValue.ofList(stringList(new String[] { "todoist" })));

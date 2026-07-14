@@ -137,8 +137,8 @@ public final class McpProtocol {
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false)));
 		tools.add(tool("get_relationship_graph",
-				"Silent relationship graph across workspace .mm files (hyperlinks + arrow links). "
-						+ "Modes: map_files (default, file-level) or map_nodes (node-level, slower). "
+				"Silent relationship graph across workspace .mm files. "
+						+ "Modes: map_files (default), map_nodes (slower), tags (tag hubs↔nodes), favorites (favorite tags↔maps). "
 						+ "Use filePath/nodeId + hops for local neighborhood; query for label search. Cached ~10min unless refresh=true.",
 				schema("mode", "string", false), schema("query", "string", false),
 				schema("filePath", "string", false), schema("nodeId", "string", false),

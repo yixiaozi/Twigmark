@@ -43,13 +43,16 @@ import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
 /**
  * Horizontal cascade rows for nested tag groups: one FlowLayout row per depth.
- * Child rows lead with 「全部」(subtree) and 「本级」(direct tags only).
+ * Child rows lead with 「全部」(subtree) and 「未分组」(direct tags only).
+ * Optional root 「全部」 scope ({@link #ALL_SCOPE_ID}) shows every tag regardless of group.
  */
 public class TagGroupCascadeBar extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 
 	public static final String TAG_DND_PREFIX = "docear-tag:";
+	/** Synthetic root scope: every tag (used by relationship graph). */
+	public static final String ALL_SCOPE_ID = "all";
 
 	private static final Color GROUP_SELECTED_BG = new Color(0xE3F2F1);
 	private static final Color GROUP_SELECTED_BORDER = new Color(0x4DB6AC);
@@ -72,6 +75,7 @@ public class TagGroupCascadeBar extends JPanel {
 	private final TagGroupStore groupStore;
 	private final String propActiveGroup;
 	private final String propDirectOnly;
+	private final boolean includeAllScope;
 	private final JPanel rowsPanel = new JPanel();
 	private Listener listener;
 	private String activeGroupId = TagGroupStore.UNGROUPED_ID;
@@ -80,21 +84,27 @@ public class TagGroupCascadeBar extends JPanel {
 
 	public TagGroupCascadeBar(final TagGroupStore groupStore, final String propActiveGroup,
 			final String propDirectOnly) {
+		this(groupStore, propActiveGroup, propDirectOnly, false);
+	}
+
+	public TagGroupCascadeBar(final TagGroupStore groupStore, final String propActiveGroup,
+			final String propDirectOnly, final boolean includeAllScope) {
 		super(new java.awt.BorderLayout());
 		this.groupStore = groupStore != null ? groupStore : TagGroupStore.getInstance();
 		this.propActiveGroup = propActiveGroup;
 		this.propDirectOnly = propDirectOnly;
+		this.includeAllScope = includeAllScope;
 		setOpaque(false);
 		rowsPanel.setOpaque(false);
 		rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
 		rowsPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
 		add(rowsPanel, java.awt.BorderLayout.CENTER);
-		activeGroupId = ResourceController.getResourceController().getProperty(propActiveGroup,
-				TagGroupStore.UNGROUPED_ID);
+		final String defaultGroup = includeAllScope ? ALL_SCOPE_ID : TagGroupStore.UNGROUPED_ID;
+		activeGroupId = ResourceController.getResourceController().getProperty(propActiveGroup, defaultGroup);
 		directOnly = "true".equalsIgnoreCase(
 				ResourceController.getResourceController().getProperty(propDirectOnly, "false"));
-		if (!this.groupStore.getGroupIds().contains(activeGroupId)) {
-			activeGroupId = TagGroupStore.UNGROUPED_ID;
+		if (!isValidActiveGroup(activeGroupId)) {
+			activeGroupId = defaultGroup;
 			directOnly = false;
 		}
 	}
@@ -102,6 +112,10 @@ public class TagGroupCascadeBar extends JPanel {
 	/** @deprecated use {@link #TagGroupCascadeBar(TagGroupStore, String, String)} */
 	public TagGroupCascadeBar(final String propActiveGroup, final String propDirectOnly) {
 		this(TagGroupStore.getInstance(), propActiveGroup, propDirectOnly);
+	}
+
+	public boolean isAllScope() {
+		return ALL_SCOPE_ID.equals(activeGroupId);
 	}
 
 	public void setListener(final Listener listener) {
@@ -118,8 +132,8 @@ public class TagGroupCascadeBar extends JPanel {
 
 	public void rebuild() {
 		rowsPanel.removeAll();
-		if (!groupStore.getGroupIds().contains(activeGroupId)) {
-			activeGroupId = TagGroupStore.UNGROUPED_ID;
+		if (!isValidActiveGroup(activeGroupId)) {
+			activeGroupId = includeAllScope ? ALL_SCOPE_ID : TagGroupStore.UNGROUPED_ID;
 			directOnly = false;
 		}
 		final List path = getActiveGroupPath();
@@ -130,7 +144,8 @@ public class TagGroupCascadeBar extends JPanel {
 			if (selectedOnRow != null) {
 				addCascadeRow(groupStore.getChildIds(parentId), parentId, selectedOnRow);
 			}
-			else if (!groupStore.isUngrouped(parentId) && parentId.equals(activeGroupId)) {
+			else if (!groupStore.isUngrouped(parentId) && !ALL_SCOPE_ID.equals(parentId)
+					&& parentId.equals(activeGroupId)) {
 				final List children = groupStore.getChildIds(parentId);
 				if (directOnly && children.isEmpty()) {
 					directOnly = false;
@@ -146,6 +161,9 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	public boolean tagMatchesActiveScope(final String tag) {
+		if (isAllScope()) {
+			return true;
+		}
 		final String tagGroupId = groupStore.getTagGroupId(tag);
 		if (directOnly) {
 			return activeGroupId.equals(tagGroupId);
@@ -218,6 +236,10 @@ public class TagGroupCascadeBar extends JPanel {
 		else {
 			row.setOpaque(false);
 			row.setBorder(BorderFactory.createEmptyBorder(1, 0, 2, 0));
+			if (includeAllScope) {
+				final boolean exact = isAllScope() && !directOnly;
+				row.add(createAllScopeButton(exact));
+			}
 		}
 		for (final Iterator it = groupIdsOnRow.iterator(); it.hasNext();) {
 			final String groupId = (String) it.next();
@@ -228,6 +250,19 @@ public class TagGroupCascadeBar extends JPanel {
 		}
 		row.add(createAddGroupButton(parentIdForAdd));
 		rowsPanel.add(row);
+	}
+
+	private JToggleButton createAllScopeButton(final boolean exactSelected) {
+		final int tagCount = listener != null ? listener.getAvailableTags().size() : 0;
+		final String label = TextUtils.getText("workspace.nodepins.group.all") + " " + tagCount;
+		final JToggleButton tab = createStyledToggle(label, exactSelected, false);
+		tab.setToolTipText(TextUtils.getText("workspace.nodepins.group.all"));
+		tab.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				selectGroup(ALL_SCOPE_ID, false);
+			}
+		});
+		return tab;
 	}
 
 	private JToggleButton createScopeButton(final String parentGroupId, final boolean forDirectOnly) {
@@ -370,12 +405,28 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	public void selectGroup(final String groupId, final boolean direct) {
-		activeGroupId = groupId != null ? groupId : TagGroupStore.UNGROUPED_ID;
-		directOnly = direct && !groupStore.isUngrouped(activeGroupId);
+		if (ALL_SCOPE_ID.equals(groupId)) {
+			activeGroupId = ALL_SCOPE_ID;
+			directOnly = false;
+		}
+		else {
+			activeGroupId = groupId != null ? groupId : TagGroupStore.UNGROUPED_ID;
+			directOnly = direct && !groupStore.isUngrouped(activeGroupId);
+		}
 		ResourceController.getResourceController().setProperty(propActiveGroup, activeGroupId);
 		ResourceController.getResourceController().setProperty(propDirectOnly, directOnly ? "true" : "false");
 		rebuild();
 		fireSelectionChanged();
+	}
+
+	private boolean isValidActiveGroup(final String groupId) {
+		if (groupId == null) {
+			return false;
+		}
+		if (ALL_SCOPE_ID.equals(groupId)) {
+			return includeAllScope;
+		}
+		return groupStore.getGroupIds().contains(groupId);
 	}
 
 	private void promptAddGroup(final String parentId) {
@@ -509,6 +560,9 @@ public class TagGroupCascadeBar extends JPanel {
 
 	private List getActiveGroupPath() {
 		final List reverse = new ArrayList();
+		if (isAllScope()) {
+			return reverse;
+		}
 		String current = activeGroupId;
 		final Set seen = new HashSet();
 		while (current != null && seen.add(current)) {
@@ -526,6 +580,10 @@ public class TagGroupCascadeBar extends JPanel {
 		}
 		for (final Iterator it = listener.getAvailableTags().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
+			if (ALL_SCOPE_ID.equals(groupId)) {
+				result.add(tag);
+				continue;
+			}
 			final String tagGroupId = groupStore.getTagGroupId(tag);
 			if (onlyDirect) {
 				if (groupId.equals(tagGroupId)) {
@@ -574,6 +632,9 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	private String resolveGroupLabel(final String groupId) {
+		if (ALL_SCOPE_ID.equals(groupId)) {
+			return TextUtils.getText("workspace.nodepins.group.all");
+		}
 		if (groupStore.isUngrouped(groupId)) {
 			return TextUtils.getText("workspace.nodepins.group.ungrouped");
 		}
