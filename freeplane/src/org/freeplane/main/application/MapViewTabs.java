@@ -32,17 +32,18 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
-import java.util.Vector;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Vector;
 
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.plaf.TabbedPaneUI;
@@ -53,32 +54,44 @@ import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.ui.ViewController;
 import org.freeplane.features.url.mindmapmode.FileOpener;
-import java.awt.Component;
-
-import javax.swing.JPanel;
-import javax.swing.JSplitPane;
-
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.ui.DefaultMapMouseListener;
 
 class MapViewTabs implements IMapViewChangeListener {
-// // 	final private Controller controller;
 	private static MapViewTabs instance;
 	private Component mContentComponent;
 	private JTabbedPane mTabbedPane = null;
+	/** Master list of all open map/document tabs (unfiltered order). */
 	final private Vector<Component> mTabbedPaneMapViews;
+	/** Currently visible strip (index-aligned with {@link #mTabbedPane}). */
+	final private Vector<Component> visibleTabKeys;
 	private boolean mTabbedPaneSelectionUpdate = true;
 	private TabbedPaneUI tabbedPaneUI;
 	private int nextTabInsertIndex = -1;
 	private int dragTabIndex = -1;
-	
+	private final JPanel tabShell;
+	private Component tabGroupChrome;
+	private TabVisibilityFilter visibilityFilter;
+	private TabsChangedListener tabsChangedListener;
+	private TabPopupMenuProvider tabPopupMenuProvider;
+	private boolean rebuildingVisibleTabs;
+
 	private static final int MAX_TAB_SHORTCUT = 9;
 
-	/**
-	 * Optional hook (Docear relationship graph): fired when the user clicks the already-selected bottom map tab.
-	 */
 	interface SameTabClickListener {
 		boolean onSameTabClicked(int tabIndex, Component mapView);
+	}
+
+	interface TabVisibilityFilter {
+		boolean isVisible(Component tabKey);
+	}
+
+	interface TabsChangedListener {
+		void tabsChanged();
+	}
+
+	interface TabPopupMenuProvider {
+		JPopupMenu createPopup(Component tabKey, int visibleTabIndex);
 	}
 
 	private static SameTabClickListener sameTabClickListener;
@@ -102,6 +115,10 @@ class MapViewTabs implements IMapViewChangeListener {
 		return result;
 	}
 
+	List getAllTabKeysInOrder() {
+		return new LinkedList(mTabbedPaneMapViews);
+	}
+
 	void setNextTabInsertIndex(final int index) {
 		nextTabInsertIndex = index;
 	}
@@ -118,9 +135,37 @@ class MapViewTabs implements IMapViewChangeListener {
 		return -1;
 	}
 
-	public MapViewTabs( final ViewController fm, final JComponent contentComponent) {
+	void setTabGroupChrome(final Component chrome) {
+		if (tabGroupChrome != null) {
+			tabShell.remove(tabGroupChrome);
+		}
+		tabGroupChrome = chrome;
+		if (chrome != null) {
+			tabShell.add(chrome, BorderLayout.SOUTH);
+		}
+		tabShell.revalidate();
+		tabShell.repaint();
+	}
+
+	void setTabVisibilityFilter(final TabVisibilityFilter filter) {
+		visibilityFilter = filter;
+		rebuildVisibleTabs(null, false);
+	}
+
+	void setTabsChangedListener(final TabsChangedListener listener) {
+		tabsChangedListener = listener;
+	}
+
+	void setTabPopupMenuProvider(final TabPopupMenuProvider provider) {
+		tabPopupMenuProvider = provider;
+	}
+
+	void refreshVisibleTabs() {
+		rebuildVisibleTabs(null, false);
+	}
+
+	public MapViewTabs(final ViewController fm, final JComponent contentComponent) {
 		instance = this;
-//		this.controller = controller;
 		mContentComponent = contentComponent;
 		mTabbedPane = new JTabbedPane();
 		removeTabbedPaneAccelerators();
@@ -128,9 +173,10 @@ class MapViewTabs implements IMapViewChangeListener {
 		mTabbedPane.setFocusable(false);
 		mTabbedPane.setTabPlacement(JTabbedPane.BOTTOM);
 		mTabbedPaneMapViews = new Vector<Component>();
+		visibleTabKeys = new Vector<Component>();
 		mTabbedPane.addChangeListener(new ChangeListener() {
 			public synchronized void stateChanged(final ChangeEvent pE) {
-				if("true".equals(mTabbedPane.getClientProperty("ChangedEventConsumed"))) {
+				if ("true".equals(mTabbedPane.getClientProperty("ChangedEventConsumed"))) {
 					mTabbedPane.putClientProperty("ChangedEventConsumed", null);
 				}
 				else {
@@ -143,13 +189,23 @@ class MapViewTabs implements IMapViewChangeListener {
 		mTabbedPane.addMouseListener(new DefaultMapMouseListener());
 		mTabbedPane.addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {
-				if (!mTabbedPane.isEnabled() || !SwingUtilities.isLeftMouseButton(e)) {
+				if (!mTabbedPane.isEnabled()) {
+					return;
+				}
+				if (maybeShowTabPopup(e)) {
+					return;
+				}
+				if (!SwingUtilities.isLeftMouseButton(e)) {
 					return;
 				}
 				dragTabIndex = mTabbedPane.indexAtLocation(e.getX(), e.getY());
 			}
 
 			public void mouseReleased(final MouseEvent e) {
+				if (maybeShowTabPopup(e)) {
+					dragTabIndex = -1;
+					return;
+				}
 				if (dragTabIndex < 0 || !SwingUtilities.isLeftMouseButton(e)) {
 					dragTabIndex = -1;
 					return;
@@ -165,74 +221,84 @@ class MapViewTabs implements IMapViewChangeListener {
 			}
 		});
 
-		//DOCEAR - MapViewTabs: keep track on not MapView tab additions
 		mTabbedPane.addContainerListener(new ContainerListener() {
 			public void componentRemoved(ContainerEvent event) {
+				if (rebuildingVisibleTabs) {
+					return;
+				}
 				if (shouldTrackAsDocumentTab(event.getChild())) {
 					mTabbedPaneMapViews.remove(event.getChild());
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
-							setTabsVisible();
+							rebuildVisibleTabs(null, false);
+							notifyTabsChanged();
 						}
 					});
 				}
 			}
-			
+
 			public void componentAdded(final ContainerEvent event) {
+				if (rebuildingVisibleTabs) {
+					return;
+				}
 				if (!shouldTrackAsDocumentTab(event.getChild())) {
 					return;
 				}
 				for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 					if (mTabbedPaneMapViews.get(i) == event.getChild()) {
-					 return;
+						return;
 					}
 				}
 				mTabbedPaneMapViews.add(event.getChild());
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						setTabsVisible();
+						rebuildVisibleTabs(event.getChild(), true);
+						notifyTabsChanged();
 					}
 				});
 			}
 		});
 		final Controller controller = Controller.getCurrentController();
 		controller.getMapViewManager().addMapViewChangeListener(this);
-		fm.getContentPane().add(mTabbedPane, BorderLayout.CENTER);
-		
+		tabShell = new JPanel(new BorderLayout());
+		tabShell.add(mTabbedPane, BorderLayout.CENTER);
+		fm.getContentPane().add(tabShell, BorderLayout.CENTER);
+
 		installTabShortcuts();
 	}
 
 	void removeTabbedPaneAccelerators() {
-    }
-    
-    private void installTabShortcuts() {
-        InputMap inputMap = mTabbedPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
-        if (inputMap == null) {
-            inputMap = new InputMap();
-            mTabbedPane.setInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, inputMap);
-        }
-        
-        javax.swing.ActionMap actionMap = mTabbedPane.getActionMap();
-        
-        for (int i = 1; i <= MAX_TAB_SHORTCUT; i++) {
-            final int tabIndex = i;
-            KeyStroke keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_0 + i, InputEvent.ALT_MASK);
-            String actionKey = "mapviewtabs.switch.to.tab." + i;
-            inputMap.put(keyStroke, actionKey);
-            actionMap.put(actionKey, new javax.swing.AbstractAction() {
-                private static final long serialVersionUID = 1L;
-                public void actionPerformed(java.awt.event.ActionEvent e) {
-                    switchToTab(tabIndex - 1);
-                }
-            });
-        }
-    }
-    
+	}
+
+	private void installTabShortcuts() {
+		InputMap inputMap = mTabbedPane.getInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT);
+		if (inputMap == null) {
+			inputMap = new InputMap();
+			mTabbedPane.setInputMap(JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, inputMap);
+		}
+
+		javax.swing.ActionMap actionMap = mTabbedPane.getActionMap();
+
+		for (int i = 1; i <= MAX_TAB_SHORTCUT; i++) {
+			final int tabIndex = i;
+			KeyStroke keyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_0 + i, InputEvent.ALT_MASK);
+			String actionKey = "mapviewtabs.switch.to.tab." + i;
+			inputMap.put(keyStroke, actionKey);
+			actionMap.put(actionKey, new javax.swing.AbstractAction() {
+				private static final long serialVersionUID = 1L;
+
+				public void actionPerformed(java.awt.event.ActionEvent e) {
+					switchToTab(tabIndex - 1);
+				}
+			});
+		}
+	}
+
 	private void switchToTab(int index) {
-        if (index >= 0 && index < mTabbedPane.getTabCount()) {
-            mTabbedPane.setSelectedIndex(index);
-        }
-    }
+		if (index >= 0 && index < mTabbedPane.getTabCount()) {
+			mTabbedPane.setSelectedIndex(index);
+		}
+	}
 
 	public void openDocumentTab(final IDocumentTabView documentView) {
 		if (documentView == null) {
@@ -241,120 +307,89 @@ class MapViewTabs implements IMapViewChangeListener {
 		final Component tabKey = documentView.getTabKey();
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == tabKey) {
-				mTabbedPane.setSelectedIndex(i);
+				ensureVisibleAndSelect(tabKey);
 				return;
 			}
 		}
-		final String title = formatTabTitle(documentView.getTabTitle());
-		final int insertIndex = resolveInsertIndex();
+		final int insertIndex = resolveInsertIndexInMaster();
 		mTabbedPaneMapViews.insertElementAt(tabKey, insertIndex);
-		mTabbedPane.insertTab(title, null, new JPanel(), null, insertIndex);
-		mTabbedPane.setSelectedIndex(insertIndex);
-		setTabsVisible();
+		rebuildVisibleTabs(tabKey, true);
+		notifyTabsChanged();
 	}
 
 	public void selectDocumentTab(final Component tabKey) {
 		if (tabKey == null) {
 			return;
 		}
-		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
-			if (mTabbedPaneMapViews.get(i) == tabKey) {
-				mTabbedPane.setSelectedIndex(i);
-				return;
-			}
-		}
+		ensureVisibleAndSelect(tabKey);
 	}
 
 	public void closeDocumentTab(final Component tabKey) {
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == tabKey) {
-				mTabbedPaneSelectionUpdate = false;
-				mTabbedPane.removeTabAt(i);
 				mTabbedPaneMapViews.remove(i);
-				mTabbedPaneSelectionUpdate = true;
-				tabSelectionChanged();
-				setTabsVisible();
+				rebuildVisibleTabs(null, false);
+				notifyTabsChanged();
 				return;
 			}
 		}
 	}
 
 	public void afterViewChange(final Component pOldMap, final Component pNewMap) {
-		final int selectedIndex = mTabbedPane.getSelectedIndex();
 		if (pNewMap == null) {
 			return;
 		}
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == pNewMap) {
-				if (selectedIndex != i) {
-					mTabbedPane.setSelectedIndex(i);
-				}
+				ensureVisibleAndSelect(pNewMap);
 				return;
 			}
 		}
-		final String title = formatTabTitle(pNewMap.getName());
-		final int insertIndex = resolveInsertIndex();
+		final int insertIndex = resolveInsertIndexInMaster();
 		mTabbedPaneMapViews.insertElementAt(pNewMap, insertIndex);
-		mTabbedPane.insertTab(title, null, new JPanel(), null, insertIndex);
-		mTabbedPane.setSelectedIndex(insertIndex);
-		setTabsVisible();
+		rebuildVisibleTabs(pNewMap, true);
+		notifyTabsChanged();
 	}
 
-	private int resolveInsertIndex() {
+	private int resolveInsertIndexInMaster() {
 		if (nextTabInsertIndex >= 0) {
-			final int index = Math.min(nextTabInsertIndex, mTabbedPane.getTabCount());
+			final int index = Math.min(nextTabInsertIndex, mTabbedPaneMapViews.size());
 			nextTabInsertIndex = -1;
 			return index;
 		}
-		return mTabbedPane.getTabCount();
+		return mTabbedPaneMapViews.size();
 	}
 
-	private void reorderTab(int fromIndex, int toIndex) {
-		if (fromIndex < 0 || toIndex < 0 || fromIndex == toIndex) {
+	private void reorderTab(int fromVisibleIndex, int toVisibleIndex) {
+		if (fromVisibleIndex < 0 || toVisibleIndex < 0 || fromVisibleIndex == toVisibleIndex) {
 			return;
 		}
-		if (fromIndex >= mTabbedPaneMapViews.size() || toIndex >= mTabbedPaneMapViews.size()) {
+		if (fromVisibleIndex >= visibleTabKeys.size() || toVisibleIndex >= visibleTabKeys.size()) {
 			return;
 		}
-		final int selectedBefore = mTabbedPane.getSelectedIndex();
-		final Component movedMapView = mTabbedPaneMapViews.remove(fromIndex);
-		final String title = mTabbedPane.getTitleAt(fromIndex);
-
-		mTabbedPaneSelectionUpdate = false;
-		mTabbedPane.removeTabAt(fromIndex);
-		if (fromIndex < toIndex) {
-			toIndex--;
+		final Component moved = visibleTabKeys.get(fromVisibleIndex);
+		final Component target = visibleTabKeys.get(toVisibleIndex);
+		final int fromMaster = getTabIndexForMapView(moved);
+		final int toMaster = getTabIndexForMapView(target);
+		if (fromMaster < 0 || toMaster < 0 || fromMaster == toMaster) {
+			return;
 		}
-		mTabbedPaneMapViews.insertElementAt(movedMapView, toIndex);
-		mTabbedPane.insertTab(title, null, new JPanel(), null, toIndex);
-
-		int newSelectedIndex = selectedBefore;
-		if (selectedBefore == fromIndex) {
-			newSelectedIndex = toIndex;
+		mTabbedPaneMapViews.remove(fromMaster);
+		int insertAt = toMaster;
+		if (fromMaster < toMaster) {
+			insertAt = toMaster - 1;
 		}
-		else if (fromIndex < selectedBefore && toIndex >= selectedBefore) {
-			newSelectedIndex = selectedBefore - 1;
-		}
-		else if (fromIndex > selectedBefore && toIndex <= selectedBefore) {
-			newSelectedIndex = selectedBefore + 1;
-		}
-		if (newSelectedIndex >= 0 && newSelectedIndex < mTabbedPane.getTabCount()) {
-			mTabbedPane.putClientProperty("ChangedEventConsumed", "true");
-			mTabbedPane.setSelectedIndex(newSelectedIndex);
-		}
-		mTabbedPaneSelectionUpdate = true;
-		tabSelectionChanged();
+		mTabbedPaneMapViews.insertElementAt(moved, insertAt);
+		rebuildVisibleTabs(moved, true);
+		notifyTabsChanged();
 	}
 
 	public void afterViewClose(final Component pOldMapView) {
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == pOldMapView) {
-				mTabbedPaneSelectionUpdate = false;
-				mTabbedPane.removeTabAt(i);
 				mTabbedPaneMapViews.remove(i);
-				mTabbedPaneSelectionUpdate = true;
-				tabSelectionChanged();
-				setTabsVisible();
+				rebuildVisibleTabs(null, false);
+				notifyTabsChanged();
 				return;
 			}
 		}
@@ -364,10 +399,9 @@ class MapViewTabs implements IMapViewChangeListener {
 		mapView.addPropertyChangeListener("name", new PropertyChangeListener() {
 			public void propertyChange(final PropertyChangeEvent evt) {
 				final Component pMapView = (Component) evt.getSource();
-				for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
-					if (mTabbedPaneMapViews.get(i) == pMapView) {
-						mTabbedPane.setTitleAt(i, formatTabTitle(pMapView.getName()));
-					}
+				final int visible = visibleTabKeys.indexOf(pMapView);
+				if (visible >= 0) {
+					mTabbedPane.setTitleAt(visible, formatTabTitle(pMapView.getName()));
 				}
 			}
 		});
@@ -414,10 +448,10 @@ class MapViewTabs implements IMapViewChangeListener {
 				mTabbedPane.setComponentAt(j, new JPanel());
 			}
 		}
-		if (selectedIndex < 0) {
+		if (selectedIndex < 0 || selectedIndex >= visibleTabKeys.size()) {
 			return;
 		}
-		final Component mapView = mTabbedPaneMapViews.get(selectedIndex);
+		final Component mapView = visibleTabKeys.get(selectedIndex);
 		Controller controller = Controller.getCurrentController();
 
 		if (mapView instanceof IDocumentTabView) {
@@ -439,10 +473,10 @@ class MapViewTabs implements IMapViewChangeListener {
 	}
 
 	private boolean notifySameTabClicked(final int tabIndex) {
-		if (sameTabClickListener == null || tabIndex < 0 || tabIndex >= mTabbedPaneMapViews.size()) {
+		if (sameTabClickListener == null || tabIndex < 0 || tabIndex >= visibleTabKeys.size()) {
 			return false;
 		}
-		return sameTabClickListener.onSameTabClicked(tabIndex, mTabbedPaneMapViews.get(tabIndex));
+		return sameTabClickListener.onSameTabClicked(tabIndex, visibleTabKeys.get(tabIndex));
 	}
 
 	private void setTabsVisible() {
@@ -460,7 +494,7 @@ class MapViewTabs implements IMapViewChangeListener {
 			mTabbedPane.setUI(new BasicTabbedPaneUI() {
 				@Override
 				protected int calculateTabAreaHeight(final int tabPlacement, final int horizRunCount,
-				                                     final int maxTabHeight) {
+						final int maxTabHeight) {
 					return 0;
 				}
 
@@ -482,11 +516,150 @@ class MapViewTabs implements IMapViewChangeListener {
 		return tabbedPaneUI == null || tabbedPaneUI == mTabbedPane.getUI();
 	}
 
-	/** Tab placeholders and the split pane must not become tab identity entries. */
 	private static boolean shouldTrackAsDocumentTab(final Component child) {
 		if (child == null || child instanceof MapView || child instanceof JSplitPane || child instanceof JPanel) {
 			return false;
 		}
 		return child instanceof IDocumentTabView;
+	}
+
+	private boolean isAllowedByFilter(final Component tabKey) {
+		return visibilityFilter == null || visibilityFilter.isVisible(tabKey);
+	}
+
+	/** Select {@code tabKey} if the strip is already correct; otherwise rebuild (force-show if filtered out). */
+	private void ensureVisibleAndSelect(final Component tabKey) {
+		if (tabKey != null && isAllowedByFilter(tabKey) && stripMatchesFilter(null)) {
+			final int idx = visibleTabKeys.indexOf(tabKey);
+			if (idx >= 0) {
+				if (mTabbedPane.getSelectedIndex() != idx) {
+					mTabbedPane.setSelectedIndex(idx);
+				}
+				return;
+			}
+		}
+		rebuildVisibleTabs(tabKey, true);
+	}
+
+	private boolean stripMatchesFilter(final Component preferOutsideFilter) {
+		int j = 0;
+		for (int i = 0; i < mTabbedPaneMapViews.size(); i++) {
+			final Component key = mTabbedPaneMapViews.get(i);
+			final boolean forced = preferOutsideFilter != null && key == preferOutsideFilter;
+			if (!forced && !isAllowedByFilter(key)) {
+				continue;
+			}
+			if (j >= visibleTabKeys.size() || visibleTabKeys.get(j) != key) {
+				return false;
+			}
+			j++;
+		}
+		return j == visibleTabKeys.size() && j == mTabbedPane.getTabCount();
+	}
+
+	/**
+	 * Rebuilds the visible strip from the master list.
+	 * @param forceSelect preferred selection; when {@code allowForceOutsideFilter} is true this tab
+	 *        is shown even if the active group filter would hide it (open / explicit activate).
+	 */
+	private void rebuildVisibleTabs(final Component forceSelect, final boolean allowForceOutsideFilter) {
+		if (rebuildingVisibleTabs) {
+			return;
+		}
+		rebuildingVisibleTabs = true;
+		Component prefer = forceSelect;
+		if (prefer == null && mTabbedPane.getSelectedIndex() >= 0
+				&& mTabbedPane.getSelectedIndex() < visibleTabKeys.size()) {
+			final Component selected = visibleTabKeys.get(mTabbedPane.getSelectedIndex());
+			if (isAllowedByFilter(selected)) {
+				prefer = selected;
+			}
+		}
+		if (prefer == null) {
+			final Component current = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+			if (current != null && isAllowedByFilter(current)) {
+				prefer = current;
+			}
+		}
+		try {
+			mTabbedPaneSelectionUpdate = false;
+			while (mTabbedPane.getTabCount() > 0) {
+				mTabbedPane.removeTabAt(mTabbedPane.getTabCount() - 1);
+			}
+			visibleTabKeys.clear();
+			int selectVisible = -1;
+			for (int i = 0; i < mTabbedPaneMapViews.size(); i++) {
+				final Component tabKey = mTabbedPaneMapViews.get(i);
+				final boolean forced = allowForceOutsideFilter && prefer != null && tabKey == prefer
+						&& !isAllowedByFilter(tabKey);
+				if (!forced && !isAllowedByFilter(tabKey)) {
+					continue;
+				}
+				final String title = formatTabTitle(resolveTabTitle(tabKey));
+				final int visibleIndex = mTabbedPane.getTabCount();
+				mTabbedPane.insertTab(title, null, new JPanel(), null, visibleIndex);
+				visibleTabKeys.add(tabKey);
+				if (prefer != null && tabKey == prefer) {
+					selectVisible = visibleIndex;
+				}
+			}
+			if (visibleTabKeys.isEmpty() && !mTabbedPaneMapViews.isEmpty()) {
+				// Active group has no open maps — keep the current/first map so the viewport is not blank.
+				Component fallback = forceSelect;
+				if (fallback == null) {
+					fallback = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+				}
+				if (fallback == null || getTabIndexForMapView(fallback) < 0) {
+					fallback = mTabbedPaneMapViews.get(0);
+				}
+				final String title = formatTabTitle(resolveTabTitle(fallback));
+				mTabbedPane.insertTab(title, null, new JPanel(), null, 0);
+				visibleTabKeys.add(fallback);
+				selectVisible = 0;
+			}
+			if (selectVisible < 0 && mTabbedPane.getTabCount() > 0) {
+				selectVisible = 0;
+			}
+			if (selectVisible >= 0) {
+				mTabbedPane.putClientProperty("ChangedEventConsumed", "true");
+				mTabbedPane.setSelectedIndex(selectVisible);
+			}
+			mTabbedPaneSelectionUpdate = true;
+			tabSelectionChanged();
+			setTabsVisible();
+		}
+		finally {
+			rebuildingVisibleTabs = false;
+		}
+	}
+
+	private static String resolveTabTitle(final Component tabKey) {
+		if (tabKey instanceof IDocumentTabView) {
+			return ((IDocumentTabView) tabKey).getTabTitle();
+		}
+		return tabKey != null ? tabKey.getName() : "";
+	}
+
+	private boolean maybeShowTabPopup(final MouseEvent e) {
+		if (tabPopupMenuProvider == null || !e.isPopupTrigger()) {
+			return false;
+		}
+		final int index = mTabbedPane.indexAtLocation(e.getX(), e.getY());
+		if (index < 0 || index >= visibleTabKeys.size()) {
+			return false;
+		}
+		final Component tabKey = visibleTabKeys.get(index);
+		final JPopupMenu popup = tabPopupMenuProvider.createPopup(tabKey, index);
+		if (popup == null) {
+			return false;
+		}
+		popup.show(mTabbedPane, e.getX(), e.getY());
+		return true;
+	}
+
+	private void notifyTabsChanged() {
+		if (tabsChangedListener != null) {
+			tabsChangedListener.tabsChanged();
+		}
 	}
 }

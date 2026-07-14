@@ -97,6 +97,7 @@ import org.freeplane.plugin.workspace.components.IWorkspaceView;
 import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.favorites.FavoritesTabPanel;
 import org.freeplane.plugin.workspace.components.currentmapfolder.CurrentMapFolderTabInstaller;
+import org.freeplane.plugin.workspace.components.maptabs.MapTabGroupIntegration;
 import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
@@ -181,7 +182,12 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		setupView(modeController);
 		setupPinnedNodesTab(modeController);
 		setupCurrentMapFolderTab(modeController);
+		setupMapTabGroups();
 		scheduleLoadAfterFrameVisible();
+	}
+
+	private void setupMapTabGroups() {
+		MapTabGroupIntegration.install();
 	}
 
 	private void scheduleLoadAfterFrameVisible() {
