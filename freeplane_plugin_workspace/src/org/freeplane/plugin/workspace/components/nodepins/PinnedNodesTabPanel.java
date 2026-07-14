@@ -1,6 +1,7 @@
 package org.freeplane.plugin.workspace.components.nodepins;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Rectangle;
@@ -21,6 +22,7 @@ import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.JColorChooser;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
@@ -53,6 +55,7 @@ import org.freeplane.plugin.workspace.features.nodepins.NodePinNavigator;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinKeyUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
+import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
 
 public class PinnedNodesTabPanel extends JPanel {
 
@@ -228,7 +231,50 @@ public class PinnedNodesTabPanel extends JPanel {
 				refreshList();
 			}
 		});
+		if (filterId != null) {
+			button.addMouseListener(new MouseAdapter() {
+				public void mousePressed(final MouseEvent e) {
+					if (e.isPopupTrigger()) {
+						showTagColorPopup(e, filterId, button);
+					}
+				}
+
+				public void mouseReleased(final MouseEvent e) {
+					if (e.isPopupTrigger()) {
+						showTagColorPopup(e, filterId, button);
+					}
+				}
+			});
+		}
 		return button;
+	}
+
+	private void showTagColorPopup(final MouseEvent e, final String tag, final JToggleButton button) {
+		final JPopupMenu popup = new JPopupMenu();
+		final JMenuItem setColorItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.set.color"));
+		setColorItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				final Color current = TagColorStore.getInstance().getColor(tag);
+				final Color chosen = JColorChooser.showDialog(PinnedNodesTabPanel.this,
+						TextUtils.getText("workspace.nodepins.action.set.color"), current);
+				if (chosen != null) {
+					TagColorStore.getInstance().setColor(tag, chosen);
+					rebuildTagButtons();
+					refreshList();
+				}
+			}
+		});
+		popup.add(setColorItem);
+		final JMenuItem resetColorItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.reset.color"));
+		resetColorItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				TagColorStore.getInstance().clearColor(tag);
+				rebuildTagButtons();
+				refreshList();
+			}
+		});
+		popup.add(resetColorItem);
+		popup.show(button, e.getX(), e.getY());
 	}
 
 	private void buildEntryList() {
@@ -402,15 +448,17 @@ public class PinnedNodesTabPanel extends JPanel {
 				}
 			}
 			if (!entry.getTags().isEmpty()) {
-				final String tagsText = formatTagsText(entry);
-				if (isSelected) {
-					html.append("  [").append(escapeHtml(tagsText)).append(']');
-				}
-				else if (!entry.exists()) {
-					html.append("  <font color='#999999'>[").append(escapeHtml(tagsText)).append("]</font>");
-				}
-				else {
-					html.append("  <font color='#666666'>[").append(escapeHtml(tagsText)).append("]</font>");
+				html.append(' ');
+				boolean first = true;
+				for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
+					final String tag = (String) it.next();
+					if (!first) {
+						html.append(' ');
+					}
+					first = false;
+					final Color tagColor = TagColorStore.darkerVariant(TagColorStore.getInstance().getColor(tag), 0.55f);
+					html.append("<font color='").append(TagColorStore.toHex(tagColor)).append("'>[")
+							.append(escapeHtml(tag)).append("]</font>");
 				}
 			}
 			html.append("</html>");
