@@ -70,11 +70,6 @@ class MapViewTabs implements IMapViewChangeListener {
 	private int nextTabInsertIndex = -1;
 	private int dragTabIndex = -1;
 	private final JPanel tabShell;
-	/**
-	 * Tab body: map/split content in CENTER, optional group chrome in SOUTH so the
-	 * JTabbedPane content border's left/right edges enclose the group strip.
-	 */
-	private final JPanel contentStack;
 	private Component tabGroupChrome;
 	private TabVisibilityFilter visibilityFilter;
 	private TabsChangedListener tabsChangedListener;
@@ -156,15 +151,12 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	void setTabGroupChrome(final Component chrome) {
 		if (tabGroupChrome != null) {
-			contentStack.remove(tabGroupChrome);
+			tabShell.remove(tabGroupChrome);
 		}
 		tabGroupChrome = chrome;
 		if (chrome != null) {
-			// Sit under the map / above the bottom tabs so L/R content borders continue past it.
-			contentStack.add(chrome, BorderLayout.SOUTH);
+			tabShell.add(chrome, BorderLayout.SOUTH);
 		}
-		contentStack.revalidate();
-		contentStack.repaint();
 		tabShell.revalidate();
 		tabShell.repaint();
 	}
@@ -192,12 +184,7 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	public MapViewTabs(final ViewController fm, final JComponent contentComponent) {
 		instance = this;
-		contentStack = new JPanel(new BorderLayout());
-		contentStack.setOpaque(false);
 		mContentComponent = contentComponent;
-		if (contentComponent != null) {
-			contentStack.add(contentComponent, BorderLayout.CENTER);
-		}
 		mTabbedPane = new JTabbedPane();
 		removeTabbedPaneAccelerators();
 
@@ -463,30 +450,16 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	public void removeContentComponent() {
 		mContentComponent = null;
-		contentStack.removeAll();
-		if (tabGroupChrome != null) {
-			contentStack.add(tabGroupChrome, BorderLayout.SOUTH);
-		}
 		if (mTabbedPane.getSelectedIndex() >= 0) {
 			mTabbedPane.setComponentAt(mTabbedPane.getSelectedIndex(), new JPanel());
 		}
 	}
 
-	public void setContentComponent(final Component contentComponent) {
-		this.mContentComponent = contentComponent;
-		contentStack.removeAll();
-		if (contentComponent != null) {
-			contentStack.add(contentComponent, BorderLayout.CENTER);
-		}
-		if (tabGroupChrome != null) {
-			contentStack.add(tabGroupChrome, BorderLayout.SOUTH);
-		}
+	public void setContentComponent(final Component mContentComponent) {
+		this.mContentComponent = mContentComponent;
 		if (mTabbedPane.getSelectedIndex() >= 0) {
-			mTabbedPane.setComponentAt(mTabbedPane.getSelectedIndex(),
-					contentComponent != null ? contentStack : new JPanel());
+			mTabbedPane.setComponentAt(mTabbedPane.getSelectedIndex(), mContentComponent);
 		}
-		contentStack.revalidate();
-		contentStack.repaint();
 	}
 
 	private void tabSelectionChanged() {
@@ -525,7 +498,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		}
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);
-			mTabbedPane.setComponentAt(selectedIndex, contentStack);
+			mTabbedPane.setComponentAt(selectedIndex, mContentComponent);
 		}
 	}
 
