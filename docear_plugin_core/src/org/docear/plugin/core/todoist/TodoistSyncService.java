@@ -1,5 +1,6 @@
 package org.docear.plugin.core.todoist;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -8,6 +9,7 @@ import java.util.Set;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.map.NodeModel;
 
 public final class TodoistSyncService {
 	private TodoistSyncService() {
@@ -255,7 +257,8 @@ public final class TodoistSyncService {
 		}
 	}
 
-	private static String contentHash(TodoistReminderRecord record, String sectionName) {
+	/** Shared content fingerprint for create/update skip checks and live auto-sync. */
+	static String contentHash(TodoistReminderRecord record, String sectionName) {
 		StringBuilder sb = new StringBuilder();
 		sb.append(sectionName).append('|');
 		sb.append(record.nodeText).append('|');
@@ -264,5 +267,131 @@ public final class TodoistSyncService {
 		sb.append(record.period).append('|');
 		sb.append(record.periodUnit);
 		return Integer.toString(sb.toString().hashCode());
+	}
+
+	/**
+	 * Push one live reminder node to Todoist (create or update). Used by auto-sync listeners.
+	 * @return true if a remote write happened
+	 */
+	static boolean syncLiveNode(final NodeModel node) throws Exception {
+		if (node == null || node.getMap() == null || node.getMap().getFile() == null) {
+			return false;
+		}
+		final File file = node.getMap().getFile();
+		if (TodoistConfig.isImportTargetFile(file)) {
+			TodoistReminderRecord record = TodoistReminderFactory.fromNode(node);
+			if (record == null) {
+				record = TodoistReminderFactory.fromImportMapNodeWithoutReminder(node);
+			}
+			if (record == null) {
+				return false;
+			}
+			return syncImportMapNode(node, record);
+		}
+		final TodoistReminderRecord record = TodoistReminderFactory.fromNode(node);
+		if (record == null) {
+			return false;
+		}
+		final String token = TodoistConfig.getApiToken();
+		if (token == null || token.trim().length() == 0) {
+			return false;
+		}
+		final TodoistApiClient client = new TodoistApiClient(token.trim());
+		final TodoistMappingStore store = new TodoistMappingStore();
+		final TodoistSectionStore sectionStore = new TodoistSectionStore();
+		final String projectId = client.ensureProject(TodoistConfig.getProjectName());
+		final String sectionName = TodoistApiClient.sectionNameForFile(record.file);
+		final String sectionId = client.ensureSection(projectId, sectionName, sectionStore);
+		final String key = record.syncKey();
+		final String hash = contentHash(record, sectionName);
+		String taskId = store.getTaskIdOnly(key);
+		if (taskId == null || taskId.length() == 0) {
+			taskId = TodoistReminderFactory.getTaskId(node);
+		}
+		final String storedHash = store.getStoredContentHash(key);
+		if (taskId != null && taskId.length() == 0) {
+			taskId = null;
+		}
+		if (taskId != null && taskId.length() > 0) {
+			final TodoistTaskLocation location = client.getTaskLocation(taskId);
+			if (location.exists) {
+				final boolean needsRelocate = !client.isTaskInLocation(location, projectId, sectionId);
+				final boolean needsContentUpdate = !hash.equals(storedHash);
+				if (!needsRelocate && !needsContentUpdate) {
+					return false;
+				}
+				if (needsRelocate) {
+					client.relocateTaskTo(taskId, projectId, sectionId);
+				}
+				if (needsContentUpdate) {
+					client.updateTaskContent(taskId, record);
+				}
+				store.putMapping(key, taskId, record.remindAt, hash);
+				store.save();
+				sectionStore.save();
+				TodoistReminderFactory.setTaskId(node, taskId);
+				TodoistReminderFactory.setStoredContentHash(node, hash);
+				return true;
+			}
+		}
+		taskId = client.createTask(record, projectId, sectionId);
+		store.putMapping(key, taskId, record.remindAt, hash);
+		store.save();
+		sectionStore.save();
+		TodoistReminderFactory.setTaskId(node, taskId);
+		TodoistReminderFactory.setStoredContentHash(node, hash);
+		return true;
+	}
+
+	/** Import-map node already has {@code todoist_task_id}; update remote task content/due. */
+	private static boolean syncImportMapNode(final NodeModel node, final TodoistReminderRecord record)
+			throws Exception {
+		final String taskId = TodoistReminderFactory.getTaskId(node);
+		if (taskId == null || taskId.length() == 0) {
+			return false;
+		}
+		final String token = TodoistConfig.getApiToken();
+		if (token == null || token.trim().length() == 0) {
+			return false;
+		}
+		final String hash = TodoistReminderFactory.contentHash(record);
+		final String stored = TodoistReminderFactory.getStoredContentHash(node);
+		if (hash.equals(stored)) {
+			return false;
+		}
+		final TodoistApiClient client = new TodoistApiClient(token.trim());
+		client.updateTaskContent(taskId, record);
+		TodoistReminderFactory.setStoredContentHash(node, hash);
+		return true;
+	}
+
+	/** Close remote task when a live reminder node is deleted / reminder removed. */
+	static void closeLiveNode(final NodeModel node) {
+		if (node == null || node.getMap() == null || node.getMap().getFile() == null) {
+			return;
+		}
+		final File file = node.getMap().getFile();
+		final String token = TodoistConfig.getApiToken();
+		if (token == null || token.trim().length() == 0) {
+			return;
+		}
+		try {
+			String taskId = TodoistReminderFactory.getTaskId(node);
+			final String key = file.getAbsolutePath() + "|" + node.getID();
+			final TodoistMappingStore store = new TodoistMappingStore();
+			if (taskId == null || taskId.length() == 0) {
+				taskId = store.getTaskIdOnly(key);
+			}
+			if (taskId == null || taskId.length() == 0) {
+				return;
+			}
+			final TodoistApiClient client = new TodoistApiClient(token.trim());
+			client.closeTask(taskId);
+			store.removeMapping(key);
+			store.save();
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist auto-sync close failed for " + node.getID(), e);
+		}
 	}
 }

@@ -16,9 +16,16 @@ public final class TodoistConfig {
 	public static final String PROP_PROJECT_ID = "todoist.project_id";
 	public static final String PROP_IMPORT_TARGET = "todoist.import_target";
 	public static final String PROP_LABEL = "todoist.label";
+	public static final String PROP_AUTO_SYNC = "todoist.auto_sync";
+	public static final String PROP_AUTO_SYNC_INTERVAL_MINUTES = "todoist.auto_sync.interval_minutes";
 	public static final String DEFAULT_PROJECT_NAME = "Docear";
 	public static final String DEFAULT_LABEL = "Docear";
 	public static final String DEFAULT_IMPORT_TARGET = "E:\\yixiaozi\\00统领全局\\todolist.mm";
+	public static final String DEFAULT_AUTO_SYNC = "true";
+	public static final String DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = "5";
+	/** Node attribute linking an imported (or pushed) mind-map node to a Todoist task id. */
+	public static final String ATTR_TASK_ID = "todoist_task_id";
+	public static final String ATTR_CONTENT_HASH = "todoist_content_hash";
 
 	private TodoistConfig() {
 	}
@@ -29,6 +36,8 @@ public final class TodoistConfig {
 		resources.setDefaultProperty(PROP_PROJECT_NAME, DEFAULT_PROJECT_NAME);
 		resources.setDefaultProperty(PROP_IMPORT_TARGET, DEFAULT_IMPORT_TARGET);
 		resources.setDefaultProperty(PROP_LABEL, DEFAULT_LABEL);
+		resources.setDefaultProperty(PROP_AUTO_SYNC, DEFAULT_AUTO_SYNC);
+		resources.setDefaultProperty(PROP_AUTO_SYNC_INTERVAL_MINUTES, DEFAULT_AUTO_SYNC_INTERVAL_MINUTES);
 	}
 
 	public static String getApiToken() {
@@ -148,6 +157,35 @@ public final class TodoistConfig {
 		catch (IOException e) {
 			return file.getAbsolutePath().equalsIgnoreCase(getImportTargetFile().getAbsolutePath());
 		}
+	}
+
+	public static boolean isAutoSyncEnabled() {
+		return ResourceController.getResourceController().getBooleanProperty(PROP_AUTO_SYNC);
+	}
+
+	public static void setAutoSyncEnabled(boolean enabled) {
+		ResourceController.getResourceController().setProperty(PROP_AUTO_SYNC, enabled ? "true" : "false");
+	}
+
+	public static int getAutoSyncIntervalMinutes() {
+		int minutes = ResourceController.getResourceController().getIntProperty(PROP_AUTO_SYNC_INTERVAL_MINUTES, 5);
+		if (minutes < 1) {
+			return 1;
+		}
+		if (minutes > 120) {
+			return 120;
+		}
+		return minutes;
+	}
+
+	public static void setAutoSyncIntervalMinutes(int minutes) {
+		if (minutes < 1) {
+			minutes = 1;
+		}
+		if (minutes > 120) {
+			minutes = 120;
+		}
+		ResourceController.getResourceController().setProperty(PROP_AUTO_SYNC_INTERVAL_MINUTES, Integer.toString(minutes));
 	}
 
 	private static String loadLocalProperty(String key, String defaultValue) {

@@ -25,7 +25,8 @@ public final class TodoistIntegrationService {
 				addMenuIfPresent(builder, "/menu_bar/help", mc);
 			}
 		});
-		LogUtils.info("Todoist integration: sync menu registered (Help and Tools > Time management).");
+		TodoistAutoSyncService.getInstance().install(modeController);
+		LogUtils.info("Todoist integration: sync menu + auto-sync registered.");
 	}
 
 	private static void addMenuIfPresent(MenuBuilder builder, String menuPath, ModeController modeController) {
