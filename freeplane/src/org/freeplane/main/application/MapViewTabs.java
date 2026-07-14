@@ -462,9 +462,9 @@ class MapViewTabs implements IMapViewChangeListener {
 			if (mapView != controller.getMapViewManager().getMapViewComponent()) {
 				controller.getMapViewManager().changeToMapView(mapView.getName());
 			}
-			else {
-				notifySameTabClicked(selectedIndex);
-			}
+			// Do NOT call notifySameTabClicked here: that hook is for an actual mouse click
+			// on the already-selected bottom tab. Programmatic re-selection (filter rebuild,
+			// view events) must not exit overlay views such as the relationship graph.
 		}
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);

@@ -90,6 +90,7 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	final private JScrollPane scrollPane;
 	private boolean setZoomComboBoxRun;
 	private Controller controller;
+	private IMapViewManager.ViewportOverride viewportOverride;
 
 	/**
 	 * Reference to the current mode as the mapView may be null.
@@ -620,7 +621,12 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		final ModeController oldModeController = controller.getModeController();
 		ModeController newModeController = oldModeController;
 		if (pNewMap != null) {
-			setViewportView(pNewMap);
+			if (viewportOverride != null && viewportOverride.getViewportComponent() != null) {
+				setViewportView(viewportOverride.getViewportComponent());
+			}
+			else {
+				setViewportView(pNewMap);
+			}
 			final IMapSelection mapSelection = getMapSelection();
 			final NodeModel selected = mapSelection.getSelected();
 			mapSelection.scrollNodeToVisible(selected);
@@ -884,4 +890,12 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		scrollPane.setHorizontalScrollBarPolicy(areScrollbarsVisible ? JScrollPane.HORIZONTAL_SCROLLBAR_ALWAYS : JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		scrollPane.setVerticalScrollBarPolicy(areScrollbarsVisible ? JScrollPane.VERTICAL_SCROLLBAR_ALWAYS : JScrollPane.VERTICAL_SCROLLBAR_NEVER);
     }
+
+	public void setViewportOverride(final IMapViewManager.ViewportOverride override) {
+		viewportOverride = override;
+	}
+
+	public IMapViewManager.ViewportOverride getViewportOverride() {
+		return viewportOverride;
+	}
 }

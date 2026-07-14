@@ -9,16 +9,17 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewChangeListener;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.MapViewController;
 
 /**
  * Shows the relationship graph in the main mind-map viewport (replacing the canvas).
  * <p>
- * {@link MapViewController#afterViewChange} always restores a {@link MapView} into the scroll
- * pane whenever a map-view event fires. While the left 「关系图」tab is active we reclaim the
- * viewport afterwards so the graph is not wiped blank. Leaving for a different mind map
- * ({@link #afterMapChange}) or intentional exit still restores the map view.
+ * Root cause of blank / "won't open": {@link MapViewController#afterViewChange} used to always
+ * call {@code setViewportView(MapView)}, stomping whatever we put in the scroll pane. We register
+ * an {@link IMapViewManager.ViewportOverride} while the left 「关系图」tab is active so that event
+ * keeps the graph. Leaving for a different mind map or intentional exit clears the override.
  */
 public class RelationshipGraphService implements IExtension, IMapSelectionListener, IMapViewChangeListener {
 
@@ -27,6 +28,11 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 	/** True while the left graph side-tab wants the main viewport. */
 	private boolean holdingViewport;
 	private boolean reclaimScheduled;
+	private final IMapViewManager.ViewportOverride viewportOverride = new IMapViewManager.ViewportOverride() {
+		public Component getViewportComponent() {
+			return getCanvas();
+		}
+	};
 
 	public RelationshipGraphService() {
 	}
@@ -67,12 +73,17 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		holdingViewport = hold;
 		if (!hold) {
 			reclaimScheduled = false;
+			clearViewportOverride();
+		}
+		else {
+			installViewportOverride();
 		}
 	}
 
 	public void showInViewport() {
 		holdingViewport = true;
 		graphInViewport = true;
+		installViewportOverride();
 		final Runnable swap = new Runnable() {
 			public void run() {
 				if (!holdingViewport) {
@@ -98,6 +109,7 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 	public void hideFromViewport() {
 		holdingViewport = false;
 		reclaimScheduled = false;
+		clearViewportOverride();
 		final Runnable restore = new Runnable() {
 			public void run() {
 				if (holdingViewport) {
@@ -127,6 +139,7 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		holdingViewport = false;
 		reclaimScheduled = false;
 		graphInViewport = false;
+		clearViewportOverride();
 		if (canvas != null) {
 			canvas.stopLayout();
 		}
@@ -151,6 +164,24 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 
 	private MapViewController getMapViewController() {
 		return (MapViewController) Controller.getCurrentController().getMapViewManager();
+	}
+
+	private void installViewportOverride() {
+		final IMapViewManager manager = Controller.getCurrentController().getMapViewManager();
+		if (manager != null) {
+			manager.setViewportOverride(viewportOverride);
+		}
+	}
+
+	private void clearViewportOverride() {
+		final Controller controller = Controller.getCurrentController();
+		if (controller == null) {
+			return;
+		}
+		final IMapViewManager manager = controller.getMapViewManager();
+		if (manager != null && manager.getViewportOverride() == viewportOverride) {
+			manager.setViewportOverride(null);
+		}
 	}
 
 	private void scheduleReclaimViewport() {
@@ -191,12 +222,8 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		if (!holdingViewport) {
 			return;
 		}
-		// MapViewController always restores MapView into the scroll pane on view events;
-		// reclaim afterwards so the graph is not left blank.
-		if (newView instanceof MapView) {
-			scheduleReclaimViewport();
-			return;
-		}
+		// MapViewController used to always restore MapView into the scroll pane on view events.
+		// With ViewportOverride it should keep the graph; reclaim as a safety net either way.
 		scheduleReclaimViewport();
 	}
 

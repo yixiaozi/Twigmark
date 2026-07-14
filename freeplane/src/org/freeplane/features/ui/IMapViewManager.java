@@ -149,5 +149,17 @@ public interface IMapViewManager {
 	public void setTextRenderingHint(final Graphics2D g);
 	public boolean closeAllMaps();
 
-	public void setScrollbarsVisible(boolean areScrollbarsVisible);	
+	public void setScrollbarsVisible(boolean areScrollbarsVisible);
+
+	/**
+	 * Optional alternate main-viewport component (e.g. relationship graph).
+	 * While set, {@code afterViewChange} must not stomp it with a MapView.
+	 */
+	public interface ViewportOverride {
+		Component getViewportComponent();
+	}
+
+	public void setViewportOverride(ViewportOverride override);
+
+	public ViewportOverride getViewportOverride();
 }

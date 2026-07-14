@@ -360,4 +360,11 @@ public class HeadlessMapViewController implements IMapViewManager {
 	public void setScrollbarsVisible(boolean areScrollbarsVisible) {
 		
 	}
+
+	public void setViewportOverride(final IMapViewManager.ViewportOverride override) {
+	}
+
+	public IMapViewManager.ViewportOverride getViewportOverride() {
+		return null;
+	}
 }
