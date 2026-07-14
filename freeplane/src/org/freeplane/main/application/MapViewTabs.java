@@ -74,7 +74,10 @@ class MapViewTabs implements IMapViewChangeListener {
 	private TabVisibilityFilter visibilityFilter;
 	private TabsChangedListener tabsChangedListener;
 	private TabPopupMenuProvider tabPopupMenuProvider;
+	private TabOutsideFilterHandler outsideFilterHandler;
 	private boolean rebuildingVisibleTabs;
+	/** True while applying a cascade/filter rebuild so view-change listeners don't re-enter. */
+	private boolean suppressingViewSync;
 
 	private static final int MAX_TAB_SHORTCUT = 9;
 
@@ -92,6 +95,17 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	interface TabPopupMenuProvider {
 		JPopupMenu createPopup(Component tabKey, int visibleTabIndex);
+	}
+
+	/**
+	 * Adjusts the active group when a map outside the current filter must become visible
+	 * (e.g. switch cascade to 「全部」). Return true if the filter was changed to include the tab.
+	 */
+	interface TabOutsideFilterHandler {
+		boolean revealTab(Component tabKey);
+
+		/** Expand filter to show every open map (e.g. active group is empty). */
+		boolean revealAll();
 	}
 
 	private static SameTabClickListener sameTabClickListener;
@@ -149,7 +163,7 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	void setTabVisibilityFilter(final TabVisibilityFilter filter) {
 		visibilityFilter = filter;
-		rebuildVisibleTabs(null, false);
+		rebuildVisibleTabs(null);
 	}
 
 	void setTabsChangedListener(final TabsChangedListener listener) {
@@ -160,8 +174,12 @@ class MapViewTabs implements IMapViewChangeListener {
 		tabPopupMenuProvider = provider;
 	}
 
+	void setTabOutsideFilterHandler(final TabOutsideFilterHandler handler) {
+		outsideFilterHandler = handler;
+	}
+
 	void refreshVisibleTabs() {
-		rebuildVisibleTabs(null, false);
+		rebuildVisibleTabs(null);
 	}
 
 	public MapViewTabs(final ViewController fm, final JComponent contentComponent) {
@@ -230,7 +248,7 @@ class MapViewTabs implements IMapViewChangeListener {
 					mTabbedPaneMapViews.remove(event.getChild());
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
-							rebuildVisibleTabs(null, false);
+							rebuildVisibleTabs(null);
 							notifyTabsChanged();
 						}
 					});
@@ -252,7 +270,7 @@ class MapViewTabs implements IMapViewChangeListener {
 				mTabbedPaneMapViews.add(event.getChild());
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						rebuildVisibleTabs(event.getChild(), true);
+						ensureVisibleAndSelect(event.getChild());
 						notifyTabsChanged();
 					}
 				});
@@ -313,7 +331,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		}
 		final int insertIndex = resolveInsertIndexInMaster();
 		mTabbedPaneMapViews.insertElementAt(tabKey, insertIndex);
-		rebuildVisibleTabs(tabKey, true);
+		ensureVisibleAndSelect(tabKey);
 		notifyTabsChanged();
 	}
 
@@ -328,7 +346,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == tabKey) {
 				mTabbedPaneMapViews.remove(i);
-				rebuildVisibleTabs(null, false);
+				rebuildVisibleTabs(null);
 				notifyTabsChanged();
 				return;
 			}
@@ -339,16 +357,22 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (pNewMap == null) {
 			return;
 		}
+		boolean known = false;
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == pNewMap) {
-				ensureVisibleAndSelect(pNewMap);
-				return;
+				known = true;
+				break;
 			}
 		}
-		final int insertIndex = resolveInsertIndexInMaster();
-		mTabbedPaneMapViews.insertElementAt(pNewMap, insertIndex);
-		rebuildVisibleTabs(pNewMap, true);
-		notifyTabsChanged();
+		if (!known) {
+			final int insertIndex = resolveInsertIndexInMaster();
+			mTabbedPaneMapViews.insertElementAt(pNewMap, insertIndex);
+			notifyTabsChanged();
+		}
+		if (rebuildingVisibleTabs || suppressingViewSync) {
+			return;
+		}
+		ensureVisibleAndSelect(pNewMap);
 	}
 
 	private int resolveInsertIndexInMaster() {
@@ -380,7 +404,7 @@ class MapViewTabs implements IMapViewChangeListener {
 			insertAt = toMaster - 1;
 		}
 		mTabbedPaneMapViews.insertElementAt(moved, insertAt);
-		rebuildVisibleTabs(moved, true);
+		rebuildVisibleTabs(moved);
 		notifyTabsChanged();
 	}
 
@@ -388,7 +412,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == pOldMapView) {
 				mTabbedPaneMapViews.remove(i);
-				rebuildVisibleTabs(null, false);
+				rebuildVisibleTabs(null);
 				notifyTabsChanged();
 				return;
 			}
@@ -460,7 +484,13 @@ class MapViewTabs implements IMapViewChangeListener {
 		else if (mapView instanceof MapView) {
 			DocumentTabSupport.deactivateDocumentView();
 			if (mapView != controller.getMapViewManager().getMapViewComponent()) {
-				controller.getMapViewManager().changeToMapView(mapView.getName());
+				suppressingViewSync = true;
+				try {
+					controller.getMapViewManager().changeToMapView(mapView.getName());
+				}
+				finally {
+					suppressingViewSync = false;
+				}
 			}
 			// Do NOT call notifySameTabClicked here: that hook is for an actual mouse click
 			// on the already-selected bottom tab. Programmatic re-selection (filter rebuild,
@@ -527,9 +557,28 @@ class MapViewTabs implements IMapViewChangeListener {
 		return visibilityFilter == null || visibilityFilter.isVisible(tabKey);
 	}
 
-	/** Select {@code tabKey} if the strip is already correct; otherwise rebuild (force-show if filtered out). */
+	/**
+	 * Ensures {@code tabKey} is on the visible strip and selected. Never force-shows a tab
+	 * outside the active group (that desynced the strip and broke later map/view switches);
+	 * ask {@link #outsideFilterHandler} to expand the filter instead.
+	 */
 	private void ensureVisibleAndSelect(final Component tabKey) {
-		if (tabKey != null && isAllowedByFilter(tabKey) && stripMatchesFilter(null)) {
+		if (rebuildingVisibleTabs || suppressingViewSync) {
+			return;
+		}
+		if (tabKey != null && !isAllowedByFilter(tabKey) && outsideFilterHandler != null) {
+			if (outsideFilterHandler.revealTab(tabKey)) {
+				// Handler updated the cascade and refreshed the strip; just select.
+				final int idx = visibleTabKeys.indexOf(tabKey);
+				if (idx >= 0) {
+					if (mTabbedPane.getSelectedIndex() != idx) {
+						mTabbedPane.setSelectedIndex(idx);
+					}
+					return;
+				}
+			}
+		}
+		if (tabKey != null && isAllowedByFilter(tabKey) && stripMatchesFilter()) {
 			final int idx = visibleTabKeys.indexOf(tabKey);
 			if (idx >= 0) {
 				if (mTabbedPane.getSelectedIndex() != idx) {
@@ -538,15 +587,14 @@ class MapViewTabs implements IMapViewChangeListener {
 				return;
 			}
 		}
-		rebuildVisibleTabs(tabKey, true);
+		rebuildVisibleTabs(tabKey);
 	}
 
-	private boolean stripMatchesFilter(final Component preferOutsideFilter) {
+	private boolean stripMatchesFilter() {
 		int j = 0;
 		for (int i = 0; i < mTabbedPaneMapViews.size(); i++) {
 			final Component key = mTabbedPaneMapViews.get(i);
-			final boolean forced = preferOutsideFilter != null && key == preferOutsideFilter;
-			if (!forced && !isAllowedByFilter(key)) {
+			if (!isAllowedByFilter(key)) {
 				continue;
 			}
 			if (j >= visibleTabKeys.size() || visibleTabKeys.get(j) != key) {
@@ -558,16 +606,19 @@ class MapViewTabs implements IMapViewChangeListener {
 	}
 
 	/**
-	 * Rebuilds the visible strip from the master list.
-	 * @param forceSelect preferred selection; when {@code allowForceOutsideFilter} is true this tab
-	 *        is shown even if the active group filter would hide it (open / explicit activate).
+	 * Rebuilds the visible strip from the master list under the current filter.
+	 * {@code preferSelect} is selected when present and allowed by the filter; otherwise
+	 * the first visible tab is selected (and becomes the active map view).
 	 */
-	private void rebuildVisibleTabs(final Component forceSelect, final boolean allowForceOutsideFilter) {
+	private void rebuildVisibleTabs(final Component preferSelect) {
 		if (rebuildingVisibleTabs) {
 			return;
 		}
 		rebuildingVisibleTabs = true;
-		Component prefer = forceSelect;
+		Component prefer = preferSelect;
+		if (prefer != null && !isAllowedByFilter(prefer)) {
+			prefer = null;
+		}
 		if (prefer == null && mTabbedPane.getSelectedIndex() >= 0
 				&& mTabbedPane.getSelectedIndex() < visibleTabKeys.size()) {
 			final Component selected = visibleTabKeys.get(mTabbedPane.getSelectedIndex());
@@ -590,9 +641,7 @@ class MapViewTabs implements IMapViewChangeListener {
 			int selectVisible = -1;
 			for (int i = 0; i < mTabbedPaneMapViews.size(); i++) {
 				final Component tabKey = mTabbedPaneMapViews.get(i);
-				final boolean forced = allowForceOutsideFilter && prefer != null && tabKey == prefer
-						&& !isAllowedByFilter(tabKey);
-				if (!forced && !isAllowedByFilter(tabKey)) {
+				if (!isAllowedByFilter(tabKey)) {
 					continue;
 				}
 				final String title = formatTabTitle(resolveTabTitle(tabKey));
@@ -603,19 +652,15 @@ class MapViewTabs implements IMapViewChangeListener {
 					selectVisible = visibleIndex;
 				}
 			}
-			if (visibleTabKeys.isEmpty() && !mTabbedPaneMapViews.isEmpty()) {
-				// Active group has no open maps — keep the current/first map so the viewport is not blank.
-				Component fallback = forceSelect;
-				if (fallback == null) {
-					fallback = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+			if (visibleTabKeys.isEmpty() && !mTabbedPaneMapViews.isEmpty() && visibilityFilter != null
+					&& outsideFilterHandler != null) {
+				rebuildingVisibleTabs = false;
+				mTabbedPaneSelectionUpdate = true;
+				if (outsideFilterHandler.revealAll()) {
+					return;
 				}
-				if (fallback == null || getTabIndexForMapView(fallback) < 0) {
-					fallback = mTabbedPaneMapViews.get(0);
-				}
-				final String title = formatTabTitle(resolveTabTitle(fallback));
-				mTabbedPane.insertTab(title, null, new JPanel(), null, 0);
-				visibleTabKeys.add(fallback);
-				selectVisible = 0;
+				rebuildingVisibleTabs = true;
+				mTabbedPaneSelectionUpdate = false;
 			}
 			if (selectVisible < 0 && mTabbedPane.getTabCount() > 0) {
 				selectVisible = 0;

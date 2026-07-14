@@ -56,6 +56,12 @@ public final class MapViewTabOrder {
 		JPopupMenu createPopup(Component tabKey, int visibleTabIndex);
 	}
 
+	public interface TabOutsideFilterHandler {
+		boolean revealTab(Component tabKey);
+
+		boolean revealAll();
+	}
+
 	public static void setTabGroupChrome(final Component chrome) {
 		final MapViewTabs tabs = MapViewTabs.getInstance();
 		if (tabs != null) {
@@ -107,6 +113,26 @@ public final class MapViewTabOrder {
 		tabs.setTabPopupMenuProvider(new MapViewTabs.TabPopupMenuProvider() {
 			public JPopupMenu createPopup(final Component tabKey, final int visibleTabIndex) {
 				return provider.createPopup(tabKey, visibleTabIndex);
+			}
+		});
+	}
+
+	public static void setTabOutsideFilterHandler(final TabOutsideFilterHandler handler) {
+		final MapViewTabs tabs = MapViewTabs.getInstance();
+		if (tabs == null) {
+			return;
+		}
+		if (handler == null) {
+			tabs.setTabOutsideFilterHandler(null);
+			return;
+		}
+		tabs.setTabOutsideFilterHandler(new MapViewTabs.TabOutsideFilterHandler() {
+			public boolean revealTab(final Component tabKey) {
+				return handler.revealTab(tabKey);
+			}
+
+			public boolean revealAll() {
+				return handler.revealAll();
 			}
 		});
 	}

@@ -30,6 +30,8 @@ import org.freeplane.view.swing.map.MapView;
  * <p>
  * Assignment keys are normalized map file paths persisted in
  * {@code {dataRoot}/_data/map-tab-groups.properties}. Default filter is 「全部」.
+ * Activating a map outside the active group expands the filter to 「全部」 so the
+ * tab strip never carries “forced” out-of-group tabs (which broke map/view switches).
  */
 public final class MapTabGroupIntegration {
 
@@ -39,6 +41,7 @@ public final class MapTabGroupIntegration {
 
 	private static TagGroupCascadeBar cascade;
 	private static boolean installed;
+	private static boolean applyingFilter;
 
 	private MapTabGroupIntegration() {
 	}
@@ -70,11 +73,20 @@ public final class MapTabGroupIntegration {
 				return isTabVisibleInActiveGroup(tabKey);
 			}
 		});
+		MapViewTabOrder.setTabOutsideFilterHandler(new MapViewTabOrder.TabOutsideFilterHandler() {
+			public boolean revealTab(final Component tabKey) {
+				return expandFilterToAll();
+			}
+
+			public boolean revealAll() {
+				return expandFilterToAll();
+			}
+		});
 		MapViewTabOrder.setTabsChangedListener(new MapViewTabOrder.TabsChangedListener() {
 			public void tabsChanged() {
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						if (cascade != null) {
+						if (cascade != null && !applyingFilter) {
 							cascade.rebuild();
 						}
 					}
@@ -92,10 +104,38 @@ public final class MapTabGroupIntegration {
 		installed = true;
 	}
 
+	private static boolean expandFilterToAll() {
+		if (cascade == null) {
+			return false;
+		}
+		if (cascade.isAllScope()) {
+			return true;
+		}
+		// Allow nested applyFilter when expanding from an empty-group rebuild.
+		final boolean wasApplying = applyingFilter;
+		applyingFilter = false;
+		try {
+			cascade.selectGroup(TagGroupCascadeBar.ALL_SCOPE_ID, false);
+		}
+		finally {
+			applyingFilter = wasApplying;
+		}
+		return cascade.isAllScope();
+	}
+
 	private static void applyFilter() {
-		MapViewTabOrder.refreshVisibleTabs();
-		if (cascade != null) {
-			cascade.rebuild();
+		if (applyingFilter) {
+			return;
+		}
+		applyingFilter = true;
+		try {
+			MapViewTabOrder.refreshVisibleTabs();
+			if (cascade != null) {
+				cascade.rebuild();
+			}
+		}
+		finally {
+			applyingFilter = false;
 		}
 	}
 
@@ -177,7 +217,6 @@ public final class MapTabGroupIntegration {
 			return normalizePath(model.getFile());
 		}
 		if (tabKey instanceof IDocumentTabView) {
-			// Non-map document tabs: no stable file key yet — leave ungrouped / unassigned
 			return null;
 		}
 		return null;
