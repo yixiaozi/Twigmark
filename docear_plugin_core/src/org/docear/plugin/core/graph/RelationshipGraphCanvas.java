@@ -701,7 +701,9 @@ public class RelationshipGraphCanvas extends JPanel {
 				final boolean match = matchedNodeKeys.contains(node.getPathKey());
 				final boolean selected = node == selectedNode;
 				final boolean hover = node == hoveredNode;
-				final int r = Math.max(2, (int) (NODE_RADIUS * zoom));
+				final boolean tagNode = node.isTagNode();
+				final int baseRadius = tagNode ? NODE_RADIUS + 3 : NODE_RADIUS;
+				final int r = Math.max(2, (int) (baseRadius * zoom));
 				if (selected) {
 					g2.setColor(new Color(180, 210, 240, 120));
 					g2.fillOval(cx - r - 4, cy - r - 4, (r + 4) * 2, (r + 4) * 2);
@@ -716,13 +718,16 @@ public class RelationshipGraphCanvas extends JPanel {
 				else if (dimNonMatches) {
 					g2.setColor(COLOR_NODE_DIM);
 				}
+				else if (tagNode) {
+					g2.setColor(resolveTagColor(node));
+				}
 				else {
 					g2.setColor(COLOR_NODE);
 				}
 				g2.fillOval(cx - r, cy - r, r * 2, r * 2);
 
-				if (drawLabels && (selected || match || hover || (!performanceMode && !dimNonMatches))) {
-					final String label = node.getLabel();
+				if (drawLabels && (selected || match || hover || tagNode || (!performanceMode && !dimNonMatches))) {
+					final String label = tagNode ? ("\u3010" + node.getLabel() + "\u3011") : node.getLabel();
 					final int labelWidth = fm.stringWidth(label);
 					g2.setColor(selected ? COLOR_NODE_SELECTED : (match ? COLOR_NODE_MATCH : COLOR_LABEL));
 					g2.drawString(label, cx - labelWidth / 2, cy + r + fm.getAscent() + 2);
@@ -772,6 +777,19 @@ public class RelationshipGraphCanvas extends JPanel {
 		g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
 		g2.drawString("\u62d6\u62fd\u7a7a\u767d\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u65b9\u5411\u952e\u9009\u62e9 \u00b7 \u53cc\u51fb\u6253\u5f00 \u00b7 Esc\u53d6\u6d88\u9009\u4e2d",
 		        12, getHeight() - 10);
+	}
+
+	private static Color resolveTagColor(final RelationshipGraphNode node) {
+		try {
+			final Color color = org.freeplane.plugin.workspace.features.nodepins.TagColorStore.getInstance()
+			        .getColor(node.getTagName());
+			if (color != null) {
+				return color;
+			}
+		}
+		catch (final Throwable ignore) {
+		}
+		return new Color(0xCE93D8);
 	}
 
 	private void drawLoadingOverlay(final Graphics2D g2) {

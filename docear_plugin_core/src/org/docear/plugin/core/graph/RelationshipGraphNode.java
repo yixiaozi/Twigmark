@@ -13,16 +13,19 @@ public final class RelationshipGraphNode {
 	private final String nodeId;
 	private final String label;
 	private final String mapLabel;
+	private final String tagName;
 	private double x;
 	private double y;
 	private double vx;
 	private double vy;
 
-	private RelationshipGraphNode(final File file, final String nodeId, final String label, final String mapLabel) {
+	private RelationshipGraphNode(final File file, final String nodeId, final String label, final String mapLabel,
+	        final String tagName) {
 		this.file = file;
 		this.nodeId = nodeId;
 		this.label = label;
 		this.mapLabel = mapLabel;
+		this.tagName = tagName;
 	}
 
 	public static RelationshipGraphNode forMapFile(final File file) {
@@ -30,7 +33,7 @@ public final class RelationshipGraphNode {
 		        ? file.getName().substring(0, file.getName().length() - 3)
 		        : file.getName();
 		final String decoded = decodeLabel(raw);
-		return new RelationshipGraphNode(file, null, decoded, decoded);
+		return new RelationshipGraphNode(file, null, decoded, decoded, null);
 	}
 
 	public static RelationshipGraphNode forMapNode(final File file, final String nodeId, final String nodeText) {
@@ -46,7 +49,13 @@ public final class RelationshipGraphNode {
 		if (text.length() > 40) {
 			text = text.substring(0, 37) + "...";
 		}
-		return new RelationshipGraphNode(file, nodeId, text, mapName);
+		return new RelationshipGraphNode(file, nodeId, text, mapName, null);
+	}
+
+	/** Virtual hub node for a mind-map tag. */
+	public static RelationshipGraphNode forTag(final String tag) {
+		final String name = tag == null ? "" : tag.trim();
+		return new RelationshipGraphNode(null, null, name, "\u6807\u7b7e", name);
 	}
 
 	private static String decodeLabel(final String raw) {
@@ -77,6 +86,14 @@ public final class RelationshipGraphNode {
 		return nodeId != null && nodeId.length() > 0;
 	}
 
+	public boolean isTagNode() {
+		return tagName != null && tagName.length() > 0;
+	}
+
+	public String getTagName() {
+		return tagName;
+	}
+
 	public String getLabel() {
 		return label;
 	}
@@ -86,6 +103,9 @@ public final class RelationshipGraphNode {
 	}
 
 	public URL getOpenUrl() throws Exception {
+		if (isTagNode() || file == null) {
+			return null;
+		}
 		if (isMapNode()) {
 			return new URL(Compat.fileToUrl(file).toString() + "#" + nodeId);
 		}
@@ -125,6 +145,9 @@ public final class RelationshipGraphNode {
 	}
 
 	public String getPathKey() {
+		if (isTagNode()) {
+			return "tag:" + tagName;
+		}
 		String fileKey;
 		try {
 			fileKey = file.getCanonicalFile().getAbsolutePath();

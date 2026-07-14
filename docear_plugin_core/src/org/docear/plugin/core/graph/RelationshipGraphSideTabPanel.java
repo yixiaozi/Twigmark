@@ -13,6 +13,8 @@ import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -43,7 +45,7 @@ import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 
 /**
- * Left sidebar: two mode tabs (map links / node links), each with search and related-item list.
+ * Left sidebar: three mode tabs (map links / node links / tags), each with search and related-item list.
  */
 public class RelationshipGraphSideTabPanel extends JPanel {
 
@@ -52,13 +54,27 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private static final Color BORDER = new Color(198, 200, 205);
 	private static final int RESULT_LIST_CAP = 200;
 	private static final int ASYNC_DISPLAY_INDEX_THRESHOLD = 80;
+	private static final int MODE_COUNT = 3;
+	private static final Comparator TAG_FIRST_COMPARATOR = new Comparator() {
+		public int compare(final Object o1, final Object o2) {
+			final RelationshipGraphNode a = (RelationshipGraphNode) o1;
+			final RelationshipGraphNode b = (RelationshipGraphNode) o2;
+			final int ta = a.isTagNode() ? 0 : 1;
+			final int tb = b.isTagNode() ? 0 : 1;
+			if (ta != tb) {
+				return ta - tb;
+			}
+			return a.getLabel().compareToIgnoreCase(b.getLabel());
+		}
+	};
 
 	private final ModeTabPanel mapFilesTab;
 	private final ModeTabPanel mapNodesTab;
+	private final ModeTabPanel tagsTab;
 	private final JTabbedPane subTabs;
 
-	private final RelationshipGraphIndex[] cachedBaseIndex = new RelationshipGraphIndex[2];
-	private final boolean[] dataLoadedForMode = new boolean[2];
+	private final RelationshipGraphIndex[] cachedBaseIndex = new RelationshipGraphIndex[MODE_COUNT];
+	private final boolean[] dataLoadedForMode = new boolean[MODE_COUNT];
 
 	private volatile int graphMode = RelationshipGraphScanner.MODE_MAP_FILES;
 	private Thread activeScanThread;
@@ -71,11 +87,13 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		mapFilesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_FILES);
 		mapNodesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_NODES);
+		tagsTab = new ModeTabPanel(RelationshipGraphScanner.MODE_TAGS);
 
 		subTabs = new JTabbedPane(JTabbedPane.TOP);
 		subTabs.setFont(subTabs.getFont().deriveFont(Font.PLAIN, 12f));
 		subTabs.addTab("\u5bfc\u56fe\u5173\u8054", mapFilesTab);
 		subTabs.addTab("\u8282\u70b9\u5173\u8054", mapNodesTab);
+		subTabs.addTab("\u6807\u7b7e", tagsTab);
 		subTabs.addChangeListener(new ChangeListener() {
 			public void stateChanged(final ChangeEvent e) {
 				onSubTabChanged();
@@ -97,13 +115,42 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		});
 	}
 
+	private ModeTabPanel tabForMode(final int mode) {
+		if (mode == RelationshipGraphScanner.MODE_MAP_NODES) {
+			return mapNodesTab;
+		}
+		if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			return tagsTab;
+		}
+		return mapFilesTab;
+	}
+
 	private ModeTabPanel activeTab() {
-		return graphMode == RelationshipGraphScanner.MODE_MAP_NODES ? mapNodesTab : mapFilesTab;
+		return tabForMode(graphMode);
+	}
+
+	private static int modeFromTabIndex(final int index) {
+		if (index == 1) {
+			return RelationshipGraphScanner.MODE_MAP_NODES;
+		}
+		if (index == 2) {
+			return RelationshipGraphScanner.MODE_TAGS;
+		}
+		return RelationshipGraphScanner.MODE_MAP_FILES;
+	}
+
+	private static int tabIndexFromMode(final int mode) {
+		if (mode == RelationshipGraphScanner.MODE_MAP_NODES) {
+			return 1;
+		}
+		if (mode == RelationshipGraphScanner.MODE_TAGS) {
+			return 2;
+		}
+		return 0;
 	}
 
 	private void onSubTabChanged() {
-		final int newMode = subTabs.getSelectedIndex() == 1 ? RelationshipGraphScanner.MODE_MAP_NODES
-		        : RelationshipGraphScanner.MODE_MAP_FILES;
+		final int newMode = modeFromTabIndex(subTabs.getSelectedIndex());
 		if (newMode == graphMode) {
 			return;
 		}
@@ -169,7 +216,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (service == null) {
 			return;
 		}
-		subTabs.setSelectedIndex(graphMode == RelationshipGraphScanner.MODE_MAP_NODES ? 1 : 0);
+		subTabs.setSelectedIndex(tabIndexFromMode(graphMode));
 		final boolean needsScan = !dataLoadedForMode[graphMode] || cachedBaseIndex[graphMode] == null;
 		if (needsScan) {
 			refreshGraphAsync(true);
@@ -259,7 +306,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		final int scanMode = graphMode;
 		final boolean deferViewport = deferViewportUntilDone;
-		final ModeTabPanel scanTab = scanMode == RelationshipGraphScanner.MODE_MAP_NODES ? mapNodesTab : mapFilesTab;
+		final ModeTabPanel scanTab = tabForMode(scanMode);
 		final boolean showIsolated = scanTab.showIsolatedCheck.isSelected();
 		final String scanSearchQuery = scanTab.activeSearchQuery;
 
@@ -645,7 +692,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			refreshButton.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					if (mode != graphMode) {
-						subTabs.setSelectedIndex(mode == RelationshipGraphScanner.MODE_MAP_NODES ? 1 : 0);
+						subTabs.setSelectedIndex(tabIndexFromMode(mode));
 					}
 					dataLoadedForMode[mode] = false;
 					cachedBaseIndex[mode] = null;
@@ -679,7 +726,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		private void runSearch() {
 			if (mode != graphMode) {
-				subTabs.setSelectedIndex(mode == RelationshipGraphScanner.MODE_MAP_NODES ? 1 : 0);
+				subTabs.setSelectedIndex(tabIndexFromMode(mode));
 			}
 			activeSearchQuery = searchField.getText();
 			focusCenterKey = null;
@@ -725,7 +772,16 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				return;
 			}
 			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GRAPH, index.getEdgeCount());
-			final String unit = index.getGraphMode() == RelationshipGraphScanner.MODE_MAP_NODES ? "\u8282\u70b9" : "\u5bfc\u56fe";
+			final String unit;
+			if (index.getGraphMode() == RelationshipGraphScanner.MODE_MAP_NODES) {
+				unit = "\u8282\u70b9";
+			}
+			else if (index.getGraphMode() == RelationshipGraphScanner.MODE_TAGS) {
+				unit = "\u6807\u7b7e/\u8282\u70b9";
+			}
+			else {
+				unit = "\u5bfc\u56fe";
+			}
 			String text = index.getNodeCount() + " " + unit + " \u00b7 " + index.getEdgeCount() + " \u8fde\u63a5";
 			if (index.getTotalNodeCount() > index.getNodeCount()) {
 				text += " \u00b7 \u5171 " + index.getTotalNodeCount();
@@ -786,7 +842,11 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				appendNeighbors(selected, ordered);
 				return new ArrayList(ordered);
 			}
-			return new ArrayList(allNodes);
+			final List all = new ArrayList(allNodes);
+			if (mode == RelationshipGraphScanner.MODE_TAGS) {
+				Collections.sort(all, TAG_FIRST_COMPARATOR);
+			}
+			return all;
 		}
 
 		private void appendNeighbors(final RelationshipGraphNode center, final Set ordered) {
@@ -846,7 +906,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			final java.awt.Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 			if (value instanceof NodeListEntry) {
 				final RelationshipGraphNode node = ((NodeListEntry) value).node;
-				if (node.isMapNode()) {
+				if (node.isTagNode()) {
+					setText("\u3010" + node.getLabel() + "\u3011");
+				}
+				else if (node.isMapNode()) {
 					setText(node.getLabel());
 				}
 				else {
