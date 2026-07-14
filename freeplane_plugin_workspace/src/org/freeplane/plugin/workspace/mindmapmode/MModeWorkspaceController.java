@@ -100,8 +100,10 @@ import org.freeplane.plugin.workspace.components.currentmapfolder.CurrentMapFold
 import org.freeplane.plugin.workspace.components.nodepins.PinnedNodesTabInstaller;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.SearchFileContextMenuHelper;
+import org.freeplane.features.text.TextController;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
+import org.freeplane.plugin.workspace.features.nodepins.TagChipContentTransformer;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.AWorkspaceModeExtension;
@@ -319,6 +321,19 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	
 	private void setupModel(ModeController modeController) {
 		NodePinsMetricsPublisher.install();
+		TextController.getController(modeController).addTextTransformer(new TagChipContentTransformer());
+		TagColorStore.getInstance().addChangeListener(new Runnable() {
+			public void run() {
+				try {
+					final Object mapView = Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+					if (mapView instanceof org.freeplane.view.swing.map.MapView) {
+						((org.freeplane.view.swing.map.MapView) mapView).getRoot().updateAll();
+					}
+				}
+				catch (final Exception ignore) {
+				}
+			}
+		});
 		FavoritesAndTagsStore.getInstance().addChangeListener(new Runnable() {
 			public void run() {
 				try {

@@ -6,9 +6,11 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -50,6 +52,7 @@ public final class TagColorStore {
 
 	private final Map colors = Collections.synchronizedMap(new LinkedHashMap());
 	private boolean loaded;
+	private final List changeListeners = Collections.synchronizedList(new ArrayList());
 
 	private TagColorStore() {
 	}
@@ -96,6 +99,7 @@ public final class TagColorStore {
 			colors.put(tag, color);
 			save();
 		}
+		fireChanged();
 	}
 
 	public void clearColor(final String tag) {
@@ -103,9 +107,31 @@ public final class TagColorStore {
 			return;
 		}
 		ensureLoaded();
+		boolean removed = false;
 		synchronized (colors) {
 			if (colors.remove(tag) != null) {
 				save();
+				removed = true;
+			}
+		}
+		if (removed) {
+			fireChanged();
+		}
+	}
+
+	public void addChangeListener(final Runnable listener) {
+		if (listener != null) {
+			changeListeners.add(listener);
+		}
+	}
+
+	private void fireChanged() {
+		final Object[] listeners = changeListeners.toArray();
+		for (int i = 0; i < listeners.length; i++) {
+			try {
+				((Runnable) listeners[i]).run();
+			}
+			catch (final Exception ignore) {
 			}
 		}
 	}
