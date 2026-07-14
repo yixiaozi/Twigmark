@@ -28,6 +28,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -318,8 +319,10 @@ public class PinnedNodesTabPanel extends JPanel {
 	private void selectGroup(final String groupId) {
 		activeGroupId = groupId != null ? groupId : TagGroupStore.UNGROUPED_ID;
 		ResourceController.getResourceController().setProperty(PROP_ACTIVE_GROUP, activeGroupId);
+		activeFilter = null;
 		rebuildGroupTabs();
 		rebuildTagButtons();
+		refreshList();
 	}
 
 	private void promptAddGroup() {
@@ -391,7 +394,7 @@ public class PinnedNodesTabPanel extends JPanel {
 	private void rebuildTagButtons() {
 		tagFilterPanel.removeAll();
 		tagFilterPanel.add(createFilterButton(null, formatCountLabel(
-				TextUtils.getText("workspace.nodepins.filter.all"), index.countAll())));
+				TextUtils.getText("workspace.nodepins.filter.all"), countEntriesInActiveGroup())));
 		for (final Iterator it = getTagsForActiveGroup().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
 			tagFilterPanel.add(createFilterButton(tag, formatCountLabel(tag, index.countWithTag(tag))));
@@ -416,6 +419,35 @@ public class PinnedNodesTabPanel extends JPanel {
 			}
 		}
 		return filtered;
+	}
+
+	/** Union of entries that carry any tag belonging to the active group. */
+	private int countEntriesInActiveGroup() {
+		final List groupTags = getTagsForActiveGroup();
+		if (groupTags.isEmpty()) {
+			return 0;
+		}
+		final Set tagSet = new HashSet(groupTags);
+		int count = 0;
+		final List entries = index.getDisplayEntries(false, null);
+		for (int i = 0; i < entries.size(); i++) {
+			if (entryMatchesAnyTag((NodePinEntry) entries.get(i), tagSet)) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	private boolean entryMatchesAnyTag(final NodePinEntry entry, final Set tagSet) {
+		if (entry == null || tagSet == null || tagSet.isEmpty()) {
+			return false;
+		}
+		for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
+			if (tagSet.contains(it.next())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private List getTagsSortedByCount() {
@@ -666,7 +698,22 @@ public class PinnedNodesTabPanel extends JPanel {
 
 	private void refreshList() {
 		listModel.clear();
-		final List entries = index.getDisplayEntries(false, activeFilter);
+		final List entries;
+		if (activeFilter != null) {
+			entries = index.getDisplayEntries(false, activeFilter);
+		}
+		else {
+			final List groupTags = getTagsForActiveGroup();
+			final Set tagSet = new HashSet(groupTags);
+			final List all = index.getDisplayEntries(false, null);
+			entries = new ArrayList();
+			for (int i = 0; i < all.size(); i++) {
+				final NodePinEntry entry = (NodePinEntry) all.get(i);
+				if (entryMatchesAnyTag(entry, tagSet)) {
+					entries.add(entry);
+				}
+			}
+		}
 		for (int i = 0; i < entries.size(); i++) {
 			listModel.addElement(resolveDisplayEntry((NodePinEntry) entries.get(i)));
 		}

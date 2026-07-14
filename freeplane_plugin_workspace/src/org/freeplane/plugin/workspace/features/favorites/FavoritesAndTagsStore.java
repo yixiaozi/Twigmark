@@ -39,7 +39,8 @@ public final class FavoritesAndTagsStore {
 	public static final String LEGACY_FAVORITES_KEY = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH) + ".favorites";
 	public static final String LEGACY_TAGS_KEY = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH) + ".tags";
 
-	public static final String[] PRESET_TAGS = { "工作", "生活", "学习", "重要" };
+	/** No built-in presets; filter chips only show tags actually used on favorites. */
+	public static final String[] PRESET_TAGS = {};
 
 	private static FavoritesAndTagsStore instance;
 
