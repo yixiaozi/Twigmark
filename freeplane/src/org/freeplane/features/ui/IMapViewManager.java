@@ -153,7 +153,8 @@ public interface IMapViewManager {
 
 	/**
 	 * Optional alternate main-viewport component (e.g. relationship graph).
-	 * While set, {@code afterViewChange} must not stomp it with a MapView.
+	 * While set, any attempt to put a MapView (or other component) into the
+	 * scroll pane is redirected to the override component.
 	 */
 	public interface ViewportOverride {
 		Component getViewportComponent();
@@ -162,4 +163,10 @@ public interface IMapViewManager {
 	public void setViewportOverride(ViewportOverride override);
 
 	public ViewportOverride getViewportOverride();
+
+	/**
+	 * Apply the current viewport: override component if present, else {@code preferred}
+	 * (typically the active MapView). Call after installing/clearing an override.
+	 */
+	public void refreshViewportView(Component preferred);
 }

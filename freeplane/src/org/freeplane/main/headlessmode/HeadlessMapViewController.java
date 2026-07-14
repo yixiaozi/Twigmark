@@ -367,4 +367,7 @@ public class HeadlessMapViewController implements IMapViewManager {
 	public IMapViewManager.ViewportOverride getViewportOverride() {
 		return null;
 	}
+
+	public void refreshViewportView(final Component preferred) {
+	}
 }

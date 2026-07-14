@@ -30,7 +30,7 @@ import javax.swing.Timer;
 /**
  * Interactive relationship graph canvas shown in the main viewport.
  */
-public class RelationshipGraphCanvas extends JPanel {
+public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrollable {
 
 	private static final long serialVersionUID = 1L;
 	private static final int NODE_RADIUS = 5;
@@ -103,6 +103,26 @@ public class RelationshipGraphCanvas extends JPanel {
 		installMouseHandlers();
 		installKeyboardHandlers();
 		startLayoutTimer();
+	}
+
+	public Dimension getPreferredScrollableViewportSize() {
+		return getPreferredSize();
+	}
+
+	public int getScrollableUnitIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+		return 40;
+	}
+
+	public int getScrollableBlockIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+		return orientation == javax.swing.SwingConstants.VERTICAL ? visibleRect.height : visibleRect.width;
+	}
+
+	public boolean getScrollableTracksViewportWidth() {
+		return true;
+	}
+
+	public boolean getScrollableTracksViewportHeight() {
+		return true;
 	}
 
 	public void setNodeOpenListener(final NodeOpenListener listener) {

@@ -26,11 +26,20 @@ public final class RelationshipGraphIntegration {
 		MapViewTabOrder.setSameTabClickListener(new MapViewTabOrder.SameTabClickListener() {
 			public boolean onSameTabClicked(final int tabIndex, final Component mapView) {
 				final RelationshipGraphService service = RelationshipGraphService.getService();
-				if (service == null || !service.isGraphInViewport()) {
+				if (service == null || !service.isHoldingViewport()) {
 					return false;
 				}
 				exitGraphViewDueToMapSwitch();
 				return true;
+			}
+		});
+		MapViewTabOrder.setMapTabActivationListener(new MapViewTabOrder.MapTabActivationListener() {
+			public void onMapTabActivated(final Component mapView) {
+				final RelationshipGraphService service = RelationshipGraphService.getService();
+				if (service == null || !service.isHoldingViewport()) {
+					return;
+				}
+				exitGraphViewDueToMapSwitch();
 			}
 		});
 		RelationshipGraphTabBridge.setProvider(new RelationshipGraphTabBridge.Provider() {
@@ -65,14 +74,17 @@ public final class RelationshipGraphIntegration {
 	}
 
 	/**
-	 * User switched to a mind map (bottom tab or open document) while the graph occupied the viewport.
+	 * User left the graph for a mind map (bottom-tab click / Alt+tab / open from graph).
+	 * Clears the viewport override and selects the workspace side tab.
 	 */
 	public static void exitGraphViewDueToMapSwitch() {
 		final RelationshipGraphService service = RelationshipGraphService.getService();
 		if (service != null) {
-			service.setHoldingViewport(false);
-			if (service.isGraphInViewport()) {
+			if (service.isHoldingViewport() || service.isGraphInViewport()) {
 				service.hideFromViewport();
+			}
+			else {
+				service.setHoldingViewport(false);
 			}
 		}
 		final MModeWorkspaceController wsController = (MModeWorkspaceController) WorkspaceController

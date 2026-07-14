@@ -44,6 +44,21 @@ public final class MapViewTabOrder {
 		});
 	}
 
+	/** Docear: exit overlay views when a different bottom map tab becomes active. */
+	public interface MapTabActivationListener {
+		void onMapTabActivated(Component mapView);
+	}
+
+	public static void setMapTabActivationListener(final MapTabActivationListener listener) {
+		MapViewTabs.setMapTabActivationListener(new MapViewTabs.MapTabActivationListener() {
+			public void onMapTabActivated(final Component mapView) {
+				if (listener != null) {
+					listener.onMapTabActivated(mapView);
+				}
+			}
+		});
+	}
+
 	public interface TabVisibilityFilter {
 		boolean isVisible(Component tabKey);
 	}

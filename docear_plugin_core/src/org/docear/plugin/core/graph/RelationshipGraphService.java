@@ -1,7 +1,11 @@
 package org.docear.plugin.core.graph;
 
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.EventQueue;
+
+import javax.swing.JScrollPane;
+import javax.swing.JViewport;
 
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.features.map.IMapSelectionListener;
@@ -16,10 +20,14 @@ import org.freeplane.view.swing.map.MapViewController;
 /**
  * Shows the relationship graph in the main mind-map viewport (replacing the canvas).
  * <p>
- * Root cause of blank / "won't open": {@link MapViewController#afterViewChange} used to always
- * call {@code setViewportView(MapView)}, stomping whatever we put in the scroll pane. We register
- * an {@link IMapViewManager.ViewportOverride} while the left 「关系图」tab is active so that event
- * keeps the graph. Leaving for a different mind map or intentional exit clears the override.
+ * While the left 「关系图」tab is active we install a {@link IMapViewManager.ViewportOverride}
+ * so every path that refreshes the scroll pane keeps the graph (MapViewController used to
+ * always restore MapView and blank the graph). Leaving the side tab, clicking a bottom map
+ * tab, or opening a node from the graph clears the override.
+ * <p>
+ * Important: do <b>not</b> exit from {@code afterMapChange} — incidental map-model events
+ * (tab rebuilds, group-filter sync, focus) would bounce the user back to「工作区」and made
+ *「打开失败」look intermittent after earlier viewport fixes.
  */
 public class RelationshipGraphService implements IExtension, IMapSelectionListener, IMapViewChangeListener {
 
@@ -91,7 +99,8 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 				}
 				final MapViewController mapViewController = getMapViewController();
 				final RelationshipGraphCanvas graphCanvas = getCanvas();
-				mapViewController.getScrollPane().setViewportView(graphCanvas);
+				sizeCanvasToViewport(mapViewController.getScrollPane(), graphCanvas);
+				mapViewController.refreshViewportView(graphCanvas);
 				graphInViewport = true;
 				graphCanvas.revalidate();
 				mapViewController.getScrollPane().validate();
@@ -120,9 +129,7 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 				}
 				final MapViewController mapViewController = getMapViewController();
 				final MapView mapView = mapViewController.getMapView();
-				if (mapView != null) {
-					mapViewController.getScrollPane().setViewportView(mapView);
-				}
+				mapViewController.refreshViewportView(mapView);
 				markGraphExitedFromViewport();
 			}
 		};
@@ -184,6 +191,23 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		}
 	}
 
+	private static void sizeCanvasToViewport(final JScrollPane scrollPane, final RelationshipGraphCanvas graphCanvas) {
+		if (scrollPane == null || graphCanvas == null) {
+			return;
+		}
+		final JViewport viewport = scrollPane.getViewport();
+		int w = viewport != null ? viewport.getWidth() : 0;
+		int h = viewport != null ? viewport.getHeight() : 0;
+		if (w < 80) {
+			w = Math.max(scrollPane.getWidth() - 24, 800);
+		}
+		if (h < 80) {
+			h = Math.max(scrollPane.getHeight() - 24, 600);
+		}
+		graphCanvas.setPreferredSize(new Dimension(w, h));
+		graphCanvas.setSize(w, h);
+	}
+
 	private void scheduleReclaimViewport() {
 		if (!holdingViewport || reclaimScheduled) {
 			return;
@@ -195,7 +219,8 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 				if (!holdingViewport) {
 					return;
 				}
-				final Component view = getMapViewController().getScrollPane().getViewport().getView();
+				final MapViewController mapViewController = getMapViewController();
+				final Component view = mapViewController.getScrollPane().getViewport().getView();
 				if (canvas == null || view != canvas) {
 					showInViewport();
 				}
@@ -210,11 +235,8 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		if (!holdingViewport) {
 			return;
 		}
-		// Different mind map became active → user left the graph for a document.
-		if (newMap != null && newMap != oldMap) {
-			RelationshipGraphIntegration.exitGraphViewDueToMapSwitch();
-			return;
-		}
+		// Keep the graph: map-model events fire for tab rebuilds/filter sync and must not
+		// exit the side tab. Bottom-map-tab switches exit via MapViewTabs/Integration.
 		scheduleReclaimViewport();
 	}
 
@@ -222,8 +244,6 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		if (!holdingViewport) {
 			return;
 		}
-		// MapViewController used to always restore MapView into the scroll pane on view events.
-		// With ViewportOverride it should keep the graph; reclaim as a safety net either way.
 		scheduleReclaimViewport();
 	}
 

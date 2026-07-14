@@ -307,6 +307,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		service.setHoldingViewport(true);
+		// Show canvas immediately (loading overlay while scan runs) so the main
+		// viewport never stays on MapView/"空白" during activation.
+		service.showInViewport();
 		subTabs.setSelectedIndex(tabIndexFromMode(graphMode));
 		updateCanvasModeHint();
 		final boolean needsScan = !dataLoadedForMode[graphMode] || cachedBaseIndex[graphMode] == null;

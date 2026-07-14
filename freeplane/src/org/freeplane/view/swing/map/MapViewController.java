@@ -621,24 +621,27 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		final ModeController oldModeController = controller.getModeController();
 		ModeController newModeController = oldModeController;
 		if (pNewMap != null) {
-			if (viewportOverride != null && viewportOverride.getViewportComponent() != null) {
-				setViewportView(viewportOverride.getViewportComponent());
+			refreshViewportView(pNewMap);
+			// While an overlay owns the viewport, MapView is not displayed — skip
+			// scroll/focus that would walk a detached MapView hierarchy.
+			if (viewportOverride == null || viewportOverride.getViewportComponent() == null) {
+				final IMapSelection mapSelection = getMapSelection();
+				if (mapSelection != null) {
+					final NodeModel selected = mapSelection.getSelected();
+					if (selected != null) {
+						mapSelection.scrollNodeToVisible(selected);
+					}
+				}
+				setZoomComboBox(getZoom());
+				obtainFocusForSelected();
 			}
-			else {
-				setViewportView(pNewMap);
-			}
-			final IMapSelection mapSelection = getMapSelection();
-			final NodeModel selected = mapSelection.getSelected();
-			mapSelection.scrollNodeToVisible(selected);
-			setZoomComboBox(getZoom());
-			obtainFocusForSelected();
 			newModeController = getModeController(pNewMap);
 			if (newModeController != oldModeController) {
 				controller.selectMode(newModeController);
 			}
 		}
 		else {
-			setViewportView(null);
+			refreshViewportView(null);
 		}
 		setTitle();
 		controller.getViewController().viewNumberChanged(getViewNumber());
@@ -671,6 +674,21 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 
 	private void setViewportView(final Component view) {
 		scrollPane.setViewportView(view);
+	}
+
+	/**
+	 * Puts {@code preferred} into the scroll pane unless a {@link ViewportOverride}
+	 * is active — in that case the override always wins (blocks MapView stomps).
+	 */
+	public void refreshViewportView(final Component preferred) {
+		if (viewportOverride != null) {
+			final Component override = viewportOverride.getViewportComponent();
+			if (override != null) {
+				setViewportView(override);
+				return;
+			}
+		}
+		setViewportView(preferred);
 	}
 
 	private void setZoomByItem(final Object item) {

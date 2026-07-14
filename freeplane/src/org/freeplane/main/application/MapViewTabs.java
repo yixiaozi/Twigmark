@@ -85,6 +85,11 @@ class MapViewTabs implements IMapViewChangeListener {
 		boolean onSameTabClicked(int tabIndex, Component mapView);
 	}
 
+	/** Fired when a bottom map tab becomes the active document (user or rebuild). */
+	interface MapTabActivationListener {
+		void onMapTabActivated(Component mapView);
+	}
+
 	interface TabVisibilityFilter {
 		boolean isVisible(Component tabKey);
 	}
@@ -109,9 +114,14 @@ class MapViewTabs implements IMapViewChangeListener {
 	}
 
 	private static SameTabClickListener sameTabClickListener;
+	private static MapTabActivationListener mapTabActivationListener;
 
 	static void setSameTabClickListener(final SameTabClickListener listener) {
 		sameTabClickListener = listener;
+	}
+
+	static void setMapTabActivationListener(final MapTabActivationListener listener) {
+		mapTabActivationListener = listener;
 	}
 
 	static MapViewTabs getInstance() {
@@ -314,6 +324,12 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	private void switchToTab(int index) {
 		if (index >= 0 && index < mTabbedPane.getTabCount()) {
+			if (index < visibleTabKeys.size()) {
+				final Component key = visibleTabKeys.get(index);
+				if (key instanceof MapView) {
+					notifyMapTabActivated(key);
+				}
+			}
 			mTabbedPane.setSelectedIndex(index);
 		}
 	}
@@ -492,9 +508,8 @@ class MapViewTabs implements IMapViewChangeListener {
 					suppressingViewSync = false;
 				}
 			}
-			// Do NOT call notifySameTabClicked here: that hook is for an actual mouse click
-			// on the already-selected bottom tab. Programmatic re-selection (filter rebuild,
-			// view events) must not exit overlay views such as the relationship graph.
+			// Do NOT exit overlay views here: rebuilds/filter sync also call this path.
+			// User mouse clicks use SameTabClickListener; Alt+N uses switchToTab.
 		}
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);
@@ -507,6 +522,12 @@ class MapViewTabs implements IMapViewChangeListener {
 			return false;
 		}
 		return sameTabClickListener.onSameTabClicked(tabIndex, visibleTabKeys.get(tabIndex));
+	}
+
+	private void notifyMapTabActivated(final Component mapView) {
+		if (mapTabActivationListener != null && mapView != null) {
+			mapTabActivationListener.onMapTabActivated(mapView);
+		}
 	}
 
 	private void setTabsVisible() {
