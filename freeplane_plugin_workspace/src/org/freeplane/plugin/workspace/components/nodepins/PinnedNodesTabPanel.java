@@ -23,8 +23,11 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
+import javax.swing.Timer;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.INodeChangeListener;
@@ -32,6 +35,7 @@ import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.ModeController;
+import org.freeplane.features.url.UrlManager;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.components.favorites.TagChipFactory;
 import org.freeplane.plugin.workspace.components.favorites.WrapFlowLayout;
@@ -40,6 +44,7 @@ import org.freeplane.plugin.workspace.features.nodepins.NodeDetailsTagUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodeMindMapActionUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinEntry;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinNavigator;
+import org.freeplane.plugin.workspace.features.nodepins.NodePinKeyUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 
@@ -47,32 +52,53 @@ public class PinnedNodesTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final String FAVORITE_NAME_COLOR = "#0066CC";
-	private static final String FILTER_PINS = "__pins__";
+	private static final int REFRESH_DEBOUNCE_MS = 200;
+	private static final int DEFAULT_TAG_PANEL_HEIGHT = 100;
+	private static final int MIN_TAG_PANEL_HEIGHT = 48;
+	private static final String PROP_FILTER_DIVIDER = "workspace.nodepins.filter.divider";
 
 	private final ModeController modeController;
 	private final NodePinsIndex index = NodePinsIndex.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList entryList = new JList(listModel);
 	private final JPanel tagFilterPanel = new JPanel(new WrapFlowLayout());
-	private String activeFilter = FILTER_PINS;
+	private JSplitPane splitPane;
+	private String activeFilter = null;
+	private final Timer refreshDebounceTimer;
+
+	{
+		refreshDebounceTimer = new Timer(REFRESH_DEBOUNCE_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				refreshViewNow();
+			}
+		});
+		refreshDebounceTimer.setRepeats(false);
+	}
 
 	private final Runnable refreshListener = new Runnable() {
 		public void run() {
-			refreshView();
+			scheduleRefreshView();
 		}
 	};
 
 	private final INodeChangeListener nodeChangeListener = new INodeChangeListener() {
 		public void nodeChanged(final NodeChangeEvent event) {
-			if (event.getNode() != null) {
-				PinnedNodesTabPanel.this.index.updateFromNode(event.getNode());
+			if (event.getNode() == null) {
+				return;
 			}
+			if (!NodeModel.NODE_TEXT.equals(event.getProperty())) {
+				return;
+			}
+			PinnedNodesTabPanel.this.index.updateFromNode(event.getNode());
 		}
 	};
 
 	private final IMapChangeListener mapChangeListener = new IMapChangeListener() {
 		public void mapChanged(final MapChangeEvent event) {
-			index.scheduleRescan();
+			// Style/filter/background changes must not trigger a full-project scan.
+			if (event != null && UrlManager.MAP_URL.equals(event.getProperty())) {
+				index.scheduleRescan();
+			}
 		}
 
 		public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
@@ -82,7 +108,10 @@ public class PinnedNodesTabPanel extends JPanel {
 		}
 
 		public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
-			PinnedNodesTabPanel.this.index.scheduleRescan();
+			final String key = NodePinKeyUtils.fromNode(child);
+			if (key != null) {
+				PinnedNodesTabPanel.this.index.removeByKey(key);
+			}
 		}
 
 		public void onPreNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
@@ -100,8 +129,32 @@ public class PinnedNodesTabPanel extends JPanel {
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
 		buildTagFilterPanel();
 		buildEntryList();
-		add(tagFilterPanel, BorderLayout.NORTH);
-		add(new JScrollPane(entryList), BorderLayout.CENTER);
+		final JScrollPane tagScrollPane = new JScrollPane(tagFilterPanel);
+		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		tagScrollPane.setMinimumSize(new java.awt.Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		final JScrollPane listScrollPane = new JScrollPane(entryList);
+		listScrollPane.setMinimumSize(new java.awt.Dimension(80, 80));
+		splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tagScrollPane, listScrollPane);
+		splitPane.setResizeWeight(0);
+		splitPane.setContinuousLayout(true);
+		splitPane.setOneTouchExpandable(false);
+		splitPane.setBorder(BorderFactory.createEmptyBorder());
+		final int savedHeight = ResourceController.getResourceController().getIntProperty(PROP_FILTER_DIVIDER,
+				DEFAULT_TAG_PANEL_HEIGHT);
+		splitPane.setDividerLocation(Math.max(MIN_TAG_PANEL_HEIGHT, savedHeight));
+		splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, new java.beans.PropertyChangeListener() {
+			public void propertyChange(final java.beans.PropertyChangeEvent evt) {
+				if (evt.getNewValue() instanceof Integer) {
+					final int location = ((Integer) evt.getNewValue()).intValue();
+					if (location >= MIN_TAG_PANEL_HEIGHT) {
+						ResourceController.getResourceController().setProperty(PROP_FILTER_DIVIDER,
+								String.valueOf(location));
+					}
+				}
+			}
+		});
+		add(splitPane, BorderLayout.CENTER);
 		index.addChangeListener(refreshListener);
 		modeController.getMapController().addNodeChangeListener(nodeChangeListener);
 		modeController.getMapController().addMapChangeListener(mapChangeListener);
@@ -117,8 +170,8 @@ public class PinnedNodesTabPanel extends JPanel {
 
 	private void rebuildTagButtons() {
 		tagFilterPanel.removeAll();
-		tagFilterPanel.add(createFilterButton(FILTER_PINS, formatCountLabel(
-				TextUtils.getText("workspace.nodepins.filter.pins"), index.countPinned())));
+		tagFilterPanel.add(createFilterButton(null, formatCountLabel(
+				TextUtils.getText("workspace.nodepins.filter.all"), index.countAll())));
 		for (final Iterator it = getTagsSortedByCount().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
 			tagFilterPanel.add(createFilterButton(tag, formatCountLabel(tag, index.countWithTag(tag))));
@@ -151,7 +204,7 @@ public class PinnedNodesTabPanel extends JPanel {
 	}
 
 	private JToggleButton createFilterButton(final String filterId, final String label) {
-		final boolean selected = filterId.equals(activeFilter);
+		final boolean selected = filterId == null ? activeFilter == null : filterId.equals(activeFilter);
 		final JToggleButton button = TagChipFactory.createFilterChip(filterId, label, selected);
 		button.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -214,26 +267,6 @@ public class PinnedNodesTabPanel extends JPanel {
 			});
 			popup.add(openLocationItem);
 		}
-		final JMenuItem editTagsItem = new JMenuItem(TextUtils.getText("workspace.action.nodepins.edit.tags"));
-		editTagsItem.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent event) {
-				EditNodePinTagsDialog.showForKey(entry.getKey());
-			}
-		});
-		popup.add(editTagsItem);
-		if (entry.isPinned()) {
-			final JMenuItem unpinItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.unpin"));
-			unpinItem.addActionListener(new ActionListener() {
-				public void actionPerformed(final ActionEvent event) {
-					NodeMindMapActionUtils.withNodeByKey(entry.getKey(), new NodeMindMapActionUtils.NodeRunnable() {
-						public void run(final NodeModel node) {
-							NodeDetailsTagService.removePinOnly(node);
-						}
-					});
-				}
-			});
-			popup.add(unpinItem);
-		}
 		popup.addSeparator();
 		final JMenuItem removeItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.remove"));
 		removeItem.addActionListener(new ActionListener() {
@@ -263,19 +296,25 @@ public class PinnedNodesTabPanel extends JPanel {
 	}
 
 	public void refreshView() {
+		scheduleRefreshView();
+	}
+
+	private void scheduleRefreshView() {
+		refreshDebounceTimer.restart();
+	}
+
+	private void refreshViewNow() {
 		rebuildTagButtons();
 		refreshList();
 	}
 
 	private void refreshList() {
 		listModel.clear();
-		final boolean pinsMode = FILTER_PINS.equals(activeFilter);
-		final String tagFilter = pinsMode ? null : activeFilter;
-		final List entries = index.getDisplayEntries(pinsMode, tagFilter);
+		final List entries = index.getDisplayEntries(false, activeFilter);
 		for (int i = 0; i < entries.size(); i++) {
 			listModel.addElement(resolveDisplayEntry((NodePinEntry) entries.get(i)));
 		}
-		publishPinnedSnapshot(index.getDisplayEntries(true, null));
+		publishPinnedSnapshot(entries);
 	}
 
 	private void publishPinnedSnapshot(final List entries) {
@@ -288,12 +327,28 @@ public class PinnedNodesTabPanel extends JPanel {
 			return entry;
 		}
 		final Set userTags = NodeDetailsTagService.getUserTags(node);
-		final boolean pinned = NodeDetailsTagService.isPinned(node);
-		final String label = NodeMindMapActionUtils.getNodePlainText(node);
-		final NodePinEntry liveEntry = new NodePinEntry(entry.getKey(), userTags, pinned,
-				label.length() > 0 ? label : entry.getListNodeLabel());
+		final String label = NodeDetailsTagUtils.extractNodeTitle(node.getText());
+		String displayLabel = label.length() > 0 ? label : entry.getListNodeLabel();
+		if (displayLabel.length() == 0 || displayLabel.startsWith("ID_")) {
+			displayLabel = formatTagsText(userTags);
+		}
+		final NodePinEntry liveEntry = new NodePinEntry(entry.getKey(), userTags, false, displayLabel);
 		liveEntry.setExists(true);
 		return liveEntry;
+	}
+
+	private String formatTagsText(final Set tags) {
+		final StringBuilder builder = new StringBuilder();
+		boolean first = true;
+		for (final Iterator it = tags.iterator(); it.hasNext();) {
+			final String tag = (String) it.next();
+			if (!first) {
+				builder.append(", ");
+			}
+			builder.append(tag);
+			first = false;
+		}
+		return builder.toString();
 	}
 
 	private class NodePinEntryRenderer extends DefaultListCellRenderer {

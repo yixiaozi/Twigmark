@@ -1,5 +1,7 @@
 package org.freeplane.plugin.workspace.features.nodepins;
 
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -9,11 +11,13 @@ import java.util.List;
 import java.util.Set;
 
 import javax.swing.SwingWorker;
+import javax.swing.Timer;
 
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.DetailTextModel;
 
 public final class NodePinsIndex {
+
+	private static final int RESCAN_DEBOUNCE_MS = 800;
 
 	private static NodePinsIndex instance;
 
@@ -21,8 +25,15 @@ public final class NodePinsIndex {
 	private final List changeListeners = new ArrayList();
 	private SwingWorker activeWorker;
 	private boolean rescanRequested;
+	private final Timer rescanDebounceTimer;
 
 	private NodePinsIndex() {
+		rescanDebounceTimer = new Timer(RESCAN_DEBOUNCE_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				rescan();
+			}
+		});
+		rescanDebounceTimer.setRepeats(false);
 	}
 
 	public static synchronized NodePinsIndex getInstance() {
@@ -32,8 +43,9 @@ public final class NodePinsIndex {
 		return instance;
 	}
 
+	/** Debounced full-project rescan; coalesces rapid calls. */
 	public void scheduleRescan() {
-		rescan();
+		rescanDebounceTimer.restart();
 	}
 
 	public void updateFromNode(final NodeModel node) {
@@ -44,37 +56,69 @@ public final class NodePinsIndex {
 		if (key == null) {
 			return;
 		}
-		final String detailsHtml = DetailTextModel.getDetailTextText(node);
+		final String nodeText = node.getText();
+		if (!NodeDetailsTagUtils.mayContainBracketTags(nodeText)) {
+			removeByKey(key);
+			return;
+		}
+		boolean changed = false;
 		synchronized (entries) {
-			if (!NodeDetailsTagUtils.hasAnyManagedTag(detailsHtml)) {
+			final Set allTags = NodeDetailsTagUtils.parseAllTags(nodeText);
+			if (allTags.isEmpty()) {
 				for (final Iterator it = entries.iterator(); it.hasNext();) {
 					if (key.equals(((NodePinEntry) it.next()).getKey())) {
 						it.remove();
+						changed = true;
 						break;
 					}
 				}
 			}
 			else {
-				final Set allTags = NodeDetailsTagUtils.parseAllTags(detailsHtml);
 				final boolean pinned = allTags.contains(NodeDetailsTagUtils.PIN_TAG);
 				final LinkedHashSet userTags = new LinkedHashSet(allTags);
 				userTags.remove(NodeDetailsTagUtils.PIN_TAG);
-				final String label = NodeMindMapActionUtils.getNodePlainText(node);
+				final String label = NodeDetailsTagUtils.extractNodeTitle(nodeText);
 				final NodePinEntry newEntry = new NodePinEntry(key, userTags, pinned, label);
 				boolean found = false;
 				for (int i = 0; i < entries.size(); i++) {
-					if (key.equals(((NodePinEntry) entries.get(i)).getKey())) {
-						entries.set(i, newEntry);
+					final NodePinEntry existing = (NodePinEntry) entries.get(i);
+					if (key.equals(existing.getKey())) {
+						if (!sameEntry(existing, newEntry)) {
+							entries.set(i, newEntry);
+							changed = true;
+						}
 						found = true;
 						break;
 					}
 				}
 				if (!found) {
 					entries.add(newEntry);
+					changed = true;
 				}
 			}
 		}
-		fireChanged();
+		if (changed) {
+			fireChanged();
+		}
+	}
+
+	public void removeByKey(final String key) {
+		if (key == null) {
+			return;
+		}
+		boolean changed = false;
+		synchronized (entries) {
+			for (final Iterator it = entries.iterator(); it.hasNext();) {
+				if (key.equals(((NodePinEntry) it.next()).getKey())) {
+					it.remove();
+					changed = true;
+					break;
+				}
+			}
+		}
+		if (changed) {
+			fireChanged();
+		}
 	}
 
 	public void rescan() {
@@ -113,18 +157,10 @@ public final class NodePinsIndex {
 
 	public List getDisplayEntries(final boolean pinsMode, final String tagFilter) {
 		synchronized (entries) {
-			if (pinsMode) {
-				final List result = new ArrayList();
-				for (int i = 0; i < entries.size(); i++) {
-					final NodePinEntry entry = (NodePinEntry) entries.get(i);
-					if (entry.isPinned() && !entry.getTags().contains(NodeDetailsTagUtils.TAG_ARCHIVED)) {
-						result.add(entry);
-					}
-				}
-				return result;
-			}
 			if (tagFilter == null || tagFilter.length() == 0) {
-				return new ArrayList(entries);
+				final List result = new ArrayList(entries);
+				Collections.sort(result, ENTRY_COMPARATOR);
+				return result;
 			}
 			final List result = new ArrayList();
 			for (int i = 0; i < entries.size(); i++) {
@@ -133,18 +169,14 @@ public final class NodePinsIndex {
 					result.add(entry);
 				}
 			}
-			Collections.sort(result, new Comparator() {
-				public int compare(final Object o1, final Object o2) {
-					final NodePinEntry a = (NodePinEntry) o1;
-					final NodePinEntry b = (NodePinEntry) o2;
-					final int mapCompare = a.getMapDisplayName().compareTo(b.getMapDisplayName());
-					if (mapCompare != 0) {
-						return mapCompare;
-					}
-					return a.getListNodeLabel().compareTo(b.getListNodeLabel());
-				}
-			});
+			Collections.sort(result, ENTRY_COMPARATOR);
 			return result;
+		}
+	}
+
+	public int countAll() {
+		synchronized (entries) {
+			return entries.size();
 		}
 	}
 
@@ -183,7 +215,7 @@ public final class NodePinsIndex {
 
 	public int countWithTag(final String tag) {
 		if (tag == null || tag.length() == 0) {
-			return countPinned();
+			return countAll();
 		}
 		int count = 0;
 		synchronized (entries) {
@@ -212,4 +244,26 @@ public final class NodePinsIndex {
 			((Runnable) changeListeners.get(i)).run();
 		}
 	}
+
+	private static boolean sameEntry(final NodePinEntry a, final NodePinEntry b) {
+		if (a.isPinned() != b.isPinned()) {
+			return false;
+		}
+		if (!a.getListNodeLabel().equals(b.getListNodeLabel())) {
+			return false;
+		}
+		return a.getTags().equals(b.getTags());
+	}
+
+	private static final Comparator ENTRY_COMPARATOR = new Comparator() {
+		public int compare(final Object o1, final Object o2) {
+			final NodePinEntry a = (NodePinEntry) o1;
+			final NodePinEntry b = (NodePinEntry) o2;
+			final int mapCompare = a.getMapDisplayName().compareTo(b.getMapDisplayName());
+			if (mapCompare != 0) {
+				return mapCompare;
+			}
+			return a.getListNodeLabel().compareTo(b.getListNodeLabel());
+		}
+	};
 }

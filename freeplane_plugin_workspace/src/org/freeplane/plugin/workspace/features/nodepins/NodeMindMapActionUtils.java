@@ -68,8 +68,7 @@ public final class NodeMindMapActionUtils {
 					return map.getNodeForID(nodeId);
 				}
 			}
-		}
-		catch (final Exception e) {
+		} catch (final Exception e) {
 			// ignore
 		}
 		return null;

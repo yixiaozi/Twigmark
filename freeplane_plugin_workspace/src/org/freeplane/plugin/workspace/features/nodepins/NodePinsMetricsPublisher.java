@@ -43,9 +43,6 @@ public final class NodePinsMetricsPublisher {
 		if (entries != null) {
 			for (int i = 0; i < entries.size(); i++) {
 				final NodePinEntry entry = (NodePinEntry) entries.get(i);
-				if (!entry.isPinned() || entry.getTags().contains(NodeDetailsTagUtils.TAG_ARCHIVED)) {
-					continue;
-				}
 				snapshot.add(new WorkspaceSideTabSnapshot.PinnedEntry(entry.getMapFile(), entry.getNodeId(),
 						entry.getListNodeLabel(), formatTagsForSnapshot(entry.getTags())));
 			}

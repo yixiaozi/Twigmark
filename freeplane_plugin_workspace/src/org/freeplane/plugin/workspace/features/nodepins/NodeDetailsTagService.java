@@ -4,10 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.core.undo.IActor;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.features.text.DetailTextModel;
-import org.freeplane.features.text.TextController;
-import org.freeplane.features.text.mindmapmode.MTextController;
 
 public final class NodeDetailsTagService {
 
@@ -18,14 +16,14 @@ public final class NodeDetailsTagService {
 		if (node == null) {
 			return new LinkedHashSet();
 		}
-		return NodeDetailsTagUtils.parseUserTags(DetailTextModel.getDetailTextText(node));
+		return NodeDetailsTagUtils.parseUserTags(node.getText());
 	}
 
 	public static boolean isPinned(final NodeModel node) {
 		if (node == null) {
 			return false;
 		}
-		return NodeDetailsTagUtils.isPinnedInDetails(DetailTextModel.getDetailTextText(node));
+		return NodeDetailsTagUtils.isPinnedInDetails(node.getText());
 	}
 
 	public static void setUserTags(final NodeModel node, final Set userTags) {
@@ -48,8 +46,8 @@ public final class NodeDetailsTagService {
 		if (node == null || node.getMap() == null) {
 			return;
 		}
-		final String existing = DetailTextModel.getDetailTextText(node);
-		final String userHtml = NodeDetailsTagUtils.extractUserContentHtml(existing);
+		final String currentText = node.getText();
+		final String textWithoutTags = NodeDetailsTagUtils.stripBracketTags(currentText);
 		final LinkedHashSet allTags = new LinkedHashSet();
 		if (userTags != null) {
 			allTags.addAll(userTags);
@@ -57,19 +55,27 @@ public final class NodeDetailsTagService {
 		if (pinned) {
 			allTags.add(NodeDetailsTagUtils.PIN_TAG);
 		}
-		final String newHtml = NodeDetailsTagUtils.buildDetailsHtml(userHtml, allTags);
+		final String newText = NodeDetailsTagUtils.appendBracketTags(textWithoutTags, allTags);
+		if (currentText.equals(newText)) {
+			return;
+		}
 		if (Controller.getCurrentModeController() == null) {
 			return;
 		}
-		final TextController textController = TextController.getController();
-		if (!(textController instanceof MTextController)) {
-			return;
-		}
-		final MTextController mTextController = (MTextController) textController;
-		mTextController.setDetails(node, newHtml);
-		if (newHtml != null && newHtml.length() > 0) {
-			mTextController.setDetailsHidden(node, false);
-		}
+		final IActor actor = new IActor() {
+			public void act() {
+				node.setText(newText);
+			}
+
+			public String getDescription() {
+				return "updateNodeTags";
+			}
+
+			public void undo() {
+				node.setText(currentText);
+			}
+		};
+		Controller.getCurrentModeController().execute(actor, node.getMap());
 		NodePinsIndex.getInstance().updateFromNode(node);
 	}
 }

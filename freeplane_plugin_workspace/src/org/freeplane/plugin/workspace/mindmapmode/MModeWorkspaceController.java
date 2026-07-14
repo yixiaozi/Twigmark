@@ -65,8 +65,6 @@ import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
-import org.freeplane.plugin.workspace.actions.EditNodePinTagsAction;
-import org.freeplane.plugin.workspace.actions.ToggleNodePinAction;
 import org.freeplane.plugin.workspace.actions.FileNodeDeleteAction;
 import org.freeplane.plugin.workspace.actions.MindMapNodeOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.MindMapPopupOpenLocationAction;
@@ -260,9 +258,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				
 				builder.addAction("/map_popup", WorkspaceController.getAction(MindMapPopupOpenLocationAction.KEY), MenuBuilder.AS_CHILD);
 				builder.addAction("/node_popup", WorkspaceController.getAction(MindMapNodeOpenLocationAction.KEY), MenuBuilder.AS_CHILD);
-				builder.addSeparator("/node_popup", MenuBuilder.AS_CHILD);
-				builder.addAction("/node_popup", WorkspaceController.getAction(ToggleNodePinAction.KEY), MenuBuilder.AS_CHILD);
-				builder.addAction("/node_popup", WorkspaceController.getAction(EditNodePinTagsAction.KEY), MenuBuilder.AS_CHILD);
 
 				projectMenu.getPopupMenu().addPopupMenuListener(new PopupMenuListener() {
 					public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
@@ -562,12 +557,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new MindMapOpenLocationAction());
 		WorkspaceController.addAction(new MindMapPopupOpenLocationAction());
 		WorkspaceController.addAction(new MindMapNodeOpenLocationAction());
-		final ToggleNodePinAction toggleNodePinAction = new ToggleNodePinAction();
-		WorkspaceController.addAction(toggleNodePinAction);
-		modeController.getMapController().addListenerForAction(toggleNodePinAction);
-		final EditNodePinTagsAction editNodePinTagsAction = new EditNodePinTagsAction();
-		WorkspaceController.addAction(editNodePinTagsAction);
-		modeController.getMapController().addListenerForAction(editNodePinTagsAction);
 	}
 	
 	private IProjectSelectionListener getWSSelectionListener(final RibbonMapChangeAdapter mapChangeAdapter) {
