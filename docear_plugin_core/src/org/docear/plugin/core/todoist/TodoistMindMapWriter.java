@@ -34,9 +34,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 /**
  * Writes Todoist tasks into the import mind map.
  * <p>
- * Updates are incremental: nodes keep a {@code todoist_task_id} attribute and are updated
- * in place. Missing tasks are created; nodes for closed/removed tasks are deleted. The old
- * full wipe ({@code clearChildren}) is no longer used.
+ * Updates are incremental: nodes keep a hidden {@code TODOIST_TASK_ID} XML attribute and are
+ * updated in place. Missing tasks are created; nodes for closed/removed tasks are deleted.
  */
 final class TodoistMindMapWriter {
 	private static final String TODOIST_BRANCH = "Todoist";

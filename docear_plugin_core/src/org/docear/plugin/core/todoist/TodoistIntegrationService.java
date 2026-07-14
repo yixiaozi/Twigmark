@@ -26,6 +26,7 @@ public final class TodoistIntegrationService {
 			}
 		});
 		TodoistAutoSyncService.getInstance().install(modeController);
+		TodoistNodeMetaIo.install(modeController);
 		LogUtils.info("Todoist integration: sync menu + auto-sync registered.");
 	}
 

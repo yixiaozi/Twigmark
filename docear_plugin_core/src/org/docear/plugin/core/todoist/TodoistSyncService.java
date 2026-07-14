@@ -343,7 +343,7 @@ public final class TodoistSyncService {
 		return true;
 	}
 
-	/** Import-map node already has {@code todoist_task_id}; update remote task content/due. */
+	/** Import-map node already has hidden {@code TODOIST_TASK_ID}; update remote task content/due. */
 	private static boolean syncImportMapNode(final NodeModel node, final TodoistReminderRecord record)
 			throws Exception {
 		final String taskId = TodoistReminderFactory.getTaskId(node);
