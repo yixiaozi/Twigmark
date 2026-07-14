@@ -317,6 +317,10 @@ public class PinnedNodesTabPanel extends JPanel {
 		final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
 		row.setOpaque(false);
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		// Child rows: leading "全部" selects the parent and shows the whole subtree.
+		if (parentIdForAdd != null) {
+			row.add(createGroupAllButton(parentIdForAdd));
+		}
 		for (final Iterator it = groupIdsOnRow.iterator(); it.hasNext();) {
 			final String groupId = (String) it.next();
 			final boolean exact = groupId.equals(activeGroupId);
@@ -325,6 +329,51 @@ public class PinnedNodesTabPanel extends JPanel {
 		}
 		row.add(createAddGroupButton(parentIdForAdd));
 		groupTabBar.add(row);
+	}
+
+	/**
+	 * "全部" on a child cascade row — select the parent group and list tags in that
+	 * group plus all nested subgroups.
+	 */
+	private JToggleButton createGroupAllButton(final String parentGroupId) {
+		final boolean selected = parentGroupId.equals(activeGroupId);
+		final int subtreeCount = countEntriesInGroupSubtree(parentGroupId);
+		final String label = formatCountLabel(TextUtils.getText("workspace.nodepins.group.all"), subtreeCount);
+		final JToggleButton tab = new JToggleButton(label) {
+			private static final long serialVersionUID = 1L;
+
+			protected void paintComponent(final Graphics g) {
+				final Graphics2D g2 = (Graphics2D) g.create();
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				final int arc = 12;
+				g2.setColor(getBackground());
+				g2.fillRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+				g2.setColor(selected ? GROUP_SELECTED_BORDER : GROUP_IDLE_BORDER);
+				g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, arc, arc);
+				if (selected) {
+					g2.setColor(GROUP_ACCENT);
+					g2.fillRoundRect(2, 3, 3, getHeight() - 6, 3, 3);
+				}
+				g2.dispose();
+				super.paintComponent(g);
+			}
+		};
+		tab.setSelected(selected);
+		tab.setFocusable(false);
+		tab.setContentAreaFilled(false);
+		tab.setBorderPainted(false);
+		tab.setOpaque(false);
+		tab.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		tab.setMargin(new Insets(1, 8, 1, 8));
+		tab.setToolTipText(TextUtils.format("workspace.nodepins.group.all.tip", resolveGroupLabel(parentGroupId)));
+		styleGroupTab(tab, selected, false);
+		tab.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				selectGroup(parentGroupId);
+			}
+		});
+		installGroupTabDropTarget(tab, parentGroupId);
+		return tab;
 	}
 
 	private JButton createAddGroupButton(final String parentId) {
@@ -614,20 +663,30 @@ public class PinnedNodesTabPanel extends JPanel {
 	}
 
 	private List getTagsForActiveGroup() {
+		return getTagsForGroupSubtree(activeGroupId);
+	}
+
+	/** Tags assigned to {@code groupId} or any nested subgroup under it. */
+	private List getTagsForGroupSubtree(final String groupId) {
 		final List tags = getTagsSortedByCount();
 		final List filtered = new ArrayList();
 		for (final Iterator it = tags.iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
-			if (activeGroupId.equals(groupStore.getTagGroupId(tag))) {
+			final String tagGroupId = groupStore.getTagGroupId(tag);
+			if (groupStore.isDescendantOf(tagGroupId, groupId)) {
 				filtered.add(tag);
 			}
 		}
 		return filtered;
 	}
 
-	/** Union of entries that carry any tag belonging to the active group. */
+	/** Union of entries that carry any tag in the active group subtree. */
 	private int countEntriesInActiveGroup() {
-		final List groupTags = getTagsForActiveGroup();
+		return countEntriesInGroupSubtree(activeGroupId);
+	}
+
+	private int countEntriesInGroupSubtree(final String groupId) {
+		final List groupTags = getTagsForGroupSubtree(groupId);
 		if (groupTags.isEmpty()) {
 			return 0;
 		}
