@@ -52,7 +52,9 @@ public final class MapTabGroupIntegration {
 		}
 		final TagGroupStore store = TagGroupStore.getInstance(STORE_FILE);
 		cascade = new TagGroupCascadeBar(store, PROP_ACTIVE_GROUP, PROP_DIRECT_ONLY, true);
-		cascade.setBorder(BorderFactory.createEmptyBorder(2, 6, 2, 6));
+		cascade.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, new java.awt.Color(0xD0D7DE)),
+				BorderFactory.createEmptyBorder(2, 6, 2, 6)));
 		cascade.setListener(new TagGroupCascadeBar.Listener() {
 			public void selectionChanged() {
 				applyFilter();
