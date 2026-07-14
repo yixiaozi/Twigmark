@@ -1,184 +1,289 @@
 package org.freeplane.features.usagestats;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Reader;
-import java.io.Writer;
 import java.net.NetworkInterface;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Enumeration;
-import java.util.UUID;
+import java.util.List;
 
 /**
- * Stable per-computer id for usage-stats folders under {@code .docear_stats/data/{deviceId}/}.
+ * Per-computer id for usage-stats folders under {@code .docear_stats/data/{deviceId}/}.
  * <p>
- * The project path {@code _data/{projectId}/.docear_stats} is shared when data lives on a
- * synced/network drive. The device identity file must therefore stay on this machine
- * ({@code user.home/.docear/device.id}), not under the shared project tree — otherwise every
- * PC would adopt the first synced {@code .device.id} and write into one folder.
+ * Computed from this machine's hardware fingerprint (MAC addresses + optional board/OS
+ * machine UUID), then kept only in memory. No file on disk — so a synced project tree
+ * cannot leak identity across PCs, and a reinstall on the same hardware yields the same id.
  */
 public class DeviceIdentifier {
-	private static final String LOCAL_DIR_NAME = ".docear";
-	private static final String DEVICE_ID_FILE = "device.id";
 	private static String cachedDeviceId = null;
 
 	public static synchronized String getDeviceId() {
 		if (cachedDeviceId != null) {
 			return cachedDeviceId;
 		}
-
-		final File localFile = getLocalDeviceIdFile();
-		if (localFile != null && localFile.isFile()) {
-			cachedDeviceId = readDeviceIdFromFile(localFile);
-			if (cachedDeviceId != null) {
-				return cachedDeviceId;
-			}
-		}
-
-		final String fromHardware = generateDeviceIdFromHardware();
-		if (fromHardware != null) {
-			cachedDeviceId = fromHardware;
-		}
-		else {
-			cachedDeviceId = UUID.randomUUID().toString().replace("-", "");
-		}
-
-		if (localFile != null) {
-			saveDeviceIdToFile(localFile, cachedDeviceId);
+		cachedDeviceId = hashString(buildFingerprintMaterial());
+		if (cachedDeviceId == null) {
+			cachedDeviceId = "unknown-device";
 		}
 		return cachedDeviceId;
 	}
 
-	/** {@code {user.home}/.docear/device.id} — local to this OS user / machine, not project sync. */
-	static File getLocalDeviceIdFile() {
-		final String home = System.getProperty("user.home");
-		if (home == null || home.length() == 0) {
-			return null;
+	/**
+	 * Stable material: sorted physical MAC addresses, plus board/platform UUID when the OS
+	 * exposes one. Same PC → same string across reinstalls; different PC → different string.
+	 */
+	private static String buildFingerprintMaterial() {
+		final StringBuilder material = new StringBuilder();
+		final List macs = collectPhysicalMacAddresses();
+		for (int i = 0; i < macs.size(); i++) {
+			if (i > 0) {
+				material.append(',');
+			}
+			material.append(macs.get(i));
 		}
-		return new File(new File(home, LOCAL_DIR_NAME), DEVICE_ID_FILE);
+		final String platformUuid = getPlatformMachineUuid();
+		if (platformUuid != null && platformUuid.length() > 0) {
+			if (material.length() > 0) {
+				material.append('|');
+			}
+			material.append(platformUuid);
+		}
+		if (material.length() == 0) {
+			// Last resort: deterministic, not random — weaker uniqueness but survives restarts.
+			material.append(System.getProperty("os.name", ""));
+			material.append('|').append(System.getProperty("os.arch", ""));
+			material.append('|').append(getDeviceName());
+			material.append('|').append(System.getProperty("user.name", ""));
+		}
+		return material.toString();
 	}
 
-	private static String readDeviceIdFromFile(final File file) {
-		Reader reader = null;
-		BufferedReader br = null;
+	private static List collectPhysicalMacAddresses() {
+		final List macs = new ArrayList();
 		try {
-			reader = new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8);
-			br = new BufferedReader(reader);
-			final String id = br.readLine();
-			if (id != null && id.trim().length() > 0) {
-				return id.trim();
+			final Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
+			if (interfaces == null) {
+				return macs;
+			}
+			while (interfaces.hasMoreElements()) {
+				final NetworkInterface iface = (NetworkInterface) interfaces.nextElement();
+				try {
+					if (iface.isLoopback() || isProbablyVirtualAdapter(iface)) {
+						continue;
+					}
+					final byte[] mac = iface.getHardwareAddress();
+					if (mac == null || mac.length == 0 || isZeroMac(mac)) {
+						continue;
+					}
+					macs.add(formatMac(mac));
+				}
+				catch (final Exception ignored) {
+					// Skip this interface.
+				}
 			}
 		}
-		catch (final IOException e) {
-			// Ignore
+		catch (final Exception ignored) {
+			// No interfaces available.
+		}
+		Collections.sort(macs);
+		return macs;
+	}
+
+	private static boolean isProbablyVirtualAdapter(final NetworkInterface iface) {
+		final String name = String.valueOf(iface.getName()).toLowerCase();
+		final String display = String.valueOf(iface.getDisplayName()).toLowerCase();
+		final String haystack = name + " " + display;
+		return haystack.indexOf("virtual") >= 0 || haystack.indexOf("vmware") >= 0
+		        || haystack.indexOf("vbox") >= 0 || haystack.indexOf("virtualbox") >= 0
+		        || haystack.indexOf("hyper-v") >= 0 || haystack.indexOf("hyperv") >= 0
+		        || haystack.indexOf("docker") >= 0 || haystack.indexOf("veth") >= 0
+		        || haystack.indexOf("tap") >= 0 || haystack.indexOf("tun") >= 0
+		        || haystack.indexOf("vpn") >= 0 || haystack.indexOf("loopback") >= 0;
+	}
+
+	private static boolean isZeroMac(final byte[] mac) {
+		for (int i = 0; i < mac.length; i++) {
+			if (mac[i] != 0) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static String formatMac(final byte[] mac) {
+		final StringBuilder sb = new StringBuilder(mac.length * 3);
+		for (int i = 0; i < mac.length; i++) {
+			if (i > 0) {
+				sb.append('-');
+			}
+			sb.append(String.format("%02X", Integer.valueOf(mac[i] & 0xff)));
+		}
+		return sb.toString();
+	}
+
+	/**
+	 * Board / platform UUID that usually survives OS reinstall on the same machine.
+	 * Windows MachineGuid is intentionally not used (it is recreated with a new Windows install).
+	 */
+	private static String getPlatformMachineUuid() {
+		final String os = System.getProperty("os.name", "").toLowerCase();
+		if (os.indexOf("win") >= 0) {
+			return readWindowsProductUuid();
+		}
+		if (os.indexOf("mac") >= 0) {
+			return readMacPlatformUuid();
+		}
+		return readLinuxProductUuid();
+	}
+
+	private static String readLinuxProductUuid() {
+		final String fromDmi = readFirstLine(new File("/sys/class/dmi/id/product_uuid"));
+		if (isUsableUuid(fromDmi)) {
+			return fromDmi.trim().toLowerCase();
+		}
+		return null;
+	}
+
+	private static String readMacPlatformUuid() {
+		return runCommandCaptureFirstMatch(new String[] { "/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice" },
+		        "IOPlatformUUID");
+	}
+
+	private static String readWindowsProductUuid() {
+		// SMBIOS UUID — same hardware keeps it across Windows reinstalls more often than MachineGuid.
+		final String fromWmic = runCommandCaptureFirstMatch(
+		        new String[] { "wmic", "csproduct", "get", "UUID" }, null);
+		if (isUsableUuid(fromWmic)) {
+			return fromWmic.trim().toLowerCase();
+		}
+		final String fromCim = runCommandCaptureFirstMatch(
+		        new String[] { "powershell", "-NoProfile", "-Command",
+		                "(Get-CimInstance -ClassName Win32_ComputerSystemProduct).UUID" },
+		        null);
+		if (isUsableUuid(fromCim)) {
+			return fromCim.trim().toLowerCase();
+		}
+		return null;
+	}
+
+	private static boolean isUsableUuid(final String value) {
+		if (value == null) {
+			return false;
+		}
+		final String v = value.trim();
+		if (v.length() < 8) {
+			return false;
+		}
+		final String lower = v.toLowerCase();
+		return lower.indexOf("ffffffff") < 0 && lower.indexOf("00000000-0000-0000-0000-000000000000") < 0
+		        && !lower.equals("uuid") && !lower.equals("to be filled by o.e.m.");
+	}
+
+	private static String readFirstLine(final File file) {
+		if (file == null || !file.isFile()) {
+			return null;
+		}
+		BufferedReader br = null;
+		try {
+			br = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8));
+			return br.readLine();
+		}
+		catch (final Exception e) {
+			return null;
 		}
 		finally {
 			if (br != null) {
 				try {
 					br.close();
 				}
-				catch (final IOException e) {
-				}
-			}
-			if (reader != null) {
-				try {
-					reader.close();
-				}
-				catch (final IOException e) {
+				catch (final Exception ignored) {
 				}
 			}
 		}
-		return null;
 	}
 
-	private static void saveDeviceIdToFile(final File file, final String deviceId) {
-		final File parentDir = file.getParentFile();
-		if (parentDir != null && !parentDir.exists()) {
-			parentDir.mkdirs();
-		}
-
-		Writer writer = null;
-		BufferedWriter bw = null;
+	private static String runCommandCaptureFirstMatch(final String[] command, final String keyHint) {
+		Process process = null;
+		BufferedReader br = null;
 		try {
-			writer = new OutputStreamWriter(new FileOutputStream(file), StandardCharsets.UTF_8);
-			bw = new BufferedWriter(writer);
-			bw.write(deviceId);
-		}
-		catch (final IOException e) {
-			// Ignore
-		}
-		finally {
-			if (bw != null) {
-				try {
-					bw.close();
-				}
-				catch (final IOException e) {
-				}
-			}
-			if (writer != null) {
-				try {
-					writer.close();
-				}
-				catch (final IOException e) {
-				}
-			}
-		}
-	}
-
-	private static String generateDeviceIdFromHardware() {
-		final String macAddress = getMacAddress();
-		if (macAddress != null && macAddress.length() > 0) {
-			return hashString(macAddress);
-		}
-		return null;
-	}
-
-	private static String getMacAddress() {
-		try {
-			final Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
-			while (interfaces.hasMoreElements()) {
-				final NetworkInterface iface = (NetworkInterface) interfaces.nextElement();
-				if (iface.isLoopback() || !iface.isUp()) {
+			process = Runtime.getRuntime().exec(command);
+			br = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+			String line;
+			while ((line = br.readLine()) != null) {
+				line = line.trim();
+				if (line.length() == 0) {
 					continue;
 				}
-				final byte[] mac = iface.getHardwareAddress();
-				if (mac != null) {
-					final StringBuilder sb = new StringBuilder();
-					for (int i = 0; i < mac.length; i++) {
-						sb.append(String.format("%02X%s", Integer.valueOf(mac[i] & 0xff),
-								(i < mac.length - 1) ? "-" : ""));
+				if (keyHint != null) {
+					final int idx = line.indexOf(keyHint);
+					if (idx < 0) {
+						continue;
 					}
-					return sb.toString();
+					final int quote = line.indexOf('"', idx);
+					if (quote >= 0) {
+						final int end = line.indexOf('"', quote + 1);
+						if (end > quote) {
+							return line.substring(quote + 1, end);
+						}
+					}
+					continue;
 				}
+				if (line.equalsIgnoreCase("UUID")) {
+					continue;
+				}
+				return line;
 			}
+			process.waitFor();
 		}
 		catch (final Exception e) {
-			// Ignore
+			return null;
+		}
+		finally {
+			if (br != null) {
+				try {
+					br.close();
+				}
+				catch (final Exception ignored) {
+				}
+			}
+			if (process != null) {
+				try {
+					process.getErrorStream().close();
+				}
+				catch (final Exception ignored) {
+				}
+				try {
+					process.destroy();
+				}
+				catch (final Exception ignored) {
+				}
+			}
 		}
 		return null;
 	}
 
 	private static String hashString(final String input) {
+		if (input == null) {
+			return null;
+		}
 		try {
 			final MessageDigest md = MessageDigest.getInstance("SHA-256");
 			final byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
-			final StringBuilder hexString = new StringBuilder();
-			for (int i = 0; i < hash.length; i++) {
+			final StringBuilder hexString = new StringBuilder(32);
+			for (int i = 0; i < hash.length && hexString.length() < 32; i++) {
 				final String hex = Integer.toHexString(0xff & hash[i]);
 				if (hex.length() == 1) {
 					hexString.append('0');
 				}
 				hexString.append(hex);
 			}
-			return hexString.toString().substring(0, 32);
+			return hexString.toString();
 		}
 		catch (final NoSuchAlgorithmException e) {
 			return null;
