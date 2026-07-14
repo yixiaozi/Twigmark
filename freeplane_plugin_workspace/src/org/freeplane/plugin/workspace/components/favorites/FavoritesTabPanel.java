@@ -306,7 +306,28 @@ public class FavoritesTabPanel extends JPanel {
 				rebuildTagButtons();
 			}
 		});
+		popup.addSeparator();
+		final JMenuItem openAllItem = new JMenuItem(TextUtils.getText("workspace.favorites.action.open.all"));
+		openAllItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				openAllFavoritesWithTag(tag);
+			}
+		});
+		popup.add(openAllItem);
 		popup.show(button, e.getX(), e.getY());
+	}
+
+	private void openAllFavoritesWithTag(final String tag) {
+		if (tag == null || tag.length() == 0) {
+			return;
+		}
+		final List favorites = store.getFavorites();
+		for (int i = 0; i < favorites.size(); i++) {
+			final FavoriteEntry entry = (FavoriteEntry) favorites.get(i);
+			if (entry.getTags().contains(tag)) {
+				openFavorite(entry);
+			}
+		}
 	}
 
 	private void buildFavoritesList() {

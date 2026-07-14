@@ -373,7 +373,25 @@ public class PinnedNodesTabPanel extends JPanel {
 				rebuildTagButtons();
 			}
 		});
+		popup.addSeparator();
+		final JMenuItem openAllItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.open.all"));
+		openAllItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				openAllPinsWithTag(tag);
+			}
+		});
+		popup.add(openAllItem);
 		popup.show(button, e.getX(), e.getY());
+	}
+
+	private void openAllPinsWithTag(final String tag) {
+		if (tag == null || tag.length() == 0) {
+			return;
+		}
+		final List entries = index.getDisplayEntries(false, tag);
+		for (int i = 0; i < entries.size(); i++) {
+			openEntry((NodePinEntry) entries.get(i));
+		}
 	}
 
 	private void buildEntryList() {
