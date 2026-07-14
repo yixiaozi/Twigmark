@@ -57,6 +57,7 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 				return;
 			}
 			LastSelectionMapExtension.getOrCreate(node.getMap()).setLastSelectedNodeId(nodeId);
+			SessionViewStateStore.getInstance().rememberSelection(node);
 		}
 	}
 }

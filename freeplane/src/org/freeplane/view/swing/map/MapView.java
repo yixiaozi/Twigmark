@@ -43,6 +43,7 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.print.PageFormat;
 import java.awt.print.Printable;
+import java.io.File;
 import java.util.AbstractList;
 import java.util.AbstractSet;
 import java.util.ArrayList;
@@ -85,6 +86,7 @@ import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.SessionViewStateStore;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -1880,14 +1882,25 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	}
 
 	private void selectSavedOrLastModifiedOrRoot() {
-		final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(getModel());
-		if (lastSelection != null) {
-			final String savedId = lastSelection.getLastSelectedNodeId();
-			if (savedId != null && !savedId.isEmpty()) {
-				final NodeModel savedNode = getModel().getNodeForID(savedId);
-				if (savedNode != null && selectNodeIfPossible(savedNode)) {
-					return;
-				}
+		final MapModel map = getModel();
+		String savedId = null;
+		final File mapFile = map != null ? map.getFile() : null;
+		if (mapFile != null) {
+			savedId = SessionViewStateStore.getInstance().getLastSelectedNodeId(mapFile);
+		}
+		if (savedId == null || savedId.isEmpty()) {
+			final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(map);
+			if (lastSelection != null) {
+				savedId = lastSelection.getLastSelectedNodeId();
+			}
+		}
+		else if (map != null) {
+			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
+		}
+		if (savedId != null && !savedId.isEmpty()) {
+			final NodeModel savedNode = map.getNodeForID(savedId);
+			if (savedNode != null && selectNodeIfPossible(savedNode)) {
+				return;
 			}
 		}
 		final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());

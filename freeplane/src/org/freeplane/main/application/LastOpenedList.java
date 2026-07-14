@@ -53,6 +53,7 @@ import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.SessionViewStateStore;
 import org.freeplane.features.map.mindmapmode.DocuMapAttribute;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -105,6 +106,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		final MapModel map = mapViewManager.getModel(newView);
 		final String restoreString = getRestoreable(map);
 		updateList(map, restoreString);
+		if (map != null) {
+			SessionViewStateStore.getInstance().rememberOpenedMap(map);
+		}
 	}
 
 	public void afterViewClose(final Component oldView) {
@@ -226,7 +230,12 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		final boolean loadLastMap = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAP);
 		final boolean loadLastMaps = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAPS);
 		String lastMap = null;
-		if (!lastOpenedList.isEmpty()) {
+		final File sessionLastMap = SessionViewStateStore.getInstance().getLastOpenedMap();
+		if (sessionLastMap != null) {
+			lastMap = getRestorable(sessionLastMap);
+			LogUtils.info("Session view state last map: " + sessionLastMap.getAbsolutePath());
+		}
+		if (lastMap == null && !lastOpenedList.isEmpty()) {
 			lastMap = decodeRestoreable(lastOpenedList.get(0));
 		}
 		if (loadLastMaps) {
@@ -236,17 +245,26 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			if (startList.isEmpty()) {
 				appendMostRecentRestorableMap(startList);
 			}
+			if (startList.isEmpty() && sessionLastMap != null) {
+				startList.add(getRestorable(sessionLastMap));
+			}
 			if (!startList.isEmpty()) {
 				LogUtils.info("Restoring " + startList.size() + " map(s) from session list");
 			}
 			safeOpenOnStart(startList);
 			if (lastMap != null) {
-				tryToChangeToMapView(lastMap);
+				if (!tryToChangeToMapView(lastMap) && sessionLastMap != null) {
+					safeOpen(getRestorable(sessionLastMap), true);
+					tryToChangeToMapView(getRestorable(sessionLastMap));
+				}
 			}
 			return;
 		}
 		if (loadLastMap && lastMap != null && isSessionRestorableMap(lastMap)) {
 			safeOpen(lastMap, true);
+		}
+		else if (loadLastMap && sessionLastMap != null) {
+			safeOpen(getRestorable(sessionLastMap), true);
 		}
 	}
 
@@ -263,7 +281,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 				return true;
 			}
 		}
-		return false;
+		return SessionViewStateStore.getInstance().getLastOpenedMap() != null;
 	}
 
 
