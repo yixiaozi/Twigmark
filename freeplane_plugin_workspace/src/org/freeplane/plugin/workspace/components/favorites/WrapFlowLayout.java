@@ -18,7 +18,7 @@ public class WrapFlowLayout extends FlowLayout {
 	private static final long serialVersionUID = 1L;
 
 	public WrapFlowLayout() {
-		super(FlowLayout.LEFT, 3, 3);
+		super(FlowLayout.LEFT, 6, 6);
 	}
 
 	public Dimension preferredLayoutSize(final Container target) {

@@ -4,10 +4,15 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DragGestureEvent;
+import java.awt.dnd.DragGestureListener;
+import java.awt.dnd.DragSource;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
@@ -20,6 +25,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -48,6 +54,7 @@ import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
+import org.freeplane.plugin.workspace.components.tagfilter.TagGroupCascadeBar;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteEntry;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteUriUtils;
@@ -60,14 +67,21 @@ public class FavoritesTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final DataFlavor REORDER_FLAVOR = DataFlavor.stringFlavor;
 	private static final String FAVORITE_NAME_COLOR = "#0066CC";
-	private static final int DEFAULT_TAG_PANEL_HEIGHT = 100;
-	private static final int MIN_TAG_PANEL_HEIGHT = 48;
+	private static final int DEFAULT_TAG_PANEL_HEIGHT = 168;
+	private static final int MIN_TAG_PANEL_HEIGHT = 96;
 	private static final String PROP_FILTER_DIVIDER = "workspace.favorites.filter.divider";
+	private static final String PROP_ACTIVE_GROUP = "workspace.favorites.filter.active.group";
+	private static final String PROP_DIRECT_ONLY = "workspace.favorites.filter.direct.only";
+
+	private static final Color FILTER_SHELL_BG = new Color(0xF7F9FB);
+	private static final Color FILTER_SHELL_BORDER = new Color(0xCFD8DC);
+	private static final Color GROUP_MUTED_FG = new Color(0x546E7A);
 
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList favoritesList = new JList(listModel);
 	private final TagFilterPanel tagFilterPanel = new TagFilterPanel();
+	private final TagGroupCascadeBar groupCascade = new TagGroupCascadeBar(PROP_ACTIVE_GROUP, PROP_DIRECT_ONLY);
 	private JPanel filterShell;
 	private JSplitPane splitPane;
 	private final Runnable refreshListener = new Runnable() {
@@ -83,6 +97,21 @@ public class FavoritesTabPanel extends JPanel {
 	public FavoritesTabPanel() {
 		super(new BorderLayout(0, 4));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		groupCascade.setListener(new TagGroupCascadeBar.Listener() {
+			public void selectionChanged() {
+				activeTagFilter = null;
+				rebuildTagButtons();
+				refreshList();
+			}
+
+			public int countEntriesForTags(final Set tags) {
+				return countFavoritesMatchingTags(tags);
+			}
+
+			public Set getAvailableTags() {
+				return store.getQuickSelectTags();
+			}
+		});
 		filterShell = buildFilterShell();
 		buildFavoritesList();
 		final JScrollPane listScrollPane = new JScrollPane(favoritesList);
@@ -114,11 +143,23 @@ public class FavoritesTabPanel extends JPanel {
 	}
 
 	private JPanel buildFilterShell() {
-		final JPanel shell = new JPanel(new BorderLayout());
+		final JPanel shell = new JPanel(new BorderLayout(0, 4));
+		shell.setBackground(FILTER_SHELL_BG);
+		shell.setOpaque(true);
 		shell.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createTitledBorder(TextUtils.getText("workspace.favorites.filter.label")),
-				BorderFactory.createEmptyBorder(0, 2, 2, 2)));
+				BorderFactory.createLineBorder(FILTER_SHELL_BORDER),
+				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 		shell.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		final JPanel header = new JPanel(new BorderLayout(0, 4));
+		header.setOpaque(false);
+		final JLabel titleLabel = new JLabel(TextUtils.getText("workspace.favorites.filter.label"));
+		titleLabel.setForeground(GROUP_MUTED_FG);
+		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, titleLabel.getFont().getSize2D()));
+		titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 1, 0, 0));
+		header.add(titleLabel, BorderLayout.NORTH);
+		groupCascade.rebuild();
+		header.add(groupCascade, BorderLayout.CENTER);
+		shell.add(header, BorderLayout.NORTH);
 		final JScrollPane tagScrollPane = new JScrollPane(tagFilterPanel);
 		tagScrollPane.setBorder(BorderFactory.createEmptyBorder());
 		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
@@ -131,6 +172,7 @@ public class FavoritesTabPanel extends JPanel {
 				tagFilterPanel.repaint();
 			}
 		});
+		groupCascade.installChipPanelDropTarget(tagFilterPanel);
 		shell.add(tagScrollPane, BorderLayout.CENTER);
 		rebuildTagButtons();
 		return shell;
@@ -138,8 +180,9 @@ public class FavoritesTabPanel extends JPanel {
 
 	private void rebuildTagButtons() {
 		tagFilterPanel.removeAll();
-		tagFilterPanel.add(createTagButton(null, formatTagCountLabel(null, TextUtils.getText("workspace.favorites.filter.all"))));
-		for (final Iterator it = getTagsSortedByCount().iterator(); it.hasNext();) {
+		tagFilterPanel.add(createTagButton(null, formatTagCountLabel(null,
+				TextUtils.getText("workspace.favorites.filter.all"))));
+		for (final Iterator it = getTagsForActiveGroup().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
 			tagFilterPanel.add(createTagButton(tag, formatTagCountLabel(tag, tag)));
 		}
@@ -153,12 +196,12 @@ public class FavoritesTabPanel extends JPanel {
 		repaint();
 	}
 
-	private Set getAvailableTags() {
-		return store.getQuickSelectTags();
+	private List getTagsForActiveGroup() {
+		return groupCascade.filterTagsInActiveScope(getTagsSortedByCount());
 	}
 
 	private List getTagsSortedByCount() {
-		final List tags = new ArrayList(getAvailableTags());
+		final List tags = new ArrayList(store.getQuickSelectTags());
 		Collections.sort(tags, new Comparator() {
 			public int compare(final Object o1, final Object o2) {
 				final String tag1 = (String) o1;
@@ -175,7 +218,28 @@ public class FavoritesTabPanel extends JPanel {
 	}
 
 	private String formatTagCountLabel(final String tag, final String baseLabel) {
+		if (tag == null) {
+			return baseLabel + " " + countFavoritesMatchingTags(new HashSet(getTagsForActiveGroup()));
+		}
 		return baseLabel + " " + store.countFavoritesWithTag(tag);
+	}
+
+	private int countFavoritesMatchingTags(final Set tags) {
+		if (tags == null || tags.isEmpty()) {
+			return 0;
+		}
+		int count = 0;
+		final List favorites = store.getFavorites();
+		for (int i = 0; i < favorites.size(); i++) {
+			final FavoriteEntry entry = (FavoriteEntry) favorites.get(i);
+			for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
+				if (tags.contains(it.next())) {
+					count++;
+					break;
+				}
+			}
+		}
+		return count;
 	}
 
 	private JToggleButton createTagButton(final String tag, final String label) {
@@ -189,6 +253,7 @@ public class FavoritesTabPanel extends JPanel {
 			}
 		});
 		if (tag != null) {
+			enableTagDrag(button, tag);
 			button.addMouseListener(new MouseAdapter() {
 				public void mousePressed(final MouseEvent e) {
 					if (e.isPopupTrigger()) {
@@ -204,6 +269,16 @@ public class FavoritesTabPanel extends JPanel {
 			});
 		}
 		return button;
+	}
+
+	private void enableTagDrag(final JComponent chip, final String tag) {
+		final DragSource dragSource = DragSource.getDefaultDragSource();
+		dragSource.createDefaultDragGestureRecognizer(chip, DnDConstants.ACTION_MOVE, new DragGestureListener() {
+			public void dragGestureRecognized(final DragGestureEvent dge) {
+				final Transferable transferable = new StringSelection(TagGroupCascadeBar.TAG_DND_PREFIX + tag);
+				dge.startDrag(DragSource.DefaultMoveDrop, transferable);
+			}
+		});
 	}
 
 	private void showTagColorPopup(final MouseEvent e, final String tag, final JToggleButton button) {
@@ -231,6 +306,11 @@ public class FavoritesTabPanel extends JPanel {
 			}
 		});
 		popup.add(resetColorItem);
+		groupCascade.appendMoveToGroupMenuItems(popup, tag, new Runnable() {
+			public void run() {
+				rebuildTagButtons();
+			}
+		});
 		popup.show(button, e.getX(), e.getY());
 	}
 
@@ -354,6 +434,7 @@ public class FavoritesTabPanel extends JPanel {
 
 	public void refreshView() {
 		store.reloadIfChanged();
+		groupCascade.rebuild();
 		rebuildTagButtons();
 		refreshList();
 	}
@@ -363,17 +444,26 @@ public class FavoritesTabPanel extends JPanel {
 		final List favorites = store.getFavorites();
 		for (int i = 0; i < favorites.size(); i++) {
 			final FavoriteEntry entry = (FavoriteEntry) favorites.get(i);
-			if (matchesTagFilter(entry)) {
+			if (matchesFilters(entry)) {
 				listModel.addElement(entry);
 			}
 		}
 	}
 
-	private boolean matchesTagFilter(final FavoriteEntry entry) {
-		if (activeTagFilter == null || activeTagFilter.length() == 0) {
-			return true;
+	private boolean matchesFilters(final FavoriteEntry entry) {
+		if (activeTagFilter != null && activeTagFilter.length() > 0) {
+			return entry.getTags().contains(activeTagFilter);
 		}
-		return entry.getTags().contains(activeTagFilter);
+		final List scopeTags = getTagsForActiveGroup();
+		if (scopeTags.isEmpty()) {
+			return false;
+		}
+		for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
+			if (scopeTags.contains(it.next())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private void persist() {
