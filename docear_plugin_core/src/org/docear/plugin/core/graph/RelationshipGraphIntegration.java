@@ -69,8 +69,11 @@ public final class RelationshipGraphIntegration {
 	 */
 	public static void exitGraphViewDueToMapSwitch() {
 		final RelationshipGraphService service = RelationshipGraphService.getService();
-		if (service != null && service.isGraphInViewport()) {
-			service.hideFromViewport();
+		if (service != null) {
+			service.setHoldingViewport(false);
+			if (service.isGraphInViewport()) {
+				service.hideFromViewport();
+			}
 		}
 		final MModeWorkspaceController wsController = (MModeWorkspaceController) WorkspaceController
 		        .getModeExtension(Controller.getCurrentModeController());

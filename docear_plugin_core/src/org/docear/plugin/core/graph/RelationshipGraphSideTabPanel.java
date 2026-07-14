@@ -306,6 +306,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (service == null) {
 			return;
 		}
+		service.setHoldingViewport(true);
 		subTabs.setSelectedIndex(tabIndexFromMode(graphMode));
 		updateCanvasModeHint();
 		final boolean needsScan = !dataLoadedForMode[graphMode] || cachedBaseIndex[graphMode] == null;
@@ -328,6 +329,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		final RelationshipGraphService service = RelationshipGraphService.getService();
 		if (service != null) {
 			service.getCanvas().setLoading(false, null);
+			service.setHoldingViewport(false);
 			service.hideFromViewport();
 		}
 	}
@@ -360,6 +362,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		if (svc == null || index == null) {
 			return;
 		}
+		svc.setHoldingViewport(true);
 		svc.getCanvas().setSearchQuery(activeTab().activeSearchQuery);
 		svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
 		svc.showInViewport();
@@ -368,6 +371,21 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		svc.getCanvas().requestFocusInWindow();
 		activeTab().updateStats(index);
 		activeTab().updateResultList();
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				if (!graphTabActive) {
+					return;
+				}
+				final RelationshipGraphService again = RelationshipGraphService.getService();
+				if (again != null && again.isHoldingViewport()) {
+					again.showInViewport();
+					if (!preserveView) {
+						again.getCanvas().fitContentInView();
+					}
+					again.getCanvas().repaint();
+				}
+			}
+		});
 	}
 
 	private RelationshipGraphService getOrCreateService() {

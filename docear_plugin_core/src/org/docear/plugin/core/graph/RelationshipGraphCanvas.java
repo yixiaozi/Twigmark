@@ -231,6 +231,20 @@ public class RelationshipGraphCanvas extends JPanel {
 		focusOnNodes(matchedNodeKeys);
 	}
 
+	/** Fit all nodes into the current canvas size (call after layout is ready). */
+	public void fitContentInView() {
+		if (index == null || index.getNodeCount() == 0) {
+			resetView();
+			return;
+		}
+		final List<RelationshipGraphNode> nodes = index.getNodes();
+		final Set<String> keys = new HashSet<String>();
+		for (int i = 0; i < nodes.size(); i++) {
+			keys.add(nodes.get(i).getPathKey());
+		}
+		focusOnNodes(keys);
+	}
+
 	public void focusOnNode(final RelationshipGraphNode node) {
 		if (node == null) {
 			return;
