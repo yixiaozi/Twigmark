@@ -95,7 +95,7 @@ public final class McpProtocol {
 		tools.add(tool("list_published", "List nodes marked with the published icon.",
 				schema("limit", "number", false)));
 		tools.add(tool("list_tag_groups",
-				"List sidebar tag groups (tabs): groupId, name, tagCount, nodeCount. Default group is ungrouped."));
+				"List sidebar tag groups: flat depth-first list plus nested tree (parentId/depth, unlimited nesting)."));
 		tools.add(tool("list_tags",
 				"List tags with counts/colors/group. scope: pins (default) | favorites | all. Optional groupId filter.",
 				schema("scope", "string", false), schema("groupId", "string", false),
@@ -108,12 +108,16 @@ public final class McpProtocol {
 				schema("tag", "string", false), schema("limit", "number", false)));
 		tools.add(tool("get_tag_catalog",
 				"One-shot tag catalog: pin groups→tags→counts/colors, plus favorite tags."));
-		tools.add(tool("create_tag_group", "Create a sidebar tag group (tab).",
-				schema("name", "string", true)));
+		tools.add(tool("create_tag_group",
+				"Create a sidebar tag group. Optional parentId nests under another group (unlimited depth).",
+				schema("name", "string", true), schema("parentId", "string", false)));
 		tools.add(tool("rename_tag_group", "Rename a custom tag group (not ungrouped).",
 				schema("groupId", "string", true), schema("name", "string", true)));
+		tools.add(tool("move_tag_group",
+				"Reparent a custom tag group. Omit/empty parentId for top level. Rejects cycles.",
+				schema("groupId", "string", true), schema("parentId", "string", false)));
 		tools.add(tool("delete_tag_group",
-				"Delete a custom tag group; its tags move to ungrouped.",
+				"Delete a custom tag group; its tags move to ungrouped; child groups move up one level.",
 				schema("groupId", "string", true)));
 		tools.add(tool("set_tag_group", "Assign a tag to a group (use groupId=ungrouped to clear).",
 				schema("tag", "string", true), schema("groupId", "string", true)));
@@ -317,10 +321,13 @@ public final class McpProtocol {
 			textResult = McpTagService.getTagCatalog();
 		}
 		else if ("create_tag_group".equals(name)) {
-			textResult = McpTagService.createTagGroup(required(args, "name"));
+			textResult = McpTagService.createTagGroup(required(args, "name"), argString(args, "parentId", ""));
 		}
 		else if ("rename_tag_group".equals(name)) {
 			textResult = McpTagService.renameTagGroup(required(args, "groupId"), required(args, "name"));
+		}
+		else if ("move_tag_group".equals(name)) {
+			textResult = McpTagService.moveTagGroup(required(args, "groupId"), argString(args, "parentId", ""));
 		}
 		else if ("delete_tag_group".equals(name)) {
 			textResult = McpTagService.deleteTagGroup(required(args, "groupId"));

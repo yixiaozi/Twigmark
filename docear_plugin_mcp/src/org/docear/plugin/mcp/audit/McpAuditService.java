@@ -121,7 +121,8 @@ public final class McpAuditService {
 		if ("list_tag_groups".equals(toolName) || "list_tags".equals(toolName) || "list_nodes_by_tag".equals(toolName)
 		    || "list_favorites".equals(toolName) || "get_tag_catalog".equals(toolName)
 		    || "create_tag_group".equals(toolName) || "rename_tag_group".equals(toolName)
-		    || "delete_tag_group".equals(toolName) || "set_tag_group".equals(toolName)
+		    || "move_tag_group".equals(toolName) || "delete_tag_group".equals(toolName)
+		    || "set_tag_group".equals(toolName)
 		    || "set_tag_color".equals(toolName)) {
 			return McpOperationIntent.TAG;
 		}

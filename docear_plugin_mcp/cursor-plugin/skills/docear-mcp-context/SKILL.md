@@ -102,11 +102,11 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 场景 | 推荐调用 |
 |------|----------|
 | 一次拿到组→标签→计数/颜色 | `get_tag_catalog` 或资源 `docear://tags/catalog` |
-| 只要分组 Tab | `list_tag_groups` |
+| 只要分组（含嵌套 tree） | `list_tag_groups` |
 | 所有/某组标签 | `list_tags`（`scope`: `pins`\|`favorites`\|`all`，可选 `groupId`） |
 | 某标签有哪些节点 | `list_nodes_by_tag`（`tag` 必填；`scope` 默认 `pins`） |
 | 收藏列表 | `list_favorites`（可选 `tag`） |
-| 建/改/删组、移标签、设色 | `create_tag_group` / `rename_tag_group` / `delete_tag_group` / `set_tag_group` / `set_tag_color` |
+| 建/改/移/删组、移标签、设色 | `create_tag_group`（可选 `parentId` 无限嵌套） / `rename_tag_group` / `move_tag_group` / `delete_tag_group` / `set_tag_group` / `set_tag_color` |
 | 给节点打标签 | 仍用 `set_node_tags` |
 
 **注意**：`list_nodes_by_tag` 的 pins 范围 = 侧栏标签索引中的节点；收藏 scope 返回 `kind:favorite`（文件级 URI，无 nodeId）。
@@ -259,7 +259,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - 读上下文：`get_selection_context`、`get_active_map_json`、`get_mindmap_json`（含 note/link/icons/tags/MODIFIED）
 - **关系图**：`get_relationship_graph`、`get_node_relationships`；资源 `docear://graph/summary`
 - 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
-- **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`、`rename_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
+- **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`
 - 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`create_mindmap`

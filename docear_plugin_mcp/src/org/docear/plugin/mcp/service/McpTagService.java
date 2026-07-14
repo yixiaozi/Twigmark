@@ -50,18 +50,12 @@ public final class McpTagService {
 					tagCount++;
 				}
 			}
-			final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
-			row.put("groupId", JsonValue.ofString(groupId));
-			row.put("name", JsonValue.ofString(resolveGroupName(store, groupId)));
-			row.put("isDefault", JsonValue.ofBoolean(store.isUngrouped(groupId)));
-			row.put("canRename", JsonValue.ofBoolean(store.canRename(groupId)));
-			row.put("canRemove", JsonValue.ofBoolean(store.canRemove(groupId)));
-			row.put("tagCount", JsonValue.ofNumber(Integer.valueOf(tagCount)));
-			row.put("nodeCount", JsonValue.ofNumber(Integer.valueOf(countNodesForGroup(index, store, groupId, allTags))));
-			groups.add(JsonValue.ofMap(row));
+			groups.add(JsonValue.ofMap(buildGroupRow(store, groupId, tagCount,
+					countNodesForGroup(index, store, groupId, allTags), null)));
 		}
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("groups", JsonValue.ofList(groups));
+		result.put("tree", JsonValue.ofList(buildGroupTree(store, null, allTags, index)));
 		result.put("count", JsonValue.ofNumber(Integer.valueOf(groups.size())));
 		return JsonValue.ofMap(result).toJson();
 	}
@@ -202,6 +196,8 @@ public final class McpTagService {
 			final Map<String, JsonValue> groupRow = new LinkedHashMap<String, JsonValue>();
 			groupRow.put("groupId", JsonValue.ofString(groupId));
 			groupRow.put("name", JsonValue.ofString(resolveGroupName(store, groupId)));
+			groupRow.put("parentId", JsonValue.ofString(nullToEmpty(store.getParentId(groupId))));
+			groupRow.put("depth", JsonValue.ofNumber(Integer.valueOf(store.getDepth(groupId))));
 			groupRow.put("isDefault", JsonValue.ofBoolean(store.isUngrouped(groupId)));
 			groupRow.put("nodeCount",
 					JsonValue.ofNumber(Integer.valueOf(countNodesForGroup(index, store, groupId, pinTags))));
@@ -210,6 +206,7 @@ public final class McpTagService {
 		}
 		result.put("scope", JsonValue.ofString(SCOPE_PINS));
 		result.put("groups", JsonValue.ofList(groups));
+		result.put("tree", JsonValue.ofList(buildGroupTree(store, null, pinTags, index)));
 		final List favSorted = new ArrayList(FavoritesAndTagsStore.getInstance().getQuickSelectTags());
 		Collections.sort(favSorted);
 		final List<JsonValue> favRows = new ArrayList<JsonValue>();
@@ -226,15 +223,18 @@ public final class McpTagService {
 		return JsonValue.ofMap(result).toJson();
 	}
 
-	public static String createTagGroup(final String name) {
+	public static String createTagGroup(final String name, final String parentId) {
 		ensureWritable();
-		final String id = TagGroupStore.getInstance().addGroup(name);
+		final String id = TagGroupStore.getInstance().addGroup(name, parentId);
 		if (id == null) {
-			throw new IllegalArgumentException("group name is required");
+			throw new IllegalArgumentException("group name is required or parentId is invalid");
 		}
+		final TagGroupStore store = TagGroupStore.getInstance();
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("groupId", JsonValue.ofString(id));
-		result.put("name", JsonValue.ofString(TagGroupStore.getInstance().getGroupName(id)));
+		result.put("name", JsonValue.ofString(store.getGroupName(id)));
+		result.put("parentId", JsonValue.ofString(nullToEmpty(store.getParentId(id))));
+		result.put("depth", JsonValue.ofNumber(Integer.valueOf(store.getDepth(id))));
 		result.put("ok", JsonValue.ofBoolean(true));
 		return JsonValue.ofMap(result).toJson();
 	}
@@ -255,6 +255,25 @@ public final class McpTagService {
 		return JsonValue.ofMap(result).toJson();
 	}
 
+	public static String moveTagGroup(final String groupId, final String parentId) {
+		ensureWritable();
+		if (groupId == null || groupId.length() == 0) {
+			throw new IllegalArgumentException("groupId is required");
+		}
+		final String targetParent = parentId != null && parentId.length() > 0 ? parentId : null;
+		final boolean ok = TagGroupStore.getInstance().moveGroup(groupId, targetParent);
+		if (!ok) {
+			throw new IllegalArgumentException("cannot move group: " + groupId);
+		}
+		final TagGroupStore store = TagGroupStore.getInstance();
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
+		result.put("groupId", JsonValue.ofString(groupId));
+		result.put("parentId", JsonValue.ofString(nullToEmpty(store.getParentId(groupId))));
+		result.put("depth", JsonValue.ofNumber(Integer.valueOf(store.getDepth(groupId))));
+		result.put("ok", JsonValue.ofBoolean(true));
+		return JsonValue.ofMap(result).toJson();
+	}
+
 	public static String deleteTagGroup(final String groupId) {
 		ensureWritable();
 		if (groupId == null || groupId.length() == 0) {
@@ -267,7 +286,7 @@ public final class McpTagService {
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("groupId", JsonValue.ofString(groupId));
 		result.put("ok", JsonValue.ofBoolean(true));
-		result.put("note", JsonValue.ofString("Tags moved to ungrouped"));
+		result.put("note", JsonValue.ofString("Tags moved to ungrouped; child groups reparented"));
 		return JsonValue.ofMap(result).toJson();
 	}
 
@@ -348,6 +367,50 @@ public final class McpTagService {
 		}
 		final String name = store.getGroupName(groupId);
 		return name != null ? name : groupId;
+	}
+
+	private static Map<String, JsonValue> buildGroupRow(final TagGroupStore store, final String groupId,
+			final int tagCount, final int nodeCount, final List<JsonValue> children) {
+		final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
+		row.put("groupId", JsonValue.ofString(groupId));
+		row.put("name", JsonValue.ofString(resolveGroupName(store, groupId)));
+		row.put("parentId", JsonValue.ofString(nullToEmpty(store.getParentId(groupId))));
+		row.put("depth", JsonValue.ofNumber(Integer.valueOf(store.getDepth(groupId))));
+		row.put("isDefault", JsonValue.ofBoolean(store.isUngrouped(groupId)));
+		row.put("canRename", JsonValue.ofBoolean(store.canRename(groupId)));
+		row.put("canRemove", JsonValue.ofBoolean(store.canRemove(groupId)));
+		row.put("tagCount", JsonValue.ofNumber(Integer.valueOf(tagCount)));
+		row.put("nodeCount", JsonValue.ofNumber(Integer.valueOf(nodeCount)));
+		if (children != null) {
+			row.put("children", JsonValue.ofList(children));
+		}
+		return row;
+	}
+
+	private static List<JsonValue> buildGroupTree(final TagGroupStore store, final String parentId,
+			final Set allTags, final NodePinsIndex index) {
+		final List children;
+		if (parentId == null) {
+			children = store.getRootGroupIds();
+		}
+		else {
+			children = store.getChildIds(parentId);
+		}
+		final List<JsonValue> rows = new ArrayList<JsonValue>();
+		for (final Iterator it = children.iterator(); it.hasNext();) {
+			final String groupId = (String) it.next();
+			int tagCount = 0;
+			for (final Iterator tagIt = allTags.iterator(); tagIt.hasNext();) {
+				final String tag = (String) tagIt.next();
+				if (groupId.equals(store.getTagGroupId(tag))) {
+					tagCount++;
+				}
+			}
+			final List<JsonValue> nested = buildGroupTree(store, groupId, allTags, index);
+			rows.add(JsonValue.ofMap(buildGroupRow(store, groupId, tagCount,
+					countNodesForGroup(index, store, groupId, allTags), nested)));
+		}
+		return rows;
 	}
 
 	private static int countNodesForGroup(final NodePinsIndex index, final TagGroupStore store, final String groupId,

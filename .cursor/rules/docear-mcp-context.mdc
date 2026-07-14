@@ -14,7 +14,7 @@ alwaysApply: true
 5. **写入时分类清晰**：先分大类（工具/资源/提示词/用法），再分子类；一条节点一个主题，不挤长句
 6. **批量写节点**用 `add_nodes`（支持 `children` 多层，一次保存）；禁止对同一父节点连续多次 `add_node`
 7. **查关联**用 `get_relationship_graph` / `get_node_relationships`（静默）；大库默认 `map_files` 或加 `query`/`filePath` 缩小范围
-8. **查标签/分组**用 `get_tag_catalog` / `list_tag_groups` / `list_tags` / `list_nodes_by_tag` / `list_favorites`（侧栏索引，非全库扫盘）
+8. **查标签/分组**用 `get_tag_catalog` / `list_tag_groups` / `list_tags` / `list_nodes_by_tag` / `list_favorites`（侧栏索引，非全库扫盘；分组支持无限嵌套）
 9. **每次 MCP 调用传 `_audit`**：`caller`、`traceId`、`questionSummary`、`operationGoal`；明细写入 `%APPDATA%\\Docear\\_data\\audit.db`
 
 详见技能：`docear_plugin_mcp/cursor-plugin/skills/docear-mcp-context/SKILL.md`（发布源；Docear 启动时会自动同步到 Cursor）
