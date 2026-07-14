@@ -97,7 +97,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 
 ## 标签 / 分组 / 收藏（侧栏）
 
-与 UI「标签」「收藏」共用 `NodePinsIndex` / `TagGroupStore` / `FavoritesAndTagsStore`（**不是**全库无索引扫描）。
+与 UI「标签」「收藏」共用索引存储，但**分组层级各自独立**：`TagGroupStore`（`tag-groups.properties`）与 `FavoriteTagGroupStore`/`getFavoritesInstance()`（`favorite-tag-groups.properties`）。
 
 | 场景 | 推荐调用 |
 |------|----------|

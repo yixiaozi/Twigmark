@@ -4,7 +4,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
-import java.awt.Font;
 import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
@@ -61,6 +60,7 @@ import org.freeplane.plugin.workspace.features.favorites.FavoriteUriUtils;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.WorkspaceMindMapUtils;
 import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
+import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
 public class FavoritesTabPanel extends JPanel {
 
@@ -75,13 +75,13 @@ public class FavoritesTabPanel extends JPanel {
 
 	private static final Color FILTER_SHELL_BG = new Color(0xF7F9FB);
 	private static final Color FILTER_SHELL_BORDER = new Color(0xCFD8DC);
-	private static final Color GROUP_MUTED_FG = new Color(0x546E7A);
 
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList favoritesList = new JList(listModel);
 	private final TagFilterPanel tagFilterPanel = new TagFilterPanel();
-	private final TagGroupCascadeBar groupCascade = new TagGroupCascadeBar(PROP_ACTIVE_GROUP, PROP_DIRECT_ONLY);
+	private final TagGroupCascadeBar groupCascade = new TagGroupCascadeBar(TagGroupStore.getFavoritesInstance(),
+			PROP_ACTIVE_GROUP, PROP_DIRECT_ONLY);
 	private JPanel filterShell;
 	private JSplitPane splitPane;
 	private final Runnable refreshListener = new Runnable() {
@@ -146,16 +146,8 @@ public class FavoritesTabPanel extends JPanel {
 				BorderFactory.createLineBorder(FILTER_SHELL_BORDER),
 				BorderFactory.createEmptyBorder(8, 8, 8, 8)));
 		shell.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
-		final JPanel header = new JPanel(new BorderLayout(0, 4));
-		header.setOpaque(false);
-		final JLabel titleLabel = new JLabel(TextUtils.getText("workspace.favorites.filter.label"));
-		titleLabel.setForeground(GROUP_MUTED_FG);
-		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, titleLabel.getFont().getSize2D()));
-		titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 1, 2, 0));
-		header.add(titleLabel, BorderLayout.NORTH);
 		groupCascade.rebuild();
-		header.add(groupCascade, BorderLayout.CENTER);
-		shell.add(header, BorderLayout.NORTH);
+		shell.add(groupCascade, BorderLayout.NORTH);
 		final JPanel tagArea = new JPanel(new BorderLayout());
 		tagArea.setOpaque(false);
 		tagArea.setBorder(BorderFactory.createCompoundBorder(

@@ -3,7 +3,6 @@ package org.freeplane.plugin.workspace.components.tagfilter;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Graphics;
@@ -36,7 +35,6 @@ import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
-import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 
 import org.freeplane.core.resources.ResourceController;
@@ -52,9 +50,6 @@ public class TagGroupCascadeBar extends JPanel {
 	private static final long serialVersionUID = 1L;
 
 	public static final String TAG_DND_PREFIX = "docear-tag:";
-
-	private static final int GROUP_ROW_HEIGHT = 30;
-	private static final int GROUP_ROWS_MAX_HEIGHT = 140;
 
 	private static final Color GROUP_SELECTED_BG = new Color(0xE3F2F1);
 	private static final Color GROUP_SELECTED_BORDER = new Color(0x4DB6AC);
@@ -74,39 +69,39 @@ public class TagGroupCascadeBar extends JPanel {
 		Set getAvailableTags();
 	}
 
-	private final TagGroupStore groupStore = TagGroupStore.getInstance();
+	private final TagGroupStore groupStore;
 	private final String propActiveGroup;
 	private final String propDirectOnly;
 	private final JPanel rowsPanel = new JPanel();
-	private final JScrollPane scrollPane;
 	private Listener listener;
 	private String activeGroupId = TagGroupStore.UNGROUPED_ID;
 	/** When true, only tags assigned directly to {@link #activeGroupId} (not subgroups). */
 	private boolean directOnly;
 
-	public TagGroupCascadeBar(final String propActiveGroup, final String propDirectOnly) {
+	public TagGroupCascadeBar(final TagGroupStore groupStore, final String propActiveGroup,
+			final String propDirectOnly) {
 		super(new java.awt.BorderLayout());
+		this.groupStore = groupStore != null ? groupStore : TagGroupStore.getInstance();
 		this.propActiveGroup = propActiveGroup;
 		this.propDirectOnly = propDirectOnly;
 		setOpaque(false);
 		rowsPanel.setOpaque(false);
 		rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
-		rowsPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
-		scrollPane = new JScrollPane(rowsPanel, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
-				JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
-		scrollPane.setBorder(BorderFactory.createEmptyBorder());
-		scrollPane.setOpaque(false);
-		scrollPane.getViewport().setOpaque(false);
-		scrollPane.setViewportBorder(BorderFactory.createEmptyBorder());
-		add(scrollPane, java.awt.BorderLayout.CENTER);
+		rowsPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
+		add(rowsPanel, java.awt.BorderLayout.CENTER);
 		activeGroupId = ResourceController.getResourceController().getProperty(propActiveGroup,
 				TagGroupStore.UNGROUPED_ID);
 		directOnly = "true".equalsIgnoreCase(
 				ResourceController.getResourceController().getProperty(propDirectOnly, "false"));
-		if (!groupStore.getGroupIds().contains(activeGroupId)) {
+		if (!this.groupStore.getGroupIds().contains(activeGroupId)) {
 			activeGroupId = TagGroupStore.UNGROUPED_ID;
 			directOnly = false;
 		}
+	}
+
+	/** @deprecated use {@link #TagGroupCascadeBar(TagGroupStore, String, String)} */
+	public TagGroupCascadeBar(final String propActiveGroup, final String propDirectOnly) {
+		this(TagGroupStore.getInstance(), propActiveGroup, propDirectOnly);
 	}
 
 	public void setListener(final Listener listener) {
@@ -144,10 +139,6 @@ public class TagGroupCascadeBar extends JPanel {
 				addCascadeRow(children, parentId, null);
 			}
 		}
-		final int rows = rowsPanel.getComponentCount();
-		final int height = Math.min(GROUP_ROWS_MAX_HEIGHT, Math.max(GROUP_ROW_HEIGHT, rows * GROUP_ROW_HEIGHT + 4));
-		scrollPane.setPreferredSize(new Dimension(10, height));
-		scrollPane.setMaximumSize(new Dimension(Integer.MAX_VALUE, GROUP_ROWS_MAX_HEIGHT));
 		rowsPanel.revalidate();
 		rowsPanel.repaint();
 		revalidate();

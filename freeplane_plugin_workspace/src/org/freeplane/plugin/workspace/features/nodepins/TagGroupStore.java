@@ -19,23 +19,27 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 
 /**
- * Persists tag filter groups under {@code {dataRoot}/_data/tag-groups.properties}.
+ * Persists tag filter groups under {@code {dataRoot}/_data/<fileName>}.
  * Built-in group {@link #UNGROUPED_ID} always exists as a root node; custom groups
  * may nest under any other group with no depth limit.
+ * <p>
+ * Pins and Favorites each have their own store file so hierarchies stay independent.
  */
 public final class TagGroupStore {
 
 	public static final String UNGROUPED_ID = "ungrouped";
+	public static final String PINS_FILE = "tag-groups.properties";
+	public static final String FAVORITES_FILE = "favorite-tag-groups.properties";
 
-	private static final String FILE_NAME = "tag-groups.properties";
 	private static final String CHARSET = "UTF-8";
 	private static final String KEY_GROUPS = "groups";
 	private static final String PREFIX_NAME = "name.";
 	private static final String PREFIX_PARENT = "parent.";
 	private static final String PREFIX_TAG = "tag.";
 
-	private static TagGroupStore instance;
+	private static final Map INSTANCES = Collections.synchronizedMap(new LinkedHashMap());
 
+	private final String fileName;
 	/** Depth-first ordered group ids; always starts with {@link #UNGROUPED_ID}. */
 	private final List groupIds = Collections.synchronizedList(new ArrayList());
 	private final Map groupNames = Collections.synchronizedMap(new LinkedHashMap());
@@ -45,14 +49,28 @@ public final class TagGroupStore {
 	private boolean loaded;
 	private long nextId;
 
-	private TagGroupStore() {
+	private TagGroupStore(final String fileName) {
+		this.fileName = fileName != null && fileName.length() > 0 ? fileName : PINS_FILE;
 	}
 
-	public static synchronized TagGroupStore getInstance() {
-		if (instance == null) {
-			instance = new TagGroupStore();
+	/** Pins / Tags sidebar store ({@link #PINS_FILE}). */
+	public static TagGroupStore getInstance() {
+		return getInstance(PINS_FILE);
+	}
+
+	/** Favorites sidebar store ({@link #FAVORITES_FILE}). */
+	public static TagGroupStore getFavoritesInstance() {
+		return getInstance(FAVORITES_FILE);
+	}
+
+	public static synchronized TagGroupStore getInstance(final String fileName) {
+		final String key = fileName != null && fileName.length() > 0 ? fileName : PINS_FILE;
+		TagGroupStore store = (TagGroupStore) INSTANCES.get(key);
+		if (store == null) {
+			store = new TagGroupStore(key);
+			INSTANCES.put(key, store);
 		}
-		return instance;
+		return store;
 	}
 
 	/**
@@ -490,7 +508,7 @@ public final class TagGroupStore {
 			LogUtils.warn("Could not create tag group dir: " + dir.getAbsolutePath());
 			return null;
 		}
-		return new File(dir, FILE_NAME);
+		return new File(dir, fileName);
 	}
 
 	private void resetDefaults() {
