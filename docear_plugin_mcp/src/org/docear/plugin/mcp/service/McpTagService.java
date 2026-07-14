@@ -286,7 +286,7 @@ public final class McpTagService {
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("groupId", JsonValue.ofString(groupId));
 		result.put("ok", JsonValue.ofBoolean(true));
-		result.put("note", JsonValue.ofString("Tags moved to ungrouped; child groups reparented"));
+		result.put("note", JsonValue.ofString("Group and nested subgroups deleted; tags moved to ungrouped"));
 		return JsonValue.ofMap(result).toJson();
 	}
 

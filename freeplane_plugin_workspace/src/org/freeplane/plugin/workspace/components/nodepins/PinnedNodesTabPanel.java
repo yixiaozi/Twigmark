@@ -66,7 +66,6 @@ import org.freeplane.plugin.workspace.features.nodepins.NodePinKeyUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
-import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
 public class PinnedNodesTabPanel extends JPanel {
 
@@ -161,10 +160,6 @@ public class PinnedNodesTabPanel extends JPanel {
 				refreshList();
 			}
 
-			public int countEntriesForTags(final Set tags) {
-				return countEntriesMatchingTags(tags);
-			}
-
 			public Set getAvailableTags() {
 				return index.getQuickSelectTags();
 			}
@@ -202,29 +197,35 @@ public class PinnedNodesTabPanel extends JPanel {
 	}
 
 	private JPanel buildFilterShell() {
-		final JPanel shell = new JPanel(new BorderLayout(0, 4));
+		final JPanel shell = new JPanel(new BorderLayout(0, 6));
 		shell.setBackground(FILTER_SHELL_BG);
 		shell.setOpaque(true);
 		shell.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createLineBorder(FILTER_SHELL_BORDER),
-				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+				BorderFactory.createEmptyBorder(8, 8, 8, 8)));
 		shell.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
 		final JPanel header = new JPanel(new BorderLayout(0, 4));
 		header.setOpaque(false);
 		final JLabel titleLabel = new JLabel(TextUtils.getText("workspace.nodepins.filter.label"));
 		titleLabel.setForeground(GROUP_MUTED_FG);
 		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, titleLabel.getFont().getSize2D()));
-		titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 1, 0, 0));
+		titleLabel.setBorder(BorderFactory.createEmptyBorder(0, 1, 2, 0));
 		header.add(titleLabel, BorderLayout.NORTH);
 		groupCascade.rebuild();
 		header.add(groupCascade, BorderLayout.CENTER);
 		shell.add(header, BorderLayout.NORTH);
+		final JPanel tagArea = new JPanel(new BorderLayout());
+		tagArea.setOpaque(false);
+		tagArea.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(0xE0E5E8)),
+				BorderFactory.createEmptyBorder(8, 2, 2, 2)));
 		final JScrollPane tagScrollPane = new JScrollPane(tagFilterPanel);
 		tagScrollPane.setBorder(BorderFactory.createEmptyBorder());
 		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
 		tagScrollPane.getViewport().setOpaque(false);
 		tagScrollPane.setOpaque(false);
+		tagScrollPane.setViewportBorder(BorderFactory.createEmptyBorder());
 		tagScrollPane.getViewport().addComponentListener(new ComponentAdapter() {
 			public void componentResized(final ComponentEvent e) {
 				tagFilterPanel.revalidate();
@@ -232,7 +233,8 @@ public class PinnedNodesTabPanel extends JPanel {
 			}
 		});
 		groupCascade.installChipPanelDropTarget(tagFilterPanel);
-		shell.add(tagScrollPane, BorderLayout.CENTER);
+		tagArea.add(tagScrollPane, BorderLayout.CENTER);
+		shell.add(tagArea, BorderLayout.CENTER);
 		rebuildTagButtons();
 		return shell;
 	}
@@ -618,6 +620,7 @@ public class PinnedNodesTabPanel extends JPanel {
 		TagFilterPanel() {
 			super(new WrapFlowLayout());
 			setOpaque(false);
+			setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
 		}
 
 		public Dimension getPreferredScrollableViewportSize() {

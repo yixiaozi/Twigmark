@@ -70,9 +70,6 @@ public class TagGroupCascadeBar extends JPanel {
 	public interface Listener {
 		void selectionChanged();
 
-		/** Count of list entries matching the given tag set (for 全部/本级 badges). */
-		int countEntriesForTags(Set tags);
-
 		/** All known tag names in this sidebar scope (pins or favorites). */
 		Set getAvailableTags();
 	}
@@ -94,11 +91,13 @@ public class TagGroupCascadeBar extends JPanel {
 		setOpaque(false);
 		rowsPanel.setOpaque(false);
 		rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
+		rowsPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 4, 0));
 		scrollPane = new JScrollPane(rowsPanel, JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED,
 				JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
 		scrollPane.setBorder(BorderFactory.createEmptyBorder());
 		scrollPane.setOpaque(false);
 		scrollPane.getViewport().setOpaque(false);
+		scrollPane.setViewportBorder(BorderFactory.createEmptyBorder());
 		add(scrollPane, java.awt.BorderLayout.CENTER);
 		activeGroupId = ResourceController.getResourceController().getProperty(propActiveGroup,
 				TagGroupStore.UNGROUPED_ID);
@@ -137,7 +136,12 @@ public class TagGroupCascadeBar extends JPanel {
 				addCascadeRow(groupStore.getChildIds(parentId), parentId, selectedOnRow);
 			}
 			else if (!groupStore.isUngrouped(parentId) && parentId.equals(activeGroupId)) {
-				addCascadeRow(groupStore.getChildIds(parentId), parentId, null);
+				final List children = groupStore.getChildIds(parentId);
+				if (directOnly && children.isEmpty()) {
+					directOnly = false;
+					ResourceController.getResourceController().setProperty(propDirectOnly, "false");
+				}
+				addCascadeRow(children, parentId, null);
 			}
 		}
 		final int rows = rowsPanel.getComponentCount();
@@ -207,20 +211,28 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	private void addCascadeRow(final List groupIdsOnRow, final String parentIdForAdd, final String selectedOnRow) {
-		final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-		row.setOpaque(false);
+		final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
 		if (parentIdForAdd != null) {
+			// Nested level: slight tint so it differs from the root row.
+			row.setOpaque(true);
+			row.setBackground(new Color(0xEEF2F4));
+			row.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 			row.add(createScopeButton(parentIdForAdd, false));
-			if (!groupStore.isUngrouped(parentIdForAdd)) {
+			// 「未分组」only when subgroups exist; otherwise 全部 already covers direct tags.
+			if (!groupStore.isUngrouped(parentIdForAdd) && !groupIdsOnRow.isEmpty()) {
 				row.add(createScopeButton(parentIdForAdd, true));
 			}
+		}
+		else {
+			row.setOpaque(false);
+			row.setBorder(BorderFactory.createEmptyBorder(1, 0, 2, 0));
 		}
 		for (final Iterator it = groupIdsOnRow.iterator(); it.hasNext();) {
 			final String groupId = (String) it.next();
 			final boolean exact = groupId.equals(activeGroupId) && !directOnly;
-			final boolean onPath = !(groupId.equals(activeGroupId)) && selectedOnRow != null
-					&& groupId.equals(selectedOnRow);
+			final boolean onPath = !exact && (groupId.equals(activeGroupId)
+					|| (selectedOnRow != null && groupId.equals(selectedOnRow)));
 			row.add(createGroupTabButton(groupId, exact, onPath));
 		}
 		row.add(createAddGroupButton(parentIdForAdd));
@@ -230,7 +242,7 @@ public class TagGroupCascadeBar extends JPanel {
 	private JToggleButton createScopeButton(final String parentGroupId, final boolean forDirectOnly) {
 		final boolean selected = parentGroupId.equals(activeGroupId) && directOnly == forDirectOnly;
 		final Set tagSet = collectScopeTags(parentGroupId, forDirectOnly);
-		final int count = listener != null ? listener.countEntriesForTags(tagSet) : tagSet.size();
+		final int count = tagSet.size();
 		final String base = TextUtils.getText(forDirectOnly ? "workspace.nodepins.group.direct"
 				: "workspace.nodepins.group.all");
 		final String tipKey = forDirectOnly ? "workspace.nodepins.group.direct.tip"
@@ -248,7 +260,9 @@ public class TagGroupCascadeBar extends JPanel {
 
 	private JToggleButton createGroupTabButton(final String groupId, final boolean exactSelected,
 			final boolean onPath) {
-		final JToggleButton tab = createStyledToggle(resolveGroupLabel(groupId), exactSelected, onPath);
+		final int tagCount = collectScopeTags(groupId, false).size();
+		final JToggleButton tab = createStyledToggle(resolveGroupLabel(groupId) + " " + tagCount, exactSelected,
+				onPath);
 		tab.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				selectGroup(groupId, false);

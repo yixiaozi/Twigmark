@@ -106,7 +106,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 所有/某组标签 | `list_tags`（`scope`: `pins`\|`favorites`\|`all`，可选 `groupId`） |
 | 某标签有哪些节点 | `list_nodes_by_tag`（`tag` 必填；`scope` 默认 `pins`） |
 | 收藏列表 | `list_favorites`（可选 `tag`） |
-| 建/改/移/删组、移标签、设色 | `create_tag_group`（可选 `parentId` 无限嵌套） / `rename_tag_group` / `move_tag_group` / `delete_tag_group` / `set_tag_group` / `set_tag_color` |
+| 建/改/移/删组、移标签、设色 | `create_tag_group`（可选 `parentId` 无限嵌套） / `rename_tag_group` / `move_tag_group` / `delete_tag_group`（含子分组） / `set_tag_group` / `set_tag_color` |
 | 给节点打标签 | 仍用 `set_node_tags` |
 
 **注意**：`list_nodes_by_tag` 的 pins 范围 = 侧栏标签索引中的节点；收藏 scope 返回 `kind:favorite`（文件级 URI，无 nodeId）。

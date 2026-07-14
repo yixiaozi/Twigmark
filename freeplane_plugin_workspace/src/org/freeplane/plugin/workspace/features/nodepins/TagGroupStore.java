@@ -319,8 +319,8 @@ public final class TagGroupStore {
 	}
 
 	/**
-	 * Removes a custom group. Direct tags fall back to ungrouped. Child groups are
-	 * reparented to this group's former parent (or become roots).
+	 * Removes a custom group and all of its descendant subgroups. Tags that belonged
+	 * to any removed group fall back to ungrouped.
 	 */
 	public boolean removeGroup(final String groupId) {
 		if (!canRemove(groupId)) {
@@ -331,31 +331,40 @@ public final class TagGroupStore {
 			if (!groupIds.contains(groupId)) {
 				return false;
 			}
-			final String oldParent = getParentId(groupId);
-			final List children = getChildIds(groupId);
-			for (int i = 0; i < children.size(); i++) {
-				final String childId = (String) children.get(i);
-				if (oldParent == null) {
-					groupParents.remove(childId);
-				}
-				else {
-					groupParents.put(childId, oldParent);
-				}
-			}
-			groupIds.remove(groupId);
-			groupNames.remove(groupId);
-			groupParents.remove(groupId);
+			final List toRemove = collectSubtreeGroupIds(groupId);
+			final Set removeSet = new HashSet(toRemove);
 			synchronized (tagToGroup) {
 				for (final Iterator it = tagToGroup.entrySet().iterator(); it.hasNext();) {
 					final Map.Entry entry = (Map.Entry) it.next();
-					if (groupId.equals(entry.getValue())) {
+					if (removeSet.contains(entry.getValue())) {
 						it.remove();
 					}
 				}
 			}
+			for (int i = 0; i < toRemove.size(); i++) {
+				final String id = (String) toRemove.get(i);
+				groupIds.remove(id);
+				groupNames.remove(id);
+				groupParents.remove(id);
+			}
 			rebuildTraversalOrder();
 			save();
 			return true;
+		}
+	}
+
+	/** Depth-first list of {@code rootId} and all nested descendants under it. */
+	private List collectSubtreeGroupIds(final String rootId) {
+		final List result = new ArrayList();
+		collectSubtreeGroupIdsRecursive(rootId, result);
+		return result;
+	}
+
+	private void collectSubtreeGroupIdsRecursive(final String groupId, final List out) {
+		out.add(groupId);
+		final List children = getChildIds(groupId);
+		for (int i = 0; i < children.size(); i++) {
+			collectSubtreeGroupIdsRecursive((String) children.get(i), out);
 		}
 	}
 

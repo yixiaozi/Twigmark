@@ -117,7 +117,7 @@ public final class McpProtocol {
 				"Reparent a custom tag group. Omit/empty parentId for top level. Rejects cycles.",
 				schema("groupId", "string", true), schema("parentId", "string", false)));
 		tools.add(tool("delete_tag_group",
-				"Delete a custom tag group; its tags move to ungrouped; child groups move up one level.",
+				"Delete a custom tag group and all nested subgroups; their tags move to ungrouped.",
 				schema("groupId", "string", true)));
 		tools.add(tool("set_tag_group", "Assign a tag to a group (use groupId=ungrouped to clear).",
 				schema("tag", "string", true), schema("groupId", "string", true)));
