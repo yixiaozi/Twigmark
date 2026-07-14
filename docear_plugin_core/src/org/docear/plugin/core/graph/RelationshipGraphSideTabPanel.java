@@ -90,6 +90,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private Thread activeScanThread;
 	private Thread activeFilterThread;
 	private volatile boolean syncingListSelection;
+	/** True while the left 「关系图」tab is selected; forces presenting completed scans into the viewport. */
+	private volatile boolean graphTabActive;
+	private volatile int scanGeneration;
 
 	public RelationshipGraphSideTabPanel() {
 		super(new BorderLayout(4, 4));
@@ -122,7 +125,19 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	public void preloadMetrics() {
 		javax.swing.SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
-				refreshGraphAsync();
+				// Never cancel/replace a scan that the user is waiting to see in the viewport.
+				if (graphTabActive) {
+					if (dataLoadedForMode[graphMode] && cachedBaseIndex[graphMode] != null) {
+						final RelationshipGraphIndex index = cachedBaseIndex[graphMode];
+						SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GRAPH,
+						        index != null ? index.getEdgeCount() : 0);
+					}
+					return;
+				}
+				if (activeScanThread != null) {
+					return;
+				}
+				refreshGraphAsync(false);
 			}
 		});
 	}
@@ -197,7 +212,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			}
 		}
 		else {
-			refreshGraphAsync();
+			refreshGraphAsync(graphTabActive);
 		}
 		updateCanvasModeHint();
 	}
@@ -286,6 +301,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	}
 
 	void onTabActivated() {
+		graphTabActive = true;
 		final RelationshipGraphService service = getOrCreateService();
 		if (service == null) {
 			return;
@@ -306,6 +322,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	}
 
 	void onTabDeactivated() {
+		graphTabActive = false;
 		cancelActiveScan();
 		cancelActiveFilter();
 		final RelationshipGraphService service = RelationshipGraphService.getService();
@@ -316,6 +333,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	}
 
 	private void cancelActiveScan() {
+		scanGeneration++;
 		if (activeScanThread != null) {
 			activeScanThread.interrupt();
 			activeScanThread = null;
@@ -373,19 +391,23 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private void refreshGraphAsync(final boolean deferViewportUntilDone) {
 		cancelActiveScan();
 		final ModeTabPanel tab = activeTab();
-		tab.statsLabel.setText(deferViewportUntilDone ? "\u9996\u6b21\u626b\u63cf\u4e2d\u2026" : "\u626b\u63cf\u4e2d\u2026");
+		tab.statsLabel.setText(deferViewportUntilDone || graphTabActive ? "\u9996\u6b21\u626b\u63cf\u4e2d\u2026" : "\u626b\u63cf\u4e2d\u2026");
 
 		final RelationshipGraphService service = RelationshipGraphService.getService();
-		if (service != null && service.isGraphInViewport()) {
+		if (service != null && (service.isGraphInViewport() || graphTabActive)) {
 			service.getCanvas().setLoading(true, "\u626b\u63cf\u5173\u8054\u4e2d\u2026");
+			if (graphTabActive && !service.isGraphInViewport()) {
+				service.showInViewport();
+			}
 		}
 
 		final int scanMode = graphMode;
-		final boolean deferViewport = deferViewportUntilDone;
+		final boolean deferViewport = deferViewportUntilDone || graphTabActive;
 		final ModeTabPanel scanTab = tabForMode(scanMode);
 		final boolean showIsolated = scanTab.showIsolatedCheck.isSelected();
 		final String scanSearchQuery = scanTab.activeSearchQuery;
 		final int focusHops = scanTab.getFocusHops();
+		final int generation = ++scanGeneration;
 
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
@@ -397,7 +419,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 						        public void onProgress(final int scanned, final int total) {
 							        SwingUtilities.invokeLater(new Runnable() {
 								        public void run() {
-									        if (scanMode != graphMode || activeScanThread != scanThread) {
+									        if (generation != scanGeneration || scanMode != graphMode
+									                || activeScanThread != scanThread) {
 										        return;
 									        }
 									        scanTab.statsLabel.setText("\u626b\u63cf " + scanned + "/" + total);
@@ -405,14 +428,15 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 							        });
 						        }
 					        });
-					if (Thread.currentThread().isInterrupted()) {
+					if (Thread.currentThread().isInterrupted() || generation != scanGeneration) {
 						return;
 					}
 					final Set[] tagsBox = new Set[1];
 					try {
 						SwingUtilities.invokeAndWait(new Runnable() {
 							public void run() {
-								if (scanMode == graphMode && activeScanThread == scanThread) {
+								if (generation == scanGeneration && scanMode == graphMode
+								        && activeScanThread == scanThread) {
 									scanTab.statsLabel.setText("\u6574\u7406\u4e2d\u2026");
 									scanTab.refreshGroupCascade(baseIndex);
 								}
@@ -428,12 +452,13 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					if (preparedDisplay != null && preparedDisplay.getNodeCount() > 0) {
 						RelationshipGraphLayout.initializePositions(preparedDisplay, 1200, 800);
 					}
-					if (Thread.currentThread().isInterrupted()) {
+					if (Thread.currentThread().isInterrupted() || generation != scanGeneration) {
 						return;
 					}
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
-							finishScanPrepared(scanMode, deferViewport, baseIndex, preparedDisplay);
+							finishScanPrepared(generation, scanThread, scanMode, deferViewport, baseIndex,
+							        preparedDisplay);
 						}
 					});
 				}
@@ -441,11 +466,11 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 					LogUtils.warn(e);
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
-							scanTab.statsLabel.setText("\u626b\u63cf\u5931\u8d25");
-							final RelationshipGraphService svc = RelationshipGraphService.getService();
-							if (svc != null) {
-								svc.getCanvas().setLoading(false, null);
+							if (generation != scanGeneration) {
+								return;
 							}
+							scanTab.statsLabel.setText("\u626b\u63cf\u5931\u8d25");
+							clearGraphLoadingOverlay();
 						}
 					});
 				}
@@ -455,12 +480,17 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		thread.start();
 	}
 
-	private void finishScanPrepared(final int scanMode, final boolean deferViewportUntilDone,
-	        final RelationshipGraphIndex baseIndex, final RelationshipGraphIndex preparedDisplayIndex) {
+	private void finishScanPrepared(final int generation, final Thread scanThread, final int scanMode,
+	        final boolean deferViewportUntilDone, final RelationshipGraphIndex baseIndex,
+	        final RelationshipGraphIndex preparedDisplayIndex) {
+		if (generation != scanGeneration || activeScanThread != scanThread) {
+			return;
+		}
 		activeScanThread = null;
 		cachedBaseIndex[scanMode] = baseIndex;
 		dataLoadedForMode[scanMode] = true;
 		if (scanMode != graphMode) {
+			clearGraphLoadingOverlay();
 			return;
 		}
 		final ModeTabPanel tab = activeTab();
@@ -479,19 +509,12 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		tab.updateResultList();
 		svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
 		svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
-		if (svc.isGraphInViewport()) {
-			SwingUtilities.invokeLater(new Runnable() {
-				public void run() {
-					if (tab.displayIndex != null) {
-						svc.loadPreparedGraph(tab.displayIndex, false);
-					}
-					svc.getCanvas().setLoading(false, null);
-					svc.getCanvas().requestFocusInWindow();
-				}
-			});
-		}
-		else if (deferViewportUntilDone) {
+		final boolean shouldPresent = svc.isGraphInViewport() || deferViewportUntilDone || graphTabActive;
+		if (shouldPresent) {
 			presentGraphInViewport(tab.displayIndex, false);
+		}
+		else {
+			clearGraphLoadingOverlay();
 		}
 	}
 
@@ -556,19 +579,12 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 								activeFilterThread = null;
 								tab.displayIndex = built;
 								if (svc != null) {
-									if (svc.isGraphInViewport()) {
-										svc.getCanvas().setLoading(false, null);
-										svc.loadPreparedGraph(tab.displayIndex, preserveView);
-										svc.getCanvas().setSearchQuery(tab.activeSearchQuery);
-										svc.getCanvas().setModeHelpHint(modeHelpHint(graphMode));
-										tab.updateStats(tab.displayIndex);
-										tab.updateResultList();
-									}
-									else if (deferViewportUntilReady) {
+									if (svc.isGraphInViewport() || deferViewportUntilReady || graphTabActive) {
 										presentGraphInViewport(tab.displayIndex, preserveView);
 									}
 									else {
 										tab.updateStats(tab.displayIndex);
+										tab.updateResultList();
 									}
 								}
 							}
@@ -604,6 +620,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	private void applyDisplayIndex(final boolean preserveView) {
 		final ModeTabPanel tab = activeTab();
 		if (tab.displayIndex == null) {
+			return;
+		}
+		if (graphTabActive) {
+			presentGraphInViewport(tab.displayIndex, preserveView);
 			return;
 		}
 		final RelationshipGraphService service = RelationshipGraphService.getService();
