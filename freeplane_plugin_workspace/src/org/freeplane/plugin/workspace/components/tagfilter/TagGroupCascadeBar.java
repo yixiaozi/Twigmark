@@ -222,24 +222,18 @@ public class TagGroupCascadeBar extends JPanel {
 	private void addCascadeRow(final List groupIdsOnRow, final String parentIdForAdd, final String selectedOnRow) {
 		final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 3));
 		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setOpaque(false);
+		row.setBorder(BorderFactory.createEmptyBorder(1, 0, 2, 0));
 		if (parentIdForAdd != null) {
-			// Nested level: slight tint so it differs from the root row.
-			row.setOpaque(true);
-			row.setBackground(new Color(0xEEF2F4));
-			row.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 			row.add(createScopeButton(parentIdForAdd, false));
 			// 「未分组」only when subgroups exist; otherwise 全部 already covers direct tags.
 			if (!groupStore.isUngrouped(parentIdForAdd) && !groupIdsOnRow.isEmpty()) {
 				row.add(createScopeButton(parentIdForAdd, true));
 			}
 		}
-		else {
-			row.setOpaque(false);
-			row.setBorder(BorderFactory.createEmptyBorder(1, 0, 2, 0));
-			if (includeAllScope) {
-				final boolean exact = isAllScope() && !directOnly;
-				row.add(createAllScopeButton(exact));
-			}
+		else if (includeAllScope) {
+			final boolean exact = isAllScope() && !directOnly;
+			row.add(createAllScopeButton(exact));
 		}
 		for (final Iterator it = groupIdsOnRow.iterator(); it.hasNext();) {
 			final String groupId = (String) it.next();
