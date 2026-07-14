@@ -4,7 +4,20 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
+import java.awt.datatransfer.Transferable;
+import java.awt.dnd.DnDConstants;
+import java.awt.dnd.DragGestureEvent;
+import java.awt.dnd.DragGestureListener;
+import java.awt.dnd.DragSource;
+import java.awt.dnd.DropTarget;
+import java.awt.dnd.DropTargetAdapter;
+import java.awt.dnd.DropTargetDropEvent;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
@@ -22,10 +35,13 @@ import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JColorChooser;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
@@ -34,6 +50,7 @@ import javax.swing.JToggleButton;
 import javax.swing.Scrollable;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
+import javax.swing.UIManager;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.TextUtils;
@@ -56,24 +73,31 @@ import org.freeplane.plugin.workspace.features.nodepins.NodePinKeyUtils;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
+import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
 public class PinnedNodesTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final String FAVORITE_NAME_COLOR = "#0066CC";
 	private static final int REFRESH_DEBOUNCE_MS = 200;
-	private static final int DEFAULT_TAG_PANEL_HEIGHT = 100;
-	private static final int MIN_TAG_PANEL_HEIGHT = 48;
+	private static final int DEFAULT_TAG_PANEL_HEIGHT = 120;
+	private static final int MIN_TAG_PANEL_HEIGHT = 72;
 	private static final String PROP_FILTER_DIVIDER = "workspace.nodepins.filter.divider";
+	private static final String PROP_ACTIVE_GROUP = "workspace.nodepins.filter.active.group";
+	private static final String TAG_DND_PREFIX = "docear-tag:";
 
 	private final ModeController modeController;
 	private final NodePinsIndex index = NodePinsIndex.getInstance();
+	private final TagGroupStore groupStore = TagGroupStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList entryList = new JList(listModel);
 	private final TagFilterPanel tagFilterPanel = new TagFilterPanel();
+	private final JPanel groupTabBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+	private JPanel filterShell;
 	private JSplitPane splitPane;
 	private JScrollPane tagScrollPane;
 	private String activeFilter = null;
+	private String activeGroupId = TagGroupStore.UNGROUPED_ID;
 	private final Timer refreshDebounceTimer;
 
 	{
@@ -137,21 +161,16 @@ public class PinnedNodesTabPanel extends JPanel {
 		super(new BorderLayout(0, 4));
 		this.modeController = modeController;
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-		buildTagFilterPanel();
+		activeGroupId = ResourceController.getResourceController().getProperty(PROP_ACTIVE_GROUP,
+				TagGroupStore.UNGROUPED_ID);
+		if (!groupStore.getGroupIds().contains(activeGroupId)) {
+			activeGroupId = TagGroupStore.UNGROUPED_ID;
+		}
+		filterShell = buildFilterShell();
 		buildEntryList();
-		tagScrollPane = new JScrollPane(tagFilterPanel);
-		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
-		tagScrollPane.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
-		tagScrollPane.getViewport().addComponentListener(new ComponentAdapter() {
-			public void componentResized(final ComponentEvent e) {
-				tagFilterPanel.revalidate();
-				tagFilterPanel.repaint();
-			}
-		});
 		final JScrollPane listScrollPane = new JScrollPane(entryList);
 		listScrollPane.setMinimumSize(new Dimension(80, 80));
-		splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tagScrollPane, listScrollPane);
+		splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, filterShell, listScrollPane);
 		splitPane.setResizeWeight(0);
 		splitPane.setContinuousLayout(true);
 		splitPane.setOneTouchExpandable(false);
@@ -179,25 +198,224 @@ public class PinnedNodesTabPanel extends JPanel {
 		index.rescan();
 	}
 
-	private void buildTagFilterPanel() {
-		tagFilterPanel.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createTitledBorder(TextUtils.getText("workspace.nodepins.filter.label")),
-				BorderFactory.createEmptyBorder(0, 2, 2, 2)));
+	private JPanel buildFilterShell() {
+		final JPanel shell = new JPanel(new BorderLayout(0, 2));
+		shell.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(new Color(0xBDBDBD)),
+				BorderFactory.createEmptyBorder(4, 6, 4, 6)));
+		shell.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		final JPanel header = new JPanel(new BorderLayout(6, 0));
+		header.setOpaque(false);
+		final JLabel titleLabel = new JLabel(TextUtils.getText("workspace.nodepins.filter.label"));
+		titleLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, 0));
+		header.add(titleLabel, BorderLayout.WEST);
+		groupTabBar.setOpaque(false);
+		rebuildGroupTabs();
+		final JScrollPane tabScroll = new JScrollPane(groupTabBar, JScrollPane.VERTICAL_SCROLLBAR_NEVER,
+				JScrollPane.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+		tabScroll.setBorder(BorderFactory.createEmptyBorder());
+		tabScroll.setOpaque(false);
+		tabScroll.getViewport().setOpaque(false);
+		header.add(tabScroll, BorderLayout.CENTER);
+		shell.add(header, BorderLayout.NORTH);
+		tagScrollPane = new JScrollPane(tagFilterPanel);
+		tagScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		tagScrollPane.getViewport().setOpaque(false);
+		tagScrollPane.setOpaque(false);
+		tagScrollPane.getViewport().addComponentListener(new ComponentAdapter() {
+			public void componentResized(final ComponentEvent e) {
+				tagFilterPanel.revalidate();
+				tagFilterPanel.repaint();
+			}
+		});
+		installChipPanelDropTarget(tagFilterPanel);
+		shell.add(tagScrollPane, BorderLayout.CENTER);
 		rebuildTagButtons();
+		return shell;
+	}
+
+	private void rebuildGroupTabs() {
+		groupTabBar.removeAll();
+		final List groupIds = groupStore.getGroupIds();
+		if (!groupIds.contains(activeGroupId)) {
+			activeGroupId = TagGroupStore.UNGROUPED_ID;
+		}
+		for (final Iterator it = groupIds.iterator(); it.hasNext();) {
+			final String groupId = (String) it.next();
+			groupTabBar.add(createGroupTabButton(groupId));
+		}
+		final JButton addButton = new JButton("+");
+		addButton.setToolTipText(TextUtils.getText("workspace.nodepins.group.add"));
+		addButton.setMargin(new Insets(1, 8, 1, 8));
+		addButton.setFocusable(false);
+		addButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				promptAddGroup();
+			}
+		});
+		groupTabBar.add(addButton);
+		groupTabBar.revalidate();
+		groupTabBar.repaint();
+	}
+
+	private JToggleButton createGroupTabButton(final String groupId) {
+		final boolean selected = groupId.equals(activeGroupId);
+		final JToggleButton tab = new JToggleButton(resolveGroupLabel(groupId));
+		tab.setSelected(selected);
+		tab.setFocusable(false);
+		tab.setMargin(new Insets(1, 8, 1, 8));
+		styleGroupTab(tab, selected);
+		tab.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				selectGroup(groupId);
+			}
+		});
+		tab.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
+				if (e.getClickCount() == 2 && groupStore.canRename(groupId)) {
+					promptRenameGroup(groupId);
+				}
+			}
+
+			public void mousePressed(final MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					showGroupTabPopup(e, groupId, tab);
+				}
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					showGroupTabPopup(e, groupId, tab);
+				}
+			}
+		});
+		installGroupTabDropTarget(tab, groupId);
+		return tab;
+	}
+
+	private void styleGroupTab(final JToggleButton tab, final boolean selected) {
+		final Color bg = selected ? new Color(0xE3F2FD) : UIManager.getColor("Button.background");
+		final Color fg = UIManager.getColor("Button.foreground");
+		tab.setOpaque(true);
+		tab.setBackground(bg != null ? bg : Color.WHITE);
+		tab.setForeground(fg != null ? fg : Color.BLACK);
+		tab.setFont(tab.getFont().deriveFont(selected ? Font.BOLD : Font.PLAIN));
+		tab.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(selected ? new Color(0x90CAF9) : new Color(0xBDBDBD)),
+				BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+	}
+
+	private String resolveGroupLabel(final String groupId) {
+		if (groupStore.isUngrouped(groupId)) {
+			return TextUtils.getText("workspace.nodepins.group.ungrouped");
+		}
+		final String name = groupStore.getGroupName(groupId);
+		return name != null ? name : groupId;
+	}
+
+	private void selectGroup(final String groupId) {
+		activeGroupId = groupId != null ? groupId : TagGroupStore.UNGROUPED_ID;
+		ResourceController.getResourceController().setProperty(PROP_ACTIVE_GROUP, activeGroupId);
+		rebuildGroupTabs();
+		rebuildTagButtons();
+	}
+
+	private void promptAddGroup() {
+		final String name = JOptionPane.showInputDialog(this,
+				TextUtils.getText("workspace.nodepins.group.add.prompt"),
+				TextUtils.getText("workspace.nodepins.group.add"), JOptionPane.PLAIN_MESSAGE);
+		if (name == null) {
+			return;
+		}
+		final String id = groupStore.addGroup(name);
+		if (id != null) {
+			selectGroup(id);
+		}
+	}
+
+	private void promptRenameGroup(final String groupId) {
+		if (!groupStore.canRename(groupId)) {
+			return;
+		}
+		final String current = resolveGroupLabel(groupId);
+		final String name = (String) JOptionPane.showInputDialog(this,
+				TextUtils.getText("workspace.nodepins.group.rename.prompt"),
+				TextUtils.getText("workspace.nodepins.group.rename"), JOptionPane.PLAIN_MESSAGE, null, null, current);
+		if (name == null) {
+			return;
+		}
+		if (groupStore.renameGroup(groupId, name)) {
+			rebuildGroupTabs();
+		}
+	}
+
+	private void showGroupTabPopup(final MouseEvent e, final String groupId, final JComponent source) {
+		final JPopupMenu popup = new JPopupMenu();
+		if (groupStore.canRename(groupId)) {
+			final JMenuItem renameItem = new JMenuItem(TextUtils.getText("workspace.nodepins.group.rename"));
+			renameItem.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent event) {
+					promptRenameGroup(groupId);
+				}
+			});
+			popup.add(renameItem);
+		}
+		if (groupStore.canRemove(groupId)) {
+			final JMenuItem deleteItem = new JMenuItem(TextUtils.getText("workspace.nodepins.group.delete"));
+			deleteItem.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent event) {
+					final int answer = JOptionPane.showConfirmDialog(PinnedNodesTabPanel.this,
+							TextUtils.getText("workspace.nodepins.group.delete.confirm"),
+							TextUtils.getText("workspace.nodepins.group.delete"), JOptionPane.YES_NO_OPTION);
+					if (answer == JOptionPane.YES_OPTION && groupStore.removeGroup(groupId)) {
+						if (groupId.equals(activeGroupId)) {
+							selectGroup(TagGroupStore.UNGROUPED_ID);
+						}
+						else {
+							rebuildGroupTabs();
+							rebuildTagButtons();
+						}
+					}
+				}
+			});
+			popup.add(deleteItem);
+		}
+		if (popup.getComponentCount() == 0) {
+			return;
+		}
+		popup.show(source, e.getX(), e.getY());
 	}
 
 	private void rebuildTagButtons() {
 		tagFilterPanel.removeAll();
 		tagFilterPanel.add(createFilterButton(null, formatCountLabel(
 				TextUtils.getText("workspace.nodepins.filter.all"), index.countAll())));
-		for (final Iterator it = getTagsSortedByCount().iterator(); it.hasNext();) {
+		for (final Iterator it = getTagsForActiveGroup().iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
 			tagFilterPanel.add(createFilterButton(tag, formatCountLabel(tag, index.countWithTag(tag))));
 		}
 		tagFilterPanel.revalidate();
 		tagFilterPanel.repaint();
+		if (filterShell != null) {
+			filterShell.revalidate();
+			filterShell.repaint();
+		}
 		revalidate();
 		repaint();
+	}
+
+	private List getTagsForActiveGroup() {
+		final List tags = getTagsSortedByCount();
+		final List filtered = new ArrayList();
+		for (final Iterator it = tags.iterator(); it.hasNext();) {
+			final String tag = (String) it.next();
+			if (activeGroupId.equals(groupStore.getTagGroupId(tag))) {
+				filtered.add(tag);
+			}
+		}
+		return filtered;
 	}
 
 	private List getTagsSortedByCount() {
@@ -232,6 +450,7 @@ public class PinnedNodesTabPanel extends JPanel {
 			}
 		});
 		if (filterId != null) {
+			enableTagDrag(button, filterId);
 			button.addMouseListener(new MouseAdapter() {
 				public void mousePressed(final MouseEvent e) {
 					if (e.isPopupTrigger()) {
@@ -247,6 +466,66 @@ public class PinnedNodesTabPanel extends JPanel {
 			});
 		}
 		return button;
+	}
+
+	private void enableTagDrag(final JComponent chip, final String tag) {
+		final DragSource dragSource = DragSource.getDefaultDragSource();
+		dragSource.createDefaultDragGestureRecognizer(chip, DnDConstants.ACTION_MOVE, new DragGestureListener() {
+			public void dragGestureRecognized(final DragGestureEvent dge) {
+				final Transferable transferable = new StringSelection(TAG_DND_PREFIX + tag);
+				dge.startDrag(DragSource.DefaultMoveDrop, transferable);
+			}
+		});
+	}
+
+	private void installGroupTabDropTarget(final JComponent tab, final String groupId) {
+		new DropTarget(tab, DnDConstants.ACTION_MOVE, new DropTargetAdapter() {
+			public void drop(final DropTargetDropEvent dtde) {
+				final String tag = extractDraggedTag(dtde);
+				if (tag == null) {
+					dtde.rejectDrop();
+					return;
+				}
+				dtde.acceptDrop(DnDConstants.ACTION_MOVE);
+				groupStore.setTagGroup(tag, groupId);
+				dtde.dropComplete(true);
+				rebuildTagButtons();
+			}
+		}, true);
+	}
+
+	private void installChipPanelDropTarget(final JComponent panel) {
+		new DropTarget(panel, DnDConstants.ACTION_MOVE, new DropTargetAdapter() {
+			public void drop(final DropTargetDropEvent dtde) {
+				final String tag = extractDraggedTag(dtde);
+				if (tag == null) {
+					dtde.rejectDrop();
+					return;
+				}
+				dtde.acceptDrop(DnDConstants.ACTION_MOVE);
+				groupStore.setTagGroup(tag, activeGroupId);
+				dtde.dropComplete(true);
+				rebuildTagButtons();
+			}
+		}, true);
+	}
+
+	private String extractDraggedTag(final DropTargetDropEvent dtde) {
+		try {
+			final Transferable transferable = dtde.getTransferable();
+			if (!transferable.isDataFlavorSupported(DataFlavor.stringFlavor)) {
+				return null;
+			}
+			final String data = (String) transferable.getTransferData(DataFlavor.stringFlavor);
+			if (data == null || !data.startsWith(TAG_DND_PREFIX)) {
+				return null;
+			}
+			final String tag = data.substring(TAG_DND_PREFIX.length());
+			return tag.length() > 0 ? tag : null;
+		}
+		catch (final Exception e) {
+			return null;
+		}
 	}
 
 	private void showTagColorPopup(final MouseEvent e, final String tag, final JToggleButton button) {
@@ -274,6 +553,21 @@ public class PinnedNodesTabPanel extends JPanel {
 			}
 		});
 		popup.add(resetColorItem);
+		popup.addSeparator();
+		final List groupIds = groupStore.getGroupIds();
+		for (final Iterator it = groupIds.iterator(); it.hasNext();) {
+			final String groupId = (String) it.next();
+			final JMenuItem moveItem = new JMenuItem(TextUtils.format("workspace.nodepins.group.move.to",
+					resolveGroupLabel(groupId)));
+			moveItem.setEnabled(!groupId.equals(groupStore.getTagGroupId(tag)));
+			moveItem.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent event) {
+					groupStore.setTagGroup(tag, groupId);
+					rebuildTagButtons();
+				}
+			});
+			popup.add(moveItem);
+		}
 		popup.show(button, e.getX(), e.getY());
 	}
 
@@ -365,6 +659,7 @@ public class PinnedNodesTabPanel extends JPanel {
 	}
 
 	private void refreshViewNow() {
+		rebuildGroupTabs();
 		rebuildTagButtons();
 		refreshList();
 	}
@@ -465,20 +760,6 @@ public class PinnedNodesTabPanel extends JPanel {
 			return html.toString();
 		}
 
-		private String formatTagsText(final NodePinEntry entry) {
-			final StringBuilder builder = new StringBuilder();
-			boolean first = true;
-			for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
-				final String tag = (String) it.next();
-				if (!first) {
-					builder.append(", ");
-				}
-				builder.append(tag);
-				first = false;
-			}
-			return builder.toString();
-		}
-
 		private String stripMindMapExtension(final String fileName) {
 			if (fileName == null) {
 				return "";
@@ -510,6 +791,7 @@ public class PinnedNodesTabPanel extends JPanel {
 
 		TagFilterPanel() {
 			super(new WrapFlowLayout());
+			setOpaque(false);
 		}
 
 		public Dimension getPreferredScrollableViewportSize() {
@@ -530,6 +812,9 @@ public class PinnedNodesTabPanel extends JPanel {
 		}
 
 		public boolean getScrollableTracksViewportHeight() {
+			if (getParent() instanceof JComponent) {
+				return getPreferredSize().height <= getParent().getHeight();
+			}
 			return false;
 		}
 	}

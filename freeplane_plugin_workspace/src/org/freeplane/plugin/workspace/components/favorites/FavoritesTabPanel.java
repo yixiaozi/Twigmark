@@ -1,12 +1,17 @@
 package org.freeplane.plugin.workspace.components.favorites;
 
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
+import java.awt.Rectangle;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionAdapter;
@@ -22,6 +27,7 @@ import java.util.Set;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.JColorChooser;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -29,31 +35,41 @@ import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JToggleButton;
+import javax.swing.Scrollable;
+import javax.swing.SwingConstants;
 import javax.swing.TransferHandler;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
+import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteEntry;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteUriUtils;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
 import org.freeplane.plugin.workspace.features.favorites.WorkspaceMindMapUtils;
+import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
 
 public class FavoritesTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final DataFlavor REORDER_FLAVOR = DataFlavor.stringFlavor;
 	private static final String FAVORITE_NAME_COLOR = "#0066CC";
+	private static final int DEFAULT_TAG_PANEL_HEIGHT = 100;
+	private static final int MIN_TAG_PANEL_HEIGHT = 48;
+	private static final String PROP_FILTER_DIVIDER = "workspace.favorites.filter.divider";
 
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList favoritesList = new JList(listModel);
-	private final JPanel tagFilterPanel = new JPanel(new WrapFlowLayout());
+	private final TagFilterPanel tagFilterPanel = new TagFilterPanel();
+	private JPanel filterShell;
+	private JSplitPane splitPane;
 	private final Runnable refreshListener = new Runnable() {
 		public void run() {
 			refreshView();
@@ -67,19 +83,57 @@ public class FavoritesTabPanel extends JPanel {
 	public FavoritesTabPanel() {
 		super(new BorderLayout(0, 4));
 		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
-		buildTagFilterPanel();
+		filterShell = buildFilterShell();
 		buildFavoritesList();
-		add(tagFilterPanel, BorderLayout.NORTH);
-		add(new JScrollPane(favoritesList), BorderLayout.CENTER);
+		final JScrollPane listScrollPane = new JScrollPane(favoritesList);
+		listScrollPane.setMinimumSize(new Dimension(80, 80));
+		splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, filterShell, listScrollPane);
+		splitPane.setResizeWeight(0);
+		splitPane.setContinuousLayout(true);
+		splitPane.setOneTouchExpandable(false);
+		splitPane.setBorder(BorderFactory.createEmptyBorder());
+		final int savedHeight = ResourceController.getResourceController().getIntProperty(PROP_FILTER_DIVIDER,
+				DEFAULT_TAG_PANEL_HEIGHT);
+		splitPane.setDividerLocation(Math.max(MIN_TAG_PANEL_HEIGHT, savedHeight));
+		splitPane.addPropertyChangeListener(JSplitPane.DIVIDER_LOCATION_PROPERTY, new java.beans.PropertyChangeListener() {
+			public void propertyChange(final java.beans.PropertyChangeEvent evt) {
+				if (evt.getNewValue() instanceof Integer) {
+					final int location = ((Integer) evt.getNewValue()).intValue();
+					if (location >= MIN_TAG_PANEL_HEIGHT) {
+						ResourceController.getResourceController().setProperty(PROP_FILTER_DIVIDER,
+								String.valueOf(location));
+					}
+					tagFilterPanel.revalidate();
+					tagFilterPanel.repaint();
+				}
+			}
+		});
+		add(splitPane, BorderLayout.CENTER);
 		store.addChangeListener(refreshListener);
 		refreshView();
 	}
 
-	private void buildTagFilterPanel() {
-		tagFilterPanel.setBorder(BorderFactory.createCompoundBorder(
+	private JPanel buildFilterShell() {
+		final JPanel shell = new JPanel(new BorderLayout());
+		shell.setBorder(BorderFactory.createCompoundBorder(
 				BorderFactory.createTitledBorder(TextUtils.getText("workspace.favorites.filter.label")),
 				BorderFactory.createEmptyBorder(0, 2, 2, 2)));
+		shell.setMinimumSize(new Dimension(80, MIN_TAG_PANEL_HEIGHT));
+		final JScrollPane tagScrollPane = new JScrollPane(tagFilterPanel);
+		tagScrollPane.setBorder(BorderFactory.createEmptyBorder());
+		tagScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		tagScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		tagScrollPane.getViewport().setOpaque(false);
+		tagScrollPane.setOpaque(false);
+		tagScrollPane.getViewport().addComponentListener(new ComponentAdapter() {
+			public void componentResized(final ComponentEvent e) {
+				tagFilterPanel.revalidate();
+				tagFilterPanel.repaint();
+			}
+		});
+		shell.add(tagScrollPane, BorderLayout.CENTER);
 		rebuildTagButtons();
+		return shell;
 	}
 
 	private void rebuildTagButtons() {
@@ -91,6 +145,10 @@ public class FavoritesTabPanel extends JPanel {
 		}
 		tagFilterPanel.revalidate();
 		tagFilterPanel.repaint();
+		if (filterShell != null) {
+			filterShell.revalidate();
+			filterShell.repaint();
+		}
 		revalidate();
 		repaint();
 	}
@@ -130,7 +188,50 @@ public class FavoritesTabPanel extends JPanel {
 				refreshList();
 			}
 		});
+		if (tag != null) {
+			button.addMouseListener(new MouseAdapter() {
+				public void mousePressed(final MouseEvent e) {
+					if (e.isPopupTrigger()) {
+						showTagColorPopup(e, tag, button);
+					}
+				}
+
+				public void mouseReleased(final MouseEvent e) {
+					if (e.isPopupTrigger()) {
+						showTagColorPopup(e, tag, button);
+					}
+				}
+			});
+		}
 		return button;
+	}
+
+	private void showTagColorPopup(final MouseEvent e, final String tag, final JToggleButton button) {
+		final JPopupMenu popup = new JPopupMenu();
+		final JMenuItem setColorItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.set.color"));
+		setColorItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				final Color current = TagColorStore.getInstance().getColor(tag);
+				final Color chosen = JColorChooser.showDialog(FavoritesTabPanel.this,
+						TextUtils.getText("workspace.nodepins.action.set.color"), current);
+				if (chosen != null) {
+					TagColorStore.getInstance().setColor(tag, chosen);
+					rebuildTagButtons();
+					refreshList();
+				}
+			}
+		});
+		popup.add(setColorItem);
+		final JMenuItem resetColorItem = new JMenuItem(TextUtils.getText("workspace.nodepins.action.reset.color"));
+		resetColorItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent event) {
+				TagColorStore.getInstance().clearColor(tag);
+				rebuildTagButtons();
+				refreshList();
+			}
+		});
+		popup.add(resetColorItem);
+		popup.show(button, e.getX(), e.getY());
 	}
 
 	private void buildFavoritesList() {
@@ -305,32 +406,29 @@ public class FavoritesTabPanel extends JPanel {
 				html.append("<b><font color='").append(FAVORITE_NAME_COLOR).append("'>").append(name).append("</font></b>");
 			}
 			if (!entry.getTags().isEmpty()) {
-				final String tagsText = formatTagsText(entry);
-				if (isSelected) {
-					html.append("  [").append(escapeHtml(tagsText)).append(']');
-				}
-				else if (!entry.exists()) {
-					html.append("  <font color='#999999'>[").append(escapeHtml(tagsText)).append("]</font>");
-				}
-				else {
-					html.append("  <font color='#666666'>[").append(escapeHtml(tagsText)).append("]</font>");
+				html.append(' ');
+				boolean first = true;
+				for (final Iterator it = entry.getTags().iterator(); it.hasNext();) {
+					final String tag = (String) it.next();
+					if (!first) {
+						html.append(' ');
+					}
+					first = false;
+					if (isSelected) {
+						html.append('[').append(escapeHtml(tag)).append(']');
+					}
+					else if (!entry.exists()) {
+						html.append("<font color='#999999'>[").append(escapeHtml(tag)).append("]</font>");
+					}
+					else {
+						final Color tagColor = TagColorStore.darkerVariant(TagColorStore.getInstance().getColor(tag), 0.55f);
+						html.append("<font color='").append(TagColorStore.toHex(tagColor)).append("'>[")
+								.append(escapeHtml(tag)).append("]</font>");
+					}
 				}
 			}
 			html.append("</html>");
 			return html.toString();
-		}
-
-		private String formatTagsText(final FavoriteEntry entry) {
-			final StringBuilder builder = new StringBuilder();
-			boolean first = true;
-			for (final String tag : entry.getTags()) {
-				if (!first) {
-					builder.append(", ");
-				}
-				builder.append(tag);
-				first = false;
-			}
-			return builder.toString();
 		}
 
 		private String escapeHtml(final String text) {
@@ -443,5 +541,38 @@ public class FavoritesTabPanel extends JPanel {
 			}
 		}
 		return null;
+	}
+
+	private static final class TagFilterPanel extends JPanel implements Scrollable {
+		private static final long serialVersionUID = 1L;
+
+		TagFilterPanel() {
+			super(new WrapFlowLayout());
+			setOpaque(false);
+		}
+
+		public Dimension getPreferredScrollableViewportSize() {
+			return getPreferredSize();
+		}
+
+		public int getScrollableUnitIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+			return 16;
+		}
+
+		public int getScrollableBlockIncrement(final Rectangle visibleRect, final int orientation, final int direction) {
+			return orientation == SwingConstants.VERTICAL ? Math.max(16, visibleRect.height - 16)
+					: Math.max(16, visibleRect.width - 16);
+		}
+
+		public boolean getScrollableTracksViewportWidth() {
+			return true;
+		}
+
+		public boolean getScrollableTracksViewportHeight() {
+			if (getParent() instanceof JComponent) {
+				return getPreferredSize().height <= getParent().getHeight();
+			}
+			return false;
+		}
 	}
 }
