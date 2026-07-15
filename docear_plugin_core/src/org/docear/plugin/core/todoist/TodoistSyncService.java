@@ -170,7 +170,7 @@ public final class TodoistSyncService {
 				LogUtils.warn("Todoist sync failed for " + key, e);
 			}
 		}
-		cleanupMisplacedTasks(client, result, store, callback, activeKeys, activeIdentities, remoteIndex);
+		cleanupMisplacedTasks(client, result, store, callback, activeKeys, activeIdentities);
 		status(callback, TextUtils.getText("todoist.sync.status.cleanup"));
 		for (Iterator it = new java.util.ArrayList(store.keySet()).iterator(); it.hasNext();) {
 			String key = (String) it.next();
@@ -230,14 +230,12 @@ public final class TodoistSyncService {
 	}
 
 	private static void cleanupMisplacedTasks(TodoistApiClient client, TodoistSyncResult result,
-			TodoistMappingStore store, TodoistSyncProgressCallback callback, Set activeKeys, Set activeIdentities,
-			TodoistDocearTaskIndex remoteIndex) {
+			TodoistMappingStore store, TodoistSyncProgressCallback callback, Set activeKeys, Set activeIdentities) {
 		status(callback, TextUtils.getText("todoist.sync.status.repair"));
 		final Set mappedTaskIds = store.getAllMappedTaskIds();
 		try {
 			closeOrphansInWrongProjects(client, result, callback, mappedTaskIds);
 			status(callback, TextUtils.getText("todoist.sync.status.dedupe"));
-			// Fresh index after the push loop so twins created mid-run are included.
 			final TodoistDocearTaskIndex index = TodoistDocearTaskIndex.load(client, result.projectId);
 			index.closeDuplicates(client, store, activeIdentities, result, callback);
 			closeOrphanTasks(client, result.projectId, result.projectName, store.getAllMappedTaskIds(), result,
