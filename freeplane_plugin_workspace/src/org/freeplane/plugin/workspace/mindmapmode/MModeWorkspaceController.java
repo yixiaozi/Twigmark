@@ -4,6 +4,8 @@ import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import org.freeplane.core.ui.components.SideTabTitleUpdater;
 import org.freeplane.core.util.SideTabMetricKeys;
@@ -26,6 +28,7 @@ import java.util.Set;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -413,10 +416,21 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			private String previousTabId = TAB_WORKSPACE;
 
 			public void stateChanged(final ChangeEvent e) {
-				ensureSideTabLoaded(sideTabs.getSelectedIndex());
+				try {
+					ensureSideTabLoaded(sideTabs.getSelectedIndex());
+				}
+				catch (final Throwable t) {
+					LogUtils.warn(t);
+					showRelationshipGraphLoadError(t);
+				}
 				final String selectedTabId = getSelectedSideTabId();
 				notifyRelationshipGraphTabChange(previousTabId, selectedTabId);
 				previousTabId = selectedTabId;
+			}
+		});
+		RelationshipGraphTabBridge.addReadyListener(new Runnable() {
+			public void run() {
+				installRelationshipGraphSideTabIfNeeded(false);
 			}
 		});
 		sideTabs.setTabReorderListener(new DraggableTabbedPane.TabReorderListener() {
@@ -847,13 +861,36 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return getWorkspaceView();
 		}
 		if (TAB_GRAPH.equals(tabId)) {
-			final JPanel placeholder = new JPanel(new BorderLayout());
+			final JPanel placeholder = new JPanel(new BorderLayout(0, 8));
 			placeholder.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-			placeholder.add(new JLabel(
-			        "<html><body style='width:200px'>\u5173\u7cfb\u56fe\u52a0\u8f7d\u4e2d\u2026<br>"
-			                + "\u82e5\u957f\u65f6\u95f4\u4ecd\u4e3a\u7a7a\u767d\uff0c\u8bf7\u518d\u70b9\u4e00\u6b21\u672c\u9875\u7b7e\u3002"
-			                + "</body></html>"),
-			        BorderLayout.NORTH);
+			placeholder.putClientProperty("docear.relationshipGraph.placeholder", Boolean.TRUE);
+			final JLabel status = new JLabel(
+			        "<html><body style='width:220px'>\u5173\u7cfb\u56fe\u52a0\u8f7d\u4e2d\u2026<br>"
+			                + "\u82e5\u957f\u65f6\u95f4\u505c\u7559\u5728\u6b64\uff0c\u8bf4\u660e\u771f\u9762\u677f\u5c1a\u672a\u6362\u4e0a\u3002"
+			                + "</body></html>");
+			placeholder.add(status, BorderLayout.NORTH);
+			final JButton retry = new JButton("\u7acb\u5373\u52a0\u8f7d\u5173\u7cfb\u56fe");
+			retry.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					installRelationshipGraphSideTabIfNeeded(true);
+				}
+			});
+			placeholder.add(retry, BorderLayout.SOUTH);
+			placeholder.addHierarchyListener(new HierarchyListener() {
+				public void hierarchyChanged(final HierarchyEvent e) {
+					if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) {
+						return;
+					}
+					if (!placeholder.isShowing()) {
+						return;
+					}
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							installRelationshipGraphSideTabIfNeeded(false);
+						}
+					});
+				}
+			});
 			return placeholder;
 		}
 		return new JPanel();
@@ -903,16 +940,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		final String tabId = sideTabOrder.get(tabIndex);
 		if (TAB_GRAPH.equals(tabId)) {
-			// Metrics can show (191) from a silent preload while the tab still holds
-			// an empty placeholder — only skip reload when a real graph panel is installed.
-			final JComponent existing = sideTabComponents.get(tabId);
-			if (isRelationshipGraphSideTabPanel(existing)
-			        && tabIndex < sideTabs.getTabCount()
-			        && isRelationshipGraphSideTabPanel(sideTabs.getComponentAt(tabIndex))) {
-				return;
-			}
+			installRelationshipGraphSideTabIfNeeded(false);
+			return;
 		}
-		else if (Boolean.TRUE.equals(sideTabLoaded.get(tabId))) {
+		if (Boolean.TRUE.equals(sideTabLoaded.get(tabId))) {
 			return;
 		}
 		JComponent panel = null;
@@ -936,22 +967,99 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else if (TAB_GIT.equals(tabId)) {
 			panel = new GitTabPanel();
 		}
-		else if (TAB_GRAPH.equals(tabId)) {
-			panel = createRelationshipGraphSideTabPanel();
-		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);
 			if (tabIndex < sideTabs.getTabCount()) {
 				sideTabs.setComponentAt(tabIndex, panel);
 			}
 			sideTabLoaded.put(tabId, Boolean.TRUE);
-			if (TAB_GRAPH.equals(tabId)) {
-				panel.revalidate();
-				panel.repaint();
-				sideTabs.revalidate();
-				sideTabs.repaint();
+		}
+	}
+
+	/**
+	 * Replace the「加载中」placeholder with the real graph panel.
+	 * Badge count can appear from silent preload before this ever succeeds.
+	 */
+	private void installRelationshipGraphSideTabIfNeeded(final boolean forceNotify) {
+		if (sideTabs == null || sideTabOrder == null) {
+			return;
+		}
+		final int tabIndex = sideTabOrder.indexOf(TAB_GRAPH);
+		if (tabIndex < 0 || tabIndex >= sideTabs.getTabCount()) {
+			return;
+		}
+		final Component displayed = sideTabs.getComponentAt(tabIndex);
+		if (isRelationshipGraphSideTabPanel(displayed)) {
+			sideTabComponents.put(TAB_GRAPH, (JComponent) displayed);
+			sideTabLoaded.put(TAB_GRAPH, Boolean.TRUE);
+			if (forceNotify && TAB_GRAPH.equals(getSelectedSideTabId())) {
+				notifyRelationshipGraphTabChange("", TAB_GRAPH);
+			}
+			return;
+		}
+		JComponent panel;
+		try {
+			panel = createRelationshipGraphSideTabPanel();
+		}
+		catch (final Throwable t) {
+			LogUtils.warn(t);
+			showRelationshipGraphLoadError(t);
+			return;
+		}
+		if (panel == null) {
+			showRelationshipGraphLoadError(new IllegalStateException("createSideTabPanel returned null"));
+			return;
+		}
+		sideTabComponents.put(TAB_GRAPH, panel);
+		sideTabs.setComponentAt(tabIndex, panel);
+		sideTabLoaded.put(TAB_GRAPH, Boolean.TRUE);
+		panel.revalidate();
+		panel.repaint();
+		sideTabs.revalidate();
+		sideTabs.repaint();
+		if (TAB_GRAPH.equals(getSelectedSideTabId()) || forceNotify) {
+			if (RelationshipGraphTabBridge.isAvailable()) {
+				try {
+					RelationshipGraphTabBridge.getProvider().onTabSelected();
+				}
+				catch (final Throwable t) {
+					LogUtils.warn(t);
+				}
 			}
 		}
+	}
+
+	private void showRelationshipGraphLoadError(final Throwable error) {
+		final int tabIndex = sideTabOrder.indexOf(TAB_GRAPH);
+		if (tabIndex < 0 || sideTabs == null || tabIndex >= sideTabs.getTabCount()) {
+			return;
+		}
+		final String detail = error == null ? "unknown" : error.getClass().getSimpleName() + ": "
+		        + String.valueOf(error.getMessage());
+		final JPanel errorPanel = new JPanel(new BorderLayout(0, 8));
+		errorPanel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+		errorPanel.add(new JLabel("<html><body style='width:220px'>\u5173\u7cfb\u56fe\u9762\u677f\u52a0\u8f7d\u5931\u8d25<br><br>"
+		        + escapeHtml(detail)
+		        + "<br><br>\u63d2\u4ef6\u53ef\u7528: "
+		        + RelationshipGraphTabBridge.isAvailable()
+		        + "</body></html>"), BorderLayout.NORTH);
+		final JButton retry = new JButton("\u91cd\u8bd5");
+		retry.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				installRelationshipGraphSideTabIfNeeded(true);
+			}
+		});
+		errorPanel.add(retry, BorderLayout.SOUTH);
+		sideTabComponents.put(TAB_GRAPH, errorPanel);
+		sideTabs.setComponentAt(tabIndex, errorPanel);
+		sideTabLoaded.put(TAB_GRAPH, Boolean.FALSE);
+	}
+
+	private static String escapeHtml(final String text) {
+		if (text == null) {
+			return "";
+		}
+		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	private static boolean isRelationshipGraphSideTabPanel(final Component component) {
@@ -1225,17 +1333,34 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private JComponent createRelationshipGraphSideTabPanel() {
-		if (RelationshipGraphTabBridge.isAvailable()) {
-			try {
-				return RelationshipGraphTabBridge.getProvider().createSideTabPanel();
-			}
-			catch (final Exception e) {
-				LogUtils.warn(e);
+		if (!RelationshipGraphTabBridge.isAvailable()) {
+			final JPanel placeholder = new JPanel(new BorderLayout(0, 8));
+			placeholder.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+			placeholder.add(new JLabel(
+			        "<html><body style='width:220px'>\u5173\u7cfb\u56fe\u63d2\u4ef6\u5c1a\u672a\u6ce8\u518c<br>"
+			                + "\u89d2\u6807\u53ef\u80fd\u6765\u81ea\u9759\u9ed8\u9884\u626b\uff0c\u4f46\u4fa7\u680f Provider \u4e3a\u7a7a\u3002"
+			                + "</body></html>"),
+			        BorderLayout.NORTH);
+			final JButton retry = new JButton("\u91cd\u8bd5");
+			retry.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					installRelationshipGraphSideTabIfNeeded(true);
+				}
+			});
+			placeholder.add(retry, BorderLayout.SOUTH);
+			return placeholder;
+		}
+		try {
+			final JComponent panel = RelationshipGraphTabBridge.getProvider().createSideTabPanel();
+			if (panel != null) {
+				return panel;
 			}
 		}
-		final JPanel placeholder = new JPanel(new BorderLayout());
-		placeholder.add(new JLabel("\u5173\u7cfb\u56fe\u63d2\u4ef6\u672a\u52a0\u8f7d"), BorderLayout.NORTH);
-		return placeholder;
+		catch (final Throwable e) {
+			LogUtils.warn(e);
+			throw new RuntimeException(e);
+		}
+		throw new IllegalStateException("createSideTabPanel returned null");
 	}
 
 	private void notifyRelationshipGraphTabChange(final String previousTabId, final String selectedTabId) {

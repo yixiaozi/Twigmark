@@ -121,8 +121,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		add(subTabs, BorderLayout.CENTER);
 		setMinimumSize(new Dimension(220, 320));
 		setPreferredSize(new Dimension(280, 420));
-
-		wireCanvasListeners();
+		// Defer canvas wiring until first activation — keep tab install off the
+		// critical EDT path so the side tab is not stuck on「加载中」forever.
 	}
 
 	/** Background scan for tab subtitle counts without activating the graph viewport. */
@@ -306,6 +306,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 	void onTabActivated() {
 		graphTabActive = true;
+		ensureModeChromeBuilt();
 		final RelationshipGraphService service = getOrCreateService();
 		if (service == null) {
 			return;
@@ -330,6 +331,22 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return;
 		}
 		rebuildDisplayIndexAsync(false, true);
+	}
+
+	private boolean modeChromeBuilt;
+
+	private void ensureModeChromeBuilt() {
+		if (modeChromeBuilt) {
+			return;
+		}
+		modeChromeBuilt = true;
+		if (tagsTab.groupCascade != null) {
+			tagsTab.groupCascade.rebuild();
+		}
+		if (favoritesTab.groupCascade != null) {
+			favoritesTab.groupCascade.rebuild();
+		}
+		wireCanvasListeners();
 	}
 
 	void onTabDeactivated() {
@@ -780,7 +797,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 						return collectTagNamesFromBase(cachedBaseIndex[ModeTabPanel.this.mode]);
 					}
 				});
-				groupCascade.rebuild();
+				// Rebuild when the parent tab is first shown (deferred from constructor).
 			}
 			else {
 				groupCascade = null;
