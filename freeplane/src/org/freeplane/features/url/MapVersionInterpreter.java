@@ -113,7 +113,36 @@ public class MapVersionInterpreter implements IExtension{
 	}
 
 	private boolean knows(String mapBegin) {
-		return mapBegin.startsWith(this.mapBegin);
+		return stripXmlPreamble(mapBegin).startsWith(this.mapBegin);
+	}
+
+	/**
+	 * Freeplane/Docear maps normally start with {@code <map version="…">}. Some external writers
+	 * (and a previous Todoist silent-sync path) prepend {@code <?xml …?>} or a UTF-8 BOM, which
+	 * made {@code startsWith("<map version=")} fail and triggered the "unknown program" warning
+	 * on every load/reload.
+	 */
+	public static String stripXmlPreamble(String mapBegin) {
+		if (mapBegin == null || mapBegin.length() == 0) {
+			return "";
+		}
+		int i = 0;
+		if (mapBegin.charAt(0) == '\uFEFF') {
+			i = 1;
+		}
+		while (i < mapBegin.length() && Character.isWhitespace(mapBegin.charAt(i))) {
+			i++;
+		}
+		if (i + 1 < mapBegin.length() && mapBegin.charAt(i) == '<' && mapBegin.charAt(i + 1) == '?') {
+			final int end = mapBegin.indexOf("?>", i + 2);
+			if (end >= 0) {
+				i = end + 2;
+				while (i < mapBegin.length() && Character.isWhitespace(mapBegin.charAt(i))) {
+					i++;
+				}
+			}
+		}
+		return i == 0 ? mapBegin : mapBegin.substring(i);
 	}
 	
 	public IMapConverter getMapConverter() {

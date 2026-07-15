@@ -191,15 +191,29 @@ final class TodoistSilentMmUpdater {
 	}
 
 	/**
-	 * Emits XML the way Freeplane's {@code XMLWriter} does: ASCII + numeric character references
-	 * for non-ASCII, so the file remains readable under the platform default charset.
+	 * Emits XML the way Freeplane/Docear save maps: the file must start with
+	 * {@code <map version="…">} (no {@code <?xml …?>} preamble). Dialect detection in
+	 * {@code MapVersionInterpreter} uses {@code startsWith("<map version=\"…")}, so an XML
+	 * declaration makes Docear treat the file as an unknown program and warn on every reload.
+	 * Non-ASCII is written as {@code &#x…;} like Freeplane's {@code XMLWriter}.
 	 */
 	private static void writeFreeplaneCompatibleXml(final Document doc, final Writer writer) throws Exception {
-		writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
 		final Element root = doc.getDocumentElement();
 		if (root != null) {
+			ensureMapVersionAttribute(root);
 			writeElement(root, writer);
 			writer.write('\n');
+		}
+	}
+
+	/** Dialect detection requires a recognizable {@code version} on {@code <map>}. */
+	private static void ensureMapVersionAttribute(final Element root) {
+		if (!"map".equals(root.getTagName())) {
+			return;
+		}
+		final String version = root.getAttribute("version");
+		if (version == null || version.trim().length() == 0) {
+			root.setAttribute("version", org.freeplane.core.util.FreeplaneVersion.XML_VERSION);
 		}
 	}
 
@@ -207,14 +221,24 @@ final class TodoistSilentMmUpdater {
 		writer.write('<');
 		writer.write(el.getTagName());
 		final NamedNodeMap attrs = el.getAttributes();
-		if (attrs != null) {
+		if ("map".equals(el.getTagName())) {
+			// version must be the first attribute: MapVersionInterpreter matches
+			// startsWith("<map version=\"…").
+			writeAttribute(writer, "version", el.getAttribute("version"));
+			if (attrs != null) {
+				for (int i = 0; i < attrs.getLength(); i++) {
+					final Attr attr = (Attr) attrs.item(i);
+					if ("version".equals(attr.getName())) {
+						continue;
+					}
+					writeAttribute(writer, attr.getName(), attr.getValue());
+				}
+			}
+		}
+		else if (attrs != null) {
 			for (int i = 0; i < attrs.getLength(); i++) {
 				final Attr attr = (Attr) attrs.item(i);
-				writer.write(' ');
-				writer.write(attr.getName());
-				writer.write("=\"");
-				writeEncoded(writer, attr.getValue(), true);
-				writer.write('"');
+				writeAttribute(writer, attr.getName(), attr.getValue());
 			}
 		}
 		final NodeList children = el.getChildNodes();
@@ -248,6 +272,14 @@ final class TodoistSilentMmUpdater {
 		writer.write("</");
 		writer.write(el.getTagName());
 		writer.write('>');
+	}
+
+	private static void writeAttribute(final Writer writer, final String name, final String value) throws Exception {
+		writer.write(' ');
+		writer.write(name);
+		writer.write("=\"");
+		writeEncoded(writer, value == null ? "" : value, true);
+		writer.write('"');
 	}
 
 	private static boolean isBlankTextOnly(final NodeList children) {
