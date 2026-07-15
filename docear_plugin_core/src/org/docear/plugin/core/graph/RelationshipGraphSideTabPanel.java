@@ -341,10 +341,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		}
 		modeChromeBuilt = true;
 		if (tagsTab.groupCascade != null) {
-			tagsTab.groupCascade.rebuild();
+			tagsTab.refreshGroupCascade(cachedBaseIndex[RelationshipGraphScanner.MODE_TAGS]);
 		}
 		if (favoritesTab.groupCascade != null) {
-			favoritesTab.groupCascade.rebuild();
+			favoritesTab.refreshGroupCascade(cachedBaseIndex[RelationshipGraphScanner.MODE_FAVORITES]);
 		}
 		wireCanvasListeners();
 	}
