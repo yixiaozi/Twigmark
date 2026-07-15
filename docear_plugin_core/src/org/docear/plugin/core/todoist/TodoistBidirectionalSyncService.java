@@ -14,6 +14,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.mindmapmode.MTextController;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderCycleAttributes;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
@@ -222,12 +223,12 @@ public final class TodoistBidirectionalSyncService {
 
 	private static void queueSilentPatch(final Map silentByPath, final File file, final String nodeId,
 			final TodoistImportTask task, final String syncKey, final TodoistMappingStore store) {
-		final PeriodInfo period = resolvePeriod(task);
+		final TodoistCycleMapper.Cycle cycle = resolveCycle(task);
 		final String hash = contentHashForTask(task, file);
 		store.putMapping(syncKey, task.id, task.dueAtMillis, hash);
 		final TodoistSilentMmUpdater.Patch patch = new TodoistSilentMmUpdater.Patch(nodeId, plainContent(task),
 				task.dueAtMillis, task.durationMinutes, TodoistPriority.toJinji(task.priority, 0), task.id, hash,
-				task.recurring, period.period, period.unit);
+				cycle.recurring, cycle.interval, cycle.periodUnit(), cycle.remindType, cycle.weekDays);
 		List list = (List) silentByPath.get(file.getAbsolutePath());
 		if (list == null) {
 			list = new ArrayList();
@@ -289,11 +290,11 @@ public final class TodoistBidirectionalSyncService {
 	 * immediately schedule a re-push via auto-sync.
 	 */
 	private static String contentHashForTask(final TodoistImportTask task, final File file) {
-		final PeriodInfo period = resolvePeriod(task);
+		final TodoistCycleMapper.Cycle cycle = resolveCycle(task);
 		final String sectionName = file == null ? "" : TodoistApiClient.sectionNameForFile(file);
 		final TodoistReminderRecord record = new TodoistReminderRecord(file, "", plainContent(task), task.dueAtMillis,
-				period.period, period.unit, task.recurring, task.durationMinutes,
-				TodoistPriority.toJinji(task.priority, 0));
+				cycle.interval, cycle.periodUnit(), cycle.recurring, task.durationMinutes,
+				TodoistPriority.toJinji(task.priority, 0), cycle.remindType, cycle.weekDays);
 		return TodoistSyncService.contentHash(record, sectionName);
 	}
 
@@ -354,7 +355,7 @@ public final class TodoistBidirectionalSyncService {
 		return changed[0];
 	}
 
-	/** True when Todoist content/due/duration/urgency differs from the linked mind-map node. */
+	/** True when Todoist content/due/duration/urgency/cycle differs from the linked mind-map node. */
 	private static boolean needsPull(final NodeModel node, final TodoistImportTask task) {
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desired = parsed.nodeText;
@@ -376,21 +377,68 @@ public final class TodoistBidirectionalSyncService {
 		if (task.dueAtMillis <= 0) {
 			return existingAt > 0;
 		}
-		if (existingAt != task.dueAtMillis) {
+		final TodoistCycleMapper.Cycle remote = resolveCycle(task);
+		if (existingAt <= 0) {
 			return true;
 		}
-		if (task.recurring) {
-			final PeriodInfo period = resolvePeriod(task);
-			if (existing == null) {
+		if (remote.recurring) {
+			// Todoist due is the *next* occurrence; Docear stores an anchor datetime.
+			// Only treat time-of-day changes as a real pull for recurring tasks.
+			if (!sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
 				return true;
 			}
-			if (existing.getPeriod() != period.period) {
-				return true;
-			}
-			final String unit = existing.getPeriodUnitAsString();
-			return unit == null || !period.unit.equalsIgnoreCase(unit);
 		}
-		return false;
+		else if (existingAt != task.dueAtMillis) {
+			return true;
+		}
+		final String localType = ReminderCycleAttributes.readRemindTypeFromNode(node);
+		final int localInterval = ReminderCycleAttributes.readIntervalFromNode(node);
+		final String localWeekDays = ReminderCycleAttributes.readWeekDaysFromNode(node);
+		final TodoistCycleMapper.Cycle local = TodoistCycleMapper.fromPublicNodeReaders(localType, localInterval,
+				localWeekDays);
+		if (remote.recurring != local.recurring) {
+			return true;
+		}
+		if (!remote.recurring) {
+			return false;
+		}
+		if (remote.interval != local.interval) {
+			return true;
+		}
+		if (!remote.remindType.equalsIgnoreCase(local.remindType)) {
+			return true;
+		}
+		return !sameWeekDays(remote.weekDays, local.weekDays);
+	}
+
+	/** Wall-clock hour:minute in the JVM default timezone (matches Freeplane reminder editor). */
+	private static boolean sameLocalTimeOfDay(final long a, final long b) {
+		if (a <= 0 || b <= 0) {
+			return a == b;
+		}
+		final java.util.Calendar ca = java.util.Calendar.getInstance();
+		ca.setTimeInMillis(a);
+		final java.util.Calendar cb = java.util.Calendar.getInstance();
+		cb.setTimeInMillis(b);
+		return ca.get(java.util.Calendar.HOUR_OF_DAY) == cb.get(java.util.Calendar.HOUR_OF_DAY)
+				&& ca.get(java.util.Calendar.MINUTE) == cb.get(java.util.Calendar.MINUTE);
+	}
+
+	private static boolean sameWeekDays(final String a, final String b) {
+		final String left = a == null ? "" : a;
+		final String right = b == null ? "" : b;
+		if (left.equals(right)) {
+			return true;
+		}
+		// Order-insensitive compare of weekday codes.
+		if (left.length() != right.length()) {
+			return false;
+		}
+		final char[] ca = left.toCharArray();
+		final char[] cb = right.toCharArray();
+		java.util.Arrays.sort(ca);
+		java.util.Arrays.sort(cb);
+		return new String(ca).equals(new String(cb));
 	}
 
 	private static boolean applyDurationAndUrgency(final NodeModel node, final TodoistImportTask task) {
@@ -430,6 +478,7 @@ public final class TodoistBidirectionalSyncService {
 	private static boolean clearReminder(final NodeModel node) {
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		if (existing == null) {
+			ReminderCycleAttributes.writeOneTimeReminder(node);
 			return false;
 		}
 		final ModeController modeController = Controller.getCurrentModeController();
@@ -438,6 +487,7 @@ public final class TodoistBidirectionalSyncService {
 			return false;
 		}
 		reminderHook.undoableDeactivateHook(node);
+		ReminderCycleAttributes.writeOneTimeReminder(node);
 		return true;
 	}
 
@@ -447,49 +497,59 @@ public final class TodoistBidirectionalSyncService {
 		if (reminderHook == null) {
 			return false;
 		}
+		final TodoistCycleMapper.Cycle cycle = resolveCycle(task);
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		final long existingAt = existing == null ? 0L : existing.getRemindUserAt();
-		final PeriodInfo period = resolvePeriod(task);
-		if (existing != null && existingAt == task.dueAtMillis && existing.getPeriod() == period.period
-				&& period.unit.equalsIgnoreCase(String.valueOf(existing.getPeriodUnitAsString()))) {
+		final String localType = ReminderCycleAttributes.readRemindTypeFromNode(node);
+		final int localInterval = ReminderCycleAttributes.readIntervalFromNode(node);
+		final String localWeekDays = ReminderCycleAttributes.readWeekDaysFromNode(node);
+		final boolean localRecurring = localType != null && localType.length() > 0
+				&& !"onetime".equalsIgnoreCase(localType);
+		final boolean sameCycle = cycle.recurring == localRecurring && (!cycle.recurring || (cycle.interval == localInterval
+				&& cycle.remindType.equalsIgnoreCase(localType == null ? "" : localType)
+				&& sameWeekDays(cycle.weekDays, localWeekDays)));
+		final boolean sameWhen = existing != null && (cycle.recurring ? sameLocalTimeOfDay(existingAt, task.dueAtMillis)
+				: existingAt == task.dueAtMillis);
+		if (sameCycle && sameWhen) {
 			return false;
 		}
 		final ReminderExtension reminder = new ReminderExtension(node);
-		reminder.setRemindUserAt(task.dueAtMillis);
-		reminder.setPeriod(period.period);
-		reminder.setPeriodUnitAsString(period.unit);
+		// Preserve Docear anchor date for recurring when only Todoist's *next* occurrence differs.
+		long remindAt = task.dueAtMillis;
+		if (cycle.recurring && existing != null && existingAt > 0 && sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
+			remindAt = existingAt;
+		}
+		else if (cycle.recurring && existing != null && existingAt > 0 && !sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
+			// User changed time-of-day on Todoist: keep local calendar day, apply new clock time.
+			remindAt = replaceLocalTimeOfDay(existingAt, task.dueAtMillis);
+		}
+		reminder.setRemindUserAt(remindAt);
+		reminder.setPeriod(cycle.interval);
+		reminder.setPeriodUnitAsString(cycle.periodUnit());
 		reminderHook.undoableActivateHook(node, reminder);
+		if (cycle.recurring) {
+			ReminderCycleAttributes.writeRecurringCycle(node, cycle.remindType, cycle.interval, cycle.weekDays);
+		}
+		else {
+			ReminderCycleAttributes.writeOneTimeReminder(node);
+		}
 		return true;
 	}
 
-	private static PeriodInfo resolvePeriod(TodoistImportTask task) {
-		if (!task.recurring) {
-			return new PeriodInfo(1, "DAY");
-		}
-		final String due = task.dueString == null ? "" : task.dueString.toLowerCase();
-		int period = 1;
-		String unit = "WEEK";
-		if (due.indexOf("day") >= 0) {
-			unit = "DAY";
-		}
-		else if (due.indexOf("month") >= 0) {
-			unit = "MONTH";
-		}
-		else if (due.indexOf("year") >= 0) {
-			unit = "YEAR";
-		}
-		final java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("every\\s+(\\d+)").matcher(due);
-		if (matcher.find()) {
-			try {
-				period = Integer.parseInt(matcher.group(1));
-			}
-			catch (NumberFormatException e) {
-			}
-		}
-		if (period <= 0) {
-			period = 1;
-		}
-		return new PeriodInfo(period, unit);
+	private static long replaceLocalTimeOfDay(final long dateMillis, final long timeSourceMillis) {
+		final java.util.Calendar date = java.util.Calendar.getInstance();
+		date.setTimeInMillis(dateMillis);
+		final java.util.Calendar time = java.util.Calendar.getInstance();
+		time.setTimeInMillis(timeSourceMillis);
+		date.set(java.util.Calendar.HOUR_OF_DAY, time.get(java.util.Calendar.HOUR_OF_DAY));
+		date.set(java.util.Calendar.MINUTE, time.get(java.util.Calendar.MINUTE));
+		date.set(java.util.Calendar.SECOND, 0);
+		date.set(java.util.Calendar.MILLISECOND, 0);
+		return date.getTimeInMillis();
+	}
+
+	private static TodoistCycleMapper.Cycle resolveCycle(final TodoistImportTask task) {
+		return TodoistCycleMapper.fromTodoistDue(task.dueString, task.recurring);
 	}
 
 	private static String plainContent(TodoistImportTask task) {
@@ -548,16 +608,6 @@ public final class TodoistBidirectionalSyncService {
 	private static void progress(TodoistSyncProgressCallback callback, int current, int total) {
 		if (callback != null) {
 			callback.onProgress(current, total);
-		}
-	}
-
-	private static final class PeriodInfo {
-		final int period;
-		final String unit;
-
-		PeriodInfo(int period, String unit) {
-			this.period = period;
-			this.unit = unit;
 		}
 	}
 }

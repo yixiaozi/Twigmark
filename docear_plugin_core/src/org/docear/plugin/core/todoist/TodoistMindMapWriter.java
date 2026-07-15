@@ -28,6 +28,7 @@ import org.freeplane.features.note.NoteController;
 import org.freeplane.features.note.mindmapmode.MNoteController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.url.mindmapmode.MFileManager;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderCycleAttributes;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
@@ -316,14 +317,20 @@ final class TodoistMindMapWriter {
 			}
 			changed = true;
 		}
-		final PeriodInfo period = resolvePeriod(task);
+		final TodoistCycleMapper.Cycle cycle = TodoistCycleMapper.fromTodoistDue(task.dueString, task.recurring);
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		final long existingAt = existing == null ? 0L : existing.getRemindUserAt();
+		final String localType = ReminderCycleAttributes.readRemindTypeFromNode(node);
+		final int localInterval = ReminderCycleAttributes.readIntervalFromNode(node);
+		final String localWeekDays = ReminderCycleAttributes.readWeekDaysFromNode(node);
+		final boolean cycleDiffers = cycle.recurring != (localType != null && localType.length() > 0
+				&& !"onetime".equalsIgnoreCase(localType))
+				|| (cycle.recurring && (cycle.interval != localInterval
+						|| !cycle.remindType.equalsIgnoreCase(localType == null ? "" : localType)
+						|| !cycle.weekDays.equals(localWeekDays == null ? "" : localWeekDays)));
 		if (task.dueAtMillis > 0) {
-			if (existingAt != task.dueAtMillis || existing == null
-					|| existing.getPeriod() != period.period
-					|| !period.unit.equalsIgnoreCase(String.valueOf(existing.getPeriodUnitAsString()))) {
-				applyReminder(node, task.dueAtMillis, period.period, period.unit);
+			if (existingAt != task.dueAtMillis || existing == null || cycleDiffers) {
+				applyReminder(node, task.dueAtMillis, cycle);
 				changed = true;
 			}
 		}
@@ -332,6 +339,7 @@ final class TodoistMindMapWriter {
 			final ReminderHook reminderHook = (ReminderHook) modeController.getExtension(ReminderHook.class);
 			if (reminderHook != null) {
 				reminderHook.undoableDeactivateHook(node);
+				ReminderCycleAttributes.writeOneTimeReminder(node);
 				changed = true;
 			}
 		}
@@ -343,16 +351,16 @@ final class TodoistMindMapWriter {
 			ReminderTaskAttributes.writeFull(node, task.durationMinutes, localLevel, desiredJinji);
 			changed = true;
 		}
-		final String hash = Integer.toString((task.content + "|" + task.dueAtMillis + "|" + task.recurring + "|"
-				+ period.period + "|" + period.unit + "|" + task.durationMinutes + "|"
-				+ TodoistPriority.toTodoistApi(desiredJinji)).hashCode());
+		final String hash = Integer.toString((task.content + "|" + task.dueAtMillis + "|" + cycle.recurring + "|"
+				+ cycle.interval + "|" + cycle.periodUnit() + "|" + cycle.remindType + "|" + cycle.weekDays + "|"
+				+ task.durationMinutes + "|" + TodoistPriority.toTodoistApi(desiredJinji)).hashCode());
 		if (!hash.equals(TodoistReminderFactory.getStoredContentHash(node))) {
 			TodoistReminderFactory.setStoredContentHash(node, hash);
 		}
 		return changed;
 	}
 
-	private static void applyReminder(NodeModel node, long dueAtMillis, int period, String periodUnit) {
+	private static void applyReminder(NodeModel node, long dueAtMillis, TodoistCycleMapper.Cycle cycle) {
 		final ModeController modeController = Controller.getCurrentModeController();
 		final ReminderHook reminderHook = (ReminderHook) modeController.getExtension(ReminderHook.class);
 		if (reminderHook == null) {
@@ -360,42 +368,15 @@ final class TodoistMindMapWriter {
 		}
 		final ReminderExtension reminder = new ReminderExtension(node);
 		reminder.setRemindUserAt(dueAtMillis);
-		reminder.setPeriod(period);
-		reminder.setPeriodUnitAsString(periodUnit);
+		reminder.setPeriod(cycle.interval);
+		reminder.setPeriodUnitAsString(cycle.periodUnit());
 		reminderHook.undoableActivateHook(node, reminder);
-	}
-
-	private static PeriodInfo resolvePeriod(TodoistImportTask task) {
-		if (!task.recurring) {
-			return new PeriodInfo(1, "DAY");
+		if (cycle.recurring) {
+			ReminderCycleAttributes.writeRecurringCycle(node, cycle.remindType, cycle.interval, cycle.weekDays);
 		}
-		final String due = task.dueString == null ? "" : task.dueString.toLowerCase();
-		int period = 1;
-		String unit = "WEEK";
-		if (due.indexOf("day") >= 0) {
-			unit = "DAY";
+		else {
+			ReminderCycleAttributes.writeOneTimeReminder(node);
 		}
-		else if (due.indexOf("month") >= 0) {
-			unit = "MONTH";
-		}
-		else if (due.indexOf("year") >= 0) {
-			unit = "YEAR";
-		}
-		else if (due.indexOf("week") >= 0) {
-			unit = "WEEK";
-		}
-		final java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("every\\s+(\\d+)").matcher(due);
-		if (matcher.find()) {
-			try {
-				period = Integer.parseInt(matcher.group(1));
-			}
-			catch (NumberFormatException e) {
-			}
-		}
-		if (period <= 0) {
-			period = 1;
-		}
-		return new PeriodInfo(period, unit);
 	}
 
 	private static void applyLink(NodeModel node, String linkUri) {
@@ -449,16 +430,6 @@ final class TodoistMindMapWriter {
 		}
 		String name = (String) names.get(id);
 		return name != null && name.length() > 0 ? name : fallback + " (" + id + ")";
-	}
-
-	private static final class PeriodInfo {
-		final int period;
-		final String unit;
-
-		PeriodInfo(int period, String unit) {
-			this.period = period;
-			this.unit = unit;
-		}
 	}
 
 	private static final class ProjectNameComparator implements Comparator {

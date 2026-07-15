@@ -6,6 +6,7 @@ import org.docear.plugin.core.util.NodeUtilities;
 import org.freeplane.core.io.UnknownElements;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderCycleAttributes;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
 
@@ -37,7 +38,7 @@ final class TodoistReminderFactory {
 		final int durationMinutes = ReminderTaskAttributes.readTaskTimeFromNode(node);
 		final int jinji = ReminderTaskAttributes.readJinjiFromNode(node);
 		return new TodoistReminderRecord(file, node.getID(), nodeText, reminder.getRemindUserAt(), cycle.period,
-				cycle.unit, cycle.recurring, durationMinutes, jinji);
+				cycle.unit, cycle.recurring, durationMinutes, jinji, cycle.remindType, cycle.weekDays);
 	}
 
 	/** Import-map task node that has a Todoist id but may not have a reminder yet. */
@@ -151,25 +152,55 @@ final class TodoistReminderFactory {
 	}
 
 	private static CycleInfo readCycle(final NodeModel node, final ReminderExtension reminder) {
-		String remindType = null;
+		// Authoritative DocearReminder cycle attrs (REMINDERTYPE / RDAYS / RWEEKS / …).
+		// ReminderExtension PERIOD/UNIT is often stuck at 1/DAY from the editor UI.
+		final String remindType = ReminderCycleAttributes.readRemindTypeFromNode(node);
+		final int interval = ReminderCycleAttributes.readIntervalFromNode(node);
+		final String weekDays = ReminderCycleAttributes.readWeekDaysFromNode(node);
+		final TodoistCycleMapper.Cycle cycle = TodoistCycleMapper.fromPublicNodeReaders(remindType, interval, weekDays);
+		if (cycle.recurring) {
+			return new CycleInfo(true, cycle.interval, cycle.periodUnit(), cycle.remindType, cycle.weekDays);
+		}
+		// Legacy fallback: UnknownElements or hook period > 1
+		String legacyType = null;
 		final UnknownElements unknown = (UnknownElements) node.getExtension(UnknownElements.class);
 		if (unknown != null && unknown.getUnknownElements() != null) {
-			remindType = unknown.getUnknownElements().getAttribute("REMINDERTYPE", null);
+			legacyType = unknown.getUnknownElements().getAttribute("REMINDERTYPE", null);
 		}
-		boolean recurring = remindType != null && remindType.length() > 0
-				&& !"onetime".equalsIgnoreCase(remindType);
+		boolean recurring = legacyType != null && legacyType.length() > 0 && !"onetime".equalsIgnoreCase(legacyType);
 		int period = reminder.getPeriod() <= 0 ? 1 : reminder.getPeriod();
 		String unit = reminder.getPeriodUnitAsString();
 		if (unit == null || unit.length() == 0) {
-			unit = mapRemindTypeToUnit(remindType);
+			unit = mapRemindTypeToUnit(legacyType);
 		}
 		if (unit == null || unit.length() == 0) {
 			unit = "DAY";
 		}
-		if (!recurring && remindType == null && period > 1) {
+		if (!recurring && legacyType == null && period > 1) {
 			recurring = true;
 		}
-		return new CycleInfo(recurring, period, unit.toUpperCase());
+		final String type = recurring ? (legacyType != null ? legacyType.toLowerCase() : unitToType(unit)) : "onetime";
+		return new CycleInfo(recurring, period, unit.toUpperCase(), type, "");
+	}
+
+	private static String unitToType(String unit) {
+		if (unit == null) {
+			return "day";
+		}
+		final String u = unit.toUpperCase();
+		if ("HOUR".equals(u)) {
+			return "hour";
+		}
+		if ("WEEK".equals(u)) {
+			return "week";
+		}
+		if ("MONTH".equals(u)) {
+			return "month";
+		}
+		if ("YEAR".equals(u)) {
+			return "year";
+		}
+		return "day";
 	}
 
 	private static String mapRemindTypeToUnit(final String remindType) {
@@ -199,11 +230,15 @@ final class TodoistReminderFactory {
 		final boolean recurring;
 		final int period;
 		final String unit;
+		final String remindType;
+		final String weekDays;
 
-		CycleInfo(boolean recurring, int period, String unit) {
+		CycleInfo(boolean recurring, int period, String unit, String remindType, String weekDays) {
 			this.recurring = recurring;
 			this.period = period;
 			this.unit = unit;
+			this.remindType = remindType;
+			this.weekDays = weekDays;
 		}
 	}
 }

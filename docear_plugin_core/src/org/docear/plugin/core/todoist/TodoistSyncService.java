@@ -356,6 +356,8 @@ public final class TodoistSyncService {
 		sb.append(record.recurring).append('|');
 		sb.append(record.period).append('|');
 		sb.append(record.periodUnit).append('|');
+		sb.append(record.remindType).append('|');
+		sb.append(record.weekDays).append('|');
 		sb.append(record.durationMinutes).append('|');
 		sb.append(TodoistPriority.toTodoistApi(record.jinji));
 		return Integer.toString(sb.toString().hashCode());

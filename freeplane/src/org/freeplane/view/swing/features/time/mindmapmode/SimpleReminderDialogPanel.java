@@ -162,8 +162,14 @@ class SimpleReminderDialogPanel extends JPanel {
 			}
 			final ReminderExtension reminderExtension = new ReminderExtension(node);
 			reminderExtension.setRemindUserAt(date.getTime());
-			reminderExtension.setPeriodUnit(PeriodUnit.DAY);
-			reminderExtension.setPeriod(1);
+			if (cycleConfig.isRecurring()) {
+				reminderExtension.setPeriod(cycleConfig.interval <= 0 ? 1 : cycleConfig.interval);
+				reminderExtension.setPeriodUnit(periodUnitForRemindType(cycleConfig.remindType));
+			}
+			else {
+				reminderExtension.setPeriodUnit(PeriodUnit.DAY);
+				reminderExtension.setPeriod(1);
+			}
 			reminderExtension.setScript(null);
 			reminderHook.undoableActivateHook(node, reminderExtension);
 			ReminderCycleAttributes.writeToNode(node, cycleConfig);
@@ -172,6 +178,22 @@ class SimpleReminderDialogPanel extends JPanel {
 		if (onClose != null) {
 			onClose.run();
 		}
+	}
+
+	private static PeriodUnit periodUnitForRemindType(final String remindType) {
+		if (ReminderCycleAttributes.TYPE_HOUR.equals(remindType)) {
+			return PeriodUnit.HOUR;
+		}
+		if (ReminderCycleAttributes.TYPE_WEEK.equals(remindType)) {
+			return PeriodUnit.WEEK;
+		}
+		if (ReminderCycleAttributes.TYPE_MONTH.equals(remindType)) {
+			return PeriodUnit.MONTH;
+		}
+		if (ReminderCycleAttributes.TYPE_YEAR.equals(remindType)) {
+			return PeriodUnit.YEAR;
+		}
+		return PeriodUnit.DAY;
 	}
 
 	private void removeReminder() {

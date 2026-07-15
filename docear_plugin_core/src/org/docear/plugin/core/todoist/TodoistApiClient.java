@@ -481,7 +481,7 @@ final class TodoistApiClient {
 			return;
 		}
 		if (record.recurring) {
-			String dueString = toRecurringDueString(record);
+			String dueString = TodoistCycleMapper.toDueString(record.cycle(), record.remindAt);
 			if (dueString != null && dueString.length() > 0) {
 				sb.append(",\"due_string\":\"").append(TodoistJson.escape(dueString)).append("\"");
 				sb.append(",\"due_lang\":\"en\"");
@@ -491,30 +491,13 @@ final class TodoistApiClient {
 						.append("\"");
 			}
 		}
-		else {
+		else if (record.remindAt > 0) {
 			sb.append(",\"due_datetime\":\"").append(TodoistJson.escape(formatUtcDateTime(record.remindAt))).append("\"");
 		}
 	}
 
 	private static String toRecurringDueString(TodoistReminderRecord record) {
-		int period = record.period <= 0 ? 1 : record.period;
-		String unit = record.periodUnit == null ? "DAY" : record.periodUnit.toUpperCase();
-		if ("MINUTE".equals(unit) || "HOUR".equals(unit)) {
-			return null;
-		}
-		if ("DAY".equals(unit)) {
-			return period == 1 ? "every day" : "every " + period + " days";
-		}
-		if ("WEEK".equals(unit)) {
-			return period == 1 ? "every week" : "every " + period + " weeks";
-		}
-		if ("MONTH".equals(unit)) {
-			return period == 1 ? "every month" : "every " + period + " months";
-		}
-		if ("YEAR".equals(unit)) {
-			return period == 1 ? "every year" : "every " + period + " years";
-		}
-		return null;
+		return TodoistCycleMapper.toDueString(record.cycle(), record.remindAt);
 	}
 
 	static String buildDescription(TodoistReminderRecord record) {

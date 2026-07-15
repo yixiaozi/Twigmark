@@ -47,9 +47,20 @@ final class TodoistSilentMmUpdater {
 		final boolean recurring;
 		final int period;
 		final String periodUnit;
+		/** Docear cycle type (day/week/…); empty/onetime clears REMINDERTYPE attrs. */
+		final String remindType;
+		/** Weekday codes for weekly cycles ({@code RWEEKS}). */
+		final String weekDays;
 
 		Patch(String nodeId, String plainText, long remindAtMillis, int durationMinutes, int jinji, String taskId,
 				String contentHash, boolean recurring, int period, String periodUnit) {
+			this(nodeId, plainText, remindAtMillis, durationMinutes, jinji, taskId, contentHash, recurring, period,
+					periodUnit, recurring ? unitToRemindType(periodUnit) : "onetime", "");
+		}
+
+		Patch(String nodeId, String plainText, long remindAtMillis, int durationMinutes, int jinji, String taskId,
+				String contentHash, boolean recurring, int period, String periodUnit, String remindType,
+				String weekDays) {
 			this.nodeId = nodeId;
 			this.plainText = plainText;
 			this.remindAtMillis = remindAtMillis;
@@ -60,6 +71,30 @@ final class TodoistSilentMmUpdater {
 			this.recurring = recurring;
 			this.period = period <= 0 ? 1 : period;
 			this.periodUnit = periodUnit == null || periodUnit.length() == 0 ? "DAY" : periodUnit;
+			this.remindType = remindType == null || remindType.length() == 0
+					? (recurring ? unitToRemindType(this.periodUnit) : "onetime")
+					: remindType;
+			this.weekDays = weekDays == null ? "" : weekDays;
+		}
+
+		private static String unitToRemindType(String periodUnit) {
+			if (periodUnit == null) {
+				return "day";
+			}
+			final String u = periodUnit.toUpperCase();
+			if ("HOUR".equals(u)) {
+				return "hour";
+			}
+			if ("WEEK".equals(u)) {
+				return "week";
+			}
+			if ("MONTH".equals(u)) {
+				return "month";
+			}
+			if ("YEAR".equals(u)) {
+				return "year";
+			}
+			return "day";
 		}
 	}
 
@@ -397,11 +432,96 @@ final class TodoistSilentMmUpdater {
 			if (ensureReminderParameters(node, patch)) {
 				changed = true;
 			}
+			if (applyCycleAttributes(node, patch)) {
+				changed = true;
+			}
 		}
-		else if (removeReminderHook(node)) {
+		else {
+			if (removeReminderHook(node)) {
+				changed = true;
+			}
+			if (clearCycleAttributes(node)) {
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	private static boolean applyCycleAttributes(final Element node, final Patch patch) {
+		if (!patch.recurring || "onetime".equalsIgnoreCase(patch.remindType)) {
+			return clearCycleAttributes(node);
+		}
+		boolean changed = false;
+		if (!patch.remindType.equals(node.getAttribute("REMINDERTYPE"))) {
+			node.setAttribute("REMINDERTYPE", patch.remindType);
+			changed = true;
+		}
+		clearIntervalAttrsExcept(node, patch.remindType);
+		final String intervalAttr = intervalAttributeFor(patch.remindType);
+		if (intervalAttr != null) {
+			final String value = Integer.toString(patch.period);
+			if (!value.equals(node.getAttribute(intervalAttr))) {
+				node.setAttribute(intervalAttr, value);
+				changed = true;
+			}
+		}
+		if ("week".equalsIgnoreCase(patch.remindType)) {
+			final String days = patch.weekDays.length() > 0 ? patch.weekDays : "1";
+			if (!days.equals(node.getAttribute("RWEEKS"))) {
+				node.setAttribute("RWEEKS", days);
+				changed = true;
+			}
+		}
+		else if (node.hasAttribute("RWEEKS")) {
+			node.removeAttribute("RWEEKS");
 			changed = true;
 		}
 		return changed;
+	}
+
+	private static boolean clearCycleAttributes(final Element node) {
+		boolean changed = false;
+		final String[] attrs = new String[] { "REMINDERTYPE", "RHOUR", "RDAYS", "RWEEK", "RMONTH", "RYEAR", "RWEEKS",
+				"EBSTRING" };
+		for (int i = 0; i < attrs.length; i++) {
+			if (node.hasAttribute(attrs[i])) {
+				node.removeAttribute(attrs[i]);
+				changed = true;
+			}
+		}
+		return changed;
+	}
+
+	private static void clearIntervalAttrsExcept(final Element node, final String remindType) {
+		final String keep = intervalAttributeFor(remindType);
+		final String[] attrs = new String[] { "RHOUR", "RDAYS", "RWEEK", "RMONTH", "RYEAR" };
+		for (int i = 0; i < attrs.length; i++) {
+			if (keep != null && keep.equals(attrs[i])) {
+				continue;
+			}
+			if (node.hasAttribute(attrs[i])) {
+				node.removeAttribute(attrs[i]);
+			}
+		}
+	}
+
+	private static String intervalAttributeFor(final String remindType) {
+		if ("hour".equalsIgnoreCase(remindType)) {
+			return "RHOUR";
+		}
+		if ("day".equalsIgnoreCase(remindType)) {
+			return "RDAYS";
+		}
+		if ("week".equalsIgnoreCase(remindType)) {
+			return "RWEEK";
+		}
+		if ("month".equalsIgnoreCase(remindType)) {
+			return "RMONTH";
+		}
+		if ("year".equalsIgnoreCase(remindType)) {
+			return "RYEAR";
+		}
+		return null;
 	}
 
 	private static boolean removeReminderHook(final Element node) {
@@ -435,7 +555,25 @@ final class TodoistSilentMmUpdater {
 			node.appendChild(hook);
 		}
 		boolean changed = false;
-		final String due = Long.toString(patch.remindAtMillis);
+		long remindAt = patch.remindAtMillis;
+		if (patch.recurring) {
+			final String existingRaw = parameters.getAttribute("REMINDUSERAT");
+			if (existingRaw != null && existingRaw.length() > 0) {
+				try {
+					final long existingAt = Long.parseLong(existingRaw);
+					if (existingAt > 0 && sameLocalTimeOfDay(existingAt, patch.remindAtMillis)) {
+						// Keep Docear anchor date; Todoist only has the next occurrence.
+						remindAt = existingAt;
+					}
+					else if (existingAt > 0) {
+						remindAt = replaceLocalTimeOfDay(existingAt, patch.remindAtMillis);
+					}
+				}
+				catch (NumberFormatException e) {
+				}
+			}
+		}
+		final String due = Long.toString(remindAt);
 		if (!due.equals(parameters.getAttribute("REMINDUSERAT"))) {
 			parameters.setAttribute("REMINDUSERAT", due);
 			changed = true;
@@ -450,6 +588,27 @@ final class TodoistSilentMmUpdater {
 			changed = true;
 		}
 		return changed;
+	}
+
+	private static boolean sameLocalTimeOfDay(final long a, final long b) {
+		final java.util.Calendar ca = java.util.Calendar.getInstance();
+		ca.setTimeInMillis(a);
+		final java.util.Calendar cb = java.util.Calendar.getInstance();
+		cb.setTimeInMillis(b);
+		return ca.get(java.util.Calendar.HOUR_OF_DAY) == cb.get(java.util.Calendar.HOUR_OF_DAY)
+				&& ca.get(java.util.Calendar.MINUTE) == cb.get(java.util.Calendar.MINUTE);
+	}
+
+	private static long replaceLocalTimeOfDay(final long dateMillis, final long timeSourceMillis) {
+		final java.util.Calendar date = java.util.Calendar.getInstance();
+		date.setTimeInMillis(dateMillis);
+		final java.util.Calendar time = java.util.Calendar.getInstance();
+		time.setTimeInMillis(timeSourceMillis);
+		date.set(java.util.Calendar.HOUR_OF_DAY, time.get(java.util.Calendar.HOUR_OF_DAY));
+		date.set(java.util.Calendar.MINUTE, time.get(java.util.Calendar.MINUTE));
+		date.set(java.util.Calendar.SECOND, 0);
+		date.set(java.util.Calendar.MILLISECOND, 0);
+		return date.getTimeInMillis();
 	}
 
 	private static Element findReminderParameters(final Element node) {

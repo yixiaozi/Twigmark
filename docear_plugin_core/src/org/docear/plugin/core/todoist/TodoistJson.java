@@ -202,7 +202,8 @@ final class TodoistJson {
 			return false;
 		}
 		char valueStart = json.charAt(afterKey);
-		return valueStart == '"' || valueStart == '-' || Character.isDigit(valueStart);
+		return valueStart == '"' || valueStart == '-' || Character.isDigit(valueStart) || valueStart == '{'
+				|| valueStart == '[' || valueStart == 't' || valueStart == 'f' || valueStart == 'n';
 	}
 
 	private static boolean isTaskObject(String object) {
@@ -269,11 +270,25 @@ final class TodoistJson {
 		String sectionId = extractFieldValue(object, "section_id");
 		long dueAt = parseDueMillis(object);
 		String dueString = extractDueString(object);
-		boolean recurring = dueString != null && dueString.toLowerCase().indexOf("every") >= 0;
+		boolean recurring = extractDueIsRecurring(object)
+				|| (dueString != null && dueString.toLowerCase().indexOf("every") >= 0);
 		int priority = parseIntField(object, "priority", 1);
 		int durationMinutes = parseDurationMinutes(object);
 		return new TodoistImportTask(id, content, description, projectId, sectionId, dueAt, recurring, dueString,
 				priority, durationMinutes);
+	}
+
+	private static boolean extractDueIsRecurring(String taskJson) {
+		int dueIdx = findJsonKey(taskJson, 0, "\"due\"");
+		if (dueIdx < 0) {
+			return false;
+		}
+		String dueObject = extractDueValueObject(taskJson, dueIdx);
+		if (dueObject == null) {
+			return false;
+		}
+		String flag = extractFieldValue(dueObject, "is_recurring");
+		return "true".equalsIgnoreCase(flag);
 	}
 
 	private static int parseDurationMinutes(String taskJson) {
@@ -371,7 +386,7 @@ final class TodoistJson {
 		if (dueIdx < 0) {
 			return 0L;
 		}
-		String dueObject = extractObjectAround(taskJson, dueIdx);
+		String dueObject = extractDueValueObject(taskJson, dueIdx);
 		if (dueObject == null || dueObject.indexOf("\"date\"") < 0) {
 			return 0L;
 		}
@@ -384,9 +399,25 @@ final class TodoistJson {
 		}
 		String date = extractFieldValue(dueObject, "date");
 		if (date != null && date.length() > 0) {
+			// Todoist often embeds time in due.date ("2026-06-27T11:00:00"); do not append T09:00:00.
+			if (date.indexOf('T') >= 0) {
+				return parseIsoDateTime(date);
+			}
 			return parseIsoDateTime(date + "T09:00:00");
 		}
 		return 0L;
+	}
+
+	/** Returns the JSON object that is the value of the due field, not the parent task. */
+	private static String extractDueValueObject(String taskJson, int dueKeyIdx) {
+		int valueStart = skipWhitespaceAndColon(taskJson, dueKeyIdx + "\"due\"".length());
+		if (valueStart >= 0 && valueStart < taskJson.length() && taskJson.charAt(valueStart) == '{') {
+			return extractObjectAround(taskJson, valueStart);
+		}
+		if (valueStart >= 0 && valueStart < taskJson.length() && taskJson.startsWith("null", valueStart)) {
+			return null;
+		}
+		return extractObjectAround(taskJson, dueKeyIdx);
 	}
 
 	private static long parseDeadlineMillis(String taskJson) {
@@ -403,17 +434,20 @@ final class TodoistJson {
 		}
 		String date = extractFieldValue(deadlineObject, "date");
 		if (date != null && date.length() > 0) {
+			if (date.indexOf('T') >= 0) {
+				return parseIsoDateTime(date);
+			}
 			return parseIsoDateTime(date + "T09:00:00");
 		}
 		return 0L;
 	}
 
 	private static String extractDueString(String taskJson) {
-		int dueIdx = taskJson.indexOf("\"due\"");
+		int dueIdx = findJsonKey(taskJson, 0, "\"due\"");
 		if (dueIdx < 0) {
 			return extractFieldValue(taskJson, "due_string");
 		}
-		String dueObject = extractObjectAround(taskJson, dueIdx);
+		String dueObject = extractDueValueObject(taskJson, dueIdx);
 		if (dueObject == null) {
 			return null;
 		}
@@ -428,6 +462,21 @@ final class TodoistJson {
 			String normalized = value.trim();
 			if (normalized.endsWith("Z")) {
 				normalized = normalized.substring(0, normalized.length() - 1) + "+0000";
+			}
+			// Strip fractional seconds: 2026-06-27T11:00:00.000000+0000
+			final int dot = normalized.indexOf('.');
+			if (dot > 10) {
+				int end = dot + 1;
+				while (end < normalized.length() && Character.isDigit(normalized.charAt(end))) {
+					end++;
+				}
+				normalized = normalized.substring(0, dot) + normalized.substring(end);
+			}
+			// Normalize +00:00 → +0000 for SimpleDateFormat Z
+			if (normalized.length() >= 6 && (normalized.charAt(normalized.length() - 3) == ':')
+					&& (normalized.charAt(normalized.length() - 6) == '+' || normalized.charAt(normalized.length() - 6) == '-')) {
+				normalized = normalized.substring(0, normalized.length() - 3)
+						+ normalized.substring(normalized.length() - 2);
 			}
 			java.text.SimpleDateFormat format;
 			if (normalized.indexOf('T') >= 0) {
@@ -476,6 +525,12 @@ final class TodoistJson {
 			}
 			if (c == 'n' && json.startsWith("null", idx)) {
 				return null;
+			}
+			if (c == 't' && json.startsWith("true", idx)) {
+				return "true";
+			}
+			if (c == 'f' && json.startsWith("false", idx)) {
+				return "false";
 			}
 			if (c == '-' || Character.isDigit(c)) {
 				return readNumberToken(json, idx);
