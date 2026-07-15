@@ -8,6 +8,9 @@
 #   -SkipBuild          skip ant; reuse existing docear_framework\dist\docear_windows.zip
 #   -TargetDir <path>    override install dir (default: E:\Temp\DocearDist)
 #   -NoLaunch            do not start Docear after extraction
+#
+# Also verifies the relationship-graph OSGi layout (tagfilter Export-Package +
+# TagGroupFilterBarFactory) so 「关系图」does not ship with NoClassDefFoundError.
 
 param(
     [switch] $SkipBuild,
@@ -21,11 +24,15 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $antPath = Join-Path $repoRoot "tools\apache-ant-1.10.14\bin\ant.bat"
 $buildFile = Join-Path $repoRoot "docear_framework\ant\build.xml"
 $distDir = Join-Path $repoRoot "docear_framework\dist"
+$frameworkBuildPlugins = Join-Path $repoRoot "docear_framework\build\plugins"
 $runtimeScript = Join-Path $PSScriptRoot "docear-runtime.ps1"
 
 . $runtimeScript
 
 & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "ensure-build-metadata.ps1") | Out-Null
+
+# Fail fast: source tree must export tagfilter before we spend time on ant.
+Assert-RelationshipGraphSourceManifest -RepoRoot $repoRoot
 
 $candidates = @(
     "C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot",
@@ -57,6 +64,10 @@ if (-not $SkipBuild) {
     }
     finally {
         Pop-Location
+    }
+
+    if (Test-Path $frameworkBuildPlugins) {
+        Assert-RelationshipGraphPluginLayout -PluginsRoot $frameworkBuildPlugins -Context "docear_framework/build/plugins"
     }
 }
 
@@ -98,6 +109,9 @@ $installDir = Find-DocearInstallDir -RootDir $extractDir
 if ($null -eq $installDir) {
     throw "Could not find Docear install folder under $extractDir"
 }
+
+$installPlugins = Join-Path $installDir "plugins"
+Assert-RelationshipGraphPluginLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
 
 Write-Output "Published Docear packages to $TargetDir"
 Write-Output "Install folder: $installDir"
