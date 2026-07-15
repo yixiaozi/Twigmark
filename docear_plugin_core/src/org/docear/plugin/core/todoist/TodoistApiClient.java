@@ -167,11 +167,32 @@ final class TodoistApiClient {
 		request("POST", "/tasks/" + taskId + "/close", null);
 	}
 
+	/** Uncomplete a closed task so the same Todoist id stays 1:1 with the mind-map node. */
+	void reopenTask(String taskId) throws IOException {
+		request("POST", "/tasks/" + taskId + "/reopen", null);
+	}
+
+	/**
+	 * Ensures the task is active. Reopens when Todoist still has the id but marked completed
+	 * (e.g. after a cut/delete race).
+	 *
+	 * @return true if the task was reopened
+	 */
+	boolean ensureTaskActive(String taskId) throws IOException {
+		TodoistTaskLocation location = getTaskLocation(taskId);
+		if (!location.exists || !location.completed) {
+			return false;
+		}
+		reopenTask(taskId);
+		return true;
+	}
+
 	TodoistTaskLocation getTaskLocation(String taskId) throws IOException {
 		try {
 			String response = request("GET", "/tasks/" + taskId, null);
+			boolean completed = isCompletedTaskJson(response);
 			return TodoistTaskLocation.found(TodoistJson.extractStringField(response, "project_id"),
-					TodoistJson.extractStringField(response, "section_id"));
+					TodoistJson.extractStringField(response, "section_id"), completed);
 		}
 		catch (IOException e) {
 			String message = e.getMessage();
@@ -180,6 +201,18 @@ final class TodoistApiClient {
 			}
 			throw e;
 		}
+	}
+
+	private static boolean isCompletedTaskJson(String response) {
+		if (response == null) {
+			return false;
+		}
+		String checked = TodoistJson.extractStringField(response, "checked");
+		if ("true".equalsIgnoreCase(checked)) {
+			return true;
+		}
+		String completed = TodoistJson.extractStringField(response, "is_completed");
+		return "true".equalsIgnoreCase(completed);
 	}
 
 	boolean isTaskInLocation(TodoistTaskLocation location, String projectId, String sectionId) {

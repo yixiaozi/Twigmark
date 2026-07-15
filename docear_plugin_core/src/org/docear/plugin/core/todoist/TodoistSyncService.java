@@ -102,9 +102,10 @@ public final class TodoistSyncService {
 			try {
 				String sectionId = client.ensureSection(result.projectId, sectionName, sectionStore);
 				if (taskId != null && taskId.length() > 0) {
+					boolean reopened = client.ensureTaskActive(taskId);
 					TodoistTaskLocation location = client.getTaskLocation(taskId);
 					boolean needsRelocate = !client.isTaskInLocation(location, result.projectId, sectionId);
-					if (hash.equals(storedHash) && location.exists && !needsRelocate) {
+					if (hash.equals(storedHash) && location.exists && !reopened && !needsRelocate) {
 						store.putMapping(key, taskId, record.remindAt, hash);
 						stampLiveNodeIfOpen(key, taskId, hash);
 						result.addSkipped(record, sectionName);
@@ -113,7 +114,7 @@ public final class TodoistSyncService {
 						}
 					}
 					else if (location.exists) {
-						boolean needsContentUpdate = !hash.equals(storedHash);
+						boolean needsContentUpdate = !hash.equals(storedHash) || reopened;
 						if (needsRelocate) {
 							client.relocateTaskTo(taskId, result.projectId, sectionId);
 						}
@@ -141,6 +142,7 @@ public final class TodoistSyncService {
 						String reused = remoteIndex.resolveExistingTaskId(key, identity, null);
 						if (reused != null) {
 							taskId = reused;
+							client.ensureTaskActive(taskId);
 							client.updateTaskContent(taskId, record);
 							client.relocateTaskTo(taskId, result.projectId, sectionId);
 							store.putMapping(key, taskId, record.remindAt, hash);
@@ -436,10 +438,11 @@ public final class TodoistSyncService {
 			taskId = null;
 		}
 		if (taskId != null && taskId.length() > 0) {
+			final boolean reopened = client.ensureTaskActive(taskId);
 			final TodoistTaskLocation location = client.getTaskLocation(taskId);
 			if (location.exists) {
 				final boolean needsRelocate = !client.isTaskInLocation(location, projectId, sectionId);
-				final boolean needsContentUpdate = !hash.equals(storedHash);
+				final boolean needsContentUpdate = !hash.equals(storedHash) || reopened;
 				if (!needsRelocate && !needsContentUpdate) {
 					store.putMapping(key, taskId, record.remindAt, hash);
 					store.save();
@@ -465,6 +468,7 @@ public final class TodoistSyncService {
 		final TodoistDocearTaskIndex remoteIndex = TodoistDocearTaskIndex.load(client, projectId);
 		final String existing = remoteIndex.resolveExistingTaskId(key, identity, null);
 		if (existing != null) {
+			client.ensureTaskActive(existing);
 			client.updateTaskContent(existing, record);
 			client.relocateTaskTo(existing, projectId, sectionId);
 			store.putMapping(key, existing, record.remindAt, hash);
@@ -473,6 +477,25 @@ public final class TodoistSyncService {
 			TodoistReminderFactory.setTaskId(node, existing);
 			TodoistReminderFactory.setStoredContentHash(node, hash);
 			return true;
+		}
+		// Last resort: task id known but inactive/missing from project list — try reopen by id again
+		// then create only if Todoist truly has no such task.
+		if (taskId != null && taskId.length() > 0) {
+			try {
+				if (client.ensureTaskActive(taskId) || client.getTaskLocation(taskId).exists) {
+					client.updateTaskContent(taskId, record);
+					client.relocateTaskTo(taskId, projectId, sectionId);
+					store.putMapping(key, taskId, record.remindAt, hash);
+					store.save();
+					sectionStore.save();
+					TodoistReminderFactory.setTaskId(node, taskId);
+					TodoistReminderFactory.setStoredContentHash(node, hash);
+					return true;
+				}
+			}
+			catch (Exception e) {
+				LogUtils.warn("Todoist: could not revive task " + taskId, e);
+			}
 		}
 		taskId = client.createTask(record, projectId, sectionId);
 		store.putMapping(key, taskId, record.remindAt, hash);
@@ -511,30 +534,56 @@ public final class TodoistSyncService {
 			return;
 		}
 		final File file = node.getMap().getFile();
+		String taskId = TodoistReminderFactory.getTaskId(node);
+		final String key = TodoistSyncKeys.syncKey(file, node.getID());
+		final String identity = TodoistSyncKeys.identityKey(file, node.getID());
+		if (taskId == null || taskId.length() == 0) {
+			final TodoistMappingStore store = TodoistMappingStore.get();
+			taskId = store.getTaskIdOnly(key);
+			if (taskId == null || taskId.length() == 0) {
+				taskId = store.findTaskIdByIdentity(identity);
+			}
+		}
+		closeByIdentity(identity, key, taskId);
+	}
+
+	/**
+	 * Close by snapshotted identity/task id (node may already be detached from the map after cut).
+	 * Keeps 1:1: mapping is removed only after a successful close.
+	 */
+	static void closeByIdentity(final String identity, final String syncKey, final String taskIdHint) {
 		final String token = TodoistConfig.getApiToken();
 		if (token == null || token.trim().length() == 0) {
 			return;
 		}
 		try {
-			String taskId = TodoistReminderFactory.getTaskId(node);
-			final String key = TodoistSyncKeys.syncKey(file, node.getID());
 			final TodoistMappingStore store = TodoistMappingStore.get();
+			String taskId = taskIdHint;
 			if (taskId == null || taskId.length() == 0) {
-				taskId = store.getTaskIdOnly(key);
-			}
-			if (taskId == null || taskId.length() == 0) {
-				taskId = store.findTaskIdByIdentity(TodoistSyncKeys.identityKey(file, node.getID()));
+				if (syncKey != null) {
+					taskId = store.getTaskIdOnly(syncKey);
+				}
+				if ((taskId == null || taskId.length() == 0) && identity != null) {
+					taskId = store.findTaskIdByIdentity(identity);
+				}
 			}
 			if (taskId == null || taskId.length() == 0) {
 				return;
 			}
 			final TodoistApiClient client = new TodoistApiClient(token.trim());
-			client.closeTask(taskId);
-			store.removeMapping(key);
+			final TodoistTaskLocation location = client.getTaskLocation(taskId);
+			if (location.exists && !location.completed) {
+				client.closeTask(taskId);
+			}
+			if (syncKey != null) {
+				store.removeMapping(syncKey);
+			}
+			store.removeByTaskId(taskId);
 			store.save();
+			LogUtils.info("Todoist: closed task " + taskId + " for identity " + identity);
 		}
 		catch (Exception e) {
-			LogUtils.warn("Todoist auto-sync close failed for " + node.getID(), e);
+			LogUtils.warn("Todoist auto-sync close failed for " + identity, e);
 		}
 	}
 }
