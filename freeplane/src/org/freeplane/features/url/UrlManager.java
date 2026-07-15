@@ -87,12 +87,26 @@ public class UrlManager implements IExtension {
 	public static final String MAP_URL = "map_url";
 
 	/**
-	 * Creates a default reader that just reads the given file.
+	 * Creates a default reader that detects UTF-8 (BOM / content) vs the platform charset
+	 * so raw UTF-8 Chinese in {@code .mm} files is not mis-read as GBK 乱码.
 	 *
 	 * @throws FileNotFoundException
 	 */
 	protected static Reader getActualReader(final InputStream file) throws FileNotFoundException {
-		return new InputStreamReader(file, FileUtils.defaultCharset());
+		try {
+			final BufferedInputStream buffered = file instanceof BufferedInputStream ? (BufferedInputStream) file
+			        : new BufferedInputStream(file);
+			final int probeSize = 16384;
+			buffered.mark(probeSize + 4);
+			final byte[] probe = new byte[probeSize];
+			final int read = buffered.read(probe);
+			buffered.reset();
+			final Charset charset = MindMapCharsetDetector.detect(probe, Math.max(0, read));
+			return new InputStreamReader(buffered, charset);
+		}
+		catch (IOException e) {
+			return new InputStreamReader(file, FileUtils.defaultCharset());
+		}
 	}
 
 	public static UrlManager getController() {

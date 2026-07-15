@@ -82,7 +82,9 @@ import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.url.IMapInputStreamConverter;
 import org.freeplane.features.url.MapConversionException;
 import org.freeplane.features.url.MapVersionInterpreter;
+import org.freeplane.features.url.MindMapCharsetDetector;
 import org.freeplane.features.url.MindMapDialectRepair;
+import org.freeplane.features.url.MindMapEncodingRepair;
 import org.freeplane.features.url.UrlManager;
 import org.freeplane.n3.nanoxml.XMLException;
 import org.freeplane.n3.nanoxml.XMLParseException;
@@ -491,6 +493,9 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 	//DOCEAR
 	private NodeModel loadTreeImpl(final MapModel map, final File f) throws FileNotFoundException, IOException,
 	        XMLException, MapConversionException {
+		// Normalize raw UTF-8/GBK Chinese to Freeplane &#x…; so the map never opens as 乱码.
+		MindMapEncodingRepair.repairIfNeeded(f);
+
 		BufferedInputStream file = new BufferedInputStream(new FileInputStream(f));
 		int versionInfoLength = 1000;
 		byte[] buffer = new byte[versionInfoLength];
@@ -558,19 +563,18 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		}
 	}
 
-	/** Prefer UTF-8 when a BOM is present; otherwise use the configured default charset. */
+	/** Decode the map header using the same charset detector as full-file load. */
 	private static String decodeMapStart(final byte[] buffer, final int readCount) {
 		if (readCount <= 0) {
 			return "";
 		}
-		if (readCount >= 3 && (buffer[0] & 0xff) == 0xEF && (buffer[1] & 0xff) == 0xBB && (buffer[2] & 0xff) == 0xBF) {
-			try {
-				return new String(buffer, 3, readCount - 3, "UTF-8");
-			}
-			catch (Exception e) {
-			}
+		final Charset charset = MindMapCharsetDetector.detect(buffer, readCount);
+		int offset = 0;
+		if (readCount >= 3 && (buffer[0] & 0xff) == 0xEF && (buffer[1] & 0xff) == 0xBB && (buffer[2] & 0xff) == 0xBF
+		        && "UTF-8".equalsIgnoreCase(charset.name())) {
+			offset = 3;
 		}
-		return new String(buffer, 0, readCount, FileUtils.defaultCharset());
+		return new String(buffer, offset, readCount - offset, charset);
 	}
 
 	/**@deprecated -- use LinkController*/
