@@ -15,25 +15,64 @@ public final class TodoistImportService {
 		return importAllTasks(null);
 	}
 
+	/** Import only Todoist tasks that are not 1:1-linked to a source mind-map reminder. */
+	public static TodoistImportResult importUnlinkedTasks(final TodoistSyncProgressCallback callback) {
+		return importTasks(callback, true);
+	}
+
 	public static TodoistImportResult importAllTasks(final TodoistSyncProgressCallback callback) {
+		return importTasks(callback, false);
+	}
+
+	private static TodoistImportResult importTasks(final TodoistSyncProgressCallback callback,
+			final boolean unlinkedOnly) {
 		final TodoistImportResult result = new TodoistImportResult();
 		final String token = TodoistConfig.getApiToken();
 		if (token == null || token.trim().length() == 0) {
 			result.failed = 1;
 			result.errorMessage = "Todoist API token is not configured.";
 			result.addFailed(result.errorMessage);
-			finish(callback, result);
+			if (!unlinkedOnly) {
+				finish(callback, result);
+			}
 			return result;
 		}
 		status(callback, TextUtils.getText("todoist.import.status.fetching"));
 		final TodoistApiClient client = new TodoistApiClient(token.trim());
 		try {
-			final List tasks = client.fetchAllActiveTasks();
+			List tasks = client.fetchAllActiveTasks();
+			final TodoistMappingStore store = new TodoistMappingStore();
+			if (unlinkedOnly) {
+				final java.util.ArrayList filtered = new java.util.ArrayList();
+				for (int i = 0; i < tasks.size(); i++) {
+					TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+					if (store.isLinkedToSourceMap(task.id)) {
+						continue;
+					}
+					String syncKey = store.getSyncKeyForTaskId(task.id);
+					if (syncKey == null) {
+						syncKey = TodoistApiClient.syncKeyFromDescription(task.description);
+					}
+					if (syncKey != null) {
+						final int sep = syncKey.lastIndexOf('|');
+						if (sep > 0) {
+							final java.io.File file = new java.io.File(syncKey.substring(0, sep));
+							if (!TodoistConfig.isImportTargetFile(file) && file.isFile()) {
+								continue;
+							}
+						}
+					}
+					filtered.add(task);
+				}
+				tasks = filtered;
+			}
 			if (tasks.isEmpty()) {
-				String warning = TextUtils.getText("todoist.import.empty");
-				result.addFailed(warning);
-				if (callback != null) {
-					callback.onFailed(warning);
+				if (!unlinkedOnly) {
+					String warning = TextUtils.getText("todoist.import.empty");
+					result.addFailed(warning);
+					if (callback != null) {
+						callback.onFailed(warning);
+					}
 				}
 			}
 			final Map projectNames = client.fetchProjectNames();
@@ -48,13 +87,15 @@ public final class TodoistImportService {
 				}
 			}
 			status(callback, TextUtils.getText("todoist.import.status.writing"));
+			final List tasksFinal = tasks;
 			final java.io.File targetFile = TodoistConfig.getImportTargetFile();
 			final TodoistImportResult[] writeResult = new TodoistImportResult[1];
 			final Exception[] writeError = new Exception[1];
 			Runnable writeJob = new Runnable() {
 				public void run() {
 					try {
-						writeResult[0] = new TodoistMindMapWriter().write(targetFile, tasks, projectNames, sectionNames);
+						writeResult[0] = new TodoistMindMapWriter().write(targetFile, tasksFinal, projectNames,
+								sectionNames);
 					}
 					catch (Exception e) {
 						writeError[0] = e;
@@ -84,7 +125,9 @@ public final class TodoistImportService {
 			}
 			LogUtils.warn("Todoist import failed", e);
 		}
-		finish(callback, result);
+		if (!unlinkedOnly) {
+			finish(callback, result);
+		}
 		return result;
 	}
 

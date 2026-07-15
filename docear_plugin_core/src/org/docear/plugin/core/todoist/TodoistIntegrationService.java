@@ -3,6 +3,8 @@ package org.docear.plugin.core.todoist;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 
@@ -14,10 +16,8 @@ public final class TodoistIntegrationService {
 		TodoistConfig.registerDefaults();
 		TodoistConfig.getApiToken();
 		modeController.addAction(new TodoistSyncAction());
-		modeController.addAction(new TodoistImportAction());
 		modeController.addAction(new TodoistSettingsAction());
 		Controller.getCurrentController().addAction(modeController.getAction(TodoistSyncAction.KEY));
-		Controller.getCurrentController().addAction(modeController.getAction(TodoistImportAction.KEY));
 		Controller.getCurrentController().addAction(modeController.getAction(TodoistSettingsAction.KEY));
 		modeController.addMenuContributor(new IMenuContributor() {
 			public void updateMenus(ModeController mc, MenuBuilder builder) {
@@ -25,9 +25,33 @@ public final class TodoistIntegrationService {
 				addMenuIfPresent(builder, "/menu_bar/help", mc);
 			}
 		});
-		TodoistAutoSyncService.getInstance().install(modeController);
 		TodoistNodeMetaIo.install(modeController);
-		LogUtils.info("Todoist integration: sync menu + auto-sync registered.");
+		TodoistAutoSyncService.getInstance().install(modeController);
+		installMapOpenStamping(modeController);
+		LogUtils.info("Todoist integration: unified sync + auto-sync registered.");
+	}
+
+	/** When a map opens, stamp node↔task links from the local mapping store (hidden XML). */
+	private static void installMapOpenStamping(final ModeController modeController) {
+		modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
+			public void onCreate(final MapModel map) {
+				try {
+					TodoistNodeLocator.stampMapFromStore(map, new TodoistMappingStore());
+				}
+				catch (Exception e) {
+					LogUtils.warn("Todoist: stamp on map open failed", e);
+				}
+			}
+
+			public void onRemove(MapModel map) {
+			}
+
+			public void onSavedAs(MapModel map) {
+			}
+
+			public void onSaved(MapModel map) {
+			}
+		});
 	}
 
 	private static void addMenuIfPresent(MenuBuilder builder, String menuPath, ModeController modeController) {
@@ -36,7 +60,6 @@ public final class TodoistIntegrationService {
 		}
 		builder.addSeparator(menuPath, MenuBuilder.AS_CHILD);
 		builder.addAction(menuPath, modeController.getAction(TodoistSyncAction.KEY), MenuBuilder.AS_CHILD);
-		builder.addAction(menuPath, modeController.getAction(TodoistImportAction.KEY), MenuBuilder.AS_CHILD);
 		builder.addAction(menuPath, modeController.getAction(TodoistSettingsAction.KEY), MenuBuilder.AS_CHILD);
 	}
 }

@@ -10,6 +10,10 @@ import javax.swing.SwingWorker;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 
+/**
+ * Unified Todoist sync: push reminders → pull linked nodes (any map, 1:1 by
+ * nodeId↔taskId) → import only unlinked tasks into the inbox map.
+ */
 public class TodoistSyncAction extends AFreeplaneAction {
 	private static final long serialVersionUID = 1L;
 	public static final String KEY = "TodoistSyncAction";
@@ -34,7 +38,7 @@ public class TodoistSyncAction extends AFreeplaneAction {
 		final TodoistSyncProgressDialog dialog = TodoistSyncProgressDialog.open(owner);
 		new SwingWorker() {
 			protected Object doInBackground() throws Exception {
-				return TodoistSyncService.syncAllReminders(dialog);
+				return TodoistBidirectionalSyncService.syncAll(dialog);
 			}
 
 			protected void done() {

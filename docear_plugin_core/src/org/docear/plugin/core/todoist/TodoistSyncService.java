@@ -86,6 +86,7 @@ public final class TodoistSyncService {
 							client.updateTaskContent(taskId, record);
 						}
 						store.putMapping(key, taskId, record.remindAt, hash);
+						stampLiveNodeIfOpen(key, taskId, hash);
 						if (needsRelocate) {
 							result.addMoved(record, sectionName);
 							if (callback != null) {
@@ -102,6 +103,7 @@ public final class TodoistSyncService {
 					else {
 						taskId = client.createTask(record, result.projectId, sectionId);
 						store.putMapping(key, taskId, record.remindAt, hash);
+						stampLiveNodeIfOpen(key, taskId, hash);
 						result.addCreated(record, sectionName);
 						if (callback != null) {
 							callback.onCreated(line);
@@ -111,6 +113,7 @@ public final class TodoistSyncService {
 				else {
 					taskId = client.createTask(record, result.projectId, sectionId);
 					store.putMapping(key, taskId, record.remindAt, hash);
+					stampLiveNodeIfOpen(key, taskId, hash);
 					result.addCreated(record, sectionName);
 					if (callback != null) {
 						callback.onCreated(line);
@@ -130,29 +133,34 @@ public final class TodoistSyncService {
 		status(callback, TextUtils.getText("todoist.sync.status.cleanup"));
 		for (Iterator it = store.keySet().iterator(); it.hasNext();) {
 			String key = (String) it.next();
-			if (!activeKeys.contains(key)) {
-				String taskId = store.getTaskIdOnly(key);
-				if (taskId != null && taskId.length() > 0) {
-					try {
-						client.closeTask(taskId);
-						result.addClosed(key);
-						if (callback != null) {
-							callback.onClosed(key);
-						}
-					}
-					catch (Exception e) {
-						result.failed++;
-						String failedLine = "Close " + taskId + ": " + e.getMessage();
-						result.failedLines.add(failedLine);
-						if (callback != null) {
-							callback.onFailed(failedLine);
-						}
-						LogUtils.warn("Todoist close failed for " + key, e);
-						continue;
+			if (activeKeys.contains(key)) {
+				continue;
+			}
+			// Inbox-map links are managed by import, not by reminder push cleanup.
+			if (isImportTargetSyncKey(key)) {
+				continue;
+			}
+			String taskId = store.getTaskIdOnly(key);
+			if (taskId != null && taskId.length() > 0) {
+				try {
+					client.closeTask(taskId);
+					result.addClosed(key);
+					if (callback != null) {
+						callback.onClosed(key);
 					}
 				}
-				store.removeMapping(key);
+				catch (Exception e) {
+					result.failed++;
+					String failedLine = "Close " + taskId + ": " + e.getMessage();
+					result.failedLines.add(failedLine);
+					if (callback != null) {
+						callback.onFailed(failedLine);
+					}
+					LogUtils.warn("Todoist close failed for " + key, e);
+					continue;
+				}
 			}
+			store.removeMapping(key);
 		}
 		store.save();
 		sectionStore.save();
@@ -267,6 +275,31 @@ public final class TodoistSyncService {
 		sb.append(record.period).append('|');
 		sb.append(record.periodUnit);
 		return Integer.toString(sb.toString().hashCode());
+	}
+
+	private static boolean isImportTargetSyncKey(final String syncKey) {
+		if (syncKey == null) {
+			return false;
+		}
+		final int sep = syncKey.lastIndexOf('|');
+		if (sep <= 0) {
+			return false;
+		}
+		return TodoistConfig.isImportTargetFile(new File(syncKey.substring(0, sep)));
+	}
+
+	private static void stampLiveNodeIfOpen(final String syncKey, final String taskId, final String hash) {
+		try {
+			final NodeModel node = TodoistNodeLocator.findOpenNodeBySyncKey(syncKey);
+			if (node == null) {
+				return;
+			}
+			TodoistReminderFactory.setTaskId(node, taskId);
+			TodoistReminderFactory.setStoredContentHash(node, hash);
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not stamp open node for " + syncKey, e);
+		}
 	}
 
 	/**

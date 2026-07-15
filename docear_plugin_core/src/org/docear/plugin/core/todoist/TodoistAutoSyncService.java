@@ -21,7 +21,7 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
  * Automatic bidirectional Todoist sync:
  * <ul>
  * <li>Debounced push when reminder text / due time change on a mind map</li>
- * <li>Periodic full reconcile (map reminders → Todoist) + incremental import (Todoist → map)</li>
+ * <li>Periodic full reconcile: push → pull linked nodes (any map) → import unlinked only</li>
  * </ul>
  */
 public final class TodoistAutoSyncService {
@@ -220,10 +220,8 @@ public final class TodoistAutoSyncService {
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
 				try {
-					LogUtils.info("Todoist auto-sync: periodic upload...");
-					TodoistSyncService.syncAllReminders(null);
-					LogUtils.info("Todoist auto-sync: periodic incremental import...");
-					TodoistImportService.importAllTasks(null);
+					LogUtils.info("Todoist auto-sync: bidirectional reconcile...");
+					TodoistBidirectionalSyncService.syncAll(null);
 				}
 				catch (Exception e) {
 					LogUtils.warn("Todoist auto-sync periodic run failed", e);

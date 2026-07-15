@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -18,27 +19,60 @@ import java.util.Set;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 
+/**
+ * Persistent 1:1 map between mind-map nodes and Todoist tasks.
+ * <p>
+ * Forward key {@code absPath|nodeId} → {@code taskId|remindAt|contentHash}<br/>
+ * Reverse key {@code taskId} → {@code absPath|nodeId} (kept in memory + file with prefix {@code #task:})
+ */
 final class TodoistMappingStore {
 	private static final String FILE_NAME = "todoist-sync-map.properties";
+	private static final String REVERSE_PREFIX = "#task:";
 
 	private final File storeFile;
 	private final Map mappings = new HashMap();
+	private final Map reverse = new HashMap();
 
 	TodoistMappingStore() {
 		storeFile = new File(Compat.getApplicationUserDirectory(), FILE_NAME);
 		load();
 	}
 
-	String getTaskId(String syncKey) {
-		return (String) mappings.get(syncKey);
-	}
-
 	void putMapping(String syncKey, String taskId, long remindAt, String contentHash) {
+		if (syncKey == null || taskId == null || taskId.length() == 0) {
+			return;
+		}
+		final String previousTaskId = getTaskIdOnly(syncKey);
+		if (previousTaskId != null && previousTaskId.length() > 0 && !previousTaskId.equals(taskId)) {
+			reverse.remove(previousTaskId);
+		}
 		mappings.put(syncKey, taskId + "|" + remindAt + "|" + contentHash);
+		reverse.put(taskId, syncKey);
 	}
 
 	void removeMapping(String syncKey) {
+		final String taskId = getTaskIdOnly(syncKey);
 		mappings.remove(syncKey);
+		if (taskId != null) {
+			reverse.remove(taskId);
+		}
+	}
+
+	void removeByTaskId(String taskId) {
+		if (taskId == null) {
+			return;
+		}
+		final String syncKey = (String) reverse.remove(taskId);
+		if (syncKey != null) {
+			mappings.remove(syncKey);
+		}
+	}
+
+	String getSyncKeyForTaskId(String taskId) {
+		if (taskId == null) {
+			return null;
+		}
+		return (String) reverse.get(taskId);
 	}
 
 	String getStoredRemindAt(String syncKey) {
@@ -82,16 +116,22 @@ final class TodoistMappingStore {
 		return mappings.keySet();
 	}
 
-	java.util.Set getAllMappedTaskIds() {
-		java.util.Set ids = new java.util.HashSet();
-		for (Iterator it = mappings.keySet().iterator(); it.hasNext();) {
-			String key = (String) it.next();
-			String taskId = getTaskIdOnly(key);
-			if (taskId != null && taskId.length() > 0) {
-				ids.add(taskId);
-			}
+	Set getAllMappedTaskIds() {
+		return new HashSet(reverse.keySet());
+	}
+
+	/** True if this task is linked to a reminder outside the Todoist import target map. */
+	boolean isLinkedToSourceMap(String taskId) {
+		final String syncKey = getSyncKeyForTaskId(taskId);
+		if (syncKey == null) {
+			return false;
 		}
-		return ids;
+		final int sep = syncKey.lastIndexOf('|');
+		if (sep <= 0) {
+			return false;
+		}
+		final File file = new File(syncKey.substring(0, sep));
+		return !TodoistConfig.isImportTargetFile(file);
 	}
 
 	void save() {
@@ -102,6 +142,13 @@ final class TodoistMappingStore {
 			for (Iterator it = mappings.entrySet().iterator(); it.hasNext();) {
 				Map.Entry entry = (Map.Entry) it.next();
 				writer.write(escape((String) entry.getKey()));
+				writer.write('=');
+				writer.write(escape((String) entry.getValue()));
+				writer.write('\n');
+			}
+			for (Iterator it = reverse.entrySet().iterator(); it.hasNext();) {
+				Map.Entry entry = (Map.Entry) it.next();
+				writer.write(escape(REVERSE_PREFIX + entry.getKey()));
 				writer.write('=');
 				writer.write(escape((String) entry.getValue()));
 				writer.write('\n');
@@ -133,14 +180,25 @@ final class TodoistMappingStore {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				line = line.trim();
-				if (line.length() == 0 || line.startsWith("#")) {
+				if (line.length() == 0 || line.startsWith("#") && !line.startsWith(REVERSE_PREFIX)) {
 					continue;
 				}
 				int eq = line.indexOf('=');
 				if (eq <= 0) {
 					continue;
 				}
-				mappings.put(unescape(line.substring(0, eq)), unescape(line.substring(eq + 1)));
+				final String key = unescape(line.substring(0, eq));
+				final String value = unescape(line.substring(eq + 1));
+				if (key.startsWith(REVERSE_PREFIX)) {
+					reverse.put(key.substring(REVERSE_PREFIX.length()), value);
+				}
+				else {
+					mappings.put(key, value);
+					final String taskId = extractTaskId(value);
+					if (taskId != null) {
+						reverse.put(taskId, key);
+					}
+				}
 			}
 		}
 		catch (IOException e) {
@@ -155,6 +213,18 @@ final class TodoistMappingStore {
 				}
 			}
 		}
+	}
+
+	private static String extractTaskId(String value) {
+		if (value == null) {
+			return null;
+		}
+		int first = value.indexOf('|');
+		if (first < 0) {
+			return value.length() > 0 ? value : null;
+		}
+		final String id = value.substring(0, first);
+		return id.length() > 0 ? id : null;
 	}
 
 	private static String escape(String value) {
