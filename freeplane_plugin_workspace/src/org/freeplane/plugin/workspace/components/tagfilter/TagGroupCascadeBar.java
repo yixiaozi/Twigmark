@@ -78,6 +78,9 @@ public class TagGroupCascadeBar extends JPanel {
 	private final boolean includeAllScope;
 	private final JPanel rowsPanel = new JPanel();
 	private Listener listener;
+	/** Optional handler that avoids nested-interface classloader issues for foreign plugins. */
+	private Runnable selectionChangedAction;
+	private Set availableTagsSnapshot = Collections.EMPTY_SET;
 	private String activeGroupId = TagGroupStore.UNGROUPED_ID;
 	/** When true, only tags assigned directly to {@link #activeGroupId} (not subgroups). */
 	private boolean directOnly;
@@ -120,6 +123,20 @@ public class TagGroupCascadeBar extends JPanel {
 
 	public void setListener(final Listener listener) {
 		this.listener = listener;
+	}
+
+	/**
+	 * Bind callbacks without implementing {@link Listener}. Prefer this from other plugins
+	 * (e.g. docear_plugin_core): nested {@code Listener} can fail with
+	 * {@code NoClassDefFoundError} across Freeplane plugin classloaders.
+	 */
+	public void bind(final Runnable onSelectionChanged, final Set availableTags) {
+		this.selectionChangedAction = onSelectionChanged;
+		setAvailableTagsSnapshot(availableTags);
+	}
+
+	public void setAvailableTagsSnapshot(final Set availableTags) {
+		this.availableTagsSnapshot = availableTags != null ? availableTags : Collections.EMPTY_SET;
 	}
 
 	public String getActiveGroupId() {
@@ -247,7 +264,7 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	private JToggleButton createAllScopeButton(final boolean exactSelected) {
-		final int tagCount = listener != null ? listener.getAvailableTags().size() : 0;
+		final int tagCount = resolveAvailableTags().size();
 		final String label = TextUtils.getText("workspace.nodepins.group.all") + " " + tagCount;
 		final JToggleButton tab = createStyledToggle(label, exactSelected, false);
 		tab.setToolTipText(TextUtils.getText("workspace.nodepins.group.all"));
@@ -569,10 +586,8 @@ public class TagGroupCascadeBar extends JPanel {
 
 	private Set collectScopeTags(final String groupId, final boolean onlyDirect) {
 		final Set result = new HashSet();
-		if (listener == null) {
-			return result;
-		}
-		for (final Iterator it = listener.getAvailableTags().iterator(); it.hasNext();) {
+		final Set available = resolveAvailableTags();
+		for (final Iterator it = available.iterator(); it.hasNext();) {
 			final String tag = (String) it.next();
 			if (ALL_SCOPE_ID.equals(groupId)) {
 				result.add(tag);
@@ -589,6 +604,16 @@ public class TagGroupCascadeBar extends JPanel {
 			}
 		}
 		return result;
+	}
+
+	private Set resolveAvailableTags() {
+		if (listener != null) {
+			final Set fromListener = listener.getAvailableTags();
+			if (fromListener != null) {
+				return fromListener;
+			}
+		}
+		return availableTagsSnapshot;
 	}
 
 	private void installGroupDropTarget(final JComponent tab, final String groupId) {
@@ -651,6 +676,9 @@ public class TagGroupCascadeBar extends JPanel {
 	private void fireSelectionChanged() {
 		if (listener != null) {
 			listener.selectionChanged();
+		}
+		if (selectionChangedAction != null) {
+			selectionChangedAction.run();
 		}
 	}
 }

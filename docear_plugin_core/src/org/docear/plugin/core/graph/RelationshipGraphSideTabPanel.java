@@ -778,26 +778,31 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			        BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 
 			if (isTagStyleMode(mode)) {
-				final TagGroupStore store = mode == RelationshipGraphScanner.MODE_FAVORITES
-				        ? TagGroupStore.getFavoritesInstance()
-				        : TagGroupStore.getInstance();
-				final String propGroup = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_GROUP
-				        : PROP_TAGS_GROUP;
-				final String propDirect = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_DIRECT
-				        : PROP_TAGS_DIRECT;
-				groupCascade = new TagGroupCascadeBar(store, propGroup, propDirect, true);
-				groupCascade.setListener(new TagGroupCascadeBar.Listener() {
-					public void selectionChanged() {
-						if (RelationshipGraphSideTabPanel.this.graphMode == ModeTabPanel.this.mode) {
-							rebuildDisplayIndex(true);
+				TagGroupCascadeBar cascade = null;
+				try {
+					final TagGroupStore store = mode == RelationshipGraphScanner.MODE_FAVORITES
+					        ? TagGroupStore.getFavoritesInstance()
+					        : TagGroupStore.getInstance();
+					final String propGroup = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_GROUP
+					        : PROP_TAGS_GROUP;
+					final String propDirect = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_DIRECT
+					        : PROP_TAGS_DIRECT;
+					cascade = new TagGroupCascadeBar(store, propGroup, propDirect, true);
+					// Do not implement TagGroupCascadeBar.Listener here — nested interfaces
+					// fail across plugin classloaders (NoClassDefFoundError: ...$Listener).
+					cascade.bind(new Runnable() {
+						public void run() {
+							if (RelationshipGraphSideTabPanel.this.graphMode == ModeTabPanel.this.mode) {
+								rebuildDisplayIndex(true);
+							}
 						}
-					}
-
-					public Set getAvailableTags() {
-						return collectTagNamesFromBase(cachedBaseIndex[ModeTabPanel.this.mode]);
-					}
-				});
-				// Rebuild when the parent tab is first shown (deferred from constructor).
+					}, java.util.Collections.EMPTY_SET);
+				}
+				catch (final Throwable t) {
+					LogUtils.warn(t);
+					cascade = null;
+				}
+				groupCascade = cascade;
 			}
 			else {
 				groupCascade = null;
@@ -991,6 +996,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		private void refreshGroupCascade(final RelationshipGraphIndex base) {
 			if (groupCascade != null) {
+				groupCascade.setAvailableTagsSnapshot(
+				        collectTagNamesFromBase(base != null ? base : cachedBaseIndex[mode]));
 				groupCascade.rebuild();
 			}
 		}
