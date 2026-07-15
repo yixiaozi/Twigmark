@@ -53,15 +53,38 @@ public final class TodoistSyncService {
 		final List reminders = new MindMapReminderScanner().scanAllReminders();
 		result.totalScanned = reminders.size();
 		status(callback, TextUtils.format("todoist.sync.status.found", new Object[] { Integer.valueOf(reminders.size()) }));
+		TodoistDocearTaskIndex remoteIndex;
+		try {
+			status(callback, TextUtils.getText("todoist.sync.status.index"));
+			remoteIndex = TodoistDocearTaskIndex.load(client, result.projectId);
+		}
+		catch (Exception e) {
+			result.failed = 1;
+			result.errorMessage = "Could not index Todoist tasks: " + e.getMessage();
+			result.failedLines.add(result.errorMessage);
+			notifyFailed(callback, result.errorMessage);
+			LogUtils.warn("Todoist remote index failed", e);
+			finish(callback, result);
+			return result;
+		}
 		final Set activeKeys = new HashSet();
+		final Set activeIdentities = new HashSet();
 		final int total = reminders.size();
 		for (int i = 0; i < reminders.size(); i++) {
 			TodoistReminderRecord record = (TodoistReminderRecord) reminders.get(i);
 			String key = record.syncKey();
+			String identity = record.identityKey();
 			activeKeys.add(key);
+			if (identity != null) {
+				activeIdentities.add(identity);
+			}
 			String sectionName = TodoistApiClient.sectionNameForFile(record.file);
 			String hash = contentHash(record, sectionName);
 			String taskId = store.getTaskIdOnly(key);
+			if (taskId == null || taskId.length() == 0) {
+				taskId = store.findTaskIdByIdentity(identity);
+			}
+			taskId = remoteIndex.resolveExistingTaskId(key, identity, taskId);
 			String storedHash = store.getStoredContentHash(key);
 			String line = TodoistSyncResult.formatLine(sectionName, record);
 			progress(callback, i + 1, total);
@@ -71,7 +94,9 @@ public final class TodoistSyncService {
 				if (taskId != null && taskId.length() > 0) {
 					TodoistTaskLocation location = client.getTaskLocation(taskId);
 					boolean needsRelocate = !client.isTaskInLocation(location, result.projectId, sectionId);
-					if (hash.equals(storedHash) && !needsRelocate) {
+					if (hash.equals(storedHash) && location.exists && !needsRelocate) {
+						store.putMapping(key, taskId, record.remindAt, hash);
+						stampLiveNodeIfOpen(key, taskId, hash);
 						result.addSkipped(record, sectionName);
 						if (callback != null) {
 							callback.onSkipped(line);
@@ -101,17 +126,33 @@ public final class TodoistSyncService {
 						}
 					}
 					else {
-						taskId = client.createTask(record, result.projectId, sectionId);
-						store.putMapping(key, taskId, record.remindAt, hash);
-						stampLiveNodeIfOpen(key, taskId, hash);
-						result.addCreated(record, sectionName);
-						if (callback != null) {
-							callback.onCreated(line);
+						// Mapped id gone — drop it from index then reuse a twin or create once.
+						remoteIndex.removeById(taskId);
+						String reused = remoteIndex.resolveExistingTaskId(key, identity, null);
+						if (reused != null) {
+							taskId = reused;
+							client.updateTaskContent(taskId, record);
+							client.relocateTaskTo(taskId, result.projectId, sectionId);
+							store.putMapping(key, taskId, record.remindAt, hash);
+							stampLiveNodeIfOpen(key, taskId, hash);
+							result.addUpdated(record, sectionName);
+							if (callback != null) {
+								callback.onUpdated(line);
+							}
+						}
+						else {
+							taskId = createAndIndex(client, remoteIndex, record, result.projectId, sectionId);
+							store.putMapping(key, taskId, record.remindAt, hash);
+							stampLiveNodeIfOpen(key, taskId, hash);
+							result.addCreated(record, sectionName);
+							if (callback != null) {
+								callback.onCreated(line);
+							}
 						}
 					}
 				}
 				else {
-					taskId = client.createTask(record, result.projectId, sectionId);
+					taskId = createAndIndex(client, remoteIndex, record, result.projectId, sectionId);
 					store.putMapping(key, taskId, record.remindAt, hash);
 					stampLiveNodeIfOpen(key, taskId, hash);
 					result.addCreated(record, sectionName);
@@ -129,18 +170,28 @@ public final class TodoistSyncService {
 				LogUtils.warn("Todoist sync failed for " + key, e);
 			}
 		}
-		cleanupMisplacedTasks(client, result, store, callback, activeKeys);
+		cleanupMisplacedTasks(client, result, store, callback, activeKeys, activeIdentities, remoteIndex);
 		status(callback, TextUtils.getText("todoist.sync.status.cleanup"));
-		for (Iterator it = store.keySet().iterator(); it.hasNext();) {
+		for (Iterator it = new java.util.ArrayList(store.keySet()).iterator(); it.hasNext();) {
 			String key = (String) it.next();
 			if (activeKeys.contains(key)) {
 				continue;
 			}
-			// Inbox-map links are managed by import, not by reminder push cleanup.
 			if (isImportTargetSyncKey(key)) {
 				continue;
 			}
+			final String identity = TodoistSyncKeys.identityKeyFromSyncKey(key);
+			if (identity != null && activeIdentities.contains(identity)) {
+				// Stale absolute-path alias for an active reminder — drop mapping only.
+				store.removeMapping(key);
+				continue;
+			}
 			String taskId = store.getTaskIdOnly(key);
+			final String currentKey = taskId == null ? null : store.getSyncKeyForTaskId(taskId);
+			if (taskId != null && currentKey != null && activeKeys.contains(currentKey)) {
+				store.removeMapping(key);
+				continue;
+			}
 			if (taskId != null && taskId.length() > 0) {
 				try {
 					client.closeTask(taskId);
@@ -168,13 +219,29 @@ public final class TodoistSyncService {
 		return result;
 	}
 
+	private static String createAndIndex(TodoistApiClient client, TodoistDocearTaskIndex remoteIndex,
+			TodoistReminderRecord record, String projectId, String sectionId) throws IOException {
+		final String taskId = client.createTask(record, projectId, sectionId);
+		if (remoteIndex != null) {
+			remoteIndex.add(new TodoistImportTask(taskId, record.nodeText, TodoistApiClient.buildDescription(record),
+					projectId, sectionId, record.remindAt, record.recurring, null));
+		}
+		return taskId;
+	}
+
 	private static void cleanupMisplacedTasks(TodoistApiClient client, TodoistSyncResult result,
-			TodoistMappingStore store, TodoistSyncProgressCallback callback, Set activeKeys) {
+			TodoistMappingStore store, TodoistSyncProgressCallback callback, Set activeKeys, Set activeIdentities,
+			TodoistDocearTaskIndex remoteIndex) {
 		status(callback, TextUtils.getText("todoist.sync.status.repair"));
 		final Set mappedTaskIds = store.getAllMappedTaskIds();
 		try {
 			closeOrphansInWrongProjects(client, result, callback, mappedTaskIds);
-			closeDuplicateTasksInProject(client, result.projectId, activeKeys, mappedTaskIds, result, callback);
+			status(callback, TextUtils.getText("todoist.sync.status.dedupe"));
+			// Fresh index after the push loop so twins created mid-run are included.
+			final TodoistDocearTaskIndex index = TodoistDocearTaskIndex.load(client, result.projectId);
+			index.closeDuplicates(client, store, activeIdentities, result, callback);
+			closeOrphanTasks(client, result.projectId, result.projectName, store.getAllMappedTaskIds(), result,
+					callback, true, activeKeys);
 		}
 		catch (Exception e) {
 			result.failed++;
@@ -199,24 +266,30 @@ public final class TodoistSyncService {
 		}
 	}
 
-	private static void closeDuplicateTasksInProject(TodoistApiClient client, String projectId, Set activeKeys,
-			Set mappedTaskIds, TodoistSyncResult result, TodoistSyncProgressCallback callback) throws IOException {
-		closeOrphanTasks(client, projectId, result.projectName, mappedTaskIds, result, callback, true, activeKeys);
-	}
-
 	private static void closeOrphanTasks(TodoistApiClient client, String projectId, String projectName,
 			Set mappedTaskIds, TodoistSyncResult result, TodoistSyncProgressCallback callback,
 			boolean onlyActiveDuplicates, Set activeKeys) throws IOException {
-		final List orphanTaskIds = client.listDocearTaskIdsInProject(projectId);
-		for (int t = 0; t < orphanTaskIds.size(); t++) {
-			String orphanTaskId = (String) orphanTaskIds.get(t);
+		final List orphanTasks = client.listDocearTasksInProject(projectId);
+		for (int t = 0; t < orphanTasks.size(); t++) {
+			TodoistImportTask orphan = (TodoistImportTask) orphanTasks.get(t);
+			final String orphanTaskId = orphan.id;
 			if (mappedTaskIds.contains(orphanTaskId)) {
 				continue;
 			}
 			if (onlyActiveDuplicates) {
-				String description = client.getTaskDescription(orphanTaskId);
-				String syncKey = TodoistApiClient.syncKeyFromDescription(description);
-				if (syncKey == null || !activeKeys.contains(syncKey)) {
+				String syncKey = TodoistApiClient.syncKeyFromDescription(orphan.description);
+				String identity = TodoistSyncKeys.identityKeyFromDescription(orphan.description);
+				boolean matchesActive = syncKey != null && activeKeys != null && activeKeys.contains(syncKey);
+				if (!matchesActive && identity != null && activeKeys != null) {
+					for (Iterator it = activeKeys.iterator(); it.hasNext();) {
+						String active = (String) it.next();
+						if (identity.equals(TodoistSyncKeys.identityKeyFromSyncKey(active))) {
+							matchesActive = true;
+							break;
+						}
+					}
+				}
+				if (!matchesActive) {
 					continue;
 				}
 			}
@@ -336,8 +409,12 @@ public final class TodoistSyncService {
 		final String sectionName = TodoistApiClient.sectionNameForFile(record.file);
 		final String sectionId = client.ensureSection(projectId, sectionName, sectionStore);
 		final String key = record.syncKey();
+		final String identity = record.identityKey();
 		final String hash = contentHash(record, sectionName);
 		String taskId = store.getTaskIdOnly(key);
+		if (taskId == null || taskId.length() == 0) {
+			taskId = store.findTaskIdByIdentity(identity);
+		}
 		if (taskId == null || taskId.length() == 0) {
 			taskId = TodoistReminderFactory.getTaskId(node);
 		}
@@ -351,6 +428,10 @@ public final class TodoistSyncService {
 				final boolean needsRelocate = !client.isTaskInLocation(location, projectId, sectionId);
 				final boolean needsContentUpdate = !hash.equals(storedHash);
 				if (!needsRelocate && !needsContentUpdate) {
+					store.putMapping(key, taskId, record.remindAt, hash);
+					store.save();
+					TodoistReminderFactory.setTaskId(node, taskId);
+					TodoistReminderFactory.setStoredContentHash(node, hash);
 					return false;
 				}
 				if (needsRelocate) {
@@ -366,6 +447,19 @@ public final class TodoistSyncService {
 				TodoistReminderFactory.setStoredContentHash(node, hash);
 				return true;
 			}
+		}
+		// No live id — look for an existing Docear twin before creating another calendar block.
+		final TodoistDocearTaskIndex remoteIndex = TodoistDocearTaskIndex.load(client, projectId);
+		final String existing = remoteIndex.resolveExistingTaskId(key, identity, null);
+		if (existing != null) {
+			client.updateTaskContent(existing, record);
+			client.relocateTaskTo(existing, projectId, sectionId);
+			store.putMapping(key, existing, record.remindAt, hash);
+			store.save();
+			sectionStore.save();
+			TodoistReminderFactory.setTaskId(node, existing);
+			TodoistReminderFactory.setStoredContentHash(node, hash);
+			return true;
 		}
 		taskId = client.createTask(record, projectId, sectionId);
 		store.putMapping(key, taskId, record.remindAt, hash);
@@ -410,10 +504,13 @@ public final class TodoistSyncService {
 		}
 		try {
 			String taskId = TodoistReminderFactory.getTaskId(node);
-			final String key = file.getAbsolutePath() + "|" + node.getID();
+			final String key = TodoistSyncKeys.syncKey(file, node.getID());
 			final TodoistMappingStore store = new TodoistMappingStore();
 			if (taskId == null || taskId.length() == 0) {
 				taskId = store.getTaskIdOnly(key);
+			}
+			if (taskId == null || taskId.length() == 0) {
+				taskId = store.findTaskIdByIdentity(TodoistSyncKeys.identityKey(file, node.getID()));
 			}
 			if (taskId == null || taskId.length() == 0) {
 				return;

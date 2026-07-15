@@ -53,7 +53,9 @@ final class TodoistMappingStore {
 	void removeMapping(String syncKey) {
 		final String taskId = getTaskIdOnly(syncKey);
 		mappings.remove(syncKey);
-		if (taskId != null) {
+		// Only drop reverse if it still points at this exact sync key (path may have
+		// been remapped to a canonical key for the same task).
+		if (taskId != null && syncKey.equals(reverse.get(taskId))) {
 			reverse.remove(taskId);
 		}
 	}
@@ -110,6 +112,22 @@ final class TodoistMappingStore {
 			return value;
 		}
 		return value.substring(0, first);
+	}
+
+	/**
+	 * Resolve a stored task id when the absolute path drifted but Map file name + node id match.
+	 */
+	String findTaskIdByIdentity(String identityKey) {
+		if (identityKey == null || identityKey.length() == 0) {
+			return null;
+		}
+		for (Iterator it = mappings.keySet().iterator(); it.hasNext();) {
+			String syncKey = (String) it.next();
+			if (identityKey.equals(TodoistSyncKeys.identityKeyFromSyncKey(syncKey))) {
+				return getTaskIdOnly(syncKey);
+			}
+		}
+		return null;
 	}
 
 	Set keySet() {

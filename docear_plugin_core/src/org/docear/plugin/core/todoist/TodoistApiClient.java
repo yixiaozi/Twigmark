@@ -209,7 +209,17 @@ final class TodoistApiClient {
 	}
 
 	java.util.List listDocearTaskIdsInProject(String projectId) throws IOException {
+		java.util.List tasks = listDocearTasksInProject(projectId);
 		java.util.List taskIds = new java.util.ArrayList();
+		for (int i = 0; i < tasks.size(); i++) {
+			taskIds.add(((TodoistImportTask) tasks.get(i)).id);
+		}
+		return taskIds;
+	}
+
+	/** Active Docear-linked tasks in a project (id + content + description + due). */
+	java.util.List listDocearTasksInProject(String projectId) throws IOException {
+		java.util.List tasks = new java.util.ArrayList();
 		String cursor = null;
 		do {
 			String path = "/tasks?project_id=" + urlEncode(projectId) + "&limit=" + PAGE_LIMIT;
@@ -217,11 +227,18 @@ final class TodoistApiClient {
 				path += "&cursor=" + urlEncode(cursor);
 			}
 			String response = request("GET", path, null);
-			TodoistJson.collectDocearTaskIds(response, taskIds);
+			TodoistJson.collectImportTasks(response, tasks);
 			cursor = TodoistJson.extractNextCursor(response);
 		}
 		while (cursor != null);
-		return taskIds;
+		java.util.List docear = new java.util.ArrayList();
+		for (int i = 0; i < tasks.size(); i++) {
+			TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+			if (task.description != null && task.description.indexOf("Docear reminder") >= 0) {
+				docear.add(task);
+			}
+		}
+		return docear;
 	}
 
 	String getTaskDescription(String taskId) throws IOException {
@@ -489,11 +506,11 @@ final class TodoistApiClient {
 		return null;
 	}
 
-	private static String buildDescription(TodoistReminderRecord record) {
+	static String buildDescription(TodoistReminderRecord record) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("Docear reminder\n");
 		sb.append("Map: ").append(record.file.getName()).append('\n');
-		sb.append("Path: ").append(record.file.getAbsolutePath()).append('\n');
+		sb.append("Path: ").append(TodoistSyncKeys.absolutePath(record.file)).append('\n');
 		sb.append("Node ID: ").append(record.nodeId);
 		return sb.toString();
 	}

@@ -23,6 +23,10 @@ final class TodoistReminderRecord {
 	}
 
 	String syncKey() {
-		return file.getAbsolutePath() + "|" + nodeId;
+		return TodoistSyncKeys.syncKey(file, nodeId);
+	}
+
+	String identityKey() {
+		return TodoistSyncKeys.identityKey(file, nodeId);
 	}
 }
