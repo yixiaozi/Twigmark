@@ -1,7 +1,9 @@
 package org.freeplane.plugin.workspace.features.nodepins;
 
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -85,6 +87,45 @@ public final class NodeDetailsTagUtils {
 		plain = HtmlUtils.unescapeHTMLUnicodeEntity(plain);
 		plain = BRACKET_TAG_PATTERN.matcher(plain).replaceAll("").trim();
 		return plain;
+	}
+
+	/**
+	 * Ordered plain-text / tag segments as they appear in the node string.
+	 * Hidden tags such as {@link #PIN_TAG} are dropped so display matches strip rules.
+	 */
+	public static List parseDisplaySegments(final String nodeText) {
+		final ArrayList segments = new ArrayList();
+		if (nodeText == null || nodeText.trim().length() == 0) {
+			return segments;
+		}
+		String plain = fixMixedEncoding(nodeText);
+		plain = HtmlUtils.unescapeHTMLUnicodeEntity(plain);
+		plain = HtmlUtils.htmlToPlain(plain);
+		if (plain == null) {
+			return segments;
+		}
+		final Matcher matcher = BRACKET_TAG_PATTERN.matcher(plain);
+		int last = 0;
+		while (matcher.find()) {
+			if (matcher.start() > last) {
+				final String text = plain.substring(last, matcher.start());
+				if (text.length() > 0) {
+					segments.add(TagDisplaySegment.text(text));
+				}
+			}
+			final String tag = normalizeTagName(matcher.group(1));
+			if (isValidTagName(tag) && !PIN_TAG.equals(tag)) {
+				segments.add(TagDisplaySegment.tag(tag));
+			}
+			last = matcher.end();
+		}
+		if (last < plain.length()) {
+			final String text = plain.substring(last);
+			if (text.length() > 0) {
+				segments.add(TagDisplaySegment.text(text));
+			}
+		}
+		return segments;
 	}
 
 	public static String buildNodeText(final String nodeTitle, final Set tags) {

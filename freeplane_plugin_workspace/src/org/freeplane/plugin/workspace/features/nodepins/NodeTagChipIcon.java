@@ -8,39 +8,38 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 import javax.swing.Icon;
 
 /**
- * Paints node title plus soft pill chips for {@code 【tag】} markers. Used only for
- * canvas display; edit still uses the raw node text.
+ * Paints node content as ordered text / tag-chip segments so {@code 【tag】} stays
+ * where it appears in the node string (not forced to the end).
  */
 public final class NodeTagChipIcon implements Icon {
 
 	private static final int CHIP_ARC = 12;
 	private static final int CHIP_PAD_X = 7;
 	private static final int CHIP_PAD_Y = 2;
-	private static final int GAP_TITLE_CHIP = 6;
-	private static final int GAP_CHIPS = 4;
+	private static final int GAP_AFTER_TEXT = 6;
+	private static final int GAP_AFTER_CHIP = 4;
 
-	private final String title;
-	private final List tags = new ArrayList();
+	private final List segments = new ArrayList();
 	private final Font titleFont;
 	private final Font chipFont;
 	private final Color titleColor;
 	private final int width;
 	private final int height;
 
-	public NodeTagChipIcon(final String title, final Set tagNames, final Font baseFont, final Color titleColor) {
-		this.title = title != null ? title : "";
-		if (tagNames != null) {
-			for (final Iterator it = tagNames.iterator(); it.hasNext();) {
-				final String tag = (String) it.next();
-				if (tag != null && tag.length() > 0) {
-					tags.add(tag);
+	public NodeTagChipIcon(final List displaySegments, final Font baseFont, final Color titleColor) {
+		if (displaySegments != null) {
+			for (int i = 0; i < displaySegments.size(); i++) {
+				final Object item = displaySegments.get(i);
+				if (item instanceof TagDisplaySegment) {
+					final TagDisplaySegment segment = (TagDisplaySegment) item;
+					if (segment.getValue().length() > 0) {
+						segments.add(segment);
+					}
 				}
 			}
 		}
@@ -51,20 +50,25 @@ public final class NodeTagChipIcon implements Icon {
 		final FontMetrics titleFm = metrics(this.titleFont);
 		final FontMetrics chipFm = metrics(this.chipFont);
 		int w = 0;
-		if (this.title.length() > 0) {
-			w += titleFm.stringWidth(this.title);
-		}
-		for (int i = 0; i < tags.size(); i++) {
-			if (w > 0) {
-				w += i == 0 ? GAP_TITLE_CHIP : GAP_CHIPS;
+		int titleH = 0;
+		int chipH = 0;
+		for (int i = 0; i < segments.size(); i++) {
+			final TagDisplaySegment segment = (TagDisplaySegment) segments.get(i);
+			if (i > 0) {
+				final TagDisplaySegment previous = (TagDisplaySegment) segments.get(i - 1);
+				w += previous.isTag() ? GAP_AFTER_CHIP : GAP_AFTER_TEXT;
 			}
-			final String tag = (String) tags.get(i);
-			w += chipFm.stringWidth(tag) + CHIP_PAD_X * 2;
+			if (segment.isTag()) {
+				w += chipFm.stringWidth(segment.getValue()) + CHIP_PAD_X * 2;
+				chipH = Math.max(chipH, chipFm.getHeight() + CHIP_PAD_Y * 2);
+			}
+			else {
+				w += titleFm.stringWidth(segment.getValue());
+				titleH = Math.max(titleH, titleFm.getHeight());
+			}
 		}
-		final int titleH = this.title.length() > 0 ? titleFm.getHeight() : 0;
-		final int chipH = tags.isEmpty() ? 0 : chipFm.getHeight() + CHIP_PAD_Y * 2;
 		this.width = Math.max(1, w);
-		this.height = Math.max(titleH, chipH);
+		this.height = Math.max(1, Math.max(titleH, chipH));
 	}
 
 	public int getIconWidth() {
@@ -83,28 +87,35 @@ public final class NodeTagChipIcon implements Icon {
 		final FontMetrics chipFm = g2.getFontMetrics(chipFont);
 		int cursorX = x;
 		final int midY = y + height / 2;
-		if (title.length() > 0) {
-			g2.setFont(titleFont);
-			g2.setColor(titleColor);
-			final int titleY = midY + (titleFm.getAscent() - titleFm.getDescent()) / 2;
-			g2.drawString(title, cursorX, titleY);
-			cursorX += titleFm.stringWidth(title) + GAP_TITLE_CHIP;
-		}
 		final int chipH = chipFm.getHeight() + CHIP_PAD_Y * 2;
 		final int chipTop = midY - chipH / 2;
-		for (int i = 0; i < tags.size(); i++) {
-			final String tag = (String) tags.get(i);
-			final int textW = chipFm.stringWidth(tag);
-			final int chipW = textW + CHIP_PAD_X * 2;
-			final Color bg = TagColorStore.getInstance().getColor(tag);
-			final Color fg = TagColorStore.contrastingTextColor(bg);
-			g2.setColor(bg);
-			g2.fillRoundRect(cursorX, chipTop, chipW, chipH, CHIP_ARC, CHIP_ARC);
-			g2.setFont(chipFont);
-			g2.setColor(fg);
-			final int textY = chipTop + CHIP_PAD_Y + chipFm.getAscent();
-			g2.drawString(tag, cursorX + CHIP_PAD_X, textY);
-			cursorX += chipW + GAP_CHIPS;
+		for (int i = 0; i < segments.size(); i++) {
+			final TagDisplaySegment segment = (TagDisplaySegment) segments.get(i);
+			if (i > 0) {
+				final TagDisplaySegment previous = (TagDisplaySegment) segments.get(i - 1);
+				cursorX += previous.isTag() ? GAP_AFTER_CHIP : GAP_AFTER_TEXT;
+			}
+			if (segment.isTag()) {
+				final String tag = segment.getValue();
+				final int textW = chipFm.stringWidth(tag);
+				final int chipW = textW + CHIP_PAD_X * 2;
+				final Color bg = TagColorStore.getInstance().getColor(tag);
+				final Color fg = TagColorStore.contrastingTextColor(bg);
+				g2.setColor(bg);
+				g2.fillRoundRect(cursorX, chipTop, chipW, chipH, CHIP_ARC, CHIP_ARC);
+				g2.setFont(chipFont);
+				g2.setColor(fg);
+				final int textY = chipTop + CHIP_PAD_Y + chipFm.getAscent();
+				g2.drawString(tag, cursorX + CHIP_PAD_X, textY);
+				cursorX += chipW;
+			}
+			else {
+				g2.setFont(titleFont);
+				g2.setColor(titleColor);
+				final int titleY = midY + (titleFm.getAscent() - titleFm.getDescent()) / 2;
+				g2.drawString(segment.getValue(), cursorX, titleY);
+				cursorX += titleFm.stringWidth(segment.getValue());
+			}
 		}
 		g2.dispose();
 	}

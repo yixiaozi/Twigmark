@@ -2,7 +2,7 @@ package org.freeplane.plugin.workspace.features.nodepins;
 
 import java.awt.Color;
 import java.awt.Font;
-import java.util.Set;
+import java.util.List;
 
 import javax.swing.Icon;
 
@@ -15,8 +15,8 @@ import org.freeplane.features.text.TextController;
 import org.freeplane.features.text.TransformationException;
 
 /**
- * Display-only: render {@code 【tag】} segments as colored pills on the mind-map canvas.
- * Edit / model text stay plain (title + 【tag】…).
+ * Display-only: render {@code 【tag】} as colored pills in their original in-text order.
+ * Edit / model text stay plain ({@code 【tag】} markers preserved where typed).
  */
 public final class TagChipContentTransformer extends AbstractContentTransformer {
 
@@ -45,17 +45,23 @@ public final class TagChipContentTransformer extends AbstractContentTransformer 
 		if (source == null || !NodeDetailsTagUtils.mayContainBracketTags(source)) {
 			return null;
 		}
-		final Set tags = NodeDetailsTagUtils.parseUserTags(source);
-		if (tags.isEmpty()) {
+		final List segments = NodeDetailsTagUtils.parseDisplaySegments(source);
+		boolean hasTag = false;
+		for (int i = 0; i < segments.size(); i++) {
+			if (((TagDisplaySegment) segments.get(i)).isTag()) {
+				hasTag = true;
+				break;
+			}
+		}
+		if (!hasTag) {
 			return null;
 		}
-		final String title = NodeDetailsTagUtils.extractNodeTitle(source);
 		final NodeStyleController style = NodeStyleController.getController(textController.getModeController());
 		final Font styleFont = style.getFont(node);
 		final float size = Math.max(9f, Math.round(style.getFontSize(node) * UITools.FONT_SCALE_FACTOR));
 		final Font baseFont = styleFont.deriveFont(size);
 		final Color fg = style.getColor(node);
-		return new NodeTagChipIcon(title, tags, baseFont, fg);
+		return new NodeTagChipIcon(segments, baseFont, fg);
 	}
 
 	private static String resolveSourceText(final Object content, final Object transformedExtension) {
