@@ -82,6 +82,7 @@ import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.url.IMapInputStreamConverter;
 import org.freeplane.features.url.MapConversionException;
 import org.freeplane.features.url.MapVersionInterpreter;
+import org.freeplane.features.url.MindMapDialectRepair;
 import org.freeplane.features.url.UrlManager;
 import org.freeplane.n3.nanoxml.XMLException;
 import org.freeplane.n3.nanoxml.XMLParseException;
@@ -490,19 +491,43 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 	//DOCEAR
 	private NodeModel loadTreeImpl(final MapModel map, final File f) throws FileNotFoundException, IOException,
 	        XMLException, MapConversionException {
-		final BufferedInputStream file = new BufferedInputStream(new FileInputStream(f));
+		BufferedInputStream file = new BufferedInputStream(new FileInputStream(f));
 		int versionInfoLength = 1000;
-		final byte[] buffer = new byte[versionInfoLength];
-		final int readCount = file.read(buffer);
-		final String mapStart = new String(buffer, FileUtils.defaultCharset().name());
+		byte[] buffer = new byte[versionInfoLength];
+		int readCount = file.read(buffer);
+		String mapStart = decodeMapStart(buffer, readCount);
+		MapVersionInterpreter versionInterpreter = MapVersionInterpreter.getVersionInterpreter(mapStart);
+		if (versionInterpreter.anotherDialect) {
+			FileUtils.silentlyClose(file);
+			file = null;
+			if (MindMapDialectRepair.repairIfNeeded(f)) {
+				file = new BufferedInputStream(new FileInputStream(f));
+				buffer = new byte[versionInfoLength];
+				readCount = file.read(buffer);
+				mapStart = decodeMapStart(buffer, readCount);
+				versionInterpreter = MapVersionInterpreter.getVersionInterpreter(mapStart);
+			}
+			else {
+				file = new BufferedInputStream(new FileInputStream(f));
+				buffer = new byte[versionInfoLength];
+				readCount = file.read(buffer);
+				mapStart = decodeMapStart(buffer, readCount);
+			}
+		}
 		final ByteArrayInputStream readBytes = new ByteArrayInputStream(buffer, 0, readCount);
 		final InputStream sequencedInput = new SequenceInputStream(readBytes, file);
 		Reader reader = null;
-		MapVersionInterpreter versionInterpreter = MapVersionInterpreter.getVersionInterpreter(mapStart);
 		map.addExtension(versionInterpreter);
-		if(versionInterpreter.anotherDialect){
-			String message = versionInterpreter.getDialectInfo(f.getAbsolutePath());
-			UITools.showMessage(message, JOptionPane.WARNING_MESSAGE);
+		if (versionInterpreter.anotherDialect) {
+			// Auto-repair already attempted. Do not block the UI with a modal dialog — that
+			// combined with external-change reload produced an unusable warning loop.
+			LogUtils.warn(versionInterpreter.getDialectInfo(f.getAbsolutePath()));
+			try {
+				Controller.getCurrentController().getViewController()
+				        .out(TextUtils.getText("dialect_info.warning"));
+			}
+			catch (Exception ignore) {
+			}
 		}
 		if(versionInterpreter.needsConversion){
 			final int showResult = OptionalDontShowMeAgainDialog.show("really_convert_to_current_version",
@@ -531,6 +556,21 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		finally {
 			FileUtils.silentlyClose(reader);
 		}
+	}
+
+	/** Prefer UTF-8 when a BOM is present; otherwise use the configured default charset. */
+	private static String decodeMapStart(final byte[] buffer, final int readCount) {
+		if (readCount <= 0) {
+			return "";
+		}
+		if (readCount >= 3 && (buffer[0] & 0xff) == 0xEF && (buffer[1] & 0xff) == 0xBB && (buffer[2] & 0xff) == 0xBF) {
+			try {
+				return new String(buffer, 3, readCount - 3, "UTF-8");
+			}
+			catch (Exception e) {
+			}
+		}
+		return new String(buffer, 0, readCount, FileUtils.defaultCharset());
 	}
 
 	/**@deprecated -- use LinkController*/

@@ -130,19 +130,34 @@ public class MapVersionInterpreter implements IExtension{
 		if (mapBegin.charAt(0) == '\uFEFF') {
 			i = 1;
 		}
-		while (i < mapBegin.length() && Character.isWhitespace(mapBegin.charAt(i))) {
-			i++;
-		}
-		if (i + 1 < mapBegin.length() && mapBegin.charAt(i) == '<' && mapBegin.charAt(i + 1) == '?') {
-			final int end = mapBegin.indexOf("?>", i + 2);
-			if (end >= 0) {
-				i = end + 2;
-				while (i < mapBegin.length() && Character.isWhitespace(mapBegin.charAt(i))) {
-					i++;
-				}
-			}
-		}
+		i = skipWhitespaceAndXmlNoise(mapBegin, i);
 		return i == 0 ? mapBegin : mapBegin.substring(i);
+	}
+
+	private static int skipWhitespaceAndXmlNoise(final String s, int i) {
+		while (true) {
+			while (i < s.length() && Character.isWhitespace(s.charAt(i))) {
+				i++;
+			}
+			if (i + 1 < s.length() && s.charAt(i) == '<' && s.charAt(i + 1) == '?') {
+				final int end = s.indexOf("?>", i + 2);
+				if (end < 0) {
+					return i;
+				}
+				i = end + 2;
+				continue;
+			}
+			if (i + 3 < s.length() && s.charAt(i) == '<' && s.charAt(i + 1) == '!' && s.charAt(i + 2) == '-'
+			        && s.charAt(i + 3) == '-') {
+				final int end = s.indexOf("-->", i + 4);
+				if (end < 0) {
+					return i;
+				}
+				i = end + 3;
+				continue;
+			}
+			return i;
+		}
 	}
 	
 	public IMapConverter getMapConverter() {
