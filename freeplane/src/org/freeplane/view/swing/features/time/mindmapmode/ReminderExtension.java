@@ -123,7 +123,10 @@ public class ReminderExtension implements IExtension, IMapChangeListener {
 	}
 
 	private void displayStateIcon(final NodeModel parent, final ClockState state) {
-		if (task != null || ! task.alreadyExecuted() || !isAncestorNode(parent)) {
+		// Original Freeplane typo was `task != null` which only "worked" because scheduleTimer
+		// always installed a TimerBlinkTask (first clause short-circuited before NPE).
+		// No-blink mode leaves task null; the correct guard is task == null.
+		if (task == null || !task.alreadyExecuted() || !isAncestorNode(parent)) {
 			return;
 		}
 		displayState(state, parent, true);
