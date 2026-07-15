@@ -44,6 +44,7 @@ import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
+import org.freeplane.plugin.workspace.components.RelationshipGraphTabBridge;
 import org.freeplane.plugin.workspace.components.tagfilter.TagGroupCascadeBar;
 import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
 
@@ -96,7 +97,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 	public RelationshipGraphSideTabPanel() {
 		super(new BorderLayout(4, 4));
+		putClientProperty(RelationshipGraphTabBridge.SIDE_TAB_CLIENT_PROPERTY, Boolean.TRUE);
 		setBorder(BorderFactory.createEmptyBorder(6, 6, 6, 6));
+		setOpaque(true);
+		setBackground(Color.WHITE);
 
 		mapFilesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_FILES);
 		mapNodesTab = new ModeTabPanel(RelationshipGraphScanner.MODE_MAP_NODES);
@@ -312,6 +316,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		service.showInViewport();
 		subTabs.setSelectedIndex(tabIndexFromMode(graphMode));
 		updateCanvasModeHint();
+		revalidate();
+		repaint();
 		final boolean needsScan = !dataLoadedForMode[graphMode] || cachedBaseIndex[graphMode] == null;
 		if (needsScan) {
 			refreshGraphAsync(true);
@@ -319,7 +325,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		}
 		final ModeTabPanel tab = activeTab();
 		if (tab.displayIndex != null) {
-			presentGraphInViewport(tab.displayIndex, true);
+			// Force fit so a previous off-screen pan/zoom never leaves a blank canvas.
+			presentGraphInViewport(tab.displayIndex, false);
 			return;
 		}
 		rebuildDisplayIndexAsync(false, true);
@@ -382,9 +389,8 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				final RelationshipGraphService again = RelationshipGraphService.getService();
 				if (again != null && again.isHoldingViewport()) {
 					again.showInViewport();
-					if (!preserveView) {
-						again.getCanvas().fitContentInView();
-					}
+					// Always fit after layout is in the viewport — a blank/off-screen canvas is worse
+					again.getCanvas().fitContentInView();
 					again.getCanvas().repaint();
 				}
 			}

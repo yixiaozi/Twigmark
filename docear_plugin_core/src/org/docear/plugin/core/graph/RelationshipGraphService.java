@@ -3,9 +3,12 @@ package org.docear.plugin.core.graph;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 
 import javax.swing.JScrollPane;
 import javax.swing.JViewport;
+import javax.swing.Timer;
 
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.features.map.IMapSelectionListener;
@@ -36,6 +39,7 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 	/** True while the left graph side-tab wants the main viewport. */
 	private boolean holdingViewport;
 	private boolean reclaimScheduled;
+	private boolean viewportWatchInstalled;
 	private final IMapViewManager.ViewportOverride viewportOverride = new IMapViewManager.ViewportOverride() {
 		public Component getViewportComponent() {
 			return getCanvas();
@@ -64,12 +68,26 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 	public RelationshipGraphCanvas getCanvas() {
 		if (canvas == null) {
 			canvas = new RelationshipGraphCanvas();
+			installViewportWatch(canvas);
 		}
 		return canvas;
 	}
 
 	public boolean isGraphInViewport() {
 		return graphInViewport;
+	}
+
+	/** True when the scroll pane's view is actually our canvas (not just a flag). */
+	public boolean isGraphActuallyVisible() {
+		try {
+			final MapViewController mapViewController = getMapViewController();
+			final JViewport viewport = mapViewController.getScrollPane().getViewport();
+			return canvas != null && viewport != null && viewport.getView() == canvas
+			        && canvas.isDisplayable() && canvas.getWidth() >= 40 && canvas.getHeight() >= 40;
+		}
+		catch (final Exception e) {
+			return false;
+		}
 	}
 
 	public boolean isHoldingViewport() {
@@ -89,6 +107,10 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 	}
 
 	public void showInViewport() {
+		showInViewportInternal(true);
+	}
+
+	private void showInViewportInternal(final boolean scheduleFollowUp) {
 		holdingViewport = true;
 		graphInViewport = true;
 		installViewportOverride();
@@ -112,6 +134,10 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		}
 		else {
 			EventQueue.invokeLater(swap);
+		}
+		if (scheduleFollowUp) {
+			scheduleDelayedReclaim(50);
+			scheduleDelayedReclaim(250);
 		}
 	}
 
@@ -208,6 +234,24 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		graphCanvas.setSize(w, h);
 	}
 
+	private void installViewportWatch(final RelationshipGraphCanvas graphCanvas) {
+		if (viewportWatchInstalled || graphCanvas == null) {
+			return;
+		}
+		viewportWatchInstalled = true;
+		graphCanvas.addHierarchyListener(new HierarchyListener() {
+			public void hierarchyChanged(final HierarchyEvent e) {
+				if (!holdingViewport) {
+					return;
+				}
+				if ((e.getChangeFlags() & HierarchyEvent.PARENT_CHANGED) != 0
+				        || (e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0) {
+					scheduleReclaimViewport();
+				}
+			}
+		});
+	}
+
 	private void scheduleReclaimViewport() {
 		if (!holdingViewport || reclaimScheduled) {
 			return;
@@ -216,16 +260,31 @@ public class RelationshipGraphService implements IExtension, IMapSelectionListen
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 				reclaimScheduled = false;
-				if (!holdingViewport) {
-					return;
-				}
-				final MapViewController mapViewController = getMapViewController();
-				final Component view = mapViewController.getScrollPane().getViewport().getView();
-				if (canvas == null || view != canvas) {
-					showInViewport();
-				}
+				reclaimIfNeeded();
 			}
 		});
+	}
+
+	private void scheduleDelayedReclaim(final int delayMs) {
+		final Timer timer = new Timer(delayMs, new java.awt.event.ActionListener() {
+			public void actionPerformed(final java.awt.event.ActionEvent e) {
+				((Timer) e.getSource()).stop();
+				reclaimIfNeeded();
+			}
+		});
+		timer.setRepeats(false);
+		timer.start();
+	}
+
+	private void reclaimIfNeeded() {
+		if (!holdingViewport) {
+			return;
+		}
+		final MapViewController mapViewController = getMapViewController();
+		final Component view = mapViewController.getScrollPane().getViewport().getView();
+		if (canvas == null || view != canvas) {
+			showInViewportInternal(false);
+		}
 	}
 
 	public void beforeMapChange(final MapModel oldMap, final MapModel newMap) {

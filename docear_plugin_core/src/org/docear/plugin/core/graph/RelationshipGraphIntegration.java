@@ -51,6 +51,10 @@ public final class RelationshipGraphIntegration {
 			}
 
 			public void onTabSelected() {
+				// ensureSideTabLoaded may have raced before the bridge was ready; create now.
+				if (sideTabPanel == null) {
+					createSideTabPanel();
+				}
 				if (sideTabPanel != null) {
 					sideTabPanel.onTabActivated();
 				}

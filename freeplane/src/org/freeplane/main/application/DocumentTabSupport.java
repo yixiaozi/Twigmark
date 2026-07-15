@@ -55,8 +55,9 @@ public final class DocumentTabSupport {
 		}
 		activeDocumentView = view;
 		view.onTabActivated();
-		Controller.getCurrentController().getMapViewManager().getScrollPane()
-		        .setViewportView(view.getViewportComponent());
+		// Must go through refreshViewportView so ViewportOverride (关系图) is respected.
+		Controller.getCurrentController().getMapViewManager()
+		        .refreshViewportView(view.getViewportComponent());
 	}
 
 	public static void deactivateDocumentView() {

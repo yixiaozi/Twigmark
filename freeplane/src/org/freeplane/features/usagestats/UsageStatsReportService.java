@@ -61,7 +61,7 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 
 	private void showInMapViewport() {
 		final MapViewController mapViewController = getMapViewController();
-		mapViewController.getScrollPane().setViewportView(getViewportPanel());
+		mapViewController.refreshViewportView(getViewportPanel());
 		reportInViewport = true;
 		getViewportPanel().refresh();
 	}
@@ -73,7 +73,7 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 		final MapViewController mapViewController = getMapViewController();
 		final MapView mapView = mapViewController.getMapView();
 		if (mapView != null) {
-			mapViewController.getScrollPane().setViewportView(mapView);
+			mapViewController.refreshViewportView(mapView);
 		}
 		reportInViewport = false;
 	}

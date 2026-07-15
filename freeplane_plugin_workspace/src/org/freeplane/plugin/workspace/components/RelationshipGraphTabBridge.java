@@ -7,6 +7,9 @@ import javax.swing.JComponent;
  */
 public final class RelationshipGraphTabBridge {
 
+	/** Set on the real side-tab panel so placeholders / failed loads are distinguishable. */
+	public static final String SIDE_TAB_CLIENT_PROPERTY = "docear.relationshipGraph.sideTab";
+
 	public interface Provider {
 		JComponent createSideTabPanel();
 

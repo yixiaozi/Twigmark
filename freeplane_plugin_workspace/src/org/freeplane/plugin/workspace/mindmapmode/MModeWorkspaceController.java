@@ -1,5 +1,6 @@
 package org.freeplane.plugin.workspace.mindmapmode;
 
+import java.awt.Component;
 import java.awt.Container;
 import java.awt.Dimension;
 import java.awt.BorderLayout;
@@ -23,6 +24,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
+import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -396,7 +398,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
-		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
+		// SCROLL keeps the content area visible: WRAP + tall metric tab headers
+		// can consume the entire left-dock height and leave an empty gray panel.
+		sideTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
 		for (final String tabId : sideTabOrder) {
 			final JComponent component = createSideTabPlaceholder(tabId);
 			sideTabComponents.put(tabId, component);
@@ -842,6 +846,16 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_WORKSPACE.equals(tabId)) {
 			return getWorkspaceView();
 		}
+		if (TAB_GRAPH.equals(tabId)) {
+			final JPanel placeholder = new JPanel(new BorderLayout());
+			placeholder.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+			placeholder.add(new JLabel(
+			        "<html><body style='width:200px'>\u5173\u7cfb\u56fe\u52a0\u8f7d\u4e2d\u2026<br>"
+			                + "\u82e5\u957f\u65f6\u95f4\u4ecd\u4e3a\u7a7a\u767d\uff0c\u8bf7\u518d\u70b9\u4e00\u6b21\u672c\u9875\u7b7e\u3002"
+			                + "</body></html>"),
+			        BorderLayout.NORTH);
+			return placeholder;
+		}
 		return new JPanel();
 	}
 
@@ -888,7 +902,17 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return;
 		}
 		final String tabId = sideTabOrder.get(tabIndex);
-		if (Boolean.TRUE.equals(sideTabLoaded.get(tabId))) {
+		if (TAB_GRAPH.equals(tabId)) {
+			// Metrics can show (191) from a silent preload while the tab still holds
+			// an empty placeholder — only skip reload when a real graph panel is installed.
+			final JComponent existing = sideTabComponents.get(tabId);
+			if (isRelationshipGraphSideTabPanel(existing)
+			        && tabIndex < sideTabs.getTabCount()
+			        && isRelationshipGraphSideTabPanel(sideTabs.getComponentAt(tabIndex))) {
+				return;
+			}
+		}
+		else if (Boolean.TRUE.equals(sideTabLoaded.get(tabId))) {
 			return;
 		}
 		JComponent panel = null;
@@ -917,9 +941,23 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);
-			sideTabs.setComponentAt(tabIndex, panel);
+			if (tabIndex < sideTabs.getTabCount()) {
+				sideTabs.setComponentAt(tabIndex, panel);
+			}
 			sideTabLoaded.put(tabId, Boolean.TRUE);
+			if (TAB_GRAPH.equals(tabId)) {
+				panel.revalidate();
+				panel.repaint();
+				sideTabs.revalidate();
+				sideTabs.repaint();
+			}
 		}
+	}
+
+	private static boolean isRelationshipGraphSideTabPanel(final Component component) {
+		return component instanceof JComponent
+		        && Boolean.TRUE.equals(((JComponent) component).getClientProperty(
+		                RelationshipGraphTabBridge.SIDE_TAB_CLIENT_PROPERTY));
 	}
 
 	private TreeView getWorkspaceView() {

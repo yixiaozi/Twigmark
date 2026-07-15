@@ -142,6 +142,11 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 		repaint();
 	}
 
+	/** Node count currently loaded into the canvas (0 if empty). */
+	public int getIndexNodeCount() {
+		return index == null ? 0 : index.getNodeCount();
+	}
+
 	public RelationshipGraphNode getSelectedNode() {
 		return selectedNode;
 	}
