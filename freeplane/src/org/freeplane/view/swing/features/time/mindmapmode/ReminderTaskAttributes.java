@@ -132,8 +132,14 @@ public final class ReminderTaskAttributes {
 		return readFromNode(node).jinji;
 	}
 
+	/** Write duration (minutes), task level and urgency (紧急 / JINJI) together. */
+	public static void writeFull(final NodeModel node, final int taskTime, final int taskLevel, final int jinji) {
+		writeToNode(node, new TaskConfig(Math.max(0, taskTime), taskLevel, jinji));
+	}
+
 	public static void writeTaskMetadata(final NodeModel node, final int taskLevel, final int jinji) {
-		writeToNode(node, new TaskConfig(0, taskLevel, jinji));
+		final TaskConfig current = readFromNode(node);
+		writeToNode(node, new TaskConfig(current.taskTime, taskLevel, jinji));
 	}
 
 	private static ReminderTaskExtension copyExtension(final ReminderTaskExtension source) {

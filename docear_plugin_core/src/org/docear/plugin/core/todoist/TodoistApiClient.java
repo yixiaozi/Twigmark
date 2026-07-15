@@ -446,23 +446,34 @@ final class TodoistApiClient {
 	}
 
 	private String buildCreateTaskJson(TodoistReminderRecord record, String projectId, String sectionId) {
-		StringBuilder sb = new StringBuilder(320);
+		StringBuilder sb = new StringBuilder(384);
 		sb.append("{\"content\":\"").append(TodoistJson.escape(truncate(record.nodeText, 500))).append("\"");
 		sb.append(",\"description\":\"").append(TodoistJson.escape(buildDescription(record))).append("\"");
 		sb.append(",\"project_id\":\"").append(TodoistJson.escape(projectId)).append("\"");
 		sb.append(",\"section_id\":\"").append(TodoistJson.escape(sectionId)).append("\"");
+		sb.append(",\"priority\":").append(TodoistPriority.toTodoistApi(record.jinji));
+		appendDurationFields(sb, record.durationMinutes);
 		appendDueFields(sb, record);
 		sb.append('}');
 		return sb.toString();
 	}
 
 	private String buildUpdateTaskJson(TodoistReminderRecord record) {
-		StringBuilder sb = new StringBuilder(320);
+		StringBuilder sb = new StringBuilder(384);
 		sb.append("{\"content\":\"").append(TodoistJson.escape(truncate(record.nodeText, 500))).append("\"");
 		sb.append(",\"description\":\"").append(TodoistJson.escape(buildDescription(record))).append("\"");
+		sb.append(",\"priority\":").append(TodoistPriority.toTodoistApi(record.jinji));
+		appendDurationFields(sb, record.durationMinutes);
 		appendDueFields(sb, record);
 		sb.append('}');
 		return sb.toString();
+	}
+
+	private static void appendDurationFields(StringBuilder sb, int durationMinutes) {
+		if (durationMinutes > 0) {
+			sb.append(",\"duration\":").append(durationMinutes);
+			sb.append(",\"duration_unit\":\"minute\"");
+		}
 	}
 
 	private void appendDueFields(StringBuilder sb, TodoistReminderRecord record) {

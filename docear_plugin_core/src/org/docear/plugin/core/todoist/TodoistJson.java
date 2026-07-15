@@ -270,7 +270,85 @@ final class TodoistJson {
 		long dueAt = parseDueMillis(object);
 		String dueString = extractDueString(object);
 		boolean recurring = dueString != null && dueString.toLowerCase().indexOf("every") >= 0;
-		return new TodoistImportTask(id, content, description, projectId, sectionId, dueAt, recurring, dueString);
+		int priority = parseIntField(object, "priority", 1);
+		int durationMinutes = parseDurationMinutes(object);
+		return new TodoistImportTask(id, content, description, projectId, sectionId, dueAt, recurring, dueString,
+				priority, durationMinutes);
+	}
+
+	private static int parseDurationMinutes(String taskJson) {
+		int durationIdx = findJsonKey(taskJson, 0, "\"duration\"");
+		if (durationIdx < 0) {
+			return 0;
+		}
+		int after = skipWhitespaceAndColon(taskJson, durationIdx + "\"duration\"".length());
+		if (after < 0 || after >= taskJson.length()) {
+			return 0;
+		}
+		char start = taskJson.charAt(after);
+		if (start == '{') {
+			String durationObject = extractObjectAround(taskJson, after);
+			if (durationObject == null) {
+				return 0;
+			}
+			int amount = parseIntField(durationObject, "amount", 0);
+			String unit = extractFieldValue(durationObject, "unit");
+			if (amount <= 0) {
+				return 0;
+			}
+			if (unit != null && unit.toLowerCase().indexOf("day") >= 0) {
+				return amount * 24 * 60;
+			}
+			return amount;
+		}
+		if (start == '-' || Character.isDigit(start)) {
+			int amount = parseIntAt(taskJson, after, 0);
+			String unit = extractFieldValue(taskJson, "duration_unit");
+			if (amount <= 0) {
+				return 0;
+			}
+			if (unit != null && unit.toLowerCase().indexOf("day") >= 0) {
+				return amount * 24 * 60;
+			}
+			return amount;
+		}
+		return 0;
+	}
+
+	private static int parseIntField(String json, String fieldName, int defaultValue) {
+		String raw = extractFieldValue(json, fieldName);
+		if (raw == null || raw.length() == 0 || "null".equals(raw)) {
+			return defaultValue;
+		}
+		try {
+			return Integer.parseInt(raw.trim());
+		}
+		catch (NumberFormatException e) {
+			return defaultValue;
+		}
+	}
+
+	private static int parseIntAt(String json, int start, int defaultValue) {
+		int i = start;
+		while (i < json.length() && Character.isWhitespace(json.charAt(i))) {
+			i++;
+		}
+		int end = i;
+		if (end < json.length() && json.charAt(end) == '-') {
+			end++;
+		}
+		while (end < json.length() && Character.isDigit(json.charAt(end))) {
+			end++;
+		}
+		if (end <= i) {
+			return defaultValue;
+		}
+		try {
+			return Integer.parseInt(json.substring(i, end));
+		}
+		catch (NumberFormatException e) {
+			return defaultValue;
+		}
 	}
 
 	private static long parseDueMillis(String taskJson) {

@@ -131,12 +131,21 @@ public final class TodoistAutoSyncService {
 			return;
 		}
 		if (property.equals(NodeModel.NODE_TEXT) || property.equals(ReminderExtension.class)
+				|| isReminderTaskProperty(property)
 				|| property.getClass().getName().indexOf("ReminderCycle") >= 0) {
 			final NodeModel node = event.getNode();
 			if (ReminderExtension.getExtension(node) != null || TodoistReminderFactory.getTaskId(node) != null) {
 				queueDirty(node);
 			}
 		}
+	}
+
+	private static boolean isReminderTaskProperty(final Object property) {
+		if (!(property instanceof Class)) {
+			return false;
+		}
+		final String name = ((Class) property).getName();
+		return name.endsWith("ReminderTaskExtension");
 	}
 
 	private synchronized void queueDirty(final NodeModel node) {

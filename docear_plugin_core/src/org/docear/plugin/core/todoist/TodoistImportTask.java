@@ -9,9 +9,18 @@ final class TodoistImportTask {
 	final long dueAtMillis;
 	final boolean recurring;
 	final String dueString;
+	/** Todoist API priority 1..4 (4 = urgent). */
+	final int priority;
+	/** Duration in minutes (0 = unset). */
+	final int durationMinutes;
 
 	TodoistImportTask(String id, String content, String description, String projectId, String sectionId,
 			long dueAtMillis, boolean recurring, String dueString) {
+		this(id, content, description, projectId, sectionId, dueAtMillis, recurring, dueString, 1, 0);
+	}
+
+	TodoistImportTask(String id, String content, String description, String projectId, String sectionId,
+			long dueAtMillis, boolean recurring, String dueString, int priority, int durationMinutes) {
 		this.id = id;
 		this.content = content == null ? "" : content;
 		this.description = description == null ? "" : description;
@@ -20,5 +29,7 @@ final class TodoistImportTask {
 		this.dueAtMillis = dueAtMillis;
 		this.recurring = recurring;
 		this.dueString = dueString;
+		this.priority = priority <= 0 ? 1 : priority;
+		this.durationMinutes = durationMinutes < 0 ? 0 : durationMinutes;
 	}
 }

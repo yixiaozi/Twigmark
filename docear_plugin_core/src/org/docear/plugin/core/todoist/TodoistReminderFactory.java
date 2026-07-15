@@ -7,6 +7,7 @@ import org.freeplane.core.io.UnknownElements;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
 
 /**
  * Builds {@link TodoistReminderRecord} from a live mind-map node (not disk SAX).
@@ -33,8 +34,10 @@ final class TodoistReminderFactory {
 			return null;
 		}
 		final CycleInfo cycle = readCycle(node, reminder);
+		final int durationMinutes = ReminderTaskAttributes.readTaskTimeFromNode(node);
+		final int jinji = ReminderTaskAttributes.readJinjiFromNode(node);
 		return new TodoistReminderRecord(file, node.getID(), nodeText, reminder.getRemindUserAt(), cycle.period,
-				cycle.unit, cycle.recurring);
+				cycle.unit, cycle.recurring, durationMinutes, jinji);
 	}
 
 	/** Import-map task node that has a Todoist id but may not have a reminder yet. */
@@ -49,7 +52,8 @@ final class TodoistReminderFactory {
 		if (nodeText.length() == 0) {
 			return null;
 		}
-		return new TodoistReminderRecord(node.getMap().getFile(), node.getID(), nodeText, 0L, 1, "DAY", false);
+		return new TodoistReminderRecord(node.getMap().getFile(), node.getID(), nodeText, 0L, 1, "DAY", false,
+				ReminderTaskAttributes.readTaskTimeFromNode(node), ReminderTaskAttributes.readJinjiFromNode(node));
 	}
 
 	static String contentHash(final TodoistReminderRecord record) {

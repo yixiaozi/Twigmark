@@ -224,7 +224,8 @@ public final class TodoistSyncService {
 		final String taskId = client.createTask(record, projectId, sectionId);
 		if (remoteIndex != null) {
 			remoteIndex.add(new TodoistImportTask(taskId, record.nodeText, TodoistApiClient.buildDescription(record),
-					projectId, sectionId, record.remindAt, record.recurring, null));
+					projectId, sectionId, record.remindAt, record.recurring, null,
+					TodoistPriority.toTodoistApi(record.jinji), record.durationMinutes));
 		}
 		return taskId;
 	}
@@ -344,7 +345,9 @@ public final class TodoistSyncService {
 		sb.append(record.remindAt).append('|');
 		sb.append(record.recurring).append('|');
 		sb.append(record.period).append('|');
-		sb.append(record.periodUnit);
+		sb.append(record.periodUnit).append('|');
+		sb.append(record.durationMinutes).append('|');
+		sb.append(TodoistPriority.toTodoistApi(record.jinji));
 		return Integer.toString(sb.toString().hashCode());
 	}
 

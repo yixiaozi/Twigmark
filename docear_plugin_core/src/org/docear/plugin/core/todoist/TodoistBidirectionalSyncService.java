@@ -1,7 +1,12 @@
 package org.docear.plugin.core.todoist;
 
 import java.awt.EventQueue;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
@@ -11,6 +16,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
 
 /**
  * One-button bidirectional sync:
@@ -94,7 +100,8 @@ public final class TodoistBidirectionalSyncService {
 
 	/**
 	 * For each active Todoist task that maps to a mind-map node (anywhere), update that node's
-	 * text and reminder when remote content differs.
+	 * text / due / duration / urgency. Open maps are updated in memory; closed maps are patched
+	 * on disk silently (never opened in the UI).
 	 */
 	static TodoistSyncResult pullLinkedNodes(final TodoistSyncProgressCallback callback) {
 		final TodoistSyncResult result = new TodoistSyncResult();
@@ -107,6 +114,7 @@ public final class TodoistBidirectionalSyncService {
 			final TodoistMappingStore store = new TodoistMappingStore();
 			final List tasks = client.fetchAllActiveTasks();
 			result.totalScanned = tasks.size();
+			final Map silentByPath = new HashMap();
 			for (int i = 0; i < tasks.size(); i++) {
 				final TodoistImportTask task = (TodoistImportTask) tasks.get(i);
 				progress(callback, i + 1, tasks.size());
@@ -124,12 +132,30 @@ public final class TodoistBidirectionalSyncService {
 				if (sep <= 0) {
 					continue;
 				}
-				final java.io.File file = new java.io.File(syncKey.substring(0, sep));
+				final File file = new File(syncKey.substring(0, sep));
+				final String nodeId = syncKey.substring(sep + 1);
 				if (TodoistConfig.isImportTargetFile(file)) {
 					continue;
 				}
 				try {
-					final boolean changed = applyTaskToLinkedNode(task, syncKey, store);
+					final NodeModel open = TodoistNodeLocator.findOpenNodeBySyncKey(syncKey);
+					boolean changed;
+					if (open != null) {
+						changed = applyTaskToOpenNode(task, syncKey, store, open);
+					}
+					else if (file.isFile()) {
+						queueSilentPatch(silentByPath, file, nodeId, task, syncKey, store);
+						continue;
+					}
+					else {
+						result.skipped++;
+						final String line = "[" + file.getName() + "] " + plainContent(task);
+						result.skippedLines.add(line);
+						if (callback != null) {
+							callback.onSkipped(line);
+						}
+						continue;
+					}
 					final String line = "[" + file.getName() + "] " + plainContent(task);
 					if (changed) {
 						result.updated++;
@@ -156,6 +182,7 @@ public final class TodoistBidirectionalSyncService {
 					LogUtils.warn("Todoist pull to linked node failed: " + syncKey, e);
 				}
 			}
+			flushSilentPatches(silentByPath, result, callback);
 			store.save();
 		}
 		catch (Exception e) {
@@ -170,47 +197,94 @@ public final class TodoistBidirectionalSyncService {
 		return result;
 	}
 
-	private static boolean applyTaskToLinkedNode(final TodoistImportTask task, final String syncKey,
-			final TodoistMappingStore store) throws Exception {
-		// Fast path: open map + local content already matches remote (compare facts, not
-		// push/pull hash formats — those differ and would thrash).
-		final NodeModel open = TodoistNodeLocator.findOpenNodeBySyncKey(syncKey);
-		if (open != null && !needsPull(open, task)) {
-			TodoistReminderFactory.setTaskId(open, task.id);
-			refreshStoredHash(open, syncKey, task, store);
+	private static void queueSilentPatch(final Map silentByPath, final File file, final String nodeId,
+			final TodoistImportTask task, final String syncKey, final TodoistMappingStore store) {
+		final PeriodInfo period = resolvePeriod(task);
+		final String hash = silentHash(task);
+		store.putMapping(syncKey, task.id, task.dueAtMillis, hash);
+		final TodoistSilentMmUpdater.Patch patch = new TodoistSilentMmUpdater.Patch(nodeId, plainContent(task),
+				task.dueAtMillis, task.durationMinutes, TodoistPriority.toJinji(task.priority, 0), task.id, hash,
+				task.recurring, period.period, period.unit);
+		List list = (List) silentByPath.get(file.getAbsolutePath());
+		if (list == null) {
+			list = new ArrayList();
+			silentByPath.put(file.getAbsolutePath(), list);
+		}
+		list.add(new Object[] { file, patch, plainContent(task) });
+	}
+
+	private static void flushSilentPatches(final Map silentByPath, final TodoistSyncResult result,
+			final TodoistSyncProgressCallback callback) {
+		for (Iterator it = silentByPath.entrySet().iterator(); it.hasNext();) {
+			Map.Entry entry = (Map.Entry) it.next();
+			List items = (List) entry.getValue();
+			if (items == null || items.isEmpty()) {
+				continue;
+			}
+			File file = (File) ((Object[]) items.get(0))[0];
+			List patches = new ArrayList();
+			for (int i = 0; i < items.size(); i++) {
+				patches.add(((Object[]) items.get(i))[1]);
+			}
+			final int written = TodoistSilentMmUpdater.applyPatches(file, patches);
+			for (int i = 0; i < items.size(); i++) {
+				final String content = (String) ((Object[]) items.get(i))[2];
+				final String line = "[" + file.getName() + "] " + content;
+				if (written > 0) {
+					result.updated++;
+					result.updatedLines.add(line);
+					if (callback != null) {
+						callback.onUpdated(line);
+					}
+				}
+				else {
+					result.skipped++;
+					result.skippedLines.add(line);
+					if (callback != null) {
+						callback.onSkipped(line);
+					}
+				}
+			}
+		}
+	}
+
+	private static String silentHash(final TodoistImportTask task) {
+		return Integer.toString((plainContent(task) + "|" + task.dueAtMillis + "|" + task.durationMinutes + "|"
+				+ TodoistPriority.toTodoistApi(TodoistPriority.toJinji(task.priority, 0))).hashCode());
+	}
+
+	private static boolean applyTaskToOpenNode(final TodoistImportTask task, final String syncKey,
+			final TodoistMappingStore store, final NodeModel openNode) throws Exception {
+		if (!needsPull(openNode, task)) {
+			TodoistReminderFactory.setTaskId(openNode, task.id);
+			refreshStoredHash(openNode, syncKey, task, store);
 			return false;
 		}
-
 		final boolean[] changed = new boolean[1];
 		final Exception[] error = new Exception[1];
 		final Runnable job = new Runnable() {
 			public void run() {
 				final boolean previous = TodoistAutoSyncService.setSuppressOutgoing(true);
 				try {
-					final NodeModel node = TodoistNodeLocator.findOrOpenNodeBySyncKey(syncKey);
-					if (node == null) {
-						return;
-					}
-					TodoistReminderFactory.setTaskId(node, task.id);
-					if (!needsPull(node, task)) {
-						refreshStoredHash(node, syncKey, task, store);
-						return;
-					}
+					TodoistReminderFactory.setTaskId(openNode, task.id);
 					final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 					final String desired = parsed.nodeText;
-					final String current = TodoistReminderFactory.plainText(node);
+					final String current = TodoistReminderFactory.plainText(openNode);
 					if (!desired.equals(current)) {
-						MTextController.getController().setNodeText(node, desired);
+						MTextController.getController().setNodeText(openNode, desired);
 						changed[0] = true;
 					}
 					if (task.dueAtMillis > 0) {
-						if (applyReminder(node, task)) {
+						if (applyReminder(openNode, task)) {
 							changed[0] = true;
 						}
 					}
-					refreshStoredHash(node, syncKey, task, store);
-					if (changed[0] && node.getMap() != null) {
-						node.getMap().setSaved(false);
+					if (applyDurationAndUrgency(openNode, task)) {
+						changed[0] = true;
+					}
+					refreshStoredHash(openNode, syncKey, task, store);
+					if (changed[0] && openNode.getMap() != null) {
+						openNode.getMap().setSaved(false);
 					}
 				}
 				catch (Exception e) {
@@ -233,12 +307,21 @@ public final class TodoistBidirectionalSyncService {
 		return changed[0];
 	}
 
-	/** True when Todoist content/due differs from the linked mind-map node. */
+	/** True when Todoist content/due/duration/urgency differs from the linked mind-map node. */
 	private static boolean needsPull(final NodeModel node, final TodoistImportTask task) {
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desired = parsed.nodeText;
 		final String current = TodoistReminderFactory.plainText(node);
 		if (!desired.equals(current)) {
+			return true;
+		}
+		final int localDuration = ReminderTaskAttributes.readTaskTimeFromNode(node);
+		if (task.durationMinutes != localDuration && (task.durationMinutes > 0 || localDuration > 0)) {
+			return true;
+		}
+		final int localJinji = ReminderTaskAttributes.readJinjiFromNode(node);
+		final int desiredJinji = TodoistPriority.toJinji(task.priority, localJinji);
+		if (desiredJinji != localJinji) {
 			return true;
 		}
 		if (task.dueAtMillis <= 0) {
@@ -263,6 +346,19 @@ public final class TodoistBidirectionalSyncService {
 		return false;
 	}
 
+	private static boolean applyDurationAndUrgency(final NodeModel node, final TodoistImportTask task) {
+		final int localDuration = ReminderTaskAttributes.readTaskTimeFromNode(node);
+		final int localLevel = ReminderTaskAttributes.readTaskLevelFromNode(node);
+		final int localJinji = ReminderTaskAttributes.readJinjiFromNode(node);
+		final int desiredJinji = TodoistPriority.toJinji(task.priority, localJinji);
+		final int desiredDuration = task.durationMinutes;
+		if (desiredDuration == localDuration && desiredJinji == localJinji) {
+			return false;
+		}
+		ReminderTaskAttributes.writeFull(node, desiredDuration, localLevel, desiredJinji);
+		return true;
+	}
+
 	/**
 	 * Persist the same content-hash scheme as push ({@link TodoistSyncService#contentHash})
 	 * so auto-sync does not immediately re-push after a pull.
@@ -277,7 +373,7 @@ public final class TodoistBidirectionalSyncService {
 			remindAt = record.remindAt;
 		}
 		else {
-			hash = Integer.toString((TodoistReminderFactory.plainText(node) + "|" + task.dueAtMillis).hashCode());
+			hash = silentHash(task);
 		}
 		TodoistReminderFactory.setStoredContentHash(node, hash);
 		store.putMapping(syncKey, task.id, remindAt, hash);

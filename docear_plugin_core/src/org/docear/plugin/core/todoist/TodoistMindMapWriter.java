@@ -30,6 +30,7 @@ import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.url.mindmapmode.MFileManager;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
 
 /**
  * Writes Todoist tasks into the import mind map.
@@ -318,8 +319,17 @@ final class TodoistMindMapWriter {
 				changed = true;
 			}
 		}
+		final int localDuration = ReminderTaskAttributes.readTaskTimeFromNode(node);
+		final int localLevel = ReminderTaskAttributes.readTaskLevelFromNode(node);
+		final int localJinji = ReminderTaskAttributes.readJinjiFromNode(node);
+		final int desiredJinji = TodoistPriority.toJinji(task.priority, localJinji);
+		if (task.durationMinutes != localDuration || desiredJinji != localJinji) {
+			ReminderTaskAttributes.writeFull(node, task.durationMinutes, localLevel, desiredJinji);
+			changed = true;
+		}
 		final String hash = Integer.toString((task.content + "|" + task.dueAtMillis + "|" + task.recurring + "|"
-				+ period.period + "|" + period.unit).hashCode());
+				+ period.period + "|" + period.unit + "|" + task.durationMinutes + "|"
+				+ TodoistPriority.toTodoistApi(desiredJinji)).hashCode());
 		if (!hash.equals(TodoistReminderFactory.getStoredContentHash(node))) {
 			TodoistReminderFactory.setStoredContentHash(node, hash);
 		}

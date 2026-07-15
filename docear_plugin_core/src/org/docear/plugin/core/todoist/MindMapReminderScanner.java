@@ -70,7 +70,10 @@ final class MindMapReminderScanner {
 						String id = attributes.getValue("ID");
 						String text = attributes.getValue("TEXT");
 						String remindType = attributes.getValue("REMINDERTYPE");
-						nodeStack.add(new String[] { id, text == null ? "" : text, remindType });
+						int taskTime = parseInt(attributes.getValue("TASKTIME"), 0);
+						int jinji = parseInt(attributes.getValue("JINJI"), 0);
+						nodeStack.add(new Object[] { id, text == null ? "" : text, remindType,
+								Integer.valueOf(taskTime), Integer.valueOf(jinji) });
 					}
 					else if ("Parameters".equals(qName) && !nodeStack.isEmpty()) {
 						String remindAt = attributes.getValue("REMINDUSERAT");
@@ -78,20 +81,22 @@ final class MindMapReminderScanner {
 							try {
 								long remindTs = Long.parseLong(remindAt);
 								if (remindTs > 0) {
-									String[] nodeInfo = (String[]) nodeStack.get(nodeStack.size() - 1);
-									String nodeText = plainNodeText(nodeInfo[1]);
+									Object[] nodeInfo = (Object[]) nodeStack.get(nodeStack.size() - 1);
+									String nodeText = plainNodeText((String) nodeInfo[1]);
 									if (nodeText.length() == 0 || "bin".equalsIgnoreCase(nodeText)) {
 										return;
 									}
-									String remindType = nodeInfo.length > 2 ? nodeInfo[2] : null;
+									String remindType = nodeInfo.length > 2 ? (String) nodeInfo[2] : null;
 									int period = parseInt(attributes.getValue("PERIOD"), 1);
 									String unit = attributes.getValue("UNIT");
 									if (unit == null || unit.trim().length() == 0) {
 										unit = "DAY";
 									}
 									boolean recurring = remindType != null && !"onetime".equalsIgnoreCase(remindType);
-									reminders.add(new TodoistReminderRecord(file, nodeInfo[0], nodeText, remindTs, period,
-											unit, recurring));
+									int duration = nodeInfo.length > 3 ? ((Integer) nodeInfo[3]).intValue() : 0;
+									int jinji = nodeInfo.length > 4 ? ((Integer) nodeInfo[4]).intValue() : 0;
+									reminders.add(new TodoistReminderRecord(file, (String) nodeInfo[0], nodeText,
+											remindTs, period, unit, recurring, duration, jinji));
 								}
 							}
 							catch (Exception e) {
