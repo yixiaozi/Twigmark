@@ -2,7 +2,6 @@ package org.docear.plugin.core.todoist;
 
 import java.io.File;
 import java.net.URI;
-import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -38,6 +37,10 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes
  * <p>
  * Updates are incremental: nodes keep a hidden {@code TODOIST_TASK_ID} XML attribute and are
  * updated in place. Missing tasks are created; nodes for closed/removed tasks are deleted.
+ * <p>
+ * If the import map is already open, updates happen in memory on the EDT. If it is closed,
+ * {@link TodoistSilentImportWriter} patches the {@code .mm} file on disk — the map is never
+ * auto-opened in the UI during sync.
  */
 final class TodoistMindMapWriter {
 	private static final String TODOIST_BRANCH = "Todoist";
@@ -55,14 +58,18 @@ final class TodoistMindMapWriter {
 			boolean preserveLinkedInboxCopies) {
 		final TodoistImportResult result = new TodoistImportResult();
 		result.targetFile = targetFile.getAbsolutePath();
+		// Prefer silent disk write when the import map is not already open — never auto-open UI.
+		if (findOpenMap(targetFile) == null) {
+			return TodoistSilentImportWriter.write(targetFile, tasks, projectNames, sectionNames,
+					preserveLinkedInboxCopies);
+		}
 		final boolean previousSuppress = TodoistAutoSyncService.setSuppressOutgoing(true);
 		try {
-			final MapModel map = loadOrCreateMap(targetFile);
+			final MapModel map = findOpenMap(targetFile);
 			if (map == null) {
-				result.failed = 1;
-				result.errorMessage = "Could not open mind map: " + targetFile.getAbsolutePath();
-				result.addFailed(result.errorMessage);
-				return result;
+				// Race: map closed between check and now — fall back to silent write.
+				return TodoistSilentImportWriter.write(targetFile, tasks, projectNames, sectionNames,
+						preserveLinkedInboxCopies);
 			}
 			final NodeModel todoistRoot = ensureTodoistBranch(map);
 			final Map existingByTaskId = indexTaskNodes(todoistRoot);
@@ -199,39 +206,11 @@ final class TodoistMindMapWriter {
 		return grouped;
 	}
 
-	private static MapModel loadOrCreateMap(File targetFile) throws Exception {
-		MapModel existing = findOpenMap(targetFile);
-		if (existing != null) {
-			return existing;
-		}
-		final ModeController modeController = Controller.getCurrentModeController();
-		final MMapController mapController = (MMapController) modeController.getMapController();
-		final URL url = Compat.fileToUrl(targetFile);
-		if (targetFile.isFile()) {
-			mapController.newMap(url);
-			existing = findOpenMap(targetFile);
-			if (existing != null) {
-				return existing;
-			}
-		}
-		final MapModel map = mapController.newMap();
-		map.setURL(url);
-		map.getRootNode().setText(targetFile.getName().endsWith(".mm")
-				? targetFile.getName().substring(0, targetFile.getName().length() - 3)
-				: targetFile.getName());
-		return map;
-	}
-
+	/**
+	 * Returns the import map only if it is already open. Sync must never auto-open maps in the UI.
+	 */
 	private static MapModel findOpenMap(File targetFile) {
-		final Map maps = Controller.getCurrentController().getMapViewManager().getMaps();
-		for (Iterator it = maps.values().iterator(); it.hasNext();) {
-			MapModel map = (MapModel) it.next();
-			File file = map.getFile();
-			if (file != null && file.getAbsolutePath().equalsIgnoreCase(targetFile.getAbsolutePath())) {
-				return map;
-			}
-		}
-		return null;
+		return TodoistNodeLocator.findOpenMap(targetFile);
 	}
 
 	private static NodeModel ensureTodoistBranch(MapModel map) {

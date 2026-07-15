@@ -102,6 +102,7 @@ public final class TodoistImportService {
 			final java.io.File targetFile = TodoistConfig.getImportTargetFile();
 			final TodoistImportResult[] writeResult = new TodoistImportResult[1];
 			final Exception[] writeError = new Exception[1];
+			final boolean mapAlreadyOpen = TodoistNodeLocator.findOpenMap(targetFile) != null;
 			Runnable writeJob = new Runnable() {
 				public void run() {
 					try {
@@ -113,11 +114,17 @@ public final class TodoistImportService {
 					}
 				}
 			};
-			if (EventQueue.isDispatchThread()) {
-				writeJob.run();
+			// Open maps must be mutated on the EDT; closed maps are written silently off-EDT.
+			if (mapAlreadyOpen) {
+				if (EventQueue.isDispatchThread()) {
+					writeJob.run();
+				}
+				else {
+					EventQueue.invokeAndWait(writeJob);
+				}
 			}
 			else {
-				EventQueue.invokeAndWait(writeJob);
+				writeJob.run();
 			}
 			if (writeError[0] != null) {
 				throw writeError[0];

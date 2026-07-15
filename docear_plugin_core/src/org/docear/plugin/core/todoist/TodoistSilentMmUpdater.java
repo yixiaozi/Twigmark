@@ -119,13 +119,7 @@ final class TodoistSilentMmUpdater {
 		}
 		InputStream in = null;
 		try {
-			final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
-			factory.setNamespaceAware(false);
-			factory.setIgnoringElementContentWhitespace(false);
-			in = new FileInputStream(mmFile);
-			final Document doc = factory.newDocumentBuilder().parse(in);
-			in.close();
-			in = null;
+			final Document doc = loadDocument(mmFile);
 			int changed = 0;
 			final NodeList nodes = doc.getElementsByTagName("node");
 			for (int i = 0; i < nodes.getLength(); i++) {
@@ -162,7 +156,29 @@ final class TodoistSilentMmUpdater {
 		}
 	}
 
-	private static boolean writeDocumentAtomically(final File mmFile, final Document doc) throws Exception {
+	/** Package-visible for silent import writer. */
+	static Document loadDocument(final File mmFile) throws Exception {
+		InputStream in = null;
+		try {
+			final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+			factory.setNamespaceAware(false);
+			factory.setIgnoringElementContentWhitespace(false);
+			in = new FileInputStream(mmFile);
+			return factory.newDocumentBuilder().parse(in);
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (Exception e) {
+				}
+			}
+		}
+	}
+
+	/** Package-visible for silent import writer. */
+	static boolean writeDocumentAtomically(final File mmFile, final Document doc) throws Exception {
 		final File parent = mmFile.getParentFile();
 		final File tmpFile = new File(parent, "~todoist-" + mmFile.getName());
 		Writer writer = null;
