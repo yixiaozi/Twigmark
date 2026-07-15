@@ -31,6 +31,16 @@ public final class TodoistBidirectionalSyncService {
 	}
 
 	public static TodoistSyncResult syncAll(final TodoistSyncProgressCallback callback) {
+		TodoistSyncGuard.enter();
+		try {
+			return syncAllUnlocked(callback);
+		}
+		finally {
+			TodoistSyncGuard.leave();
+		}
+	}
+
+	private static TodoistSyncResult syncAllUnlocked(final TodoistSyncProgressCallback callback) {
 		final TodoistSyncResult merged = new TodoistSyncResult();
 		status(callback, TextUtils.getText("todoist.sync.status.connecting"));
 		final TodoistSyncProgressCallback phase = phaseCallback(callback);
@@ -38,7 +48,7 @@ public final class TodoistBidirectionalSyncService {
 		final TodoistSyncResult push = TodoistSyncService.syncAllReminders(phase);
 		merge(merged, push);
 		try {
-			TodoistNodeLocator.stampOpenMapsFromStore(new TodoistMappingStore());
+			TodoistNodeLocator.stampOpenMapsFromStore(TodoistMappingStore.get());
 		}
 		catch (Exception e) {
 			LogUtils.warn("Todoist: could not stamp open maps", e);
@@ -111,7 +121,7 @@ public final class TodoistBidirectionalSyncService {
 		}
 		try {
 			final TodoistApiClient client = new TodoistApiClient(token.trim());
-			final TodoistMappingStore store = new TodoistMappingStore();
+			final TodoistMappingStore store = TodoistMappingStore.get();
 			final List tasks = client.fetchAllActiveTasks();
 			result.totalScanned = tasks.size();
 			final Map silentByPath = new HashMap();
@@ -138,10 +148,23 @@ public final class TodoistBidirectionalSyncService {
 					continue;
 				}
 				try {
-					final NodeModel open = TodoistNodeLocator.findOpenNodeBySyncKey(syncKey);
+					final org.freeplane.features.map.MapModel openMap = TodoistNodeLocator.findOpenMap(file);
+					final NodeModel open = openMap == null ? null : openMap.getNodeForID(nodeId);
 					boolean changed;
 					if (open != null) {
 						changed = applyTaskToOpenNode(task, syncKey, store, open);
+					}
+					else if (openMap != null) {
+						// Map is open in UI — never silently rewrite the open file on disk.
+						result.skipped++;
+						final String line = "[" + file.getName() + "] " + plainContent(task)
+								+ " (open map, node missing)";
+						result.skippedLines.add(line);
+						if (callback != null) {
+							callback.onSkipped(line);
+						}
+						LogUtils.warn("Todoist pull: skip silent update for open map missing node " + syncKey);
+						continue;
 					}
 					else if (file.isFile()) {
 						queueSilentPatch(silentByPath, file, nodeId, task, syncKey, store);
@@ -200,7 +223,7 @@ public final class TodoistBidirectionalSyncService {
 	private static void queueSilentPatch(final Map silentByPath, final File file, final String nodeId,
 			final TodoistImportTask task, final String syncKey, final TodoistMappingStore store) {
 		final PeriodInfo period = resolvePeriod(task);
-		final String hash = silentHash(task);
+		final String hash = contentHashForTask(task, file);
 		store.putMapping(syncKey, task.id, task.dueAtMillis, hash);
 		final TodoistSilentMmUpdater.Patch patch = new TodoistSilentMmUpdater.Patch(nodeId, plainContent(task),
 				task.dueAtMillis, task.durationMinutes, TodoistPriority.toJinji(task.priority, 0), task.id, hash,
@@ -222,6 +245,19 @@ public final class TodoistBidirectionalSyncService {
 				continue;
 			}
 			File file = (File) ((Object[]) items.get(0))[0];
+			if (TodoistNodeLocator.findOpenMap(file) != null) {
+				for (int i = 0; i < items.size(); i++) {
+					final String content = (String) ((Object[]) items.get(i))[2];
+					final String line = "[" + file.getName() + "] " + content + " (map opened during sync)";
+					result.skipped++;
+					result.skippedLines.add(line);
+					if (callback != null) {
+						callback.onSkipped(line);
+					}
+				}
+				LogUtils.warn("Todoist: skip silent patches; map opened during sync: " + file.getPath());
+				continue;
+			}
 			List patches = new ArrayList();
 			for (int i = 0; i < items.size(); i++) {
 				patches.add(((Object[]) items.get(i))[1]);
@@ -248,9 +284,17 @@ public final class TodoistBidirectionalSyncService {
 		}
 	}
 
-	private static String silentHash(final TodoistImportTask task) {
-		return Integer.toString((plainContent(task) + "|" + task.dueAtMillis + "|" + task.durationMinutes + "|"
-				+ TodoistPriority.toTodoistApi(TodoistPriority.toJinji(task.priority, 0))).hashCode());
+	/**
+	 * Same fingerprint scheme as push ({@link TodoistSyncService#contentHash}) so a pull does not
+	 * immediately schedule a re-push via auto-sync.
+	 */
+	private static String contentHashForTask(final TodoistImportTask task, final File file) {
+		final PeriodInfo period = resolvePeriod(task);
+		final String sectionName = file == null ? "" : TodoistApiClient.sectionNameForFile(file);
+		final TodoistReminderRecord record = new TodoistReminderRecord(file, "", plainContent(task), task.dueAtMillis,
+				period.period, period.unit, task.recurring, task.durationMinutes,
+				TodoistPriority.toJinji(task.priority, 0));
+		return TodoistSyncService.contentHash(record, sectionName);
 	}
 
 	private static boolean applyTaskToOpenNode(final TodoistImportTask task, final String syncKey,
@@ -278,6 +322,9 @@ public final class TodoistBidirectionalSyncService {
 						if (applyReminder(openNode, task)) {
 							changed[0] = true;
 						}
+					}
+					else if (clearReminder(openNode)) {
+						changed[0] = true;
 					}
 					if (applyDurationAndUrgency(openNode, task)) {
 						changed[0] = true;
@@ -324,11 +371,11 @@ public final class TodoistBidirectionalSyncService {
 		if (desiredJinji != localJinji) {
 			return true;
 		}
-		if (task.dueAtMillis <= 0) {
-			return false;
-		}
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		final long existingAt = existing == null ? 0L : existing.getRemindUserAt();
+		if (task.dueAtMillis <= 0) {
+			return existingAt > 0;
+		}
 		if (existingAt != task.dueAtMillis) {
 			return true;
 		}
@@ -373,10 +420,25 @@ public final class TodoistBidirectionalSyncService {
 			remindAt = record.remindAt;
 		}
 		else {
-			hash = silentHash(task);
+			final File file = node.getMap() == null ? null : node.getMap().getFile();
+			hash = contentHashForTask(task, file);
 		}
 		TodoistReminderFactory.setStoredContentHash(node, hash);
 		store.putMapping(syncKey, task.id, remindAt, hash);
+	}
+
+	private static boolean clearReminder(final NodeModel node) {
+		final ReminderExtension existing = ReminderExtension.getExtension(node);
+		if (existing == null) {
+			return false;
+		}
+		final ModeController modeController = Controller.getCurrentModeController();
+		final ReminderHook reminderHook = (ReminderHook) modeController.getExtension(ReminderHook.class);
+		if (reminderHook == null) {
+			return false;
+		}
+		reminderHook.undoableDeactivateHook(node);
+		return true;
 	}
 
 	private static boolean applyReminder(final NodeModel node, final TodoistImportTask task) {

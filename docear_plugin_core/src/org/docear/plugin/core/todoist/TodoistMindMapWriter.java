@@ -43,6 +43,15 @@ final class TodoistMindMapWriter {
 	private static final String NO_SECTION_KEY = "__no_section__";
 
 	TodoistImportResult write(File targetFile, List tasks, Map projectNames, Map sectionNames) {
+		return write(targetFile, tasks, projectNames, sectionNames, false);
+	}
+
+	/**
+	 * @param preserveLinkedInboxCopies when true (unlinked-only import), do not delete import-map
+	 *            nodes whose task id is still 1:1-linked to a source mind map.
+	 */
+	TodoistImportResult write(File targetFile, List tasks, Map projectNames, Map sectionNames,
+			boolean preserveLinkedInboxCopies) {
 		final TodoistImportResult result = new TodoistImportResult();
 		result.targetFile = targetFile.getAbsolutePath();
 		final boolean previousSuppress = TodoistAutoSyncService.setSuppressOutgoing(true);
@@ -93,7 +102,7 @@ final class TodoistMindMapWriter {
 					}
 				}
 			}
-			removeStaleTaskNodes(existingByTaskId, result);
+			removeStaleTaskNodes(existingByTaskId, result, preserveLinkedInboxCopies);
 			pruneEmptyFolders(todoistRoot);
 			saveMap(map, targetFile);
 		}
@@ -128,13 +137,20 @@ final class TodoistMindMapWriter {
 		}
 	}
 
-	private static void removeStaleTaskNodes(Map leftoverByTaskId, TodoistImportResult result) {
+	private static void removeStaleTaskNodes(Map leftoverByTaskId, TodoistImportResult result,
+			boolean preserveLinkedInboxCopies) {
 		if (leftoverByTaskId.isEmpty()) {
 			return;
 		}
+		final TodoistMappingStore store = preserveLinkedInboxCopies ? TodoistMappingStore.get() : null;
 		final MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
-		for (Iterator it = leftoverByTaskId.values().iterator(); it.hasNext();) {
-			NodeModel stale = (NodeModel) it.next();
+		for (Iterator it = leftoverByTaskId.entrySet().iterator(); it.hasNext();) {
+			Map.Entry entry = (Map.Entry) it.next();
+			final String taskId = (String) entry.getKey();
+			if (store != null && store.isLinkedToSourceMap(taskId)) {
+				continue;
+			}
+			NodeModel stale = (NodeModel) entry.getValue();
 			try {
 				mapController.deleteNode(stale);
 				result.addUpdated("[removed closed task] " + nodePlainText(stale));

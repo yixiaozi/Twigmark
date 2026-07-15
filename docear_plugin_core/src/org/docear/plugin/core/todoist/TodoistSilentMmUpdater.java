@@ -1,29 +1,36 @@
 package org.docear.plugin.core.todoist;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.RandomAccessFile;
+import java.io.Writer;
+import java.nio.charset.Charset;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 
 import org.freeplane.core.util.LogUtils;
+import org.w3c.dom.Attr;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
+import org.w3c.dom.NamedNodeMap;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
 /**
  * Applies Todoist→mind-map updates to closed {@code .mm} files without opening them in the UI.
+ * <p>
+ * Serialization matches Freeplane's {@code XMLWriter}: characters {@code > 0x7E} become
+ * {@code &#x…;} so files stay ASCII-safe. Freeplane loads without a UTF-8 BOM using
+ * {@code FileUtils.defaultCharset()} (often GBK on Chinese Windows); raw UTF-8 Chinese from a
+ * DOM {@code Transformer} is the usual cause of 乱码 after silent Todoist sync.
+ * Writes are atomic (temp + rename) and refused while the map is open in Docear.
  */
 final class TodoistSilentMmUpdater {
 	private TodoistSilentMmUpdater() {
@@ -61,6 +68,10 @@ final class TodoistSilentMmUpdater {
 		if (mmFile == null || !mmFile.isFile() || patches == null || patches.isEmpty()) {
 			return 0;
 		}
+		if (TodoistNodeLocator.findOpenMap(mmFile) != null) {
+			LogUtils.warn("Todoist: refusing silent .mm update while map is open: " + mmFile.getPath());
+			return 0;
+		}
 		final Map byId = new HashMap();
 		for (int i = 0; i < patches.size(); i++) {
 			Patch p = (Patch) patches.get(i);
@@ -72,7 +83,6 @@ final class TodoistSilentMmUpdater {
 			return 0;
 		}
 		InputStream in = null;
-		OutputStream out = null;
 		try {
 			final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
 			factory.setNamespaceAware(false);
@@ -97,11 +107,9 @@ final class TodoistSilentMmUpdater {
 			if (changed == 0) {
 				return 0;
 			}
-			final Transformer transformer = TransformerFactory.newInstance().newTransformer();
-			transformer.setOutputProperty(OutputKeys.ENCODING, "UTF-8");
-			transformer.setOutputProperty(OutputKeys.INDENT, "no");
-			out = new FileOutputStream(mmFile);
-			transformer.transform(new DOMSource(doc), new StreamResult(out));
+			if (!writeDocumentAtomically(mmFile, doc)) {
+				return 0;
+			}
 			return changed;
 		}
 		catch (Exception e) {
@@ -116,12 +124,197 @@ final class TodoistSilentMmUpdater {
 				catch (Exception e) {
 				}
 			}
-			if (out != null) {
+		}
+	}
+
+	private static boolean writeDocumentAtomically(final File mmFile, final Document doc) throws Exception {
+		final File parent = mmFile.getParentFile();
+		final File tmpFile = new File(parent, "~todoist-" + mmFile.getName());
+		Writer writer = null;
+		try {
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmpFile), Charset.forName("UTF-8")));
+			writeFreeplaneCompatibleXml(doc, writer);
+			writer.flush();
+			writer.close();
+			writer = null;
+			if (!isValidMapFile(tmpFile)) {
+				LogUtils.warn("Todoist: silent .mm update produced invalid map, keeping original: " + mmFile.getPath());
+				tmpFile.delete();
+				return false;
+			}
+			if (mmFile.exists() && !mmFile.delete()) {
+				LogUtils.warn("Todoist: could not replace open/locked .mm: " + mmFile.getPath());
+				tmpFile.delete();
+				return false;
+			}
+			if (!tmpFile.renameTo(mmFile)) {
+				LogUtils.warn("Todoist: could not rename temp .mm into place: " + mmFile.getPath());
+				tmpFile.delete();
+				return false;
+			}
+			return true;
+		}
+		finally {
+			if (writer != null) {
 				try {
-					out.close();
+					writer.close();
 				}
 				catch (Exception e) {
 				}
+			}
+			if (tmpFile.exists() && !tmpFile.equals(mmFile)) {
+				// left behind only on failure paths above that did not delete
+			}
+		}
+	}
+
+	private static boolean isValidMapFile(final File file) {
+		try {
+			final RandomAccessFile raf = new RandomAccessFile(file, "r");
+			try {
+				final long length = raf.length();
+				if (length < 7) {
+					return false;
+				}
+				raf.seek(Math.max(0, length - 32));
+				final byte[] buf = new byte[(int) Math.min(32, length)];
+				raf.readFully(buf);
+				return new String(buf, "US-ASCII").indexOf("/map>") >= 0;
+			}
+			finally {
+				raf.close();
+			}
+		}
+		catch (Exception e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Emits XML the way Freeplane's {@code XMLWriter} does: ASCII + numeric character references
+	 * for non-ASCII, so the file remains readable under the platform default charset.
+	 */
+	private static void writeFreeplaneCompatibleXml(final Document doc, final Writer writer) throws Exception {
+		writer.write("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+		final Element root = doc.getDocumentElement();
+		if (root != null) {
+			writeElement(root, writer);
+			writer.write('\n');
+		}
+	}
+
+	private static void writeElement(final Element el, final Writer writer) throws Exception {
+		writer.write('<');
+		writer.write(el.getTagName());
+		final NamedNodeMap attrs = el.getAttributes();
+		if (attrs != null) {
+			for (int i = 0; i < attrs.getLength(); i++) {
+				final Attr attr = (Attr) attrs.item(i);
+				writer.write(' ');
+				writer.write(attr.getName());
+				writer.write("=\"");
+				writeEncoded(writer, attr.getValue(), true);
+				writer.write('"');
+			}
+		}
+		final NodeList children = el.getChildNodes();
+		boolean hasElementChild = false;
+		for (int i = 0; i < children.getLength(); i++) {
+			if (children.item(i).getNodeType() == Node.ELEMENT_NODE) {
+				hasElementChild = true;
+				break;
+			}
+		}
+		if (!hasElementChild && isBlankTextOnly(children)) {
+			writer.write("/>");
+			return;
+		}
+		writer.write('>');
+		for (int i = 0; i < children.getLength(); i++) {
+			final Node child = children.item(i);
+			final short type = child.getNodeType();
+			if (type == Node.ELEMENT_NODE) {
+				writeElement((Element) child, writer);
+			}
+			else if (type == Node.TEXT_NODE || type == Node.CDATA_SECTION_NODE) {
+				writeEncoded(writer, child.getNodeValue(), false);
+			}
+			else if (type == Node.COMMENT_NODE) {
+				writer.write("<!--");
+				writer.write(child.getNodeValue());
+				writer.write("-->");
+			}
+		}
+		writer.write("</");
+		writer.write(el.getTagName());
+		writer.write('>');
+	}
+
+	private static boolean isBlankTextOnly(final NodeList children) {
+		for (int i = 0; i < children.getLength(); i++) {
+			final Node child = children.item(i);
+			if (child.getNodeType() == Node.ELEMENT_NODE) {
+				return false;
+			}
+			if (child.getNodeType() == Node.TEXT_NODE) {
+				final String v = child.getNodeValue();
+				if (v != null && v.trim().length() > 0) {
+					return false;
+				}
+			}
+			else if (child.getNodeType() != Node.COMMENT_NODE) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	/** Same rules as {@code org.freeplane.core.io.xml.XMLWriter#writeEncoded}. */
+	private static void writeEncoded(final Writer writer, final String str, final boolean attributeValue)
+			throws Exception {
+		if (str == null) {
+			return;
+		}
+		for (int i = 0; i < str.length(); i++) {
+			final char c = str.charAt(i);
+			if (c > 0x7E) {
+				writer.write("&#x");
+				writer.write(Integer.toString(c, 16));
+				writer.write(';');
+				continue;
+			}
+			switch (c) {
+				case '<':
+					writer.write("&lt;");
+					continue;
+				case '>':
+					writer.write("&gt;");
+					continue;
+				case '&':
+					writer.write("&amp;");
+					continue;
+				case '\'':
+					writer.write("&apos;");
+					continue;
+				case '"':
+					writer.write("&quot;");
+					continue;
+				case 0x0A:
+					if (attributeValue) {
+						writer.write("&#xa;");
+					}
+					else {
+						writer.write(c);
+					}
+					continue;
+				default:
+					if (c < ' ') {
+						writer.write("&#x");
+						writer.write(Integer.toString(c, 16));
+						writer.write(';');
+						continue;
+					}
+					writer.write(c);
 			}
 		}
 	}
@@ -152,6 +345,10 @@ final class TodoistSilentMmUpdater {
 				changed = true;
 			}
 		}
+		else if (node.hasAttribute("JINJI") && !"0".equals(node.getAttribute("JINJI"))) {
+			node.setAttribute("JINJI", "0");
+			changed = true;
+		}
 		if (patch.taskId != null && patch.taskId.length() > 0) {
 			if (!patch.taskId.equals(node.getAttribute(TodoistNodeMetaIo.XML_TASK_ID))) {
 				node.setAttribute(TodoistNodeMetaIo.XML_TASK_ID, patch.taskId);
@@ -169,7 +366,31 @@ final class TodoistSilentMmUpdater {
 				changed = true;
 			}
 		}
+		else if (removeReminderHook(node)) {
+			changed = true;
+		}
 		return changed;
+	}
+
+	private static boolean removeReminderHook(final Element node) {
+		final NodeList children = node.getChildNodes();
+		boolean removed = false;
+		for (int i = children.getLength() - 1; i >= 0; i--) {
+			final Node child = children.item(i);
+			if (child.getNodeType() != Node.ELEMENT_NODE) {
+				continue;
+			}
+			final Element el = (Element) child;
+			if (!"hook".equals(el.getTagName())) {
+				continue;
+			}
+			final String name = el.getAttribute("NAME");
+			if (name != null && name.indexOf("TimeManagementReminder") >= 0) {
+				node.removeChild(el);
+				removed = true;
+			}
+		}
+		return removed;
 	}
 
 	private static boolean ensureReminderParameters(final Element node, final Patch patch) {

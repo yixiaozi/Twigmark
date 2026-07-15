@@ -20,6 +20,16 @@ public final class TodoistSyncService {
 	}
 
 	public static TodoistSyncResult syncAllReminders(TodoistSyncProgressCallback callback) {
+		TodoistSyncGuard.enter();
+		try {
+			return syncAllRemindersBody(callback);
+		}
+		finally {
+			TodoistSyncGuard.leave();
+		}
+	}
+
+	private static TodoistSyncResult syncAllRemindersBody(TodoistSyncProgressCallback callback) {
 		final TodoistSyncResult result = new TodoistSyncResult();
 		final String token = TodoistConfig.getApiToken();
 		if (token == null || token.trim().length() == 0) {
@@ -32,7 +42,7 @@ public final class TodoistSyncService {
 		}
 		status(callback, TextUtils.getText("todoist.sync.status.connecting"));
 		final TodoistApiClient client = new TodoistApiClient(token.trim());
-		final TodoistMappingStore store = new TodoistMappingStore();
+		final TodoistMappingStore store = TodoistMappingStore.get();
 		final TodoistSectionStore sectionStore = new TodoistSectionStore();
 		final String projectName = TodoistConfig.getProjectName();
 		result.projectName = projectName;
@@ -404,7 +414,7 @@ public final class TodoistSyncService {
 			return false;
 		}
 		final TodoistApiClient client = new TodoistApiClient(token.trim());
-		final TodoistMappingStore store = new TodoistMappingStore();
+		final TodoistMappingStore store = TodoistMappingStore.get();
 		final TodoistSectionStore sectionStore = new TodoistSectionStore();
 		final String projectId = client.ensureProject(TodoistConfig.getProjectName());
 		final String sectionName = TodoistApiClient.sectionNameForFile(record.file);
@@ -506,7 +516,7 @@ public final class TodoistSyncService {
 		try {
 			String taskId = TodoistReminderFactory.getTaskId(node);
 			final String key = TodoistSyncKeys.syncKey(file, node.getID());
-			final TodoistMappingStore store = new TodoistMappingStore();
+			final TodoistMappingStore store = TodoistMappingStore.get();
 			if (taskId == null || taskId.length() == 0) {
 				taskId = store.getTaskIdOnly(key);
 			}

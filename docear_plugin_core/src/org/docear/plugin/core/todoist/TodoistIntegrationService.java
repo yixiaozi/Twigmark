@@ -36,7 +36,7 @@ public final class TodoistIntegrationService {
 		modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
 			public void onCreate(final MapModel map) {
 				try {
-					TodoistNodeLocator.stampMapFromStore(map, new TodoistMappingStore());
+					TodoistNodeLocator.stampMapFromStore(map, TodoistMappingStore.get());
 				}
 				catch (Exception e) {
 					LogUtils.warn("Todoist: stamp on map open failed", e);

@@ -67,13 +67,25 @@ final class TodoistNodeLocator {
 		if (targetFile == null) {
 			return null;
 		}
-		final Map maps = Controller.getCurrentController().getMapViewManager().getMaps();
-		for (Iterator it = maps.values().iterator(); it.hasNext();) {
-			MapModel map = (MapModel) it.next();
-			File file = map.getFile();
-			if (file != null && pathsEqual(file, targetFile)) {
-				return map;
+		try {
+			final Controller controller = Controller.getCurrentController();
+			if (controller == null || controller.getMapViewManager() == null) {
+				return null;
 			}
+			final Map maps = controller.getMapViewManager().getMaps();
+			if (maps == null) {
+				return null;
+			}
+			for (Iterator it = maps.values().iterator(); it.hasNext();) {
+				MapModel map = (MapModel) it.next();
+				File file = map.getFile();
+				if (file != null && pathsEqual(file, targetFile)) {
+					return map;
+				}
+			}
+		}
+		catch (Exception e) {
+			return null;
 		}
 		return null;
 	}

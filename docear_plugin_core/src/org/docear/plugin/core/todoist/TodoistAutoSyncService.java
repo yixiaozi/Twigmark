@@ -199,17 +199,26 @@ public final class TodoistAutoSyncService {
 		}
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
-				for (int i = 0; i < toClose.size(); i++) {
-					TodoistSyncService.closeLiveNode((NodeModel) toClose.get(i));
+				if (!TodoistSyncGuard.tryEnter()) {
+					LogUtils.info("Todoist auto-sync push skipped; full sync in progress");
+					return;
 				}
-				for (int i = 0; i < toPush.size(); i++) {
-					final NodeModel node = (NodeModel) toPush.get(i);
-					try {
-						TodoistSyncService.syncLiveNode(node);
+				try {
+					for (int i = 0; i < toClose.size(); i++) {
+						TodoistSyncService.closeLiveNode((NodeModel) toClose.get(i));
 					}
-					catch (Exception e) {
-						LogUtils.warn("Todoist auto-sync push failed for node " + node.getID(), e);
+					for (int i = 0; i < toPush.size(); i++) {
+						final NodeModel node = (NodeModel) toPush.get(i);
+						try {
+							TodoistSyncService.syncLiveNode(node);
+						}
+						catch (Exception e) {
+							LogUtils.warn("Todoist auto-sync push failed for node " + node.getID(), e);
+						}
 					}
+				}
+				finally {
+					TodoistSyncGuard.leave();
 				}
 			}
 		}, "TodoistAutoSync-push");

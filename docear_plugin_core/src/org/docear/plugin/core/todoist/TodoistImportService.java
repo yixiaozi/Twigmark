@@ -26,6 +26,17 @@ public final class TodoistImportService {
 
 	private static TodoistImportResult importTasks(final TodoistSyncProgressCallback callback,
 			final boolean unlinkedOnly) {
+		TodoistSyncGuard.enter();
+		try {
+			return importTasksBody(callback, unlinkedOnly);
+		}
+		finally {
+			TodoistSyncGuard.leave();
+		}
+	}
+
+	private static TodoistImportResult importTasksBody(final TodoistSyncProgressCallback callback,
+			final boolean unlinkedOnly) {
 		final TodoistImportResult result = new TodoistImportResult();
 		final String token = TodoistConfig.getApiToken();
 		if (token == null || token.trim().length() == 0) {
@@ -41,7 +52,7 @@ public final class TodoistImportService {
 		final TodoistApiClient client = new TodoistApiClient(token.trim());
 		try {
 			List tasks = client.fetchAllActiveTasks();
-			final TodoistMappingStore store = new TodoistMappingStore();
+			final TodoistMappingStore store = TodoistMappingStore.get();
 			if (unlinkedOnly) {
 				final java.util.ArrayList filtered = new java.util.ArrayList();
 				for (int i = 0; i < tasks.size(); i++) {
@@ -95,7 +106,7 @@ public final class TodoistImportService {
 				public void run() {
 					try {
 						writeResult[0] = new TodoistMindMapWriter().write(targetFile, tasksFinal, projectNames,
-								sectionNames);
+								sectionNames, unlinkedOnly);
 					}
 					catch (Exception e) {
 						writeError[0] = e;
