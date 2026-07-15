@@ -166,6 +166,21 @@ final class TodoistCycleMapper {
 		return Cycle.oneTime();
 	}
 
+	/**
+	 * True when Todoist only says "recurring" without a usable due.string — not safe to overwrite
+	 * local REMINDERTYPE / RWEEKS from a weak day/1 fallback.
+	 */
+	static boolean isWeakRecurringFallback(String dueString, boolean isRecurring) {
+		if (!isRecurring) {
+			return false;
+		}
+		if (dueString == null || dueString.trim().length() == 0) {
+			return true;
+		}
+		final String s = dueString.toLowerCase(Locale.ENGLISH);
+		return s.indexOf("every") < 0 && s.indexOf("daily") < 0;
+	}
+
 	/** True for "every day" / "every N days" / "daily" — not weekday names. */
 	private static boolean isDayCyclePhrase(String dueLower) {
 		if (dueLower.indexOf("daily") >= 0) {

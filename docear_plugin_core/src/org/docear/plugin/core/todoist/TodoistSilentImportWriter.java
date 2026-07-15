@@ -54,6 +54,7 @@ final class TodoistSilentImportWriter {
 			if (parent != null && !parent.exists()) {
 				parent.mkdirs();
 			}
+			TodoistSilentMmUpdater.recoverInterruptedWrite(targetFile);
 			final Document doc = targetFile.isFile() ? TodoistSilentMmUpdater.loadDocument(targetFile)
 					: newEmptyMapDocument(targetFile);
 			final Element root = doc.getDocumentElement();
@@ -242,31 +243,22 @@ final class TodoistSilentImportWriter {
 				changed = true;
 			}
 		}
-		else if (node.hasAttribute("TASKTIME") && !"0".equals(node.getAttribute("TASKTIME"))) {
-			node.setAttribute("TASKTIME", "0");
-			changed = true;
-		}
 		if (jinji > 0) {
 			if (!Integer.toString(jinji).equals(node.getAttribute("JINJI"))) {
 				node.setAttribute("JINJI", Integer.toString(jinji));
 				changed = true;
 			}
 		}
-		else if (node.hasAttribute("JINJI") && !"0".equals(node.getAttribute("JINJI"))) {
-			node.setAttribute("JINJI", "0");
-			changed = true;
-		}
-		if (applyCycleAttrs(node, cycle)) {
+		final boolean cycleTrusted = !TodoistCycleMapper.isWeakRecurringFallback(task.dueString, task.recurring);
+		if (cycleTrusted && applyCycleAttrs(node, cycle)) {
 			changed = true;
 		}
 		if (task.dueAtMillis > 0) {
-			if (ensureReminder(doc, node, task.dueAtMillis, cycle)) {
+			if (ensureReminder(doc, node, task.dueAtMillis, cycle, cycleTrusted)) {
 				changed = true;
 			}
 		}
-		else if (removeReminder(node)) {
-			changed = true;
-		}
+		// Map-protect: never remove local reminder when Todoist has no due.
 		if (applyNote(doc, node, task.description)) {
 			changed = true;
 		}
@@ -339,7 +331,7 @@ final class TodoistSilentImportWriter {
 	}
 
 	private static boolean ensureReminder(final Document doc, final Element node, final long dueAt,
-			final TodoistCycleMapper.Cycle cycle) {
+			final TodoistCycleMapper.Cycle cycle, final boolean cycleTrusted) {
 		Element parameters = findReminderParameters(node);
 		if (parameters == null) {
 			final Element hook = doc.createElement("hook");
@@ -354,14 +346,21 @@ final class TodoistSilentImportWriter {
 			parameters.setAttribute("REMINDUSERAT", due);
 			changed = true;
 		}
-		final String period = Integer.toString(cycle.interval);
-		if (!period.equals(parameters.getAttribute("PERIOD"))) {
-			parameters.setAttribute("PERIOD", period);
-			changed = true;
+		if (cycleTrusted) {
+			final String period = Integer.toString(cycle.interval);
+			if (!period.equals(parameters.getAttribute("PERIOD"))) {
+				parameters.setAttribute("PERIOD", period);
+				changed = true;
+			}
+			final String unit = cycle.periodUnit();
+			if (!unit.equalsIgnoreCase(String.valueOf(parameters.getAttribute("UNIT")))) {
+				parameters.setAttribute("UNIT", unit);
+				changed = true;
+			}
 		}
-		final String unit = cycle.periodUnit();
-		if (!unit.equalsIgnoreCase(String.valueOf(parameters.getAttribute("UNIT")))) {
-			parameters.setAttribute("UNIT", unit);
+		else if (!parameters.hasAttribute("PERIOD") || parameters.getAttribute("PERIOD").length() == 0) {
+			parameters.setAttribute("PERIOD", "1");
+			parameters.setAttribute("UNIT", "DAY");
 			changed = true;
 		}
 		return changed;

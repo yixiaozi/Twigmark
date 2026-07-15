@@ -21,6 +21,7 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.util.Date;
 import java.util.Timer;
+import java.util.TimerTask;
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.util.SysUtils;
 import org.freeplane.features.map.IMapChangeListener;
@@ -102,6 +103,14 @@ public class ReminderExtension implements IExtension, IMapChangeListener {
 		}
 		timer.schedule(task, date, BLINKING_PERIOD);
 		this.task = task;
+	}
+
+	/** One-shot fire (e.g. reminder script) without a repeating blink period. */
+	public void scheduleOnce(final TimerTask once, final Date date) {
+		if (timer == null) {
+			timer = SysUtils.createTimer(getClass().getSimpleName());
+		}
+		timer.schedule(once, date);
 	}
 
 	public void deactivateTimer() {

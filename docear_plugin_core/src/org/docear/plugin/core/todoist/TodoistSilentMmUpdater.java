@@ -51,16 +51,30 @@ final class TodoistSilentMmUpdater {
 		final String remindType;
 		/** Weekday codes for weekly cycles ({@code RWEEKS}). */
 		final String weekDays;
+		/**
+		 * When false, do not overwrite or clear local REMINDERTYPE cycle attrs (Todoist due.string
+		 * was missing/unparseable). Time-of-day updates may still apply.
+		 */
+		final boolean cycleTrusted;
+		/** When true, allow clearing local reminder if remindAtMillis &lt;= 0. Default false (map-protect). */
+		final boolean allowClearReminder;
 
 		Patch(String nodeId, String plainText, long remindAtMillis, int durationMinutes, int jinji, String taskId,
 				String contentHash, boolean recurring, int period, String periodUnit) {
 			this(nodeId, plainText, remindAtMillis, durationMinutes, jinji, taskId, contentHash, recurring, period,
-					periodUnit, recurring ? unitToRemindType(periodUnit) : "onetime", "");
+					periodUnit, recurring ? unitToRemindType(periodUnit) : "onetime", "", true, false);
 		}
 
 		Patch(String nodeId, String plainText, long remindAtMillis, int durationMinutes, int jinji, String taskId,
 				String contentHash, boolean recurring, int period, String periodUnit, String remindType,
 				String weekDays) {
+			this(nodeId, plainText, remindAtMillis, durationMinutes, jinji, taskId, contentHash, recurring, period,
+					periodUnit, remindType, weekDays, true, false);
+		}
+
+		Patch(String nodeId, String plainText, long remindAtMillis, int durationMinutes, int jinji, String taskId,
+				String contentHash, boolean recurring, int period, String periodUnit, String remindType,
+				String weekDays, boolean cycleTrusted, boolean allowClearReminder) {
 			this.nodeId = nodeId;
 			this.plainText = plainText;
 			this.remindAtMillis = remindAtMillis;
@@ -75,6 +89,8 @@ final class TodoistSilentMmUpdater {
 					? (recurring ? unitToRemindType(this.periodUnit) : "onetime")
 					: remindType;
 			this.weekDays = weekDays == null ? "" : weekDays;
+			this.cycleTrusted = cycleTrusted;
+			this.allowClearReminder = allowClearReminder;
 		}
 
 		private static String unitToRemindType(String periodUnit) {
@@ -100,7 +116,11 @@ final class TodoistSilentMmUpdater {
 
 	/** @return number of nodes changed */
 	static int applyPatches(final File mmFile, final List patches) {
-		if (mmFile == null || !mmFile.isFile() || patches == null || patches.isEmpty()) {
+		if (mmFile == null || patches == null || patches.isEmpty()) {
+			return 0;
+		}
+		recoverInterruptedWrite(mmFile);
+		if (!mmFile.isFile()) {
 			return 0;
 		}
 		if (TodoistNodeLocator.findOpenMap(mmFile) != null) {
@@ -177,31 +197,85 @@ final class TodoistSilentMmUpdater {
 		}
 	}
 
-	/** Package-visible for silent import writer. */
+	/**
+	 * If a previous silent write was interrupted (process killed mid-rename), restore the map
+	 * from a valid temp or backup so we never leave the user with a missing .mm.
+	 */
+	static void recoverInterruptedWrite(final File mmFile) {
+		if (mmFile == null) {
+			return;
+		}
+		final File parent = mmFile.getParentFile();
+		if (parent == null) {
+			return;
+		}
+		final File tmpFile = new File(parent, "~todoist-" + mmFile.getName() + ".tmp");
+		final File bakFile = new File(parent, "~todoist-" + mmFile.getName() + ".bak");
+		try {
+			if (!mmFile.exists()) {
+				// Prefer the new content that was fsynced before the final rename.
+				if (tmpFile.exists() && isValidMapFile(tmpFile) && tmpFile.renameTo(mmFile)) {
+					LogUtils.warn("Todoist: recovered .mm from temp after interrupted write: " + mmFile.getPath());
+				}
+				else if (bakFile.exists() && bakFile.renameTo(mmFile)) {
+					LogUtils.warn("Todoist: restored .mm from backup after interrupted write: " + mmFile.getPath());
+				}
+			}
+			if (tmpFile.exists() && mmFile.exists()) {
+				tmpFile.delete();
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: recoverInterruptedWrite failed for " + mmFile.getPath(), e);
+		}
+	}
+
+	/** Package-visible for silent import writer. Crash-safe: temp + fsync + backup + rename. */
 	static boolean writeDocumentAtomically(final File mmFile, final Document doc) throws Exception {
 		final File parent = mmFile.getParentFile();
-		final File tmpFile = new File(parent, "~todoist-" + mmFile.getName());
+		if (parent != null && !parent.exists()) {
+			parent.mkdirs();
+		}
+		recoverInterruptedWrite(mmFile);
+		final File tmpFile = new File(parent, "~todoist-" + mmFile.getName() + ".tmp");
+		final File bakFile = new File(parent, "~todoist-" + mmFile.getName() + ".bak");
+		FileOutputStream fos = null;
 		Writer writer = null;
 		try {
-			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(tmpFile), Charset.forName("UTF-8")));
+			fos = new FileOutputStream(tmpFile);
+			writer = new BufferedWriter(new OutputStreamWriter(fos, Charset.forName("UTF-8")));
 			writeFreeplaneCompatibleXml(doc, writer);
 			writer.flush();
+			fos.getFD().sync();
 			writer.close();
 			writer = null;
+			fos = null;
 			if (!isValidMapFile(tmpFile)) {
 				LogUtils.warn("Todoist: silent .mm update produced invalid map, keeping original: " + mmFile.getPath());
 				tmpFile.delete();
 				return false;
 			}
-			if (mmFile.exists() && !mmFile.delete()) {
-				LogUtils.warn("Todoist: could not replace open/locked .mm: " + mmFile.getPath());
-				tmpFile.delete();
-				return false;
+			if (mmFile.exists()) {
+				if (bakFile.exists() && !bakFile.delete()) {
+					LogUtils.warn("Todoist: could not remove old backup: " + bakFile.getPath());
+				}
+				if (!mmFile.renameTo(bakFile)) {
+					LogUtils.warn("Todoist: could not backup .mm before replace: " + mmFile.getPath());
+					tmpFile.delete();
+					return false;
+				}
 			}
 			if (!tmpFile.renameTo(mmFile)) {
 				LogUtils.warn("Todoist: could not rename temp .mm into place: " + mmFile.getPath());
+				if (bakFile.exists() && !mmFile.exists()) {
+					bakFile.renameTo(mmFile);
+				}
 				tmpFile.delete();
 				return false;
+			}
+			if (bakFile.exists() && !bakFile.delete()) {
+				// Non-fatal: leftover .bak is recoverable evidence of a successful write.
+				LogUtils.info("Todoist: left backup after successful write: " + bakFile.getPath());
 			}
 			return true;
 		}
@@ -213,8 +287,12 @@ final class TodoistSilentMmUpdater {
 				catch (Exception e) {
 				}
 			}
-			if (tmpFile.exists() && !tmpFile.equals(mmFile)) {
-				// left behind only on failure paths above that did not delete
+			else if (fos != null) {
+				try {
+					fos.close();
+				}
+				catch (Exception e) {
+				}
 			}
 		}
 	}
@@ -404,7 +482,8 @@ final class TodoistSilentMmUpdater {
 
 	private static boolean applyPatchToElement(final Element node, final Patch patch) {
 		boolean changed = false;
-		if (patch.plainText != null) {
+		// Never wipe node text with an empty Todoist content field.
+		if (patch.plainText != null && patch.plainText.length() > 0) {
 			final String current = node.getAttribute("TEXT");
 			final String currentPlain = htmlToPlainSafe(current);
 			if (!patch.plainText.equals(currentPlain)) {
@@ -412,25 +491,18 @@ final class TodoistSilentMmUpdater {
 				changed = true;
 			}
 		}
+		// Map-protect: never clear richer local TASKTIME / JINJI from empty Todoist fields.
 		if (patch.durationMinutes > 0) {
 			if (!Integer.toString(patch.durationMinutes).equals(node.getAttribute("TASKTIME"))) {
 				node.setAttribute("TASKTIME", Integer.toString(patch.durationMinutes));
 				changed = true;
 			}
 		}
-		else if (node.hasAttribute("TASKTIME") && !"0".equals(node.getAttribute("TASKTIME"))) {
-			node.setAttribute("TASKTIME", "0");
-			changed = true;
-		}
 		if (patch.jinji > 0) {
 			if (!Integer.toString(patch.jinji).equals(node.getAttribute("JINJI"))) {
 				node.setAttribute("JINJI", Integer.toString(patch.jinji));
 				changed = true;
 			}
-		}
-		else if (node.hasAttribute("JINJI") && !"0".equals(node.getAttribute("JINJI"))) {
-			node.setAttribute("JINJI", "0");
-			changed = true;
 		}
 		if (patch.taskId != null && patch.taskId.length() > 0) {
 			if (!patch.taskId.equals(node.getAttribute(TodoistNodeMetaIo.XML_TASK_ID))) {
@@ -448,11 +520,11 @@ final class TodoistSilentMmUpdater {
 			if (ensureReminderParameters(node, patch)) {
 				changed = true;
 			}
-			if (applyCycleAttributes(node, patch)) {
+			if (patch.cycleTrusted && applyCycleAttributes(node, patch)) {
 				changed = true;
 			}
 		}
-		else {
+		else if (patch.allowClearReminder) {
 			if (removeReminderHook(node)) {
 				changed = true;
 			}
@@ -594,13 +666,21 @@ final class TodoistSilentMmUpdater {
 			parameters.setAttribute("REMINDUSERAT", due);
 			changed = true;
 		}
-		final String period = Integer.toString(patch.period);
-		if (!period.equals(parameters.getAttribute("PERIOD"))) {
-			parameters.setAttribute("PERIOD", period);
-			changed = true;
+		// Weak Todoist recurring (is_recurring without due.string) must not clobber local PERIOD/UNIT.
+		if (patch.cycleTrusted) {
+			final String period = Integer.toString(patch.period);
+			if (!period.equals(parameters.getAttribute("PERIOD"))) {
+				parameters.setAttribute("PERIOD", period);
+				changed = true;
+			}
+			if (!patch.periodUnit.equalsIgnoreCase(String.valueOf(parameters.getAttribute("UNIT")))) {
+				parameters.setAttribute("UNIT", patch.periodUnit);
+				changed = true;
+			}
 		}
-		if (!patch.periodUnit.equalsIgnoreCase(String.valueOf(parameters.getAttribute("UNIT")))) {
-			parameters.setAttribute("UNIT", patch.periodUnit);
+		else if (!parameters.hasAttribute("PERIOD") || parameters.getAttribute("PERIOD").length() == 0) {
+			parameters.setAttribute("PERIOD", "1");
+			parameters.setAttribute("UNIT", "DAY");
 			changed = true;
 		}
 		return changed;

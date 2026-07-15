@@ -22,12 +22,14 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.util.Date;
+import java.util.TimerTask;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.SwingUtilities;
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.EnabledAction;
@@ -237,10 +239,9 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 	}
 
 	void blink(final ReminderExtension model, final boolean stateAdded) {
-		if (model.getNode().getMap() != Controller.getCurrentController().getMap()) {
-			return;
-		}
-		model.displayState((stateAdded) ? ClockState.CLOCK_VISIBLE : ClockState.CLOCK_INVISIBLE, model.getNode(), true);
+		// Blink disabled: many overdue reminders were flooding the EDT with recursive
+		// nodeRefresh every second and freezing maps that have lots of past-due tasks.
+		return;
 	}
 
 	@Override
@@ -298,9 +299,22 @@ public class ReminderHook extends PersistentNodeHook implements IExtension {
 	}
 
 	private void scheduleTimer(final ReminderExtension model) {
-		final Date date = new Date(model.getRemindUserAt());
-		scheduleTimer(model, new TimerBlinkTask(this, model, false, System.currentTimeMillis() < date.getTime() + ReminderExtension.BLINKING_PERIOD));
+		// Static clock icon only — no repeating blink timer (that was the UI lag source).
 		model.displayState(ClockState.CLOCK_VISIBLE, model.getNode(), false);
+		final String script = model.getScript();
+		if (script == null || script.length() == 0) {
+			return;
+		}
+		final Date date = new Date(model.getRemindUserAt());
+		model.scheduleOnce(new TimerTask() {
+			public void run() {
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						runScript(model);
+					}
+				});
+			}
+		}, date);
 	}
 
 	private void scheduleTimer(final ReminderExtension model, final TimerBlinkTask task) {

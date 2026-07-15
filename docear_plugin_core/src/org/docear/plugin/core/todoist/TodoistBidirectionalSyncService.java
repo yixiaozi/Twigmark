@@ -224,11 +224,14 @@ public final class TodoistBidirectionalSyncService {
 	private static void queueSilentPatch(final Map silentByPath, final File file, final String nodeId,
 			final TodoistImportTask task, final String syncKey, final TodoistMappingStore store) {
 		final TodoistCycleMapper.Cycle cycle = resolveCycle(task);
+		final boolean cycleTrusted = !TodoistCycleMapper.isWeakRecurringFallback(task.dueString, task.recurring);
 		final String hash = contentHashForTask(task, file);
 		store.putMapping(syncKey, task.id, task.dueAtMillis, hash);
+		// jinji: pass local=0 here; applyPatch never clears local JINJI when remote is default.
+		final int jinji = TodoistPriority.toJinji(task.priority, 0);
 		final TodoistSilentMmUpdater.Patch patch = new TodoistSilentMmUpdater.Patch(nodeId, plainContent(task),
-				task.dueAtMillis, task.durationMinutes, TodoistPriority.toJinji(task.priority, 0), task.id, hash,
-				cycle.recurring, cycle.interval, cycle.periodUnit(), cycle.remindType, cycle.weekDays);
+				task.dueAtMillis, task.durationMinutes, jinji, task.id, hash, cycle.recurring, cycle.interval,
+				cycle.periodUnit(), cycle.remindType, cycle.weekDays, cycleTrusted, false);
 		List list = (List) silentByPath.get(file.getAbsolutePath());
 		if (list == null) {
 			list = new ArrayList();
@@ -324,9 +327,7 @@ public final class TodoistBidirectionalSyncService {
 							changed[0] = true;
 						}
 					}
-					else if (clearReminder(openNode)) {
-						changed[0] = true;
-					}
+					// Map-protect: never clear a local reminder just because Todoist has no due.
 					if (applyDurationAndUrgency(openNode, task)) {
 						changed[0] = true;
 					}
@@ -355,41 +356,47 @@ public final class TodoistBidirectionalSyncService {
 		return changed[0];
 	}
 
-	/** True when Todoist content/due/duration/urgency/cycle differs from the linked mind-map node. */
+	/**
+	 * True when Todoist has <em>richer or clearly different</em> content than the linked node.
+	 * Empty/default Todoist fields never force a destructive pull (map settings win).
+	 */
 	private static boolean needsPull(final NodeModel node, final TodoistImportTask task) {
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desired = parsed.nodeText;
 		final String current = TodoistReminderFactory.plainText(node);
-		if (!desired.equals(current)) {
+		if (desired.length() > 0 && !desired.equals(current)) {
 			return true;
 		}
 		final int localDuration = ReminderTaskAttributes.readTaskTimeFromNode(node);
-		if (task.durationMinutes != localDuration && (task.durationMinutes > 0 || localDuration > 0)) {
+		if (task.durationMinutes > 0 && task.durationMinutes != localDuration) {
 			return true;
 		}
 		final int localJinji = ReminderTaskAttributes.readJinjiFromNode(node);
 		final int desiredJinji = TodoistPriority.toJinji(task.priority, localJinji);
-		if (desiredJinji != localJinji) {
+		if (desiredJinji != localJinji && desiredJinji > 0) {
 			return true;
 		}
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		final long existingAt = existing == null ? 0L : existing.getRemindUserAt();
 		if (task.dueAtMillis <= 0) {
-			return existingAt > 0;
+			// Do not pull-to-clear: keep local reminder when Todoist has no due.
+			return false;
 		}
 		final TodoistCycleMapper.Cycle remote = resolveCycle(task);
+		final boolean cycleTrusted = !TodoistCycleMapper.isWeakRecurringFallback(task.dueString, task.recurring);
 		if (existingAt <= 0) {
 			return true;
 		}
 		if (remote.recurring) {
-			// Todoist due is the *next* occurrence; Docear stores an anchor datetime.
-			// Only treat time-of-day changes as a real pull for recurring tasks.
 			if (!sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
 				return true;
 			}
 		}
 		else if (existingAt != task.dueAtMillis) {
 			return true;
+		}
+		if (!cycleTrusted) {
+			return false;
 		}
 		final String localType = ReminderCycleAttributes.readRemindTypeFromNode(node);
 		final int localInterval = ReminderCycleAttributes.readIntervalFromNode(node);
@@ -446,7 +453,8 @@ public final class TodoistBidirectionalSyncService {
 		final int localLevel = ReminderTaskAttributes.readTaskLevelFromNode(node);
 		final int localJinji = ReminderTaskAttributes.readJinjiFromNode(node);
 		final int desiredJinji = TodoistPriority.toJinji(task.priority, localJinji);
-		final int desiredDuration = task.durationMinutes;
+		// Never clear local duration with Todoist unset (0).
+		final int desiredDuration = task.durationMinutes > 0 ? task.durationMinutes : localDuration;
 		if (desiredDuration == localDuration && desiredJinji == localJinji) {
 			return false;
 		}
@@ -498,6 +506,7 @@ public final class TodoistBidirectionalSyncService {
 			return false;
 		}
 		final TodoistCycleMapper.Cycle cycle = resolveCycle(task);
+		final boolean cycleTrusted = !TodoistCycleMapper.isWeakRecurringFallback(task.dueString, task.recurring);
 		final ReminderExtension existing = ReminderExtension.getExtension(node);
 		final long existingAt = existing == null ? 0L : existing.getRemindUserAt();
 		final String localType = ReminderCycleAttributes.readRemindTypeFromNode(node);
@@ -505,33 +514,50 @@ public final class TodoistBidirectionalSyncService {
 		final String localWeekDays = ReminderCycleAttributes.readWeekDaysFromNode(node);
 		final boolean localRecurring = localType != null && localType.length() > 0
 				&& !"onetime".equalsIgnoreCase(localType);
-		final boolean sameCycle = cycle.recurring == localRecurring && (!cycle.recurring || (cycle.interval == localInterval
-				&& cycle.remindType.equalsIgnoreCase(localType == null ? "" : localType)
-				&& sameWeekDays(cycle.weekDays, localWeekDays)));
-		final boolean sameWhen = existing != null && (cycle.recurring ? sameLocalTimeOfDay(existingAt, task.dueAtMillis)
+		final boolean sameCycle = !cycleTrusted || (cycle.recurring == localRecurring && (!cycle.recurring
+				|| (cycle.interval == localInterval
+						&& cycle.remindType.equalsIgnoreCase(localType == null ? "" : localType)
+						&& sameWeekDays(cycle.weekDays, localWeekDays))));
+		final boolean sameWhen = existing != null && (cycle.recurring || localRecurring
+				? sameLocalTimeOfDay(existingAt, task.dueAtMillis)
 				: existingAt == task.dueAtMillis);
 		if (sameCycle && sameWhen) {
 			return false;
 		}
 		final ReminderExtension reminder = new ReminderExtension(node);
-		// Preserve Docear anchor date for recurring when only Todoist's *next* occurrence differs.
 		long remindAt = task.dueAtMillis;
-		if (cycle.recurring && existing != null && existingAt > 0 && sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
+		if ((cycle.recurring || localRecurring) && existing != null && existingAt > 0
+				&& sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
 			remindAt = existingAt;
 		}
-		else if (cycle.recurring && existing != null && existingAt > 0 && !sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
-			// User changed time-of-day on Todoist: keep local calendar day, apply new clock time.
+		else if ((cycle.recurring || localRecurring) && existing != null && existingAt > 0
+				&& !sameLocalTimeOfDay(existingAt, task.dueAtMillis)) {
 			remindAt = replaceLocalTimeOfDay(existingAt, task.dueAtMillis);
 		}
 		reminder.setRemindUserAt(remindAt);
-		reminder.setPeriod(cycle.interval);
-		reminder.setPeriodUnitAsString(cycle.periodUnit());
-		reminderHook.undoableActivateHook(node, reminder);
-		if (cycle.recurring) {
-			ReminderCycleAttributes.writeRecurringCycle(node, cycle.remindType, cycle.interval, cycle.weekDays);
+		if (cycleTrusted && cycle.recurring) {
+			reminder.setPeriod(cycle.interval);
+			reminder.setPeriodUnitAsString(cycle.periodUnit());
+		}
+		else if (existing != null) {
+			reminder.setPeriod(existing.getPeriod() <= 0 ? 1 : existing.getPeriod());
+			final String unit = existing.getPeriodUnitAsString();
+			reminder.setPeriodUnitAsString(unit == null || unit.length() == 0 ? "DAY" : unit);
 		}
 		else {
-			ReminderCycleAttributes.writeOneTimeReminder(node);
+			reminder.setPeriod(1);
+			reminder.setPeriodUnitAsString("DAY");
+		}
+		reminderHook.undoableActivateHook(node, reminder);
+		if (cycleTrusted) {
+			if (cycle.recurring) {
+				ReminderCycleAttributes.writeRecurringCycle(node, cycle.remindType, cycle.interval, cycle.weekDays);
+			}
+			else if (!localRecurring) {
+				ReminderCycleAttributes.writeOneTimeReminder(node);
+			}
+			// If remote is one-time but local was recurring and due.string was trusted empty —
+			// only clear when cycleTrusted and !cycle.recurring.
 		}
 		return true;
 	}

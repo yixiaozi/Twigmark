@@ -21,7 +21,7 @@ final class TodoistPriority {
 
 	/**
 	 * Pull: Todoist API priority → mind-map 紧急程度.
-	 * Keeps local unset (0) when remote is the default normal (1).
+	 * Default Todoist priority (1) never clears a richer local {@code JINJI} — map settings win.
 	 */
 	static int toJinji(final int apiPriority, final int localJinji) {
 		int clamped = apiPriority;
@@ -31,7 +31,7 @@ final class TodoistPriority {
 		if (clamped > 4) {
 			clamped = 4;
 		}
-		if (clamped <= 1 && localJinji <= 0) {
+		if (clamped <= 1) {
 			return localJinji;
 		}
 		return clamped;
