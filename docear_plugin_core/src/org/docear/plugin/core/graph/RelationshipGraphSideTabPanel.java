@@ -27,6 +27,7 @@ import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
@@ -45,8 +46,7 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.components.RelationshipGraphTabBridge;
-import org.freeplane.plugin.workspace.components.tagfilter.TagGroupCascadeBar;
-import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
+import org.freeplane.plugin.workspace.components.TagGroupFilterBarFactory;
 
 /**
  * Left sidebar: mode tabs (map links / node links / tags / favorites), search and related-item list.
@@ -758,7 +758,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 		private final JCheckBox showIsolatedCheck;
 		private final JCheckBox focusSelectedCheck;
 		private final JComboBox hopCombo;
-		private final TagGroupCascadeBar groupCascade;
+		private final JComponent groupCascade;
 
 		private String activeSearchQuery = "";
 		private String focusCenterKey;
@@ -778,25 +778,27 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			        BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 
 			if (isTagStyleMode(mode)) {
-				TagGroupCascadeBar cascade = null;
+				JComponent cascade = null;
 				try {
-					final TagGroupStore store = mode == RelationshipGraphScanner.MODE_FAVORITES
-					        ? TagGroupStore.getFavoritesInstance()
-					        : TagGroupStore.getInstance();
 					final String propGroup = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_GROUP
 					        : PROP_TAGS_GROUP;
 					final String propDirect = mode == RelationshipGraphScanner.MODE_FAVORITES ? PROP_FAV_DIRECT
 					        : PROP_TAGS_DIRECT;
-					cascade = new TagGroupCascadeBar(store, propGroup, propDirect, true);
-					// Do not implement TagGroupCascadeBar.Listener here — nested interfaces
-					// fail across plugin classloaders (NoClassDefFoundError: ...$Listener).
-					cascade.bind(new Runnable() {
+					final Runnable onChange = new Runnable() {
 						public void run() {
 							if (RelationshipGraphSideTabPanel.this.graphMode == ModeTabPanel.this.mode) {
 								rebuildDisplayIndex(true);
 							}
 						}
-					}, java.util.Collections.EMPTY_SET);
+					};
+					// Create via exported factory — never touch TagGroupCascadeBar from this
+					// bundle (OSGi does not export ...tagfilter by default → NoClassDefFoundError).
+					if (mode == RelationshipGraphScanner.MODE_FAVORITES) {
+						cascade = TagGroupFilterBarFactory.createFavoritesBar(propGroup, propDirect, onChange);
+					}
+					else {
+						cascade = TagGroupFilterBarFactory.createTagsBar(propGroup, propDirect, onChange);
+					}
 				}
 				catch (final Throwable t) {
 					LogUtils.warn(t);
@@ -996,9 +998,9 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 
 		private void refreshGroupCascade(final RelationshipGraphIndex base) {
 			if (groupCascade != null) {
-				groupCascade.setAvailableTagsSnapshot(
+				TagGroupFilterBarFactory.setAvailableTags(groupCascade,
 				        collectTagNamesFromBase(base != null ? base : cachedBaseIndex[mode]));
-				groupCascade.rebuild();
+				TagGroupFilterBarFactory.rebuild(groupCascade);
 			}
 		}
 
@@ -1006,14 +1008,14 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			if (!isTagStyleMode(mode) || groupCascade == null) {
 				return null;
 			}
-			if (groupCascade.isAllScope()) {
+			if (TagGroupFilterBarFactory.isAllScope(groupCascade)) {
 				return null;
 			}
 			final Set names = collectTagNamesFromBase(base != null ? base : cachedBaseIndex[mode]);
 			final Set allowed = new HashSet();
 			for (final Object nameObj : names) {
 				final String tag = (String) nameObj;
-				if (groupCascade.tagMatchesActiveScope(tag)) {
+				if (TagGroupFilterBarFactory.tagMatchesActiveScope(groupCascade, tag)) {
 					allowed.add(tag);
 				}
 			}
