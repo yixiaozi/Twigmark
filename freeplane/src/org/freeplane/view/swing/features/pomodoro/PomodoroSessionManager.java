@@ -113,6 +113,7 @@ public final class PomodoroSessionManager {
 		ensureTickRunning();
 		showWindow();
 		fireChanged();
+		refreshWindow();
 	}
 
 	public void pause(final NodeModel node) {
@@ -130,6 +131,7 @@ public final class PomodoroSessionManager {
 		PomodoroAttributes.write(node, next);
 		updateTickState();
 		fireChanged();
+		refreshWindow();
 	}
 
 	/** End current segment: commit focus into total + session log + note. */
@@ -172,6 +174,16 @@ public final class PomodoroSessionManager {
 			public void run() {
 				if (window != null) {
 					window.hideQuietly();
+				}
+			}
+		});
+	}
+
+	void refreshWindow() {
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				if (window != null && window.isVisible()) {
+					window.refresh();
 				}
 			}
 		});
