@@ -9,6 +9,7 @@ public final class SideTabMetricKeys {
 	public static final String LEFT_ACTIVITY = "left.activity";
 	public static final String LEFT_GRAPH = "left.graph";
 	public static final String LEFT_GIT = "left.git";
+	public static final String LEFT_NEXT_ACTIONS = "left.next_actions";
 
 	public static final String RIGHT_CURRENT_REMINDERS = "right.current_reminders";
 	public static final String RIGHT_CURRENT_FOLDER = "right.current_folder";

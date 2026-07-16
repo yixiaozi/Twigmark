@@ -184,6 +184,7 @@
 			<ribbon_band name="icons" resize_policies="Mirror">
                 <ribbon_action action="IconSelectionPlugin" />
 			    <ribbon_action action="ToggleFunnelIconAction" accelerator="alt W" />
+			    <ribbon_action action="ToggleFlagIconAction" accelerator="alt Q" />
 			    <ribbon_action action="TogglePublishIconAction" accelerator="alt E" />
 			    <ribbon_action action="ToggleCheckmarkIconAction" accelerator="alt R" />
 			    <ribbon_action action="HierarchicalIconsAction" />

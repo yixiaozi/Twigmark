@@ -75,6 +75,7 @@ import org.freeplane.features.icon.UIIcon;
 import org.freeplane.features.icon.mindmapmode.IconSelectionPlugin;
 import org.freeplane.features.hashphotos.mindmapmode.HashPhotosEventsAutoSync;
 import org.freeplane.features.icon.mindmapmode.ToggleCheckmarkIconAction;
+import org.freeplane.features.icon.mindmapmode.ToggleFlagIconAction;
 import org.freeplane.features.icon.mindmapmode.ToggleFunnelIconAction;
 import org.freeplane.features.icon.mindmapmode.TogglePublishIconAction;
 import org.freeplane.features.icon.mindmapmode.MIconController;
@@ -231,6 +232,7 @@ public class MModeControllerFactory {
 		MEncryptionController.install(new MEncryptionController(modeController));
 		modeController.addAction(new IconSelectionPlugin());
 		modeController.addAction(new ToggleFunnelIconAction());
+		modeController.addAction(new ToggleFlagIconAction());
 		modeController.addAction(new TogglePublishIconAction());
 		modeController.addAction(new ToggleCheckmarkIconAction());
 		modeController.addAction(new NewParentNode());

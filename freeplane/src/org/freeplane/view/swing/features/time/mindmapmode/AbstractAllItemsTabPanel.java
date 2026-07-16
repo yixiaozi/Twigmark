@@ -823,6 +823,17 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			}
 			WorkspaceSideTabSnapshotRegistry.updatePublishedEntries(entries);
 			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_PUBLISHED, entries.size());
+			return;
+		}
+		if ("\u7ea2\u65d7".equals(getRootLabel())) {
+			int count = 0;
+			for (int i = 0; i < records.size(); i++) {
+				ItemRecord record = (ItemRecord) records.get(i);
+				if (isValidMindmapFile(record.file)) {
+					count++;
+				}
+			}
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_NEXT_ACTIONS, count);
 		}
 	}
 
@@ -832,6 +843,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 		else if ("\u5168\u90e8\u53d1\u5e03".equals(getRootLabel())) {
 			SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_PUBLISHED, count);
+		}
+		else if ("\u7ea2\u65d7".equals(getRootLabel())) {
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_NEXT_ACTIONS, count);
 		}
 	}
 

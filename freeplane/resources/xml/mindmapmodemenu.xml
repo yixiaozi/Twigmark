@@ -82,6 +82,7 @@
 			<menu_submenu name="icons" name_ref="menu_iconView">
 				<menu_action action="IconSelectionPlugin" accelerator="control F2"/>
 				<menu_action action="ToggleFunnelIconAction" accelerator="alt W" />
+				<menu_action action="ToggleFlagIconAction" accelerator="alt Q" />
 				<menu_action action="TogglePublishIconAction" accelerator="alt E" />
 				<menu_action action="ToggleCheckmarkIconAction" accelerator="alt R" />
 				<menu_submenu name="icons" name_ref="menu_iconByCategory">

@@ -134,6 +134,7 @@ import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.git.GitTabPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllFlagsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
@@ -151,13 +152,15 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_ACTIVITY = "activity";
 	private static final String TAB_GIT = "git";
 	private static final String TAB_GRAPH = "relationship_graph";
+	private static final String TAB_NEXT_ACTIONS = "next_actions";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
 	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
 	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
-			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT
+			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT, TAB_NEXT_ACTIONS
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
-			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH, TAB_GIT
+			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH,
+			TAB_GIT, TAB_NEXT_ACTIONS
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -679,6 +682,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		normalizeSearchTabOrder();
 		normalizeSideTabOrder();
+		normalizeNextActionsTabOrder();
 	}
 
 	private void normalizeSearchTabOrder() {
@@ -718,6 +722,29 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else {
 			sideTabOrder.add(TAB_GRAPH);
 		}
+		persistSideTabOrder();
+	}
+
+	/** Keep「红旗」immediately to the right of Git. */
+	private void normalizeNextActionsTabOrder() {
+		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+			return;
+		}
+		final int desiredIndex;
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		if (gitIndex >= 0) {
+			desiredIndex = gitIndex + 1;
+		}
+		else {
+			desiredIndex = sideTabOrder.size() - 1;
+		}
+		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
+		if (currentIndex == desiredIndex) {
+			return;
+		}
+		sideTabOrder.remove(TAB_NEXT_ACTIONS);
+		final int insertAt = Math.min(desiredIndex, sideTabOrder.size());
+		sideTabOrder.add(insertAt, TAB_NEXT_ACTIONS);
 		persistSideTabOrder();
 	}
 
@@ -777,6 +804,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_GIT.equals(tabId)) {
 			return "Git";
 		}
+		if (TAB_NEXT_ACTIONS.equals(tabId)) {
+			return "\u7ea2\u65d7";
+		}
 		if (TAB_GRAPH.equals(tabId)) {
 			return "\u5173\u7cfb\u56fe";
 		}
@@ -804,6 +834,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (TAB_GIT.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_GIT;
+		}
+		if (TAB_NEXT_ACTIONS.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_NEXT_ACTIONS;
 		}
 		if (TAB_GRAPH.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_GRAPH;
@@ -966,6 +999,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		else if (TAB_GIT.equals(tabId)) {
 			panel = new GitTabPanel();
+		}
+		else if (TAB_NEXT_ACTIONS.equals(tabId)) {
+			panel = new EnhancedAllFlagsTabPanel();
 		}
 		if (panel != null) {
 			sideTabComponents.put(tabId, panel);
