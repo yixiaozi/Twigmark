@@ -9,17 +9,20 @@ import com.sun.jna.platform.win32.WinUser;
 
 /**
  * Registers system-wide hotkeys on Windows (Docear must be running):
- * Ctrl+Shift+Space → quick capture, Ctrl+Space → show/hide, Shift+Space → command palette.
+ * Ctrl+Shift+Space → quick capture, Ctrl+Space → show/hide, Shift+Space → command palette,
+ * Alt+Space → open-map switcher (overrides the Windows window system menu while registered).
  * RegisterHotKey and the message loop run on the same dedicated thread (required by Win32).
  */
 final class QuickCaptureHotkey {
 	private static final int HOTKEY_ID_CAPTURE = 0x7CE0;
 	private static final int HOTKEY_ID_TOGGLE = 0x7CE1;
 	private static final int HOTKEY_ID_COMMAND = 0x7CE2;
+	private static final int HOTKEY_ID_MAP_SWITCH = 0x7CE3;
 	private static final int MOD_NOREPEAT = 0x4000;
 	private static final int MODIFIERS_CAPTURE = WinUser.MOD_CONTROL | WinUser.MOD_SHIFT | MOD_NOREPEAT;
 	private static final int MODIFIERS_TOGGLE = WinUser.MOD_CONTROL | MOD_NOREPEAT;
 	private static final int MODIFIERS_COMMAND = WinUser.MOD_SHIFT | MOD_NOREPEAT;
+	private static final int MODIFIERS_MAP_SWITCH = WinUser.MOD_ALT | MOD_NOREPEAT;
 	private static final int VK_SPACE = 0x20;
 	private static final int PM_REMOVE = 0x0001;
 
@@ -27,6 +30,7 @@ final class QuickCaptureHotkey {
 	private static volatile boolean registeredCapture;
 	private static volatile boolean registeredToggle;
 	private static volatile boolean registeredCommand;
+	private static volatile boolean registeredMapSwitch;
 	private static volatile boolean threadStarted;
 	private static volatile boolean shutdownHookAdded;
 
@@ -97,7 +101,17 @@ final class QuickCaptureHotkey {
 				LogUtils.info("QuickCapture: global hotkey Shift+Space registered.");
 			}
 
-			if (!registeredCapture && !registeredToggle && !registeredCommand) {
+			if (!User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID_MAP_SWITCH, MODIFIERS_MAP_SWITCH, VK_SPACE)) {
+				final int err = Kernel32.INSTANCE.GetLastError();
+				LogUtils.warn("QuickCapture: RegisterHotKey failed for Alt+Space (Win32 error " + err
+				        + "). May be used by Windows system menu or another program.");
+			}
+			else {
+				registeredMapSwitch = true;
+				LogUtils.info("QuickCapture: global hotkey Alt+Space registered (map switcher).");
+			}
+
+			if (!registeredCapture && !registeredToggle && !registeredCommand && !registeredMapSwitch) {
 				return;
 			}
 
@@ -118,6 +132,9 @@ final class QuickCaptureHotkey {
 						}
 						else if (msg.wParam.intValue() == HOTKEY_ID_COMMAND) {
 							org.docear.plugin.core.quickcommand.QuickCommandService.showDialog();
+						}
+						else if (msg.wParam.intValue() == HOTKEY_ID_MAP_SWITCH) {
+							org.docear.plugin.core.mapswitcher.MapSwitcherService.showDialog();
 						}
 					}
 					User32.INSTANCE.TranslateMessage(msg);
@@ -210,6 +227,11 @@ final class QuickCaptureHotkey {
 		if (registeredCommand) {
 			User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_COMMAND);
 			registeredCommand = false;
+			any = true;
+		}
+		if (registeredMapSwitch) {
+			User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_MAP_SWITCH);
+			registeredMapSwitch = false;
 			any = true;
 		}
 		if (any) {
