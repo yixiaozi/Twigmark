@@ -53,6 +53,7 @@ import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.SessionOpenMapsStore;
 import org.freeplane.features.map.mindmapmode.DocuMapAttribute;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -99,12 +100,14 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	public void afterViewChange(final Component oldView, final Component newView) {
 		if (newView == null) {
 			updateMenus();
+			schedulePersistOpenedNow();
 			return;
 		}
 		final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
 		final MapModel map = mapViewManager.getModel(newView);
 		final String restoreString = getRestoreable(map);
 		updateList(map, restoreString);
+		schedulePersistOpenedNow();
 	}
 
 	public void afterViewClose(final Component oldView) {
@@ -191,6 +194,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 				updateList(event.getMap(), restorable);
 			}
 		}
+		schedulePersistOpenedNow();
 	}
 
 	public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
@@ -225,19 +229,37 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	public void openMapsOnStart() {
 		final boolean loadLastMap = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAP);
 		final boolean loadLastMaps = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAPS);
-		String lastMap = null;
-		if (!lastOpenedList.isEmpty()) {
-			lastMap = decodeRestoreable(lastOpenedList.get(0));
+		final SessionOpenMapsStore sessionStore = SessionOpenMapsStore.getInstance();
+		final List<String> sessionOpenMaps = new LinkedList<String>(sessionStore.getOpenMaps());
+		filterNonRestorableMaps(sessionOpenMaps);
+
+		String lastMap = sessionStore.getLastMap();
+		if (lastMap == null || !isSessionRestorableMap(decodeRestoreable(lastMap))
+				|| !mapFileExists(decodeRestoreable(lastMap))) {
+			lastMap = null;
+			if (!lastOpenedList.isEmpty()) {
+				lastMap = decodeRestoreable(lastOpenedList.get(0));
+			}
 		}
+		else {
+			lastMap = decodeRestoreable(lastMap);
+		}
+
 		if (loadLastMaps) {
 			final List<String> startList = new LinkedList<String>();
-			restoreList(OPENED_NOW, startList);
-			filterNonRestorableMaps(startList);
+			if (!sessionOpenMaps.isEmpty()) {
+				startList.addAll(sessionOpenMaps);
+				LogUtils.info("Restoring " + startList.size() + " map(s) from session-open-maps.properties");
+			}
+			else {
+				restoreList(OPENED_NOW, startList);
+				filterNonRestorableMaps(startList);
+				if (!startList.isEmpty()) {
+					LogUtils.info("Restoring " + startList.size() + " map(s) from auto.properties openedNow");
+				}
+			}
 			if (startList.isEmpty()) {
 				appendMostRecentRestorableMap(startList);
-			}
-			if (!startList.isEmpty()) {
-				LogUtils.info("Restoring " + startList.size() + " map(s) from session list");
 			}
 			safeOpenOnStart(startList);
 			if (lastMap != null) {
@@ -251,6 +273,13 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public boolean hasRestorableSessionMaps() {
+		if (SessionOpenMapsStore.getInstance().hasOpenMaps()) {
+			final List<String> sessionOpenMaps = new LinkedList<String>(SessionOpenMapsStore.getInstance().getOpenMaps());
+			filterNonRestorableMaps(sessionOpenMaps);
+			if (!sessionOpenMaps.isEmpty()) {
+				return true;
+			}
+		}
 		final List<String> openedNow = new LinkedList<String>();
 		restoreList(OPENED_NOW, openedNow);
 		for (int i = 0; i < openedNow.size(); i++) {
@@ -352,11 +381,28 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	private void persistOpenedNowNow() {
 		final String encoded = ConfigurationUtils.encodeListValue(currenlyOpenedList, true);
 		ResourceController.getResourceController().setProperty(OPENED_NOW, encoded);
+
+		String lastRestoreable = null;
+		try {
+			final Controller controller = Controller.getCurrentController();
+			if (controller != null) {
+				final MapModel map = controller.getMap();
+				lastRestoreable = getRestoreable(map);
+			}
+		}
+		catch (Exception e) {
+		}
+		if (lastRestoreable == null && !currenlyOpenedList.isEmpty()) {
+			lastRestoreable = currenlyOpenedList.get(0);
+		}
+		SessionOpenMapsStore.getInstance().saveOpenMaps(currenlyOpenedList, lastRestoreable);
+
 		if (currenlyOpenedList.isEmpty()) {
-			LogUtils.info("Session restore list (openedNow) is empty");
+			LogUtils.info("Session restore list is empty (session-open-maps.properties)");
 		}
 		else {
-			LogUtils.info("Session restore list (openedNow): " + currenlyOpenedList.size() + " map(s)");
+			LogUtils.info("Session restore list: " + currenlyOpenedList.size()
+					+ " map(s) written to session-open-maps.properties");
 		}
 	}
 
