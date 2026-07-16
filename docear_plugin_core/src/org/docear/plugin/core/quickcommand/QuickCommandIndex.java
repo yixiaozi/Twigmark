@@ -337,6 +337,14 @@ final class QuickCommandIndex {
 			public int compare(final Object a, final Object b) {
 				final QuickCommandCandidate ca = (QuickCommandCandidate) a;
 				final QuickCommandCandidate cb = (QuickCommandCandidate) b;
+				// ★ recent / previously selected items first.
+				if (ca.recent != cb.recent) {
+					return ca.recent ? -1 : 1;
+				}
+				if (ca.recent && cb.recent && ca.historyRank != cb.historyRank) {
+					// Higher history rank = more recent selection.
+					return ca.historyRank > cb.historyRank ? -1 : 1;
+				}
 				if (ca.modifiedAt != cb.modifiedAt) {
 					return ca.modifiedAt > cb.modifiedAt ? -1 : 1;
 				}

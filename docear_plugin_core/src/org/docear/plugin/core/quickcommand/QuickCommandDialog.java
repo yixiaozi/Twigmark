@@ -98,9 +98,17 @@ final class QuickCommandDialog extends JDialog {
 		input.setFont(preferUiFont(20f));
 		input.setForeground(TEXT);
 		input.setCaretColor(ACCENT);
-		input.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
+		input.setBorder(new EmptyBorder(2, 2, 8, 2));
 		input.setBackground(PANEL);
 		input.setOpaque(true);
+
+		final JPanel inputWrap = new JPanel(new BorderLayout());
+		inputWrap.setOpaque(true);
+		inputWrap.setBackground(PANEL);
+		inputWrap.setBorder(BorderFactory.createCompoundBorder(
+		        BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE),
+		        new EmptyBorder(0, 0, 10, 0)));
+		inputWrap.add(input, BorderLayout.CENTER);
 
 		list.setFont(preferUiFont(15f));
 		list.setBackground(PANEL);
@@ -123,7 +131,7 @@ final class QuickCommandDialog extends JDialog {
 		hintLabel.setForeground(MUTED);
 		hintLabel.setBorder(new EmptyBorder(6, 2, 2, 2));
 
-		root.add(input, BorderLayout.NORTH);
+		root.add(inputWrap, BorderLayout.NORTH);
 		root.add(scroll, BorderLayout.CENTER);
 		root.add(hintLabel, BorderLayout.SOUTH);
 		setContentPane(root);

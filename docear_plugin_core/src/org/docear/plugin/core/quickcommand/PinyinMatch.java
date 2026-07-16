@@ -55,6 +55,10 @@ final class PinyinMatch {
 			return true;
 		}
 		final String t = text.toLowerCase(Locale.ROOT);
+		// Chinese query: literal substring only (吴 must not match 务/误/无 via pinyin).
+		if (containsChinese(q)) {
+			return t.contains(q);
+		}
 		final String full = fullPinyin == null || fullPinyin.length() == 0 ? fullPinyin(text) : fullPinyin;
 		final String jx = initials == null || initials.length() == 0 ? initials(text) : initials;
 		if (t.contains(q) || full.contains(q) || jx.contains(q)) {
@@ -64,6 +68,18 @@ final class PinyinMatch {
 			return true;
 		}
 		return mixedMatch(text, q);
+	}
+
+	static boolean containsChinese(final String value) {
+		if (value == null || value.length() == 0) {
+			return false;
+		}
+		for (int i = 0; i < value.length(); i++) {
+			if (isChinese(value.charAt(i))) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/** DocearReminder StationInfo.Search: filter chars appear in order. */
@@ -93,8 +109,9 @@ final class PinyinMatch {
 	}
 
 	/**
-	 * Walk text chars; query may use Chinese glyph, same-pinyin Chinese, full pinyin,
-	 * or pinyin prefix. Text characters may be skipped (so {@code xi} matches {@code 无锡}).
+	 * Walk text chars; latin query may use full pinyin or pinyin prefix.
+	 * Text characters may be skipped (so {@code xi} matches {@code 无锡}).
+	 * Chinese-to-Chinese same-pinyin fuzzy is intentionally disabled.
 	 */
 	static boolean mixedMatch(final String text, final String query) {
 		if (query == null || query.length() == 0) {
@@ -103,7 +120,11 @@ final class PinyinMatch {
 		if (text == null || text.length() == 0) {
 			return false;
 		}
-		return matchAt(text, 0, query.toLowerCase(Locale.ROOT), 0);
+		final String q = query.toLowerCase(Locale.ROOT);
+		if (containsChinese(q)) {
+			return text.toLowerCase(Locale.ROOT).contains(q);
+		}
+		return matchAt(text, 0, q, 0);
 	}
 
 	private static boolean matchAt(final String text, final int ti, final String query, final int qi) {
@@ -142,16 +163,12 @@ final class PinyinMatch {
 		if (tcLower == qc || textChar == qc) {
 			out[n++] = 1;
 		}
-		final String textPy = charPinyin(textChar);
-		if (textPy.length() == 0) {
+		// Chinese query chars: exact glyph only (no 吴 ≈ 无).
+		if (isChinese(qc)) {
 			return n;
 		}
-		// Query Chinese with same pinyin (吴 ≈ 无 → wu).
-		if (isChinese(qc)) {
-			final String queryPy = charPinyin(qc);
-			if (queryPy.length() > 0 && queryPy.equals(textPy) && !contains(out, n, 1)) {
-				out[n++] = 1;
-			}
+		final String textPy = charPinyin(textChar);
+		if (textPy.length() == 0) {
 			return n;
 		}
 		// Full pinyin or any non-empty prefix (w / wu for 无, x / xi for 锡).
@@ -267,6 +284,10 @@ final class PinyinMatch {
 			for (int i = 0; i < q.length() && literal + i < hit.length; i++) {
 				hit[literal + i] = true;
 			}
+			return hit;
+		}
+		// Chinese queries never fuzzy-highlight non-literal hits.
+		if (containsChinese(q)) {
 			return hit;
 		}
 		final boolean[] path = new boolean[text.length()];
