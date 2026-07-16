@@ -14,9 +14,10 @@ final class StartPomodoroAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
-		if (node != null) {
-			PomodoroSessionManager.getInstance().start(node);
+		if (manager != null && node != null) {
+			manager.start(node);
 		}
 	}
 }
@@ -29,9 +30,10 @@ final class PausePomodoroAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
-		if (node != null) {
-			PomodoroSessionManager.getInstance().pause(node);
+		if (manager != null && node != null) {
+			manager.pause(node);
 		}
 	}
 }
@@ -44,9 +46,10 @@ final class StopPomodoroAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
-		if (node != null) {
-			PomodoroSessionManager.getInstance().stop(node);
+		if (manager != null && node != null) {
+			manager.stop(node);
 		}
 	}
 }
@@ -74,6 +77,9 @@ final class ShowPomodoroWindowAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
-		PomodoroSessionManager.getInstance().showWindow();
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+		if (manager != null) {
+			manager.showWindow();
+		}
 	}
 }

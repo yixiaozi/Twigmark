@@ -181,6 +181,13 @@ public class MModeControllerFactory {
 	private void createAddIns() {
 		LastSelectionMapExtensionIO.install(modeController);
 		UsageStatsReportService.install(modeController);
+		// Pomodoro must install before its sidebar tab (tab ctor/reload uses SessionManager).
+		try {
+			PomodoroController.install(modeController);
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.severe("Pomodoro install failed; continuing without it", e);
+		}
 		final JComponent tabs = (JComponent) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
 		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u63d0\u9192", new EnhancedAllRemindersTabPanel());
@@ -188,7 +195,12 @@ public class MModeControllerFactory {
 		tabs.add("\u65f6\u95f4\u8f74", new ReminderTimelineTabPanel());
 		tabs.add("\u5f85\u529e", new TodoTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u5f85\u529e", new EnhancedAllTodosTabPanel());
-		tabs.add("\u756a\u8304\u949f", new PomodoroTabPanel(modeController));
+		try {
+			tabs.add("\u756a\u8304\u949f", new PomodoroTabPanel(modeController));
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.severe("Pomodoro tab failed; continuing without it", e);
+		}
 		installWorkspacePinnedNodesTab(modeController, tabs);
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
@@ -205,7 +217,6 @@ public class MModeControllerFactory {
 		new CreationModificationPlugin();
 		HashPhotosEventsAutoSync.install(modeController);
 		modeController.addExtension(ReminderHook.class, new ReminderHook(modeController));
-		PomodoroController.install(modeController);
 		new AutomaticEdgeColorHook();
 		new ViewerController();
 		modeController.addAction(new AddAttributeAction());

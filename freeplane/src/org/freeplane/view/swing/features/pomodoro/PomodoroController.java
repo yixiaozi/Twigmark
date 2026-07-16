@@ -31,7 +31,12 @@ public final class PomodoroController implements IExtension {
 		modeController.addAction(new StopPomodoroAction());
 		modeController.addAction(new TogglePomodoroAction());
 		modeController.addAction(new ShowPomodoroWindowAction());
-		registerStateIcon(modeController);
+		try {
+			registerStateIcon(modeController);
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.warn("Pomodoro state icon registration failed", e);
+		}
 		modeController.addExtension(PomodoroController.class, new PomodoroController());
 		modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
 			public void onCreate(final MapModel map) {

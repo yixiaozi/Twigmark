@@ -97,17 +97,19 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		}));
 		actions.add(btn("暂停", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 				final NodeModel node = selectedMindMapNode();
-				if (node != null) {
-					PomodoroSessionManager.getInstance().pause(node);
+				if (manager != null && node != null) {
+					manager.pause(node);
 				}
 			}
 		}));
 		actions.add(btn("结束", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 				final NodeModel node = selectedMindMapNode();
-				if (node != null) {
-					PomodoroSessionManager.getInstance().stop(node);
+				if (manager != null && node != null) {
+					manager.stop(node);
 				}
 			}
 		}));
@@ -122,7 +124,10 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		}));
 		actions.add(btn("小窗", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				PomodoroSessionManager.getInstance().showWindow();
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+				if (manager != null) {
+					manager.showWindow();
+				}
 			}
 		}));
 		top.add(actions, BorderLayout.SOUTH);
@@ -152,13 +157,14 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		});
 		tree.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 				final NodeModel node = selectedMindMapNode();
-				if (node == null) {
+				if (manager == null || node == null) {
 					return;
 				}
-				PomodoroSessionManager.getInstance().navigateTo(node);
+				manager.navigateTo(node);
 				if (e.getClickCount() >= 2) {
-					PomodoroSessionManager.getInstance().start(node);
+					manager.start(node);
 				}
 			}
 		});
@@ -178,12 +184,16 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	}
 
 	private void startSelectedOrFocused() {
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+		if (manager == null) {
+			return;
+		}
 		NodeModel node = selectedMindMapNode();
 		if (node == null) {
 			node = Controller.getCurrentController().getSelection().getSelected();
 		}
 		if (node != null) {
-			PomodoroSessionManager.getInstance().start(node);
+			manager.start(node);
 		}
 	}
 
@@ -266,6 +276,15 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	}
 
 	private void reload() {
+		try {
+			reloadImpl();
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.warn("Pomodoro sidebar reload failed", e);
+		}
+	}
+
+	private void reloadImpl() {
 		final Enumeration expanded = tree.getExpandedDescendants(new TreePath(rootNode.getPath()));
 		rootNode.removeAllChildren();
 		final long now = System.currentTimeMillis();
@@ -293,7 +312,12 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		expandAll();
 		restoreExpanded(expanded);
 		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_POMODORO, count);
-		final long[] stats = PomodoroSessionManager.getInstance().computeStats(showAllMaps);
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+		if (manager == null) {
+			statsLabel.setText("番茄钟未就绪");
+			return;
+		}
+		final long[] stats = manager.computeStats(showAllMaps);
 		statsLabel.setText("今日 " + PomodoroFormatter.formatDuration(stats[0]) + " · 本周 "
 				+ PomodoroFormatter.formatDuration(stats[1]) + " · 累计 "
 				+ PomodoroFormatter.formatDuration(stats[2]) + " · " + stats[3] + " 个节点");
