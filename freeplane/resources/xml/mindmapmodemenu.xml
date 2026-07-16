@@ -449,6 +449,7 @@
 			<menu_action action="ToggleUsageStatsReportAction"/>
 			<menu_action action="QuickCaptureAction" accelerator="control shift SPACE" />
 			<menu_action action="QuickCommandAction" accelerator="shift SPACE" />
+			<menu_action action="MapSwitcherAction" accelerator="alt SPACE" />
 			<menu_separator />
 			<menu_action action="EncryptionSettingsAction" />
 		</menu_submenu>
