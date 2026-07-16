@@ -730,21 +730,22 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
 			return;
 		}
-		final int desiredIndex;
 		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
-		if (gitIndex >= 0) {
-			desiredIndex = gitIndex + 1;
-		}
-		else {
-			desiredIndex = sideTabOrder.size() - 1;
-		}
 		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
-		if (currentIndex == desiredIndex) {
+		if (gitIndex >= 0 && currentIndex == gitIndex + 1) {
+			return;
+		}
+		if (gitIndex < 0 && currentIndex == sideTabOrder.size() - 1) {
 			return;
 		}
 		sideTabOrder.remove(TAB_NEXT_ACTIONS);
-		final int insertAt = Math.min(desiredIndex, sideTabOrder.size());
-		sideTabOrder.add(insertAt, TAB_NEXT_ACTIONS);
+		if (gitIndex >= 0) {
+			final int insertAt = sideTabOrder.indexOf(TAB_GIT) + 1;
+			sideTabOrder.add(insertAt, TAB_NEXT_ACTIONS);
+		}
+		else {
+			sideTabOrder.add(TAB_NEXT_ACTIONS);
+		}
 		persistSideTabOrder();
 	}
 
