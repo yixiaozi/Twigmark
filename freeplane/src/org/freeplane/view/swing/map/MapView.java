@@ -1893,12 +1893,12 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	private void selectSavedOrLastModifiedOrRoot() {
 		final MapModel map = getModel();
 		String savedId = null;
-		boolean fromSessionStore = false;
 		final File mapFile = map != null ? map.getFile() : null;
+		// 1) Session store — covers selection changes not yet saved into the .mm
 		if (mapFile != null) {
 			savedId = SessionViewStateStore.getInstance().getLastSelectedNodeId(mapFile);
-			fromSessionStore = savedId != null && !savedId.isEmpty();
 		}
+		// 2) Map attribute last_selected_id — portable with the file
 		if (savedId == null || savedId.isEmpty()) {
 			final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(map);
 			if (lastSelection != null) {
@@ -1907,7 +1907,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 		if (savedId != null && !savedId.isEmpty() && map != null) {
 			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
-			if (!fromSessionStore && mapFile != null) {
+			if (mapFile != null) {
 				SessionViewStateStore.getInstance().setLastSelectedNode(mapFile, savedId);
 			}
 			final NodeModel savedNode = map.getNodeForID(savedId);
@@ -1916,10 +1916,17 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			}
 		}
 		final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());
-		if (lastModified != null && selectNodeIfPossible(lastModified)) {
-			return;
+		if (lastModified != null) {
+			// Pre-seed so onSelect does not mark the map dirty on open.
+			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(lastModified.createID());
+			if (selectNodeIfPossible(lastModified)) {
+				return;
+			}
 		}
 		final NodeView root = getRoot();
+		if (map != null && root != null && root.getModel() != null) {
+			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(root.getModel().createID());
+		}
 		selectAsTheOnlyOneSelected(root);
 		centerNode(root, false);
 	}

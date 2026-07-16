@@ -5,10 +5,16 @@ import org.freeplane.core.io.IAttributeHandler;
 import org.freeplane.core.io.IExtensionAttributeWriter;
 import org.freeplane.core.io.ITreeWriter;
 import org.freeplane.core.io.ReadManager;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 
 /**
- * Reads/writes {@link LastSelectionMapExtension} as a {@code last_selected_id} attribute on the map element.
+ * Reads/writes {@link LastSelectionMapExtension} as {@code last_selected_id} on the
+ * {@code <map>} element so the next open can restore the selection.
+ * <p>
+ * Also mirrors selection into {@link SessionViewStateStore} for unsaved sessions.
+ * When the selected node id changes, the map is marked unsaved so the attribute is
+ * written into the {@code .mm} on the next save.
  */
 public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 	static final String MAP_TAG = "map";
@@ -41,7 +47,72 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 
 	public static void install(final ModeController modeController) {
 		new LastSelectionMapExtensionIO(modeController.getMapController());
-		modeController.getMapController().addNodeSelectionListener(new LastSelectionNodeListener());
+		final MapController mapController = modeController.getMapController();
+		mapController.addNodeSelectionListener(new LastSelectionNodeListener());
+		mapController.addMapLifeCycleListener(new IMapLifeCycleListener() {
+			public void onCreate(final MapModel map) {
+			}
+
+			public void onRemove(final MapModel map) {
+				syncSelectionFromController(map);
+			}
+
+			public void onSavedAs(final MapModel map) {
+				syncSelectionFromController(map);
+			}
+
+			public void onSaved(final MapModel map) {
+			}
+		});
+	}
+
+	/** Keep map attribute in sync with the real selection just before save/close. */
+	static void syncSelectionFromController(final MapModel map) {
+		if (map == null) {
+			return;
+		}
+		try {
+			final IMapSelection selection = Controller.getCurrentController().getSelection();
+			if (selection == null) {
+				return;
+			}
+			final NodeModel selected = selection.getSelected();
+			if (selected == null || selected.getMap() != map) {
+				return;
+			}
+			rememberSelection(selected, false);
+		}
+		catch (Exception e) {
+		}
+	}
+
+	/**
+	 * @param markMapDirty when true and the id changed, mark the map unsaved so
+	 *        {@code last_selected_id} is persisted into the {@code .mm} on save.
+	 */
+	static void rememberSelection(final NodeModel node, final boolean markMapDirty) {
+		if (node == null || node.getMap() == null) {
+			return;
+		}
+		final MapModel map = node.getMap();
+		final String nodeId = node.createID();
+		if (nodeId == null || nodeId.isEmpty()) {
+			return;
+		}
+		final LastSelectionMapExtension extension = LastSelectionMapExtension.getOrCreate(map);
+		final String previous = extension.getLastSelectedNodeId();
+		final boolean changed = previous == null || !nodeId.equals(previous);
+		if (changed) {
+			extension.setLastSelectedNodeId(nodeId);
+		}
+		SessionViewStateStore.getInstance().rememberSelection(node);
+		if (markMapDirty && changed && map.getFile() != null) {
+			try {
+				Controller.getCurrentModeController().getMapController().setSaved(map, false);
+			}
+			catch (Exception e) {
+			}
+		}
 	}
 
 	private static final class LastSelectionNodeListener implements INodeSelectionListener {
@@ -49,15 +120,7 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 		}
 
 		public void onSelect(final NodeModel node) {
-			if (node == null || node.getMap() == null) {
-				return;
-			}
-			final String nodeId = node.createID();
-			if (nodeId == null || nodeId.isEmpty()) {
-				return;
-			}
-			LastSelectionMapExtension.getOrCreate(node.getMap()).setLastSelectedNodeId(nodeId);
-			SessionViewStateStore.getInstance().rememberSelection(node);
+			rememberSelection(node, true);
 		}
 	}
 }

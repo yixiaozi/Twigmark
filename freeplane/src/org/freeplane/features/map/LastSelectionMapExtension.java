@@ -3,9 +3,9 @@ package org.freeplane.features.map;
 import org.freeplane.core.extension.IExtension;
 
 /**
- * Persists the last selected node id on the map (saved into the .mm file as {@code last_selected_id}).
- * Live selection is also mirrored to {@link SessionViewStateStore} under {@code _data/session-view.properties}
- * so restore works without an explicit save.
+ * Persists the last selected node id on the map (saved into the .mm file as {@code last_selected_id}
+ * on the {@code <map>} element). Live selection is also mirrored to {@link SessionViewStateStore}
+ * under {@code _data/session-view.properties} so restore works without an explicit save.
  */
 public class LastSelectionMapExtension implements IExtension {
 	private String lastSelectedNodeId;
