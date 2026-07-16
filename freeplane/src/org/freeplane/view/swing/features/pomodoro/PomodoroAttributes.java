@@ -67,16 +67,8 @@ public final class PomodoroAttributes {
 				mapController.nodeChanged(node, PomodoroExtension.class, after, before);
 			}
 		}, node.getMap());
-		// Visible AttributeModel sync outside the core undo actor (avoids nested execute).
-		if (after.isEmpty() || !after.isEnabled()) {
-			PomodoroVisibleAttributes.clear(node);
-		}
-		else {
-			PomodoroVisibleAttributes.sync(node, after);
-		}
-		if (before != null && before.isEnabled() && !after.isEnabled()) {
-			PomodoroVisibleAttributes.clear(node);
-		}
+		// Never mirror into the visible Attribute table — data stays in hidden XML attrs only.
+		PomodoroVisibleAttributes.clear(node);
 	}
 
 	public static void writeSilent(final NodeModel node, final PomodoroExtension desired) {
@@ -86,7 +78,7 @@ public final class PomodoroAttributes {
 		final PomodoroExtension before = copyOrNull(PomodoroExtension.getExtension(node));
 		final PomodoroExtension after = desired.copy();
 		applyToNode(node, after);
-		PomodoroVisibleAttributes.syncSilent(node, after);
+		PomodoroVisibleAttributes.clear(node);
 		try {
 			Controller.getCurrentModeController().getMapController()
 					.nodeChanged(node, PomodoroExtension.class, before, after);

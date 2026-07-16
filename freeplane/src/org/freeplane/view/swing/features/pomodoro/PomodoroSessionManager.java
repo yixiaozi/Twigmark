@@ -157,7 +157,6 @@ public final class PomodoroSessionManager {
 		next.setState(PomodoroExtension.STATE_IDLE);
 		next.setEnabled(true);
 		PomodoroAttributes.write(node, next);
-		PomodoroNoteSync.sync(node, next);
 		updateTickState();
 		fireChanged();
 	}
@@ -349,7 +348,7 @@ public final class PomodoroSessionManager {
 			PomodoroAttributes.writeSilent(node, next);
 		}
 		else if (ext != null && ext.isEnabled()) {
-			PomodoroVisibleAttributes.syncSilent(node, ext);
+			PomodoroVisibleAttributes.clear(node);
 		}
 		final List children = node.getChildren();
 		if (children != null) {
