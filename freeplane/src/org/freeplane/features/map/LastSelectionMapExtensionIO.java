@@ -18,11 +18,27 @@ import org.freeplane.features.mode.ModeController;
  */
 public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 	static final String MAP_TAG = "map";
-	static final String LAST_SELECTED_ID_ATTR = "last_selected_id";
+	public static final String LAST_SELECTED_ID_ATTR = "last_selected_id";
+
+	/** When true, selection hooks must not overwrite last_selected_id / session during open restore. */
+	private static final ThreadLocal<Boolean> SUPPRESS_REMEMBER = new ThreadLocal<Boolean>();
 
 	private LastSelectionMapExtensionIO(final MapController mapController) {
 		registerAttributeHandlers(mapController.getReadManager());
 		mapController.getWriteManager().addExtensionAttributeWriter(LastSelectionMapExtension.class, this);
+	}
+
+	public static void setSuppressRememberSelection(final boolean suppress) {
+		if (suppress) {
+			SUPPRESS_REMEMBER.set(Boolean.TRUE);
+		}
+		else {
+			SUPPRESS_REMEMBER.remove();
+		}
+	}
+
+	private static boolean isRememberSelectionSuppressed() {
+		return Boolean.TRUE.equals(SUPPRESS_REMEMBER.get());
 	}
 
 	private void registerAttributeHandlers(final ReadManager reader) {
@@ -90,7 +106,10 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 	 * @param markMapDirty when true and the id changed, mark the map unsaved so
 	 *        {@code last_selected_id} is persisted into the {@code .mm} on save.
 	 */
-	static void rememberSelection(final NodeModel node, final boolean markMapDirty) {
+	public static void rememberSelection(final NodeModel node, final boolean markMapDirty) {
+		if (isRememberSelectionSuppressed()) {
+			return;
+		}
 		if (node == null || node.getMap() == null) {
 			return;
 		}
