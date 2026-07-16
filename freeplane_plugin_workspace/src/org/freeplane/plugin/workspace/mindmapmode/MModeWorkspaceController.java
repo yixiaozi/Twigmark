@@ -404,9 +404,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		
 		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
-		// SCROLL keeps the content area visible: WRAP + tall metric tab headers
-		// can consume the entire left-dock height and leave an empty gray panel.
-		sideTabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+		// Match the right format sidebar: wrap tab headers onto extra rows when
+		// the dock is narrow, instead of hiding tabs behind a scroll triangle.
+		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 		for (final String tabId : sideTabOrder) {
 			final JComponent component = createSideTabPlaceholder(tabId);
 			sideTabComponents.put(tabId, component);
