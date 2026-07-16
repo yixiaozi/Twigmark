@@ -1,5 +1,12 @@
 # Copy to your Docear/Freeplane user folder as encryption.local.properties
 # Windows example: %APPDATA%\Docear\encryption.local.properties
 #
-# Do NOT commit the real file with your password to git.
-encryption.password=YOUR_ENCRYPTION_PASSWORD_HERE
+# Do NOT commit the real file to git.
+#
+# The default encryption password is stored encrypted (AES-128, machine-bound).
+# Copying this file to another PC will NOT reveal the password.
+encryption.storage.version=2
+encryption.password.enc=v1:BASE64_CIPHERTEXT_HERE
+
+# Legacy plaintext (auto-migrated on first launch after upgrade — then removed):
+# encryption.password=YOUR_ENCRYPTION_PASSWORD_HERE
