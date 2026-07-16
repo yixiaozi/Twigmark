@@ -6,6 +6,8 @@ import java.awt.event.MouseEvent;
 import javax.swing.Icon;
 import javax.swing.JTabbedPane;
 
+import org.freeplane.core.ui.components.TabbedPaneStableOrder;
+
 /**
  * JTabbedPane that supports reordering tabs by dragging tab headers.
  */
@@ -21,6 +23,7 @@ public class DraggableTabbedPane extends JTabbedPane {
 	private TabReorderListener reorderListener;
 
 	public DraggableTabbedPane() {
+		TabbedPaneStableOrder.install(this);
 		addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {
 				if (!isEnabled()) {
@@ -40,6 +43,11 @@ public class DraggableTabbedPane extends JTabbedPane {
 				dragTabIndex = -1;
 			}
 		});
+	}
+
+	public void updateUI() {
+		super.updateUI();
+		TabbedPaneStableOrder.install(this);
 	}
 
 	public void setTabReorderListener(final TabReorderListener listener) {

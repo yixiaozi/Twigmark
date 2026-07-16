@@ -50,9 +50,13 @@ import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.features.map.IMapLifeCycleListener;
+import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.xml.sax.Attributes;
@@ -91,25 +95,6 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			this.text = text == null ? "" : text;
 		}
 
-		private boolean hasTargetIcon(String iconName) {
-			for (int i = 0; i < iconNames.size(); i++) {
-				if (iconName.equalsIgnoreCase((String) iconNames.get(i))) {
-					return true;
-				}
-			}
-			return false;
-		}
-
-		private List getExtraIconNames(String excludeIconName) {
-			final List result = new ArrayList();
-			for (int i = 0; i < iconNames.size(); i++) {
-				String name = (String) iconNames.get(i);
-				if (!excludeIconName.equalsIgnoreCase(name)) {
-					result.add(name);
-				}
-			}
-			return result;
-		}
 	}
 
 	protected static final class CachedFileResult {
@@ -150,6 +135,16 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	protected abstract String getRootLabel();
 	protected abstract String getStatusLabelPrefix();
 
+	/** Override to accept multiple icon names (e.g. all {@code flag*}). */
+	protected boolean isTargetIcon(final String iconName) {
+		final String want = getIconName();
+		return want != null && want.equalsIgnoreCase(iconName);
+	}
+
+	private boolean isTargetIconName(final String iconName) {
+		return isTargetIcon(iconName);
+	}
+
 	protected final JButton refreshButton = new JButton("\u5237\u65b0");
 	protected final JLabel statusLabel = new JLabel();
 	protected final JTree tree = new JTree();
@@ -161,6 +156,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	protected boolean rescanRequested;
 	protected Set lastActiveFileKeys = new HashSet();
 	protected final Timer autoRefreshTimer;
+	private final Timer liveRefreshTimer;
+	private boolean mapListenersInstalled;
 
 	public AbstractAllItemsTabPanel() {
 		super(new BorderLayout(4, 4));
@@ -262,7 +259,63 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		});
 		autoRefreshTimer.start();
 
+		liveRefreshTimer = new Timer(400, new java.awt.event.ActionListener() {
+			public void actionPerformed(java.awt.event.ActionEvent e) {
+				triggerRescan();
+			}
+		});
+		liveRefreshTimer.setRepeats(false);
+
+		installOpenMapListeners();
 		triggerRescan();
+	}
+
+	private void installOpenMapListeners() {
+		if (mapListenersInstalled) {
+			return;
+		}
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			if (modeController == null) {
+				return;
+			}
+			final org.freeplane.features.map.MapController mapController = modeController.getMapController();
+			mapController.addNodeChangeListener(new INodeChangeListener() {
+				public void nodeChanged(final NodeChangeEvent event) {
+					if (event != null && NodeModel.NODE_ICON.equals(event.getProperty())) {
+						scheduleLiveRefresh();
+					}
+				}
+			});
+			mapController.addMapLifeCycleListener(new IMapLifeCycleListener() {
+				public void onCreate(final MapModel map) {
+					scheduleLiveRefresh();
+				}
+
+				public void onRemove(final MapModel map) {
+					scheduleLiveRefresh();
+				}
+
+				public void onSavedAs(final MapModel map) {
+					scheduleLiveRefresh();
+				}
+
+				public void onSaved(final MapModel map) {
+					scheduleLiveRefresh();
+				}
+			});
+			mapListenersInstalled = true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("All-items tab: could not listen for open-map icon changes.", e);
+		}
+	}
+
+	private void scheduleLiveRefresh() {
+		if (!isDisplayable()) {
+			return;
+		}
+		liveRefreshTimer.restart();
 	}
 
 	protected void triggerRescan() {
@@ -273,6 +326,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		rescanRequested = false;
 		cacheByFile.clear();
+		itemsByKey.clear();
+		itemKeysByFile.clear();
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
@@ -280,10 +335,27 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				for (int i = 0; i < files.size(); i++) {
 					activeFileKeys.add(fileKey((File) files.get(i)));
 				}
+				final Map openByKey = collectOpenMapModels();
+				for (Object keyObj : openByKey.keySet()) {
+					activeFileKeys.add((String) keyObj);
+				}
 				lastActiveFileKeys = activeFileKeys;
 				purgeStaleItems(activeFileKeys);
-				itemsByKey.clear();
-				itemKeysByFile.clear();
+				final Set scannedOpenKeys = new HashSet();
+				int progress = 0;
+				final int total = files.size() + openByKey.size();
+				for (Object entryObj : openByKey.entrySet()) {
+					if (rescanRequested) {
+						return null;
+					}
+					final Map.Entry entry = (Map.Entry) entryObj;
+					final String key = (String) entry.getKey();
+					final MapModel map = (MapModel) entry.getValue();
+					final List items = getItemsFromOpenMap(map);
+					scannedOpenKeys.add(key);
+					progress++;
+					publish(new ScanChunk(key, items, progress, total));
+				}
 				for (int i = 0; i < files.size(); i++) {
 					if (rescanRequested) {
 						return null;
@@ -292,8 +364,14 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 					if (!isValidMindmapFile(file)) {
 						continue;
 					}
+					final String key = fileKey(file);
+					if (scannedOpenKeys.contains(key)) {
+						progress++;
+						continue;
+					}
 					List items = getItemsForFile(file);
-					publish(new ScanChunk(fileKey(file), items, i + 1, files.size()));
+					progress++;
+					publish(new ScanChunk(key, items, progress, total));
 				}
 				return null;
 			}
@@ -614,11 +692,11 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				public void endElement(String uri, String localName, String qName) {
 					if ("node".equals(qName) && !nodeStack.isEmpty()) {
 						NodeScanInfo info = (NodeScanInfo) nodeStack.remove(nodeStack.size() - 1);
-						if (info.hasTargetIcon(getIconName())) {
+						if (nodeHasTargetIcon(info.iconNames)) {
 							String nodeText = info.text == null ? "" : info.text.trim();
 							if (!"bin".equalsIgnoreCase(nodeText)) {
 								items.add(new ItemRecord(file, info.id, nodeText, file.getName(),
-										findNearestTodoParentOnStack(nodeStack), info.getExtraIconNames(getIconName())));
+										findNearestTodoParentOnStack(nodeStack), extraIconNames(info.iconNames)));
 							}
 						}
 					}
@@ -630,6 +708,102 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		cacheByFile.put(fileKey(file), new CachedFileResult(modified, length, items));
 		return items;
+	}
+
+	private Map collectOpenMapModels() {
+		final Map openByKey = new HashMap();
+		try {
+			final Controller controller = Controller.getCurrentController();
+			if (controller == null || controller.getMapViewManager() == null) {
+				return openByKey;
+			}
+			final Map maps = controller.getMapViewManager().getMaps();
+			if (maps == null) {
+				return openByKey;
+			}
+			for (Object mapObj : maps.values()) {
+				final MapModel map = (MapModel) mapObj;
+				if (map == null || map.getFile() == null || !isValidMindmapFile(map.getFile())) {
+					continue;
+				}
+				openByKey.put(fileKey(map.getFile()), map);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("All-items tab: open map scan failed.", e);
+		}
+		return openByKey;
+	}
+
+	private List getItemsFromOpenMap(final MapModel map) {
+		final List items = new ArrayList();
+		if (map == null || map.getRootNode() == null || map.getFile() == null) {
+			return items;
+		}
+		collectOpenMapItems(map.getRootNode(), map.getFile(), null, items);
+		return items;
+	}
+
+	private void collectOpenMapItems(final NodeModel node, final File file, final String nearestTargetParentId,
+	        final List items) {
+		if (node == null) {
+			return;
+		}
+		final List iconNames = collectNodeIconNames(node);
+		String parentForChildren = nearestTargetParentId;
+		if (nodeHasTargetIcon(iconNames)) {
+			final String nodeText = normalizeNodeText(node.getText());
+			if (!"bin".equalsIgnoreCase(nodeText)) {
+				final String nodeId = node.getID() != null ? node.getID() : node.createID();
+				items.add(new ItemRecord(file, nodeId, nodeText, file.getName(), nearestTargetParentId,
+				        extraIconNames(iconNames)));
+				parentForChildren = nodeId;
+			}
+		}
+		for (int i = 0; i < node.getChildCount(); i++) {
+			collectOpenMapItems((NodeModel) node.getChildAt(i), file, parentForChildren, items);
+		}
+	}
+
+	private List collectNodeIconNames(final NodeModel node) {
+		final List names = new ArrayList();
+		final List icons = node.getIcons();
+		if (icons == null) {
+			return names;
+		}
+		for (int i = 0; i < icons.size(); i++) {
+			final Object icon = icons.get(i);
+			if (icon instanceof MindIcon) {
+				names.add(((MindIcon) icon).getName());
+			}
+		}
+		return names;
+	}
+
+	private boolean nodeHasTargetIcon(final List iconNames) {
+		if (iconNames == null) {
+			return false;
+		}
+		for (int i = 0; i < iconNames.size(); i++) {
+			if (isTargetIcon((String) iconNames.get(i))) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private List extraIconNames(final List iconNames) {
+		final List result = new ArrayList();
+		if (iconNames == null) {
+			return result;
+		}
+		for (int i = 0; i < iconNames.size(); i++) {
+			final String name = (String) iconNames.get(i);
+			if (!isTargetIcon(name)) {
+				result.add(name);
+			}
+		}
+		return result;
 	}
 
 	private void rebuildTreeFromCache() {
@@ -776,7 +950,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	private String findNearestTodoParentOnStack(List nodeStack) {
 		for (int i = nodeStack.size() - 1; i >= 0; i--) {
 			NodeScanInfo ancestor = (NodeScanInfo) nodeStack.get(i);
-			if (!ancestor.hasTargetIcon(getIconName())) {
+			if (!nodeHasTargetIcon(ancestor.iconNames)) {
 				continue;
 			}
 			String label = ancestor.text == null ? "" : ancestor.text.trim();

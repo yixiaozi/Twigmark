@@ -362,6 +362,7 @@ public class MModeControllerFactory {
 			}
 		});
 		tabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
+		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(tabs);
 		otcr.setExpanded(expanded);
 		resisableTabs.putClientProperty(ViewController.VISIBLE_PROPERTY_KEY, "styleScrollPaneVisible");
 		modeController.getUserInputListenerFactory().addToolBar("/format", ViewController.RIGHT, resisableTabs);

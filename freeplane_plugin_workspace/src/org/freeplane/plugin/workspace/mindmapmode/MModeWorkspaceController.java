@@ -407,6 +407,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		// Match the right format sidebar: wrap tab headers onto extra rows when
 		// the dock is narrow, instead of hiding tabs behind a scroll triangle.
 		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
+		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(sideTabs);
 		for (final String tabId : sideTabOrder) {
 			final JComponent component = createSideTabPlaceholder(tabId);
 			sideTabComponents.put(tabId, component);
@@ -443,6 +444,20 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				sideTabOrder.add(toIndex, tabId);
 				rebuildSideTabs(selectedTabId);
 				persistSideTabOrder();
+			}
+		});
+		// Warm「红旗」scan in background so the badge updates without opening the tab.
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					final int nextActionsIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
+					if (nextActionsIndex >= 0) {
+						ensureSideTabLoaded(nextActionsIndex);
+					}
+				}
+				catch (Throwable t) {
+					LogUtils.warn(t);
+				}
 			}
 		});
 		
