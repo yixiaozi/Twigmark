@@ -18,7 +18,6 @@ import org.freeplane.features.ui.IMapViewManager;
 
 /**
  * Global free-timing pomodoro sessions: many paused, at most one running.
- * Starting one auto-pauses others. State is persisted on mind-map nodes.
  */
 public final class PomodoroSessionManager {
 	public interface Listener {
@@ -92,22 +91,25 @@ public final class PomodoroSessionManager {
 		return null;
 	}
 
-	/** Start or resume focus on {@code node}. Auto-enables switch; pauses any other running session. */
 	public void start(final NodeModel node) {
 		if (node == null) {
 			return;
 		}
 		pauseAllRunningExcept(node);
+		final long now = System.currentTimeMillis();
 		final PomodoroExtension next = extensionCopy(node);
 		next.setEnabled(true);
 		if (PomodoroExtension.STATE_RUNNING.equals(next.getState()) && next.getStartedAt() > 0) {
-			// already running this node
+			PomodoroAttributes.write(node, next);
 		}
 		else {
+			if (next.getSessionAt() <= 0 || PomodoroExtension.STATE_IDLE.equals(next.getState())) {
+				next.setSessionAt(now);
+			}
 			next.setState(PomodoroExtension.STATE_RUNNING);
-			next.setStartedAt(System.currentTimeMillis());
+			next.setStartedAt(now);
+			PomodoroAttributes.write(node, next);
 		}
-		PomodoroAttributes.write(node, next);
 		ensureTickRunning();
 		showWindow();
 		fireChanged();
@@ -130,7 +132,7 @@ public final class PomodoroSessionManager {
 		fireChanged();
 	}
 
-	/** End current segment: fold active time into total, back to idle (enabled stays on). */
+	/** End current segment: commit focus into total + session log + note. */
 	public void stop(final NodeModel node) {
 		if (node == null) {
 			return;
@@ -139,14 +141,23 @@ public final class PomodoroSessionManager {
 		if (ext == null) {
 			return;
 		}
+		final long now = System.currentTimeMillis();
 		final PomodoroExtension next = ext.copy();
 		flushRunningIntoActive(next);
-		next.setTotalMs(next.getTotalMs() + next.getActiveMs());
+		final long focusMs = next.getActiveMs();
+		if (focusMs > 0) {
+			final long sessionStart = next.getSessionAt() > 0 ? next.getSessionAt() : now - focusMs;
+			final PomodoroSessionRecord record = new PomodoroSessionRecord(sessionStart, now, focusMs);
+			next.setLog(PomodoroLog.append(next.getLog(), record));
+			next.setTotalMs(next.getTotalMs() + focusMs);
+		}
 		next.setActiveMs(0);
 		next.setStartedAt(0);
+		next.setSessionAt(0);
 		next.setState(PomodoroExtension.STATE_IDLE);
 		next.setEnabled(true);
 		PomodoroAttributes.write(node, next);
+		PomodoroNoteSync.sync(node, next);
 		updateTickState();
 		fireChanged();
 	}
@@ -168,15 +179,12 @@ public final class PomodoroSessionManager {
 		}
 	}
 
-	/** Close window policy: end the running session (commit), keep paused sessions. */
 	public void endRunningOnWindowClose() {
 		final NodeModel running = getRunningNode();
 		if (running != null) {
 			stop(running);
 		}
-		if (window != null) {
-			window = null;
-		}
+		window = null;
 		updateTickState();
 		fireChanged();
 	}
@@ -228,6 +236,61 @@ public final class PomodoroSessionManager {
 		}
 	}
 
+	/** Map-wide / all-open totals for stats bar. */
+	public long[] computeStats(final boolean allMaps) {
+		long today = 0L;
+		long week = 0L;
+		long total = 0L;
+		int enabled = 0;
+		int running = 0;
+		int paused = 0;
+		final long todayStart = PomodoroLog.startOfToday();
+		final long weekStart = PomodoroLog.startOfWeek();
+		final long now = System.currentTimeMillis();
+		final List nodes = allMaps ? collectOpenPomodoroNodes() : collectCurrentMapPomodoroNodes();
+		for (int i = 0; i < nodes.size(); i++) {
+			final NodeModel node = (NodeModel) nodes.get(i);
+			final PomodoroExtension ext = PomodoroExtension.getExtension(node);
+			if (ext == null || !ext.isEnabled()) {
+				continue;
+			}
+			enabled++;
+			final String state = ext.getState();
+			if (PomodoroExtension.STATE_RUNNING.equals(state)) {
+				running++;
+			}
+			else if (PomodoroExtension.STATE_PAUSED.equals(state)) {
+				paused++;
+			}
+			total += ext.liveTotalMs(now);
+			today += PomodoroLog.sumFocusSince(PomodoroLog.decode(ext.getLog()), todayStart) + contribLiveToday(ext, now, todayStart);
+			week += PomodoroLog.sumFocusSince(PomodoroLog.decode(ext.getLog()), weekStart) + contribLiveToday(ext, now, weekStart);
+		}
+		return new long[] { today, week, total, enabled, running, paused };
+	}
+
+	private static long contribLiveToday(final PomodoroExtension ext, final long now, final long since) {
+		if (ext.liveSegmentMs(now) <= 0) {
+			return 0L;
+		}
+		// Live segment counts toward today/week only if session started today/this week.
+		final long anchor = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
+		return anchor >= since ? ext.liveSegmentMs(now) : 0L;
+	}
+
+	List collectCurrentMapPomodoroNodes() {
+		final List result = new ArrayList();
+		try {
+			final MapModel map = Controller.getCurrentController().getMap();
+			if (map != null) {
+				collectEnabled(map, result);
+			}
+		}
+		catch (Exception e) {
+		}
+		return result;
+	}
+
 	List collectOpenPomodoroNodes() {
 		final List result = new ArrayList();
 		try {
@@ -239,10 +302,9 @@ public final class PomodoroSessionManager {
 			final Iterator it = maps.values().iterator();
 			while (it.hasNext()) {
 				final Object value = it.next();
-				if (!(value instanceof MapModel)) {
-					continue;
+				if (value instanceof MapModel) {
+					collectEnabled((MapModel) value, result);
 				}
-				collectEnabled((MapModel) value, result);
 			}
 		}
 		catch (Exception e) {
@@ -271,7 +333,6 @@ public final class PomodoroSessionManager {
 		}
 	}
 
-	/** After map load: demote stale running → paused (do not count offline wall clock). */
 	public void recoverStaleRunning(final NodeModel root) {
 		if (root == null) {
 			return;
@@ -286,6 +347,9 @@ public final class PomodoroSessionManager {
 			next.setState(PomodoroExtension.STATE_PAUSED);
 			next.setStartedAt(0);
 			PomodoroAttributes.writeSilent(node, next);
+		}
+		else if (ext != null && ext.isEnabled()) {
+			PomodoroVisibleAttributes.syncSilent(node, ext);
 		}
 		final List children = node.getChildren();
 		if (children != null) {
@@ -331,7 +395,6 @@ public final class PomodoroSessionManager {
 			}
 		}
 		catch (Exception e) {
-			// best-effort during JVM exit
 		}
 	}
 
@@ -372,6 +435,13 @@ public final class PomodoroSessionManager {
 		}
 		try {
 			Controller.getCurrentModeController().getMapController().nodeRefresh(running);
+			// Refresh ancestors so Σ chips update live.
+			NodeModel parent = running.getParentNode();
+			int guard = 0;
+			while (parent != null && guard++ < 64) {
+				Controller.getCurrentModeController().getMapController().nodeRefresh(parent);
+				parent = parent.getParentNode();
+			}
 		}
 		catch (Exception e) {
 		}

@@ -7,7 +7,6 @@ import org.freeplane.features.mode.Controller;
 
 /**
  * XML attribute names and undoable read/write for pomodoro node state.
- * Visible on {@code <node>} so Freeplane's attribute table can show them.
  */
 public final class PomodoroAttributes {
 	public static final String POMODORO = "POMODORO";
@@ -15,6 +14,16 @@ public final class PomodoroAttributes {
 	public static final String POMODORO_ACTIVE_MS = "POMODORO_ACTIVE_MS";
 	public static final String POMODORO_STATE = "POMODORO_STATE";
 	public static final String POMODORO_STARTED_AT = "POMODORO_STARTED_AT";
+	public static final String POMODORO_SESSION_AT = "POMODORO_SESSION_AT";
+	public static final String POMODORO_LOG = "POMODORO_LOG";
+
+	/** Visible AttributeModel names (Chinese, shown under the node). */
+	public static final String ATTR_ENABLED = "番茄钟";
+	public static final String ATTR_TOTAL = "番茄累计";
+	public static final String ATTR_STATE = "番茄状态";
+	public static final String ATTR_TODAY = "番茄今日";
+	public static final String ATTR_COUNT = "番茄次数";
+	public static final String ATTR_SUBTREE = "番茄含子树";
 
 	private PomodoroAttributes() {
 	}
@@ -58,9 +67,18 @@ public final class PomodoroAttributes {
 				mapController.nodeChanged(node, PomodoroExtension.class, after, before);
 			}
 		}, node.getMap());
+		// Visible AttributeModel sync outside the core undo actor (avoids nested execute).
+		if (after.isEmpty() || !after.isEnabled()) {
+			PomodoroVisibleAttributes.clear(node);
+		}
+		else {
+			PomodoroVisibleAttributes.sync(node, after);
+		}
+		if (before != null && before.isEnabled() && !after.isEnabled()) {
+			PomodoroVisibleAttributes.clear(node);
+		}
 	}
 
-	/** Persist without undo stack (pause-all-on-shutdown / recover). Still marks map dirty via nodeChanged. */
 	public static void writeSilent(final NodeModel node, final PomodoroExtension desired) {
 		if (node == null || desired == null) {
 			return;
@@ -68,12 +86,12 @@ public final class PomodoroAttributes {
 		final PomodoroExtension before = copyOrNull(PomodoroExtension.getExtension(node));
 		final PomodoroExtension after = desired.copy();
 		applyToNode(node, after);
+		PomodoroVisibleAttributes.syncSilent(node, after);
 		try {
 			Controller.getCurrentModeController().getMapController()
 					.nodeChanged(node, PomodoroExtension.class, before, after);
 		}
 		catch (Exception e) {
-			// Headless / shutdown paths may lack a mode controller.
 		}
 	}
 
@@ -93,7 +111,6 @@ public final class PomodoroAttributes {
 		final PomodoroExtension desired = next == null ? new PomodoroExtension() : next.copy();
 		desired.setEnabled(enabled);
 		if (!enabled) {
-			// Keep totals; clear live segment when turning off.
 			if (PomodoroExtension.STATE_RUNNING.equals(desired.getState())) {
 				desired.setActiveMs(desired.getActiveMs()
 						+ Math.max(0L, System.currentTimeMillis() - desired.getStartedAt()));
@@ -101,6 +118,7 @@ public final class PomodoroAttributes {
 			desired.setState(PomodoroExtension.STATE_IDLE);
 			desired.setStartedAt(0);
 			desired.setActiveMs(0);
+			desired.setSessionAt(0);
 		}
 		write(node, desired);
 	}
@@ -131,5 +149,15 @@ public final class PomodoroAttributes {
 		}
 		final String v = value.trim();
 		return "true".equalsIgnoreCase(v) || "1".equals(v) || "yes".equalsIgnoreCase(v);
+	}
+
+	public static String stateLabel(final String state) {
+		if (PomodoroExtension.STATE_RUNNING.equals(state)) {
+			return "进行中";
+		}
+		if (PomodoroExtension.STATE_PAUSED.equals(state)) {
+			return "已暂停";
+		}
+		return "空闲";
 	}
 }

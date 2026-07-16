@@ -11,7 +11,9 @@ import org.freeplane.features.text.TextController;
  * transformer mutates HTML string so it runs after reminder prefix (200) → use 250.
  */
 final class PomodoroTextTransformer extends AbstractContentTransformer {
-	private static final String COLOR = "#C45C26";
+	private static final String COLOR_IDLE = "#C45C26";
+	private static final String COLOR_RUN = "#D9480F";
+	private static final String COLOR_PAUSE = "#8A6A4E";
 
 	PomodoroTextTransformer() {
 		super(250);
@@ -22,15 +24,26 @@ final class PomodoroTextTransformer extends AbstractContentTransformer {
 		if (!(content instanceof String)) {
 			return content;
 		}
+		final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 		final String suffix = PomodoroTotals.formatInline(node, System.currentTimeMillis());
 		if (suffix.length() == 0) {
 			return content;
 		}
-		return appendSuffix((String) content, suffix);
+		String color = COLOR_IDLE;
+		if (ext != null) {
+			if (PomodoroExtension.STATE_RUNNING.equals(ext.getState())) {
+				color = COLOR_RUN;
+			}
+			else if (PomodoroExtension.STATE_PAUSED.equals(ext.getState())) {
+				color = COLOR_PAUSE;
+			}
+		}
+		return appendSuffix((String) content, suffix, color);
 	}
 
-	private static String appendSuffix(final String text, final String suffix) {
-		final String suffixHtml = "&nbsp;<span style=\"color:" + COLOR + ";font-size:90%\">"
+	private static String appendSuffix(final String text, final String suffix, final String color) {
+		final String suffixHtml = "&nbsp;<span style=\"color:" + color
+				+ ";font-size:90%;font-weight:bold;background-color:#FFF4EC;padding:1px 4px;border-radius:3px\">"
 				+ HtmlUtils.toHTMLEscapedText(suffix) + "</span>";
 		if (HtmlUtils.isHtmlNode(text)) {
 			final String lower = text.toLowerCase();

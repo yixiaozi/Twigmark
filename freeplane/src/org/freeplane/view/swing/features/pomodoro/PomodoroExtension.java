@@ -16,6 +16,10 @@ public final class PomodoroExtension implements IExtension {
 	private long activeMs;
 	private String state = STATE_IDLE;
 	private long startedAt;
+	/** Wall-clock when the current multi-pause session began (idle→running). */
+	private long sessionAt;
+	/** Encoded session history ({@link PomodoroLog}). */
+	private String log = "";
 
 	static PomodoroExtension getExtension(final NodeModel node) {
 		return node == null ? null : (PomodoroExtension) node.getExtension(PomodoroExtension.class);
@@ -31,8 +35,9 @@ public final class PomodoroExtension implements IExtension {
 	}
 
 	boolean isEmpty() {
-		return !enabled && totalMs <= 0 && activeMs <= 0 && startedAt <= 0
-				&& (state == null || STATE_IDLE.equals(state));
+		return !enabled && totalMs <= 0 && activeMs <= 0 && startedAt <= 0 && sessionAt <= 0
+				&& (state == null || STATE_IDLE.equals(state))
+				&& (log == null || log.length() == 0);
 	}
 
 	PomodoroExtension copy() {
@@ -42,6 +47,8 @@ public final class PomodoroExtension implements IExtension {
 		copy.activeMs = activeMs;
 		copy.state = state;
 		copy.startedAt = startedAt;
+		copy.sessionAt = sessionAt;
+		copy.log = log == null ? "" : log;
 		return copy;
 	}
 
@@ -52,6 +59,8 @@ public final class PomodoroExtension implements IExtension {
 			activeMs = 0;
 			state = STATE_IDLE;
 			startedAt = 0;
+			sessionAt = 0;
+			log = "";
 			return;
 		}
 		enabled = source.enabled;
@@ -59,6 +68,8 @@ public final class PomodoroExtension implements IExtension {
 		activeMs = source.activeMs;
 		state = source.state == null ? STATE_IDLE : source.state;
 		startedAt = source.startedAt;
+		sessionAt = source.sessionAt;
+		log = source.log == null ? "" : source.log;
 	}
 
 	public boolean isEnabled() {
@@ -101,7 +112,22 @@ public final class PomodoroExtension implements IExtension {
 		this.startedAt = Math.max(0L, startedAt);
 	}
 
-	/** Live elapsed for the current open segment (includes active + running delta). */
+	public long getSessionAt() {
+		return sessionAt;
+	}
+
+	public void setSessionAt(final long sessionAt) {
+		this.sessionAt = Math.max(0L, sessionAt);
+	}
+
+	public String getLog() {
+		return log == null ? "" : log;
+	}
+
+	public void setLog(final String log) {
+		this.log = log == null ? "" : log;
+	}
+
 	public long liveSegmentMs(final long now) {
 		long ms = activeMs;
 		if (STATE_RUNNING.equals(getState()) && startedAt > 0 && now > startedAt) {
@@ -110,8 +136,11 @@ public final class PomodoroExtension implements IExtension {
 		return ms;
 	}
 
-	/** Total focus time including the live segment. */
 	public long liveTotalMs(final long now) {
 		return totalMs + liveSegmentMs(now);
+	}
+
+	public int sessionCount() {
+		return PomodoroLog.decode(getLog()).size();
 	}
 }
