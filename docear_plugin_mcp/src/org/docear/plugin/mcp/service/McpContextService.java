@@ -179,6 +179,22 @@ public final class McpContextService {
 			result.put("nodeText", JsonValue.ofString(TextController.getController().getPlainTextContent(selected)));
 			result.put("hasChildren", JsonValue.ofBoolean(selected.hasChildren()));
 		}
+		try {
+			final org.freeplane.view.swing.features.pomodoro.PomodoroSessionManager manager =
+					org.freeplane.view.swing.features.pomodoro.PomodoroSessionManager.getInstance();
+			if (manager != null) {
+				final NodeModel running = manager.getRunningNode();
+				if (running != null) {
+					result.put("runningPomodoro", McpPomodoroService.sessionJson(running, System.currentTimeMillis()));
+				}
+				else {
+					result.put("runningPomodoro", JsonValue.ofNull());
+				}
+			}
+		}
+		catch (Exception e) {
+			result.put("runningPomodoro", JsonValue.ofNull());
+		}
 		return JsonValue.ofMap(result).toJson();
 	}
 
@@ -205,6 +221,8 @@ public final class McpContextService {
 		model.put("tags", JsonValue.ofString(
 				"sidebar pin tags + TagGroupStore groups + favorites tags; node details tags string"));
 		model.put("relationshipGraph", JsonValue.ofString("file-level .mm hyperlinks + node LINK/arrowlink edges"));
+		model.put("pomodoro", JsonValue.ofString(
+				"free-timing focus sessions on nodes: POMODORO_* attrs + POMODORO_LOG history; one running at a time"));
 		return model;
 	}
 
@@ -217,6 +235,7 @@ public final class McpContextService {
 		caps.put("graph", JsonValue.ofList(stringList(new String[] { "map_files", "map_nodes", "tags", "favorites", "neighbors", "search" })));
 		caps.put("tags", JsonValue.ofList(stringList(new String[] { "groups", "list", "nodes_by_tag", "favorites",
 				"catalog", "set_group", "set_color" })));
+		caps.put("pomodoro", JsonValue.ofList(stringList(new String[] { "running", "list", "stats", "history", "start", "pause", "stop" })));
 		caps.put("integrations", JsonValue.ofList(stringList(new String[] { "todoist" })));
 		return caps;
 	}

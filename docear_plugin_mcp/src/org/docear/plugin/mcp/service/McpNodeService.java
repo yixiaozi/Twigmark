@@ -345,6 +345,20 @@ public final class McpNodeService {
 
 		data.put("privacy", JsonValue.ofString(readPrivacyLevel(node)));
 
+		try {
+			final org.freeplane.view.swing.features.pomodoro.PomodoroExtension pomodoro =
+					org.freeplane.view.swing.features.pomodoro.PomodoroAttributes.read(node);
+			if (pomodoro != null && (pomodoro.isEnabled() || pomodoro.getTotalMs() > 0 || pomodoro.sessionCount() > 0)) {
+				data.put("pomodoro", McpPomodoroService.sessionJson(node, System.currentTimeMillis()));
+			}
+			else {
+				data.put("pomodoro", JsonValue.ofNull());
+			}
+		}
+		catch (Exception e) {
+			data.put("pomodoro", JsonValue.ofNull());
+		}
+
 		return JsonValue.ofMap(data);
 	}
 

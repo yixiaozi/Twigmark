@@ -126,6 +126,12 @@ public final class McpAuditService {
 		    || "set_tag_color".equals(toolName)) {
 			return McpOperationIntent.TAG;
 		}
+		if ("get_running_pomodoro".equals(toolName) || "list_pomodoro_sessions".equals(toolName)
+		    || "get_pomodoro_stats".equals(toolName) || "get_pomodoro_history".equals(toolName)
+		    || "start_pomodoro".equals(toolName) || "pause_pomodoro".equals(toolName)
+		    || "stop_pomodoro".equals(toolName)) {
+			return McpOperationIntent.POMODORO;
+		}
 		if ("get_active_map_json".equals(toolName) || "get_mindmap_json".equals(toolName) || "search_nodes".equals(toolName)
 		    || "list_recently_modified".equals(toolName) || "open_mindmap".equals(toolName)
 		    || "navigate_to_node".equals(toolName) || "add_node".equals(toolName) || "add_nodes".equals(toolName)
@@ -162,6 +168,9 @@ public final class McpAuditService {
 		}
 		if ("docear://tags/catalog".equals(uri)) {
 			return McpOperationIntent.TAG;
+		}
+		if ("docear://pomodoro/running".equals(uri) || "docear://pomodoro/stats".equals(uri)) {
+			return McpOperationIntent.POMODORO;
 		}
 		return McpOperationIntent.RESOURCE;
 	}

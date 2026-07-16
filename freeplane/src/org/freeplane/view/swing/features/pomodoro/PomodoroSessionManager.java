@@ -277,6 +277,14 @@ public final class PomodoroSessionManager {
 		return anchor >= since ? ext.liveSegmentMs(now) : 0L;
 	}
 
+	public List listOpenPomodoroNodes() {
+		return collectOpenPomodoroNodes();
+	}
+
+	public List listCurrentMapPomodoroNodes() {
+		return collectCurrentMapPomodoroNodes();
+	}
+
 	List collectCurrentMapPomodoroNodes() {
 		final List result = new ArrayList();
 		try {

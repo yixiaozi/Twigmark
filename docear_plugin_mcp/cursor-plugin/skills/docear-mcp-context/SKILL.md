@@ -5,7 +5,8 @@ description: >-
   open map and selected node via get_selection_context. When writing to mind maps,
   use clear hierarchical categories (overview → major sections → sub-items), not
   flat long one-liners. Use when the user mentions mind maps, .mm files, Docear,
-  MCP tools, todos, reminders, relationship graph, or asks to add/organize nodes.
+  MCP tools, todos, reminders, pomodoro/focus time, relationship graph, or asks
+  to add/organize nodes.
 ---
 
 # Docear MCP：先读当前上下文
@@ -49,6 +50,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | `WORKSPACE` | McpWorkspaceService |
 | `GRAPH` | McpRelationshipGraphService |
 | `TAG` | McpTagService |
+| `POMODORO` | McpPomodoroService |
 | `RESOURCE` / `PROMPT` | 资源读取 / 提示词 |
 
 查询已记录日志：
@@ -93,11 +95,25 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 
 限定范围：`search_nodes` 可传 `filePath` 或 `projectId`（来自 `list_projects`）。
 
-钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别等）。
+钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别、番茄钟 `pomodoro` 等）。
+
+## 番茄钟 / 专注时间（Pomodoro）
+
+节点自由计时专注会话，数据存在导图 XML（`POMODORO_*` / `POMODORO_LOG`）。**同一时刻只会有一个 running**；可有多个 paused。
+
+| 场景 | 推荐 MCP 调用 |
+|------|----------------|
+| 用户现在在干什么 / 正在计时吗 | `get_running_pomodoro` 或资源 `docear://pomodoro/running`；`get_selection_context` 也会带 `runningPomodoro` |
+| 今日/本周累计 | `get_pomodoro_stats` 或 `docear://pomodoro/stats`（`allMaps` 默认 false=当前图） |
+| 哪些节点开了番茄钟 | `list_pomodoro_sessions`（可选 `stateFilter`: `running`\|`paused`\|`idle`，`allMaps`） |
+| 什么时间干了什么 | `get_pomodoro_history`（`filePath` / 可选 `nodeId` / `sinceMillis` / `limit`） |
+| 帮我开始/暂停/结束 | `start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`（可选 `filePath`+`nodeId`，省略 nodeId=当前选中） |
+
+**原则**：问「现在/最近在做什么」时先读 running + stats，再按需查 history；不要为查计时去 `open_mindmap`。
 
 ## 标签 / 分组 / 收藏（侧栏）
 
-与 UI「标签」「收藏」共用索引存储，但**分组层级各自独立**：`TagGroupStore`（`tag-groups.properties`）与 `FavoriteTagGroupStore`/`getFavoritesInstance()`（`favorite-tag-groups.properties`）。
+与 UI「标签」「收藏」共用索引存储，但**分组层级各自独立**：`TagGroupStore`（`tag-groups.properties`）与 `getFavoritesInstance()`（`favorite-tag-groups.properties`）。
 
 | 场景 | 推荐调用 |
 |------|----------|
@@ -245,7 +261,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 
 **参数要点**
 
-- `mode`: `map_files`（导图级，快）| `map_nodes`（节点级，慢，务必加 `query` / `filePath` / 小 `maxNodes`）| `tags`（标签枢纽↔节点）| `favorites`（收藏标签↔收藏导图）
+- `mode`: `map_files`（导图级，快）| `map_nodes`（节点级，慢，112k+ 节点时务必加 `query` / `filePath` / 小 `maxNodes`）
 - `filePath` + `nodeId` + `hops`: 以该点为中心的 N 跳邻域
 - `query`: 按 label / mapLabel / 路径过滤，并包含匹配节点的直接邻居
 - `showIsolated`: 默认 false（隐藏无连接项）
@@ -259,6 +275,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - 读上下文：`get_selection_context`、`get_active_map_json`、`get_mindmap_json`（含 note/link/icons/tags/MODIFIED）
 - **关系图**：`get_relationship_graph`、`get_node_relationships`；资源 `docear://graph/summary`
 - 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
+- **番茄钟**：`get_running_pomodoro`、`list_pomodoro_sessions`、`get_pomodoro_stats`、`get_pomodoro_history`；写：`start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`；资源 `docear://pomodoro/running`、`docear://pomodoro/stats`
 - **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`

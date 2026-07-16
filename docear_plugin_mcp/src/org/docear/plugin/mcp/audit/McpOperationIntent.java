@@ -11,6 +11,7 @@ public enum McpOperationIntent {
 	WORKSPACE("McpWorkspaceService"),
 	GRAPH("McpRelationshipGraphService"),
 	TAG("McpTagService"),
+	POMODORO("McpPomodoroService"),
 	RESOURCE("McpResource"),
 	PROMPT("McpPrompt"),
 	UNKNOWN("Unknown");

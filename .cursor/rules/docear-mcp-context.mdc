@@ -16,5 +16,6 @@ alwaysApply: true
 7. **查关联**用 `get_relationship_graph` / `get_node_relationships`（静默）；大库默认 `map_files` 或加 `query`/`filePath` 缩小范围；也可用 `mode: tags` / `favorites`
 8. **查标签/分组**用 `get_tag_catalog` / `list_tag_groups` / `list_tags` / `list_nodes_by_tag` / `list_favorites`（侧栏索引，非全库扫盘；分组支持无限嵌套）
 9. **每次 MCP 调用传 `_audit`**：`caller`、`traceId`、`questionSummary`、`operationGoal`；明细写入 `%APPDATA%\\Docear\\_data\\audit.db`
+10. **查番茄钟/专注**：`get_running_pomodoro` / `get_pomodoro_stats` / `get_pomodoro_history`（问「现在在干什么、什么时间干了什么」时优先）；`get_selection_context` 含 `runningPomodoro`
 
 详见技能：`docear_plugin_mcp/cursor-plugin/skills/docear-mcp-context/SKILL.md`（发布源；Docear 启动时会自动同步到 Cursor）

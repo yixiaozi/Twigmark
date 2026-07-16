@@ -12,6 +12,7 @@ import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeService;
+import org.docear.plugin.mcp.service.McpPomodoroService;
 import org.docear.plugin.mcp.service.McpRelationshipGraphService;
 import org.docear.plugin.mcp.service.McpTagService;
 import org.docear.plugin.mcp.service.McpTaskService;
@@ -125,7 +126,32 @@ public final class McpProtocol {
 				"Set tag chip color (#RRGGBB) or clear=true to restore auto palette.",
 				schema("tag", "string", true), schema("color", "string", false),
 				schema("clear", "boolean", false)));
-		tools.add(tool("get_selection_context", "Get current selection context in Docear."));
+		tools.add(tool("get_selection_context",
+				"Get current selection context in Docear (includes runningPomodoro when a focus session is active)."));
+		tools.add(tool("get_running_pomodoro",
+				"Get the currently running pomodoro / focus session (node, live times). Prefer this to learn what the user is doing now."));
+		tools.add(tool("list_pomodoro_sessions",
+				"List pomodoro-enabled nodes. allMaps=true scans all open maps (default false=current map). "
+						+ "stateFilter: running|paused|idle (optional).",
+				schema("allMaps", "boolean", false), schema("stateFilter", "string", false)));
+		tools.add(tool("get_pomodoro_stats",
+				"Pomodoro focus totals: today / week / total plus running/paused counts. allMaps defaults false.",
+				schema("allMaps", "boolean", false)));
+		tools.add(tool("get_pomodoro_history",
+				"Completed focus session history from node POMODORO_LOG. Optional nodeId; omit for whole map. "
+						+ "sinceMillis filters by end time; limit defaults 100 (latest).",
+				schema("filePath", "string", false), schema("nodeId", "string", false),
+				schema("sinceMillis", "number", false), schema("limit", "number", false)));
+		tools.add(tool("start_pomodoro",
+				"Start free-timing pomodoro on a node (auto-enables switch; pauses other running). "
+						+ "Omit nodeId to use current selection; optional filePath for silent map.",
+				schema("filePath", "string", false), schema("nodeId", "string", false)));
+		tools.add(tool("pause_pomodoro",
+				"Pause the running pomodoro on a node. Omit nodeId for current selection.",
+				schema("filePath", "string", false), schema("nodeId", "string", false)));
+		tools.add(tool("stop_pomodoro",
+				"Stop/end the pomodoro session on a node (records history). Omit nodeId for current selection.",
+				schema("filePath", "string", false), schema("nodeId", "string", false)));
 		tools.add(tool("search_nodes",
 				"Search nodes by keyword via silent SAX. Filters by node MODIFIED (not global Top-N). "
 						+ "Use modifiedWithinDays, filePath, or projectId to narrow large workspaces.",
@@ -342,6 +368,32 @@ public final class McpProtocol {
 		else if ("get_selection_context".equals(name)) {
 			textResult = McpContextService.getSelectionContext();
 		}
+		else if ("get_running_pomodoro".equals(name)) {
+			textResult = McpPomodoroService.getRunningPomodoro();
+		}
+		else if ("list_pomodoro_sessions".equals(name)) {
+			textResult = McpPomodoroService.listPomodoroSessions(argBool(args, "allMaps", false),
+					argString(args, "stateFilter", ""));
+		}
+		else if ("get_pomodoro_stats".equals(name)) {
+			textResult = McpPomodoroService.getPomodoroStats(argBool(args, "allMaps", false));
+		}
+		else if ("get_pomodoro_history".equals(name)) {
+			textResult = McpPomodoroService.getPomodoroHistory(argString(args, "filePath", ""),
+					argString(args, "nodeId", ""), argLong(args, "sinceMillis", 0L), argInt(args, "limit", 100));
+		}
+		else if ("start_pomodoro".equals(name)) {
+			textResult = McpPomodoroService.startPomodoro(argString(args, "filePath", ""),
+					argString(args, "nodeId", ""));
+		}
+		else if ("pause_pomodoro".equals(name)) {
+			textResult = McpPomodoroService.pausePomodoro(argString(args, "filePath", ""),
+					argString(args, "nodeId", ""));
+		}
+		else if ("stop_pomodoro".equals(name)) {
+			textResult = McpPomodoroService.stopPomodoro(argString(args, "filePath", ""),
+					argString(args, "nodeId", ""));
+		}
 		else if ("search_nodes".equals(name)) {
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
 					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0),
@@ -484,6 +536,8 @@ public final class McpProtocol {
 		resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
 		resources.add(resource("docear://graph/summary", "Relationship graph summary (file + node modes)", "application/json"));
 		resources.add(resource("docear://tags/catalog", "Tag groups + tags + favorite tags catalog", "application/json"));
+		resources.add(resource("docear://pomodoro/running", "Currently running pomodoro / focus session", "application/json"));
+		resources.add(resource("docear://pomodoro/stats", "Pomodoro today/week/total stats (all open maps)", "application/json"));
 		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
 		return resources;
 	}
@@ -575,6 +629,14 @@ public final class McpProtocol {
 			mimeType = "application/json";
 			text = McpTagService.getTagCatalog();
 		}
+		else if ("docear://pomodoro/running".equals(uri)) {
+			mimeType = "application/json";
+			text = McpPomodoroService.getRunningPomodoro();
+		}
+		else if ("docear://pomodoro/stats".equals(uri)) {
+			mimeType = "application/json";
+			text = McpPomodoroService.getPomodoroStats(true);
+		}
 		else if ("docear://inbox".equals(uri)) {
 			mimeType = "application/json";
 			text = McpContextService.getInboxContext();
@@ -593,6 +655,7 @@ public final class McpProtocol {
 		prompts.add(prompt("project-status", "Summarize project progress from workspace mind maps."));
 		prompts.add(prompt("inbox-triage", "Triage inbox captures into projects and todos."));
 		prompts.add(prompt("weekly-review", "Weekly review of completed and pending work."));
+		prompts.add(prompt("focus-status", "Summarize what the user is focusing on now and recent pomodoro history."));
 		return prompts;
 	}
 
@@ -638,6 +701,10 @@ public final class McpProtocol {
 		}
 		else if ("weekly-review".equals(name)) {
 			instructions = "Read docear://workspace/plan, docear://tasks/reminders, docear://tasks/todos and docear://context/recent. Produce a weekly summary with wins, blockers and next-week priorities.";
+		}
+		else if ("focus-status".equals(name)) {
+			instructions = "Read docear://pomodoro/running and docear://pomodoro/stats. Optionally call get_pomodoro_history on the active map. "
+					+ "Summarize what the user is focusing on now (node text + live time), today/week totals, and recent completed sessions with timestamps.";
 		}
 		else {
 			throw new IllegalArgumentException("Unknown prompt: " + name);
