@@ -430,6 +430,12 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	/** While true, unfolding must not fill an empty selection with ancestors (esp. root). */
 	private boolean restoringSelection = false;
 	private int lastSelectedRestoreAttempts = 0;
+	/**
+	 * When non-null, open-time last-selection restore should put the map's saved flag
+	 * back to this value. Unfolding ancestors (Docear defaults to always_save_folding)
+	 * and selection bookkeeping must not leave a freshly opened map dirty.
+	 */
+	private Boolean savedFlagBeforeSelectionRestore = null;
 	final private Selection selection = new Selection();
 	private int siblingMaxLevel;
 	private float zoom = 1F;
@@ -1909,6 +1915,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
 	private void selectSavedOrLastModifiedOrRoot() {
 		final MapModel map = getModel();
+		beginSelectionRestoreSavedGuard(map);
 		LastSelectionMapExtensionIO.ensureLoadedFromUnknownElements(map);
 		final String savedId = LastSelectionMapExtensionIO.readLastSelectedId(map);
 		if (savedId != null && !savedId.isEmpty()) {
@@ -1923,6 +1930,30 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			return;
 		}
 		selectLastModifiedOrRoot();
+	}
+
+	private void beginSelectionRestoreSavedGuard(final MapModel map) {
+		if (savedFlagBeforeSelectionRestore == null && map != null) {
+			savedFlagBeforeSelectionRestore = Boolean.valueOf(map.isSaved());
+		}
+	}
+
+	private void finishSelectionRestoreSavedGuard() {
+		final Boolean wasSaved = savedFlagBeforeSelectionRestore;
+		savedFlagBeforeSelectionRestore = null;
+		if (!Boolean.TRUE.equals(wasSaved)) {
+			return;
+		}
+		final MapModel map = getModel();
+		if (map == null) {
+			return;
+		}
+		try {
+			getModeController().getMapController().setSaved(map, true);
+		}
+		catch (Exception e) {
+			map.setSaved(true);
+		}
 	}
 
 	private void ensureTemporaryRootSelection() {
@@ -1970,6 +2001,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		if (map == null || savedId == null || savedId.isEmpty()) {
 			return false;
 		}
+		beginSelectionRestoreSavedGuard(map);
 		final NodeModel savedNode = map.getNodeForID(savedId);
 		if (savedNode == null) {
 			org.freeplane.core.util.LogUtils.warn("last_selected_id not found in map: " + savedId);
@@ -1977,6 +2009,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 		restoringSelection = true;
 		LastSelectionMapExtensionIO.setSuppressRememberSelection(true);
+		MapController.setSuppressFoldingDirty(true);
 		try {
 			if (!selectNodeIfPossible(savedNode)) {
 				return false;
@@ -1988,19 +2021,23 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
 			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
 			LastSelectionMapExtensionIO.rememberSelection(savedNode, false);
+			finishSelectionRestoreSavedGuard();
 			return true;
 		}
 		finally {
+			MapController.setSuppressFoldingDirty(false);
 			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
 			restoringSelection = false;
 		}
 	}
 
 	private void selectLastModifiedOrRoot() {
+		final MapModel map = getModel();
+		beginSelectionRestoreSavedGuard(map);
 		restoringSelection = true;
 		LastSelectionMapExtensionIO.setSuppressRememberSelection(true);
+		MapController.setSuppressFoldingDirty(true);
 		try {
-			final MapModel map = getModel();
 			final NodeModel lastModified = LastModifiedNodeSelector.find(map.getRootNode());
 			if (lastModified != null && selectNodeIfPossible(lastModified)) {
 				LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(lastModified.createID());
@@ -2015,8 +2052,10 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			}
 		}
 		finally {
+			MapController.setSuppressFoldingDirty(false);
 			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
 			restoringSelection = false;
+			finishSelectionRestoreSavedGuard();
 		}
 	}
 

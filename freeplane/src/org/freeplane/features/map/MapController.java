@@ -69,6 +69,22 @@ public class MapController extends SelectionController implements IExtension{
 		BACK, BACK_N_FOLD, FORWARD, FORWARD_N_FOLD
 	}
 
+	/** When true, folding changes must not mark the map unsaved (open-time selection restore). */
+	private static final ThreadLocal<Boolean> SUPPRESS_FOLDING_DIRTY = new ThreadLocal<Boolean>();
+
+	public static void setSuppressFoldingDirty(final boolean suppress) {
+		if (suppress) {
+			SUPPRESS_FOLDING_DIRTY.set(Boolean.TRUE);
+		}
+		else {
+			SUPPRESS_FOLDING_DIRTY.remove();
+		}
+	}
+
+	private static boolean isFoldingDirtySuppressed() {
+		return Boolean.TRUE.equals(SUPPRESS_FOLDING_DIRTY.get());
+	}
+
 	private static class ActionEnablerOnChange implements INodeChangeListener, INodeSelectionListener, IActionOnChange, IMapChangeListener {
 		final AFreeplaneAction action;
 
@@ -358,7 +374,8 @@ public class MapController extends SelectionController implements IExtension{
 	private void fireFoldingChanged(final NodeModel node) {
 	    final ResourceController resourceController = ResourceController.getResourceController();
 	    if (resourceController.getProperty(NodeBuilder.RESOURCES_SAVE_FOLDING).equals(
-	    	NodeBuilder.RESOURCES_ALWAYS_SAVE_FOLDING)) {
+	    	NodeBuilder.RESOURCES_ALWAYS_SAVE_FOLDING)
+	            && !isFoldingDirtySuppressed()) {
 	    	final MapModel map = node.getMap();
 	    	setSaved(map, false);
 	    }

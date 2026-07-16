@@ -14,8 +14,9 @@ import org.freeplane.n3.nanoxml.XMLElement;
  * Reads/writes {@link LastSelectionMapExtension} as {@code last_selected_id} on the
  * {@code <map>} element so the next open can restore the selection.
  * <p>
- * When the selected node id changes, the map is marked unsaved so the attribute is
- * written into the {@code .mm} on the next save.
+ * When the user changes the selected node, the map is marked unsaved so the attribute is
+ * written into the {@code .mm} on the next save. Open-time restore suppresses that
+ * bookkeeping (and folding dirty) so simply opening a map does not prompt to save.
  */
 public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 	static final String MAP_TAG = "map";
