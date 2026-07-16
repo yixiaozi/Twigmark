@@ -21,6 +21,7 @@ public final class SideTabMetricKeys {
 	public static final String RIGHT_PUBLISHED = "right.published";
 	public static final String RIGHT_RECENT_MODIFIED = "right.recent_modified";
 	public static final String RIGHT_AI_CHAT = "right.ai_chat";
+	public static final String RIGHT_POMODORO = "right.pomodoro";
 
 	private SideTabMetricKeys() {
 	}

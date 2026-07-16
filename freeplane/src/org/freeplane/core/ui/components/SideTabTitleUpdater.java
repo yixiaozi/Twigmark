@@ -185,6 +185,9 @@ public final class SideTabTitleUpdater {
 		if ("AI \u804a\u5929".equals(title)) {
 			return SideTabMetricKeys.RIGHT_AI_CHAT;
 		}
+		if ("\u756a\u8304\u949f".equals(title)) {
+			return SideTabMetricKeys.RIGHT_POMODORO;
+		}
 		return "";
 	}
 }

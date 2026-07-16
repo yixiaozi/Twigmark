@@ -137,6 +137,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecurringRe
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllRecentlyModified;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
+import org.freeplane.view.swing.features.pomodoro.PomodoroController;
+import org.freeplane.view.swing.features.pomodoro.PomodoroTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTimelineTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.TodoTabPanel;
 import org.freeplane.view.swing.map.ShowNotesInMapAction;
@@ -186,6 +188,7 @@ public class MModeControllerFactory {
 		tabs.add("\u65f6\u95f4\u8f74", new ReminderTimelineTabPanel());
 		tabs.add("\u5f85\u529e", new TodoTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u5f85\u529e", new EnhancedAllTodosTabPanel());
+		tabs.add("\u756a\u8304\u949f", new PomodoroTabPanel(modeController));
 		installWorkspacePinnedNodesTab(modeController, tabs);
 		tabs.add("\u5168\u90e8\u53d1\u5e03", new EnhancedAllPublishTabPanel());
 		tabs.add("\u6700\u8fd1\u4fee\u6539", new EnhancedAllRecentlyModified());
@@ -202,6 +205,7 @@ public class MModeControllerFactory {
 		new CreationModificationPlugin();
 		HashPhotosEventsAutoSync.install(modeController);
 		modeController.addExtension(ReminderHook.class, new ReminderHook(modeController));
+		PomodoroController.install(modeController);
 		new AutomaticEdgeColorHook();
 		new ViewerController();
 		modeController.addAction(new AddAttributeAction());

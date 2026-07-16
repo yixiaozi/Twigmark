@@ -349,6 +349,11 @@
 					<ribbon_action action="TimeManagementAction" accelerator="control T" />
 					<ribbon_action action="TimeListAction" />
 					<ribbon_action action="ReminderHookAction" />
+					<ribbon_action action="StartPomodoroAction" accelerator="control shift P" />
+					<ribbon_action action="PausePomodoroAction" />
+					<ribbon_action action="StopPomodoroAction" />
+					<ribbon_action action="TogglePomodoroAction" />
+					<ribbon_action action="ShowPomodoroWindowAction" />
 				</ribbon_action>
 				<ribbon_action name="menu_encryption" priority="medium">
 					<ribbon_action action="EnterPassword" />

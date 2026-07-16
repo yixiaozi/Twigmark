@@ -1,0 +1,117 @@
+package org.freeplane.view.swing.features.pomodoro;
+
+import org.freeplane.core.extension.IExtension;
+import org.freeplane.features.map.NodeModel;
+
+/**
+ * Pomodoro / focus-time metadata stored on a mind-map node.
+ */
+public final class PomodoroExtension implements IExtension {
+	public static final String STATE_IDLE = "idle";
+	public static final String STATE_RUNNING = "running";
+	public static final String STATE_PAUSED = "paused";
+
+	private boolean enabled;
+	private long totalMs;
+	private long activeMs;
+	private String state = STATE_IDLE;
+	private long startedAt;
+
+	static PomodoroExtension getExtension(final NodeModel node) {
+		return node == null ? null : (PomodoroExtension) node.getExtension(PomodoroExtension.class);
+	}
+
+	static PomodoroExtension getOrCreateExtension(final NodeModel node) {
+		PomodoroExtension extension = getExtension(node);
+		if (extension == null) {
+			extension = new PomodoroExtension();
+			node.addExtension(extension);
+		}
+		return extension;
+	}
+
+	boolean isEmpty() {
+		return !enabled && totalMs <= 0 && activeMs <= 0 && startedAt <= 0
+				&& (state == null || STATE_IDLE.equals(state));
+	}
+
+	PomodoroExtension copy() {
+		final PomodoroExtension copy = new PomodoroExtension();
+		copy.enabled = enabled;
+		copy.totalMs = totalMs;
+		copy.activeMs = activeMs;
+		copy.state = state;
+		copy.startedAt = startedAt;
+		return copy;
+	}
+
+	void apply(final PomodoroExtension source) {
+		if (source == null) {
+			enabled = false;
+			totalMs = 0;
+			activeMs = 0;
+			state = STATE_IDLE;
+			startedAt = 0;
+			return;
+		}
+		enabled = source.enabled;
+		totalMs = source.totalMs;
+		activeMs = source.activeMs;
+		state = source.state == null ? STATE_IDLE : source.state;
+		startedAt = source.startedAt;
+	}
+
+	public boolean isEnabled() {
+		return enabled;
+	}
+
+	public void setEnabled(final boolean enabled) {
+		this.enabled = enabled;
+	}
+
+	public long getTotalMs() {
+		return totalMs;
+	}
+
+	public void setTotalMs(final long totalMs) {
+		this.totalMs = Math.max(0L, totalMs);
+	}
+
+	public long getActiveMs() {
+		return activeMs;
+	}
+
+	public void setActiveMs(final long activeMs) {
+		this.activeMs = Math.max(0L, activeMs);
+	}
+
+	public String getState() {
+		return state == null ? STATE_IDLE : state;
+	}
+
+	public void setState(final String state) {
+		this.state = state == null || state.length() == 0 ? STATE_IDLE : state;
+	}
+
+	public long getStartedAt() {
+		return startedAt;
+	}
+
+	public void setStartedAt(final long startedAt) {
+		this.startedAt = Math.max(0L, startedAt);
+	}
+
+	/** Live elapsed for the current open segment (includes active + running delta). */
+	public long liveSegmentMs(final long now) {
+		long ms = activeMs;
+		if (STATE_RUNNING.equals(getState()) && startedAt > 0 && now > startedAt) {
+			ms += now - startedAt;
+		}
+		return ms;
+	}
+
+	/** Total focus time including the live segment. */
+	public long liveTotalMs(final long now) {
+		return totalMs + liveSegmentMs(now);
+	}
+}
