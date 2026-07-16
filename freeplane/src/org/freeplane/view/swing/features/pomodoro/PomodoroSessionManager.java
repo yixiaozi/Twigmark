@@ -163,6 +163,18 @@ public final class PomodoroSessionManager {
 		}
 		updateTickState();
 		fireChanged();
+		hideWindow();
+	}
+
+	/** Hide floating timer without stopping sessions (e.g. after explicit Stop). */
+	void hideWindow() {
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				if (window != null) {
+					window.hideQuietly();
+				}
+			}
+		});
 	}
 
 	public void togglePauseResume(final NodeModel node) {
