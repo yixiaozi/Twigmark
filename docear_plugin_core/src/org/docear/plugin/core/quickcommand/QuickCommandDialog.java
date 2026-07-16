@@ -23,6 +23,7 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
@@ -38,22 +39,22 @@ import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.plaf.basic.BasicScrollBarUI;
 
 /**
- * Global command palette: Shift+Space.
+ * Global command palette: Shift+Space. Minimal launcher-style overlay.
  */
 final class QuickCommandDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 	private static QuickCommandDialog current;
 
-	private static final Color BG = new Color(0xF4, 0xF6, 0xF8);
-	private static final Color PANEL = Color.WHITE;
-	private static final Color TEXT = new Color(0x1F, 0x29, 0x37);
+	private static final Color PANEL = new Color(0xFA, 0xFB, 0xFC);
+	private static final Color TEXT = new Color(0x11, 0x18, 0x27);
 	private static final Color MUTED = new Color(0x6B, 0x72, 0x80);
 	private static final Color ACCENT = new Color(0x0F, 0x76, 0x6E);
-	private static final Color ACCENT_SOFT = new Color(0xD1, 0xFA, 0xE5);
-	private static final Color ROW_HOVER = new Color(0xEC, 0xFD, 0xF5);
-	private static final Color BORDER = new Color(0xE5, 0xE7, 0xEB);
+	private static final Color ACCENT_SOFT = new Color(0xCC, 0xF2, 0xE9);
+	private static final Color ROW_ALT = new Color(0xF3, 0xF4, 0xF6);
+	private static final Color HAIRLINE = new Color(0xE5, 0xE7, 0xEB);
 
 	private final JTextField input = new JTextField();
 	private final DefaultListModel listModel = new DefaultListModel();
@@ -62,14 +63,14 @@ final class QuickCommandDialog extends JDialog {
 	private boolean suppressFilter;
 
 	QuickCommandDialog() {
-		super((java.awt.Frame) null, "\u5feb\u901f\u547d\u4ee4", false);
+		super((java.awt.Frame) null, "", false);
+		setUndecorated(true);
 		setAlwaysOnTop(true);
-		setUndecorated(false);
 		buildUi();
 		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		setSize(new Dimension(640, 460));
-		setMinimumSize(new Dimension(480, 320));
-		getContentPane().setBackground(BG);
+		setSize(new Dimension(960, 520));
+		setMinimumSize(new Dimension(720, 360));
+		getRootPane().setBorder(BorderFactory.createLineBorder(new Color(0xD1, 0xD5, 0xDB), 1));
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowOpened(final WindowEvent e) {
@@ -87,53 +88,42 @@ final class QuickCommandDialog extends JDialog {
 	}
 
 	private void buildUi() {
-		final JPanel shell = new JPanel(new BorderLayout(0, 0));
-		shell.setBackground(BG);
-		shell.setBorder(new EmptyBorder(14, 14, 12, 14));
+		final JPanel root = new JPanel(new BorderLayout(0, 0));
+		root.setBackground(PANEL);
+		root.setBorder(new EmptyBorder(10, 14, 8, 10));
 
-		final JPanel card = new JPanel(new BorderLayout(0, 0));
-		card.setBackground(PANEL);
-		card.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
-		        new EmptyBorder(14, 14, 10, 14)));
-
-		final JLabel title = new JLabel("快速命令");
-		title.setFont(title.getFont().deriveFont(Font.BOLD, 13f));
-		title.setForeground(MUTED);
-		title.setBorder(new EmptyBorder(0, 2, 8, 2));
-
-		input.setFont(preferUiFont(18f));
+		input.setFont(preferUiFont(20f));
 		input.setForeground(TEXT);
 		input.setCaretColor(ACCENT);
-		input.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(BORDER),
-		        new EmptyBorder(10, 12, 10, 12)));
-		input.setBackground(new Color(0xFA, 0xFB, 0xFC));
+		input.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
+		input.setBackground(PANEL);
+		input.setOpaque(true);
 
 		list.setFont(preferUiFont(15f));
 		list.setBackground(PANEL);
 		list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		list.setFixedCellHeight(44);
+		list.setFixedCellHeight(40);
 		list.setCellRenderer(new CandidateRenderer());
 		list.setBorder(null);
 
 		final JScrollPane scroll = new JScrollPane(list);
-		scroll.setBorder(BorderFactory.createEmptyBorder(10, 0, 8, 0));
+		scroll.setBorder(null);
 		scroll.getViewport().setBackground(PANEL);
 		scroll.setBackground(PANEL);
+		scroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		scroll.getVerticalScrollBar().setUnitIncrement(28);
+		scroll.getVerticalScrollBar().setPreferredSize(new Dimension(5, 0));
+		scroll.getVerticalScrollBar().setUI(new ThinScrollBarUI());
+		scroll.getVerticalScrollBar().setOpaque(false);
 
 		hintLabel.setFont(preferUiFont(12f));
 		hintLabel.setForeground(MUTED);
-		hintLabel.setBorder(new EmptyBorder(4, 2, 0, 2));
+		hintLabel.setBorder(new EmptyBorder(6, 2, 2, 2));
 
-		final JPanel north = new JPanel(new BorderLayout());
-		north.setOpaque(false);
-		north.add(title, BorderLayout.NORTH);
-		north.add(input, BorderLayout.CENTER);
-
-		card.add(north, BorderLayout.NORTH);
-		card.add(scroll, BorderLayout.CENTER);
-		card.add(hintLabel, BorderLayout.SOUTH);
-		shell.add(card, BorderLayout.CENTER);
-		setContentPane(shell);
+		root.add(input, BorderLayout.NORTH);
+		root.add(scroll, BorderLayout.CENTER);
+		root.add(hintLabel, BorderLayout.SOUTH);
+		setContentPane(root);
 
 		input.getDocument().addDocumentListener(new DocumentListener() {
 			public void insertUpdate(final DocumentEvent e) {
@@ -212,10 +202,8 @@ final class QuickCommandDialog extends JDialog {
 		        "SansSerif" };
 		for (int i = 0; i < prefer.length; i++) {
 			final Font font = new Font(prefer[i], Font.PLAIN, Math.round(size));
-			if (!"Dialog".equalsIgnoreCase(font.getFamily()) || "SansSerif".equals(prefer[i])) {
-				if (font.canDisplay('快')) {
-					return font.deriveFont(size);
-				}
+			if (font.canDisplay('快')) {
+				return font.deriveFont(size);
 			}
 		}
 		return new JLabel().getFont().deriveFont(size);
@@ -255,16 +243,16 @@ final class QuickCommandDialog extends JDialog {
 	private void updateHint() {
 		final String text = input.getText() == null ? "" : input.getText();
 		if (text.indexOf("@@") >= 0) {
-			hintLabel.setText("@@ 图标节点 · Enter 打开/添加 · Shift+Enter 提醒任务 · 空查询显示最近使用");
+			hintLabel.setText("@@ 节点 · Enter 打开/添加 · Shift+Enter 提醒 · 空查询仅最近使用 · Esc 关闭");
 		}
 		else if (text.indexOf('@') >= 0) {
-			hintLabel.setText("@ 导图 · Enter 打开/添加 · Shift+Enter 提醒任务 · 支持拼音/首字母 · 空查询显示最近");
+			hintLabel.setText("@ 导图 · 拼音/首字母/混输均可 · 结果按修改时间倒序 · Esc 关闭");
 		}
 		else if (text.trim().length() == 0) {
-			hintLabel.setText("最近使用的导图可直接 Enter 打开 · 输入 @ / @@ / 应用名继续");
+			hintLabel.setText("最近选择 · Enter 打开 · @ 导图 · @@ 节点 · Esc 关闭");
 		}
 		else {
-			hintLabel.setText("快速启动 · @ 打开导图 · @@ 打开图标节点 · Esc 关闭");
+			hintLabel.setText("快速启动 · 支持拼音模糊 · Esc 关闭");
 		}
 	}
 
@@ -343,24 +331,61 @@ final class QuickCommandDialog extends JDialog {
 		current.setVisible(true);
 	}
 
+	private static final class ThinScrollBarUI extends BasicScrollBarUI {
+		protected void configureScrollBarColors() {
+			thumbColor = new Color(0xC4, 0xC4, 0xC4);
+			thumbDarkShadowColor = thumbColor;
+			thumbHighlightColor = thumbColor;
+			thumbLightShadowColor = thumbColor;
+			trackColor = PANEL;
+			trackHighlightColor = PANEL;
+		}
+
+		protected JButton createDecreaseButton(final int orientation) {
+			return zeroButton();
+		}
+
+		protected JButton createIncreaseButton(final int orientation) {
+			return zeroButton();
+		}
+
+		private JButton zeroButton() {
+			final JButton button = new JButton();
+			button.setPreferredSize(new Dimension(0, 0));
+			button.setMinimumSize(new Dimension(0, 0));
+			button.setMaximumSize(new Dimension(0, 0));
+			button.setOpaque(false);
+			button.setBorder(null);
+			return button;
+		}
+
+		protected void paintTrack(final Graphics g, final JComponent c, final Rectangle trackBounds) {
+			g.setColor(PANEL);
+			g.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+		}
+
+		protected void paintThumb(final Graphics g, final JComponent c, final Rectangle thumbBounds) {
+			if (thumbBounds.isEmpty() || !scrollbar.isEnabled()) {
+				return;
+			}
+			final Graphics2D g2 = (Graphics2D) g.create();
+			g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+			g2.setColor(thumbColor);
+			final int gap = 1;
+			g2.fillRoundRect(thumbBounds.x + gap, thumbBounds.y + gap, Math.max(2, thumbBounds.width - gap * 2),
+			        Math.max(8, thumbBounds.height - gap * 2), 6, 6);
+			g2.dispose();
+		}
+	}
+
 	private static final class CandidateRenderer extends DefaultListCellRenderer {
 		private static final long serialVersionUID = 1L;
 
 		public Component getListCellRendererComponent(final JList list, final Object value, final int index,
 		        final boolean isSelected, final boolean cellHasFocus) {
-			final JPanel row = new JPanel(new BorderLayout(10, 0)) {
-				private static final long serialVersionUID = 1L;
-
-				protected void paintComponent(final Graphics g) {
-					final Graphics2D g2 = (Graphics2D) g.create();
-					g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-					g2.setColor(getBackground());
-					g2.fillRoundRect(2, 2, getWidth() - 4, getHeight() - 4, 10, 10);
-					g2.dispose();
-				}
-			};
-			row.setOpaque(false);
-			row.setBorder(new EmptyBorder(4, 8, 4, 8));
+			final JPanel row = new JPanel(new BorderLayout(10, 0));
+			row.setOpaque(true);
+			row.setBorder(new EmptyBorder(0, 4, 0, 8));
 
 			final QuickCommandCandidate item = value instanceof QuickCommandCandidate ? (QuickCommandCandidate) value
 			        : null;
@@ -372,7 +397,7 @@ final class QuickCommandDialog extends JDialog {
 			badgeLabel.setFont(preferUiFont(11f));
 			badgeLabel.setForeground(isSelected ? ACCENT : MUTED);
 			badgeLabel.setHorizontalAlignment(SwingConstants.CENTER);
-			badgeLabel.setPreferredSize(new Dimension(40, 28));
+			badgeLabel.setPreferredSize(new Dimension(36, 28));
 
 			final JLabel main = new JLabel(item != null && item.recent ? "★ " + label : label);
 			main.setFont(preferUiFont(15f));
@@ -382,19 +407,20 @@ final class QuickCommandDialog extends JDialog {
 			sub.setFont(preferUiFont(12f));
 			sub.setForeground(MUTED);
 
-			final JPanel texts = new JPanel(new BorderLayout(0, 1));
+			final JPanel texts = new JPanel(new BorderLayout(0, 0));
 			texts.setOpaque(false);
-			texts.add(main, BorderLayout.NORTH);
-			if (detail != null && detail.length() > 0 && item != null && item.kind != QuickCommandCandidate.Kind.MAP) {
-				texts.add(sub, BorderLayout.SOUTH);
+			texts.add(main, BorderLayout.CENTER);
+			if (item != null && item.kind == QuickCommandCandidate.Kind.ICON_NODE && detail != null
+			        && detail.length() > 0) {
+				texts.add(sub, BorderLayout.EAST);
 			}
 			else if (item != null && item.kind == QuickCommandCandidate.Kind.HINT) {
-				texts.add(sub, BorderLayout.SOUTH);
+				texts.add(sub, BorderLayout.EAST);
 			}
 
 			row.add(badgeLabel, BorderLayout.WEST);
 			row.add(texts, BorderLayout.CENTER);
-			row.setBackground(isSelected ? ACCENT_SOFT : (index % 2 == 0 ? PANEL : ROW_HOVER));
+			row.setBackground(isSelected ? ACCENT_SOFT : (index % 2 == 0 ? PANEL : ROW_ALT));
 			return row;
 		}
 	}
