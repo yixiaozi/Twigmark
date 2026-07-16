@@ -6,6 +6,7 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
@@ -36,7 +37,7 @@ import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.view.swing.map.MapView;
 
 /**
- * Alt+Space overlay: browse open maps with ←/→, Enter to switch, Delete to close.
+ * Alt+Space overlay: compact open-map switcher with ←→/↑↓, Enter, Delete.
  */
 final class MapSwitcherDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
@@ -51,11 +52,20 @@ final class MapSwitcherDialog extends JDialog {
 	private static final Color SELECTED_BORDER = new Color(0x0F, 0x76, 0x6E);
 	private static final Color HAIRLINE = new Color(0xD1, 0xD5, 0xDB);
 
-	private final JPanel strip = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 0));
+	private static final int CARD_H_GAP = 6;
+	private static final int CARD_V_GAP = 6;
+	private static final int CARD_HEIGHT = 34;
+	private static final int CARD_MIN_WIDTH = 64;
+	private static final int CARD_MAX_WIDTH = 140;
+	private static final int DIALOG_MAX_WIDTH = 920;
+
+	private final JPanel strip = new JPanel(new FlowLayout(FlowLayout.CENTER, CARD_H_GAP, CARD_V_GAP));
 	private final JLabel hintLabel = new JLabel(" ");
 	private final List entries = new ArrayList();
 	private int selectedIndex;
 	private boolean closing;
+	/** Columns in the first wrapped row; recomputed after layout. */
+	private int columnsPerRow = 1;
 
 	MapSwitcherDialog() {
 		super((java.awt.Frame) null, "", false);
@@ -83,76 +93,67 @@ final class MapSwitcherDialog extends JDialog {
 	private void buildUi() {
 		final JPanel root = new JPanel(new BorderLayout(0, 0));
 		root.setBackground(PANEL);
-		root.setBorder(new EmptyBorder(16, 18, 12, 18));
+		root.setBorder(new EmptyBorder(10, 12, 8, 12));
 
 		final JLabel title = new JLabel("切换导图");
-		title.setFont(preferUiFont(14f));
+		title.setFont(preferUiFont(12f));
 		title.setForeground(MUTED);
-		title.setBorder(new EmptyBorder(0, 2, 10, 2));
+		title.setBorder(new EmptyBorder(0, 2, 6, 2));
 
 		strip.setOpaque(false);
-		strip.setBorder(new EmptyBorder(4, 0, 8, 0));
+		strip.setBorder(new EmptyBorder(0, 0, 2, 0));
 
-		hintLabel.setFont(preferUiFont(12f));
+		hintLabel.setFont(preferUiFont(11f));
 		hintLabel.setForeground(MUTED);
-		hintLabel.setBorder(new EmptyBorder(8, 2, 0, 2));
-		hintLabel.setText("← → 选择 · Enter 打开 · Delete 关闭 · Esc 取消");
+		hintLabel.setBorder(new EmptyBorder(6, 2, 0, 2));
+		hintLabel.setText("← → ↑ ↓ 选择 · Enter 打开 · Delete 关闭 · Esc 取消");
 
 		root.add(title, BorderLayout.NORTH);
 		root.add(strip, BorderLayout.CENTER);
 		root.add(hintLabel, BorderLayout.SOUTH);
 		setContentPane(root);
 
-		final JComponent glass = getRootPane();
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0),
-		        "mapswitch.cancel");
-		glass.getActionMap().put("mapswitch.cancel", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-
-			public void actionPerformed(final ActionEvent e) {
+		bindKey(KeyEvent.VK_ESCAPE, "mapswitch.cancel", new Runnable() {
+			public void run() {
 				dispose();
 			}
 		});
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0),
-		        "mapswitch.left");
-		glass.getActionMap().put("mapswitch.left", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-
-			public void actionPerformed(final ActionEvent e) {
+		bindKey(KeyEvent.VK_LEFT, "mapswitch.left", new Runnable() {
+			public void run() {
 				moveSelection(-1);
 			}
 		});
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0),
-		        "mapswitch.right");
-		glass.getActionMap().put("mapswitch.right", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-
-			public void actionPerformed(final ActionEvent e) {
+		bindKey(KeyEvent.VK_RIGHT, "mapswitch.right", new Runnable() {
+			public void run() {
 				moveSelection(1);
 			}
 		});
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0),
-		        "mapswitch.open");
-		glass.getActionMap().put("mapswitch.open", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-
-			public void actionPerformed(final ActionEvent e) {
+		bindKey(KeyEvent.VK_UP, "mapswitch.up", new Runnable() {
+			public void run() {
+				moveVertical(-1);
+			}
+		});
+		bindKey(KeyEvent.VK_DOWN, "mapswitch.down", new Runnable() {
+			public void run() {
+				moveVertical(1);
+			}
+		});
+		bindKey(KeyEvent.VK_ENTER, "mapswitch.open", new Runnable() {
+			public void run() {
 				activateSelected();
 			}
 		});
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0),
-		        "mapswitch.close");
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_BACK_SPACE, 0),
-		        "mapswitch.close");
-		glass.getActionMap().put("mapswitch.close", new AbstractAction() {
-			private static final long serialVersionUID = 1L;
-
-			public void actionPerformed(final ActionEvent e) {
+		bindKey(KeyEvent.VK_DELETE, "mapswitch.close", new Runnable() {
+			public void run() {
 				closeSelected();
 			}
 		});
-		// Repeat Alt+Space while open → step right (Alt+Tab style).
-		glass.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
+		bindKey(KeyEvent.VK_BACK_SPACE, "mapswitch.close", new Runnable() {
+			public void run() {
+				closeSelected();
+			}
+		});
+		getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(
 		        KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, KeyEvent.ALT_DOWN_MASK), "mapswitch.right");
 
 		addKeyListener(new KeyAdapter() {
@@ -164,6 +165,14 @@ final class MapSwitcherDialog extends JDialog {
 				}
 				else if (e.getKeyCode() == KeyEvent.VK_RIGHT) {
 					moveSelection(1);
+					e.consume();
+				}
+				else if (e.getKeyCode() == KeyEvent.VK_UP) {
+					moveVertical(-1);
+					e.consume();
+				}
+				else if (e.getKeyCode() == KeyEvent.VK_DOWN) {
+					moveVertical(1);
 					e.consume();
 				}
 				else if (e.getKeyCode() == KeyEvent.VK_ENTER) {
@@ -178,6 +187,17 @@ final class MapSwitcherDialog extends JDialog {
 					dispose();
 					e.consume();
 				}
+			}
+		});
+	}
+
+	private void bindKey(final int keyCode, final String name, final Runnable action) {
+		getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(keyCode, 0), name);
+		getRootPane().getActionMap().put(name, new AbstractAction() {
+			private static final long serialVersionUID = 1L;
+
+			public void actionPerformed(final ActionEvent e) {
+				action.run();
 			}
 		});
 	}
@@ -212,10 +232,11 @@ final class MapSwitcherDialog extends JDialog {
 		}
 		if (entries.isEmpty()) {
 			final JLabel empty = new JLabel("没有已打开的导图");
-			empty.setFont(preferUiFont(15f));
+			empty.setFont(preferUiFont(13f));
 			empty.setForeground(MUTED);
 			strip.add(empty);
 			selectedIndex = 0;
+			columnsPerRow = 1;
 			packAndLayout();
 			return;
 		}
@@ -223,7 +244,6 @@ final class MapSwitcherDialog extends JDialog {
 			selectedIndex = preferIndex;
 		}
 		else if (entries.size() > 1) {
-			// Alt+Tab style: land on the next map after the active one.
 			selectedIndex = (activeIndex + 1) % entries.size();
 		}
 		else {
@@ -235,26 +255,34 @@ final class MapSwitcherDialog extends JDialog {
 
 	private void rebuildCards() {
 		strip.removeAll();
+		final Font nameFont = preferUiFont(12f);
+		final FontMetrics metrics = getFontMetrics(nameFont);
 		for (int i = 0; i < entries.size(); i++) {
 			final Entry entry = (Entry) entries.get(i);
 			final int index = i;
-			final JPanel card = new JPanel(new BorderLayout(0, 4));
-			card.setPreferredSize(new Dimension(132, 72));
-			card.setOpaque(true);
 			final boolean selected = i == selectedIndex;
+			final JPanel card = new JPanel(new BorderLayout(0, 0));
+			card.setOpaque(true);
 			card.setBackground(selected ? SELECTED_BG : CARD);
 			card.setBorder(BorderFactory.createCompoundBorder(
 			        BorderFactory.createLineBorder(selected ? SELECTED_BORDER : CARD_BORDER, selected ? 2 : 1),
-			        new EmptyBorder(10, 10, 10, 10)));
+			        new EmptyBorder(4, 8, 4, 8)));
 
-			final JLabel name = new JLabel(entry.title, SwingConstants.CENTER);
-			name.setFont(preferUiFont(selected ? 15f : 14f));
-			name.setForeground(TEXT);
-			final JLabel mark = new JLabel(entry.active ? "当前" : " ", SwingConstants.CENTER);
-			mark.setFont(preferUiFont(11f));
-			mark.setForeground(selected ? SELECTED_BORDER : MUTED);
+			final String labelText = entry.active ? entry.title + " ·" : entry.title;
+			final JLabel name = new JLabel(labelText, SwingConstants.CENTER);
+			name.setFont(nameFont);
+			name.setForeground(selected ? SELECTED_BORDER : TEXT);
 			card.add(name, BorderLayout.CENTER);
-			card.add(mark, BorderLayout.SOUTH);
+
+			int textW = metrics.stringWidth(labelText) + 20;
+			if (textW < CARD_MIN_WIDTH) {
+				textW = CARD_MIN_WIDTH;
+			}
+			if (textW > CARD_MAX_WIDTH) {
+				textW = CARD_MAX_WIDTH;
+				name.setToolTipText(entry.title);
+			}
+			card.setPreferredSize(new Dimension(textW, CARD_HEIGHT));
 
 			card.addMouseListener(new MouseAdapter() {
 				@Override
@@ -281,6 +309,52 @@ final class MapSwitcherDialog extends JDialog {
 		selectedIndex = ((selectedIndex + delta) % size + size) % size;
 		rebuildCards();
 		packAndLayout();
+	}
+
+	private void moveVertical(final int rowDelta) {
+		if (entries.isEmpty()) {
+			return;
+		}
+		refreshColumnsPerRow();
+		final int cols = Math.max(1, columnsPerRow);
+		final int size = entries.size();
+		int next = selectedIndex + rowDelta * cols;
+		if (next < 0) {
+			final int col = selectedIndex % cols;
+			final int lastRowStart = (size - 1) / cols * cols;
+			next = Math.min(size - 1, lastRowStart + col);
+		}
+		else if (next >= size) {
+			next = selectedIndex % cols;
+			if (next >= size) {
+				next = size - 1;
+			}
+		}
+		if (next == selectedIndex) {
+			return;
+		}
+		selectedIndex = next;
+		rebuildCards();
+		packAndLayout();
+	}
+
+	private void refreshColumnsPerRow() {
+		final int count = strip.getComponentCount();
+		if (count <= 1) {
+			columnsPerRow = Math.max(1, count);
+			return;
+		}
+		final int firstY = strip.getComponent(0).getY();
+		int cols = 0;
+		for (int i = 0; i < count; i++) {
+			if (Math.abs(strip.getComponent(i).getY() - firstY) <= 2) {
+				cols++;
+			}
+			else {
+				break;
+			}
+		}
+		columnsPerRow = Math.max(1, cols);
 	}
 
 	private void activateSelected() {
@@ -317,8 +391,8 @@ final class MapSwitcherDialog extends JDialog {
 			if (manager == null) {
 				return;
 			}
-			final Component current = manager.getMapViewComponent();
-			final String currentName = current == null ? null : current.getName();
+			final Component currentView = manager.getMapViewComponent();
+			final String currentName = currentView == null ? null : currentView.getName();
 			if (currentName == null || !entry.key.equals(currentName)) {
 				manager.changeToMapView(entry.key);
 			}
@@ -335,8 +409,7 @@ final class MapSwitcherDialog extends JDialog {
 		if (!isDisplayable()) {
 			return;
 		}
-		final int nextPrefer = Math.max(0, keepIndex);
-		reload(nextPrefer);
+		reload(Math.max(0, keepIndex));
 		if (entries.isEmpty()) {
 			dispose();
 			return;
@@ -346,11 +419,23 @@ final class MapSwitcherDialog extends JDialog {
 	}
 
 	private void packAndLayout() {
+		final int estimateCols = Math.max(1, Math.min(entries.size(), 10));
+		final int preferWidth = Math.min(DIALOG_MAX_WIDTH, Math.max(360, estimateCols * 88 + 40));
+		strip.setPreferredSize(null);
 		pack();
-		final Dimension size = getSize();
-		final int width = Math.max(420, Math.min(960, size.width + 8));
-		final int height = Math.max(140, size.height);
-		setSize(new Dimension(width, height));
+		int width = Math.max(preferWidth, getWidth());
+		if (width > DIALOG_MAX_WIDTH) {
+			width = DIALOG_MAX_WIDTH;
+		}
+		// Force wrap width so FlowLayout can form multiple rows when many maps are open.
+		strip.setPreferredSize(new Dimension(width - 28, strip.getPreferredSize().height));
+		pack();
+		refreshColumnsPerRow();
+		final int rows = Math.max(1, (entries.size() + columnsPerRow - 1) / Math.max(1, columnsPerRow));
+		final int stripHeight = rows * (CARD_HEIGHT + CARD_V_GAP) + 8;
+		strip.setPreferredSize(new Dimension(width - 28, stripHeight));
+		pack();
+		setSize(new Dimension(width, Math.max(96, getHeight())));
 		centerOnPointerScreen();
 	}
 
