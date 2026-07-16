@@ -373,10 +373,14 @@
 				<menu_action action="ReminderHookAction" />
 				<menu_separator />
 				<menu_action action="StartPomodoroAction" accelerator="control shift P" />
-				<menu_action action="PausePomodoroAction" />
-				<menu_action action="StopPomodoroAction" />
-				<menu_action action="TogglePomodoroAction" />
-				<menu_action action="ShowPomodoroWindowAction" />
+				<menu_action action="PausePomodoroAction" accelerator="control shift O" />
+				<menu_action action="StopPomodoroAction" accelerator="control shift E" />
+				<menu_action action="TogglePomodoroAction" accelerator="control shift U" />
+				<menu_action action="ShowPomodoroHistoryAction" accelerator="control shift H" />
+				<menu_action action="ShowPomodoroWindowAction" accelerator="control shift M" />
+				<menu_action action="ExportPomodoroStatsAction" />
+				<menu_action action="SyncPomodoroNoteAction" />
+				<menu_action action="CyclePomodoroSkinAction" />
 				<menu_separator />
 				<menu_action action="TodoistSyncAction" />
 				<menu_action action="TodoistSettingsAction" />
@@ -524,10 +528,14 @@
 		<menu_separator />
 		<menu_submenu name="menu_pomodoro" name_ref="menu_pomodoro">
 			<menu_action action="StartPomodoroAction" accelerator="control shift P" />
-			<menu_action action="PausePomodoroAction" />
-			<menu_action action="StopPomodoroAction" />
-			<menu_action action="TogglePomodoroAction" />
-			<menu_action action="ShowPomodoroWindowAction" />
+			<menu_action action="PausePomodoroAction" accelerator="control shift O" />
+			<menu_action action="StopPomodoroAction" accelerator="control shift E" />
+			<menu_action action="TogglePomodoroAction" accelerator="control shift U" />
+			<menu_action action="ShowPomodoroHistoryAction" accelerator="control shift H" />
+			<menu_action action="ShowPomodoroWindowAction" accelerator="control shift M" />
+			<menu_action action="ExportPomodoroStatsAction" />
+			<menu_action action="SyncPomodoroNoteAction" />
+			<menu_action action="CyclePomodoroSkinAction" />
 		</menu_submenu>
 		</menu_category>
 	<menu_category name="main_toolbar">

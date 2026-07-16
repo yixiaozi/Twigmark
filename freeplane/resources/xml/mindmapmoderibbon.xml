@@ -350,10 +350,14 @@
 					<ribbon_action action="TimeListAction" />
 					<ribbon_action action="ReminderHookAction" />
 					<ribbon_action action="StartPomodoroAction" accelerator="control shift P" />
-					<ribbon_action action="PausePomodoroAction" />
-					<ribbon_action action="StopPomodoroAction" />
-					<ribbon_action action="TogglePomodoroAction" />
-					<ribbon_action action="ShowPomodoroWindowAction" />
+					<ribbon_action action="PausePomodoroAction" accelerator="control shift O" />
+					<ribbon_action action="StopPomodoroAction" accelerator="control shift E" />
+					<ribbon_action action="TogglePomodoroAction" accelerator="control shift U" />
+					<ribbon_action action="ShowPomodoroHistoryAction" accelerator="control shift H" />
+					<ribbon_action action="ShowPomodoroWindowAction" accelerator="control shift M" />
+					<ribbon_action action="ExportPomodoroStatsAction" />
+					<ribbon_action action="SyncPomodoroNoteAction" />
+					<ribbon_action action="CyclePomodoroSkinAction" />
 				</ribbon_action>
 				<ribbon_action name="menu_encryption" priority="medium">
 					<ribbon_action action="EnterPassword" />

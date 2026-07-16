@@ -83,3 +83,67 @@ final class ShowPomodoroWindowAction extends AFreeplaneAction {
 		}
 	}
 }
+
+final class ShowPomodoroHistoryAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	ShowPomodoroHistoryAction() {
+		super("ShowPomodoroHistoryAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
+		if (node != null) {
+			PomodoroHistoryDialog.showForNode(node);
+		}
+	}
+}
+
+final class ExportPomodoroStatsAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	ExportPomodoroStatsAction() {
+		super("ExportPomodoroStatsAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		PomodoroExport.exportInteractive(true);
+	}
+}
+
+final class SyncPomodoroNoteAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	SyncPomodoroNoteAction() {
+		super("SyncPomodoroNoteAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
+		if (node == null) {
+			return;
+		}
+		final PomodoroExtension ext = PomodoroAttributes.read(node);
+		if (ext != null) {
+			PomodoroNoteSync.sync(node, ext);
+		}
+	}
+}
+
+final class CyclePomodoroSkinAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	CyclePomodoroSkinAction() {
+		super("CyclePomodoroSkinAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		final String next = PomodoroTheme.nextSkin(PomodoroTheme.current().name);
+		PomodoroTheme.setSkin(next);
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+		if (manager != null) {
+			manager.showWindow();
+			manager.refreshUi();
+		}
+	}
+}

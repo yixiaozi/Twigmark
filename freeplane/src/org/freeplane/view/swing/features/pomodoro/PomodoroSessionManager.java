@@ -157,6 +157,10 @@ public final class PomodoroSessionManager {
 		next.setState(PomodoroExtension.STATE_IDLE);
 		next.setEnabled(true);
 		PomodoroAttributes.write(node, next);
+		PomodoroNoteSync.sync(node, next);
+		if (focusMs > 0) {
+			PomodoroSound.playRing();
+		}
 		updateTickState();
 		fireChanged();
 	}
@@ -345,12 +349,16 @@ public final class PomodoroSessionManager {
 			return;
 		}
 		recoverRecursive(root);
+		updateTickState();
+		fireChanged();
 	}
 
 	private void recoverRecursive(final NodeModel node) {
 		final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 		if (ext != null && PomodoroExtension.STATE_RUNNING.equals(ext.getState())) {
 			final PomodoroExtension next = ext.copy();
+			// Crash reopen: keep accrued activeMs; only fold in live delta if short (avoid overnight inflation).
+			flushRunningIntoActiveBounded(next, 4L * 60L * 60L * 1000L);
 			next.setState(PomodoroExtension.STATE_PAUSED);
 			next.setStartedAt(0);
 			PomodoroAttributes.writeSilent(node, next);
@@ -406,9 +414,16 @@ public final class PomodoroSessionManager {
 	}
 
 	private static void flushRunningIntoActive(final PomodoroExtension next) {
+		flushRunningIntoActiveBounded(next, Long.MAX_VALUE);
+	}
+
+	/** Fold live RUNNING wall time into activeMs, discarding delta beyond {@code maxDeltaMs}. */
+	private static void flushRunningIntoActiveBounded(final PomodoroExtension next, final long maxDeltaMs) {
 		if (PomodoroExtension.STATE_RUNNING.equals(next.getState()) && next.getStartedAt() > 0) {
 			final long delta = Math.max(0L, System.currentTimeMillis() - next.getStartedAt());
-			next.setActiveMs(next.getActiveMs() + delta);
+			if (delta > 0 && delta <= maxDeltaMs) {
+				next.setActiveMs(next.getActiveMs() + delta);
+			}
 			next.setStartedAt(0);
 		}
 	}
@@ -416,6 +431,14 @@ public final class PomodoroSessionManager {
 	private static PomodoroExtension extensionCopy(final NodeModel node) {
 		final PomodoroExtension existing = PomodoroExtension.getExtension(node);
 		return existing == null ? new PomodoroExtension() : existing.copy();
+	}
+
+	void refreshUi() {
+		if (window != null) {
+			window.applyTheme();
+			window.refresh();
+		}
+		fireChanged();
 	}
 
 	private void ensureTickRunning() {

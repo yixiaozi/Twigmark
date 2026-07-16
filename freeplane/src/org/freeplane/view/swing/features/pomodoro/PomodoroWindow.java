@@ -30,6 +30,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.util.HtmlUtils;
@@ -44,12 +45,6 @@ import org.freeplane.features.text.TextController;
 final class PomodoroWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
 
-	private static final Color BG = new Color(0x22201E);
-	private static final Color CARD = new Color(0x2E2A28);
-	private static final Color ACCENT = new Color(0xE07A3D);
-	private static final Color TEXT = new Color(0xF2EBE4);
-	private static final Color MUTED = new Color(0x9A9188);
-
 	private static final int EXPANDED_W = 360;
 	private static final int EXPANDED_H = 168;
 	private static final int COLLAPSED_W = 168;
@@ -62,11 +57,18 @@ final class PomodoroWindow extends JFrame {
 	private final JLabel clockLabel = new JLabel("00:00", SwingConstants.CENTER);
 	private final JLabel titleLabel = new JLabel(" ", SwingConstants.LEFT);
 	private final JLabel collapsedClock = new JLabel("00:00 ▶", SwingConstants.CENTER);
+	private final JLabel brand = new JLabel("番茄钟");
+	private final JLabel leftTitle = new JLabel("进行过");
 	private final DefaultListModel historyModel = new DefaultListModel();
 	private final JList historyList = new JList(historyModel);
+	private final JScrollPane leftScroll;
 	private NodeModel focusedNode;
 	private boolean collapsed;
 	private boolean closingEndsSession = true;
+	private PomodoroTheme theme = PomodoroTheme.current();
+	private final Timer pulseTimer;
+	private boolean pulseOn;
+	private boolean wasRunning;
 
 	PomodoroWindow(final PomodoroSessionManager manager) {
 		super("番茄钟");
@@ -76,7 +78,19 @@ final class PomodoroWindow extends JFrame {
 		setType(Window.Type.UTILITY);
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
 		setResizable(false);
+		leftScroll = new JScrollPane(historyList);
+		pulseTimer = new Timer(700, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				pulseOn = !pulseOn;
+				if (wasRunning) {
+					clockLabel.setForeground(pulseOn ? theme.accent : theme.text);
+					collapsedClock.setForeground(pulseOn ? theme.accent : theme.text);
+				}
+			}
+		});
+		pulseTimer.setRepeats(true);
 		buildUi();
+		applyTheme();
 		setCollapsed(false);
 		dockBottomRight();
 		addWindowListener(new WindowAdapter() {
@@ -90,14 +104,9 @@ final class PomodoroWindow extends JFrame {
 	}
 
 	private void buildUi() {
-		getRootPane().setBorder(BorderFactory.createLineBorder(new Color(0x4A433C), 1));
-		getContentPane().setBackground(BG);
-
 		// --- collapsed bar ---
-		collapsedPanel.setBackground(BG);
 		collapsedPanel.setBorder(new EmptyBorder(4, 8, 4, 6));
 		collapsedClock.setFont(new Font("SansSerif", Font.BOLD, 13));
-		collapsedClock.setForeground(ACCENT);
 		collapsedClock.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 		collapsedClock.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
@@ -112,18 +121,13 @@ final class PomodoroWindow extends JFrame {
 		}), BorderLayout.EAST);
 
 		// --- expanded ---
-		expandedPanel.setBackground(BG);
 		expandedPanel.setBorder(new EmptyBorder(6, 6, 6, 6));
 
 		final JPanel left = new JPanel(new BorderLayout(0, 2));
 		left.setOpaque(false);
-		final JLabel leftTitle = new JLabel("进行过");
-		leftTitle.setForeground(MUTED);
 		leftTitle.setFont(new Font("SansSerif", Font.PLAIN, 10));
 		left.add(leftTitle, BorderLayout.NORTH);
 		historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		historyList.setBackground(CARD);
-		historyList.setForeground(TEXT);
 		historyList.setFont(new Font("SansSerif", Font.PLAIN, 11));
 		historyList.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
 		historyList.setCellRenderer(new DefaultListCellRenderer() {
@@ -133,8 +137,8 @@ final class PomodoroWindow extends JFrame {
 					final boolean isSelected, final boolean cellHasFocus) {
 				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				setOpaque(true);
-				setBackground(isSelected ? new Color(0x3A342F) : CARD);
-				setForeground(TEXT);
+				setBackground(isSelected ? theme.border : theme.card);
+				setForeground(theme.text);
 				setFont(new Font("SansSerif", Font.PLAIN, 11));
 				setBorder(new EmptyBorder(2, 4, 2, 4));
 				if (value instanceof HistoryRow) {
@@ -154,14 +158,12 @@ final class PomodoroWindow extends JFrame {
 				refreshHeader(row.node);
 				if (e.getClickCount() >= 2) {
 					manager.navigateTo(row.node);
-					manager.start(row.node);
+					PomodoroHistoryDialog.showForNode(row.node);
 				}
 			}
 		});
-		final JScrollPane leftScroll = new JScrollPane(historyList);
 		leftScroll.setPreferredSize(new Dimension(148, 110));
-		leftScroll.setBorder(BorderFactory.createLineBorder(new Color(0x3E3833)));
-		leftScroll.getViewport().setBackground(CARD);
+		leftScroll.getViewport().setBackground(theme.card);
 		left.add(leftScroll, BorderLayout.CENTER);
 		expandedPanel.add(left, BorderLayout.WEST);
 
@@ -171,12 +173,17 @@ final class PomodoroWindow extends JFrame {
 
 		final JPanel topBar = new JPanel(new BorderLayout());
 		topBar.setOpaque(false);
-		final JLabel brand = new JLabel("番茄钟");
-		brand.setForeground(MUTED);
 		brand.setFont(new Font("SansSerif", Font.PLAIN, 10));
 		topBar.add(brand, BorderLayout.WEST);
 		final JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 2, 0));
 		topBtns.setOpaque(false);
+		topBtns.add(tinyButton("皮肤", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				PomodoroTheme.setSkin(PomodoroTheme.nextSkin(theme.name));
+				applyTheme();
+				refresh();
+			}
+		}));
 		topBtns.add(tinyButton("▾", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				setCollapsed(true);
@@ -193,9 +200,7 @@ final class PomodoroWindow extends JFrame {
 		right.add(topBar, BorderLayout.NORTH);
 
 		clockLabel.setFont(new Font("SansSerif", Font.BOLD, 28));
-		clockLabel.setForeground(TEXT);
 		titleLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
-		titleLabel.setForeground(MUTED);
 		titleLabel.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 		titleLabel.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
@@ -246,12 +251,30 @@ final class PomodoroWindow extends JFrame {
 		enableDrag(collapsedClock);
 	}
 
-	private static JButton tinyButton(final String text, final ActionListener listener) {
+	void applyTheme() {
+		theme = PomodoroTheme.current();
+		getRootPane().setBorder(BorderFactory.createLineBorder(theme.border, 1));
+		getContentPane().setBackground(theme.bg);
+		collapsedPanel.setBackground(theme.bg);
+		expandedPanel.setBackground(theme.bg);
+		historyList.setBackground(theme.card);
+		historyList.setForeground(theme.text);
+		leftScroll.setBorder(BorderFactory.createLineBorder(theme.border));
+		leftScroll.getViewport().setBackground(theme.card);
+		clockLabel.setForeground(theme.text);
+		collapsedClock.setForeground(theme.accent);
+		titleLabel.setForeground(theme.muted);
+		brand.setForeground(theme.muted);
+		leftTitle.setForeground(theme.muted);
+		repaint();
+	}
+
+	private JButton tinyButton(final String text, final ActionListener listener) {
 		final JButton b = new JButton(text);
 		b.setMargin(new java.awt.Insets(0, 4, 0, 4));
 		b.setFont(new Font("SansSerif", Font.PLAIN, 11));
-		b.setForeground(MUTED);
-		b.setBackground(BG);
+		b.setForeground(theme.muted);
+		b.setBackground(theme.bg);
 		b.setBorderPainted(false);
 		b.setFocusPainted(false);
 		b.setContentAreaFilled(false);
@@ -259,13 +282,13 @@ final class PomodoroWindow extends JFrame {
 		return b;
 	}
 
-	private static JButton chipButton(final String icon, final String tip, final ActionListener listener) {
+	private JButton chipButton(final String icon, final String tip, final ActionListener listener) {
 		final JButton b = new JButton(icon);
 		b.setToolTipText(tip);
 		b.setMargin(new java.awt.Insets(2, 8, 2, 8));
 		b.setFont(new Font("SansSerif", Font.PLAIN, 12));
-		b.setForeground(TEXT);
-		b.setBackground(new Color(0x3A342F));
+		b.setForeground(theme.text);
+		b.setBackground(theme.border);
 		b.setBorder(new EmptyBorder(4, 10, 4, 10));
 		b.setFocusPainted(false);
 		b.addActionListener(listener);
@@ -331,6 +354,9 @@ final class PomodoroWindow extends JFrame {
 		if (visible) {
 			dockBottomRight();
 		}
+		else {
+			pulseTimer.stop();
+		}
 		super.setVisible(visible);
 	}
 
@@ -359,9 +385,8 @@ final class PomodoroWindow extends JFrame {
 			final String state = ext.getState();
 			if (PomodoroExtension.STATE_RUNNING.equals(state)) {
 				running = node;
-				continue; // running stays on the right clock, not left list
+				continue;
 			}
-			// Left: paused sessions + nodes with completed history / totals
 			if (PomodoroExtension.STATE_PAUSED.equals(state) || ext.getLog().length() > 0 || ext.getTotalMs() > 0) {
 				historyModel.addElement(new HistoryRow(node, now));
 			}
@@ -380,6 +405,8 @@ final class PomodoroWindow extends JFrame {
 			clockLabel.setText("00:00");
 			titleLabel.setText("选中节点后开始");
 			collapsedClock.setText("00:00");
+			wasRunning = false;
+			pulseTimer.stop();
 		}
 		if (!collapsed) {
 			dockBottomRight();
@@ -403,7 +430,7 @@ final class PomodoroWindow extends JFrame {
 		final boolean running = ext != null && PomodoroExtension.STATE_RUNNING.equals(ext.getState());
 		final boolean paused = ext != null && PomodoroExtension.STATE_PAUSED.equals(ext.getState());
 		clockLabel.setText(PomodoroFormatter.formatClock(segment));
-		clockLabel.setForeground(running ? ACCENT : TEXT);
+		clockLabel.setForeground(running ? theme.accent : theme.text);
 		final String name = plainText(node);
 		String mark = "";
 		if (running) {
@@ -414,6 +441,17 @@ final class PomodoroWindow extends JFrame {
 		}
 		titleLabel.setText(mark + name);
 		collapsedClock.setText(PomodoroFormatter.formatClock(segment) + (running ? " ▶" : (paused ? " ❚❚" : "")));
+		wasRunning = running;
+		if (running) {
+			if (!pulseTimer.isRunning()) {
+				pulseTimer.start();
+			}
+		}
+		else {
+			pulseTimer.stop();
+			clockLabel.setForeground(theme.text);
+			collapsedClock.setForeground(theme.accent);
+		}
 	}
 
 	private static String plainText(final NodeModel node) {
