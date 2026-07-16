@@ -207,4 +207,138 @@ final class PinyinMatch {
 	private static boolean isAsciiLetterOrDigit(final char c) {
 		return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
 	}
+
+	/**
+	 * Build HTML that paints characters contributing to the fuzzy match in {@code colorHex}
+	 * (e.g. {@code #DC2626}). Returns plain text when there is nothing to highlight.
+	 */
+	static String highlightHtml(final String text, final String query, final String colorHex) {
+		if (text == null || text.length() == 0) {
+			return "";
+		}
+		if (query == null || query.trim().length() == 0) {
+			return escapeHtml(text);
+		}
+		final boolean[] hit = matchedChars(text, query.trim());
+		boolean any = false;
+		for (int i = 0; i < hit.length; i++) {
+			if (hit[i]) {
+				any = true;
+				break;
+			}
+		}
+		if (!any) {
+			return escapeHtml(text);
+		}
+		final String color = colorHex == null || colorHex.length() == 0 ? "#DC2626" : colorHex;
+		final StringBuilder sb = new StringBuilder(text.length() * 8);
+		sb.append("<html>");
+		boolean inHit = false;
+		for (int i = 0; i < text.length(); i++) {
+			if (hit[i] && !inHit) {
+				sb.append("<font color=\"").append(color).append("\">");
+				inHit = true;
+			}
+			else if (!hit[i] && inHit) {
+				sb.append("</font>");
+				inHit = false;
+			}
+			sb.append(escapeHtmlChar(text.charAt(i)));
+		}
+		if (inHit) {
+			sb.append("</font>");
+		}
+		return sb.toString();
+	}
+
+	/** Which characters in {@code text} participate in matching {@code query}. */
+	static boolean[] matchedChars(final String text, final String query) {
+		final boolean[] hit = new boolean[text == null ? 0 : text.length()];
+		if (text == null || text.length() == 0 || query == null || query.length() == 0) {
+			return hit;
+		}
+		final String q = query.toLowerCase(Locale.ROOT).trim();
+		if (q.length() == 0) {
+			return hit;
+		}
+		final String lower = text.toLowerCase(Locale.ROOT);
+		final int literal = lower.indexOf(q);
+		if (literal >= 0) {
+			for (int i = 0; i < q.length() && literal + i < hit.length; i++) {
+				hit[literal + i] = true;
+			}
+			return hit;
+		}
+		final boolean[] path = new boolean[text.length()];
+		if (collectMatch(text, 0, q, 0, path, hit)) {
+			return hit;
+		}
+		// Fall back: mark chars whose initial/pinyin letter appears in query order.
+		markInitialSubsequence(text, q, hit);
+		return hit;
+	}
+
+	private static boolean collectMatch(final String text, final int ti, final String query, final int qi,
+	        final boolean[] path, final boolean[] best) {
+		if (qi >= query.length()) {
+			System.arraycopy(path, 0, best, 0, path.length);
+			return true;
+		}
+		if (ti >= text.length()) {
+			return false;
+		}
+		final char tc = text.charAt(ti);
+		if (Character.isWhitespace(tc)) {
+			return collectMatch(text, ti + 1, query, qi, path, best);
+		}
+		final int[] consumed = new int[8];
+		final int n = waysToConsume(tc, query, qi, consumed);
+		for (int i = 0; i < n; i++) {
+			path[ti] = true;
+			if (collectMatch(text, ti + 1, query, qi + consumed[i], path, best)) {
+				return true;
+			}
+			path[ti] = false;
+		}
+		return collectMatch(text, ti + 1, query, qi, path, best);
+	}
+
+	private static void markInitialSubsequence(final String text, final String query, final boolean[] hit) {
+		int qi = 0;
+		for (int i = 0; i < text.length() && qi < query.length(); i++) {
+			final String py = charPinyin(text.charAt(i));
+			if (py.length() == 0) {
+				continue;
+			}
+			final char initial = py.charAt(0);
+			if (initial == query.charAt(qi)) {
+				hit[i] = true;
+				qi++;
+			}
+		}
+	}
+
+	private static String escapeHtml(final String text) {
+		final StringBuilder sb = new StringBuilder(text.length() + 8);
+		for (int i = 0; i < text.length(); i++) {
+			sb.append(escapeHtmlChar(text.charAt(i)));
+		}
+		return sb.toString();
+	}
+
+	private static String escapeHtmlChar(final char c) {
+		if (c == '<') {
+			return "&lt;";
+		}
+		if (c == '>') {
+			return "&gt;";
+		}
+		if (c == '&') {
+			return "&amp;";
+		}
+		if (c == '"') {
+			return "&quot;";
+		}
+		return String.valueOf(c);
+	}
 }

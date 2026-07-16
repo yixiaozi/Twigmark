@@ -55,6 +55,8 @@ final class QuickCommandDialog extends JDialog {
 	private static final Color ACCENT_SOFT = new Color(0xCC, 0xF2, 0xE9);
 	private static final Color ROW_ALT = new Color(0xF3, 0xF4, 0xF6);
 	private static final Color HAIRLINE = new Color(0xE5, 0xE7, 0xEB);
+	private static final String MATCH_RED = "#DC2626";
+	private static final String HIGHLIGHT_QUERY_KEY = "quickcommand.highlightQuery";
 
 	private final JTextField input = new JTextField();
 	private final DefaultListModel listModel = new DefaultListModel();
@@ -68,8 +70,9 @@ final class QuickCommandDialog extends JDialog {
 		setAlwaysOnTop(true);
 		buildUi();
 		setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-		setSize(new Dimension(960, 520));
-		setMinimumSize(new Dimension(720, 360));
+		// Content-only footprint roughly matching the old inner card width.
+		setSize(new Dimension(720, 480));
+		setMinimumSize(new Dimension(560, 320));
 		getRootPane().setBorder(BorderFactory.createLineBorder(new Color(0xD1, 0xD5, 0xDB), 1));
 		addWindowListener(new WindowAdapter() {
 			@Override
@@ -229,6 +232,7 @@ final class QuickCommandDialog extends JDialog {
 			return;
 		}
 		final String text = input.getText();
+		list.putClientProperty(HIGHLIGHT_QUERY_KEY, extractHighlightQuery(text));
 		final List suggestions = QuickCommandController.suggest(text);
 		listModel.clear();
 		for (int i = 0; i < suggestions.size(); i++) {
@@ -238,6 +242,22 @@ final class QuickCommandDialog extends JDialog {
 			list.setSelectedIndex(0);
 		}
 		updateHint();
+	}
+
+	/** Query portion used for red match highlighting (@ / @@ suffix, else whole input). */
+	private static String extractHighlightQuery(final String raw) {
+		if (raw == null) {
+			return "";
+		}
+		final int atAt = raw.indexOf("@@");
+		if (atAt >= 0) {
+			return raw.substring(atAt + 2).trim();
+		}
+		final int at = raw.lastIndexOf('@');
+		if (at >= 0) {
+			return raw.substring(at + 1).trim();
+		}
+		return raw.trim();
 	}
 
 	private void updateHint() {
@@ -392,6 +412,8 @@ final class QuickCommandDialog extends JDialog {
 			final String label = item != null ? item.label : String.valueOf(value);
 			final String detail = item != null ? item.detail : "";
 			final String badge = item != null ? item.kindBadge() : "";
+			final Object queryObj = list.getClientProperty(HIGHLIGHT_QUERY_KEY);
+			final String query = queryObj == null ? "" : String.valueOf(queryObj);
 
 			final JLabel badgeLabel = new JLabel(badge);
 			badgeLabel.setFont(preferUiFont(11f));
@@ -399,7 +421,17 @@ final class QuickCommandDialog extends JDialog {
 			badgeLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			badgeLabel.setPreferredSize(new Dimension(36, 28));
 
-			final JLabel main = new JLabel(item != null && item.recent ? "★ " + label : label);
+			final String highlighted = PinyinMatch.highlightHtml(label, query, MATCH_RED);
+			final boolean useHtml = query.length() > 0 && highlighted.startsWith("<html>");
+			final String mainText;
+			if (useHtml) {
+				final String body = highlighted.substring("<html>".length());
+				mainText = item != null && item.recent ? "<html>★ " + body : highlighted;
+			}
+			else {
+				mainText = item != null && item.recent ? "★ " + label : label;
+			}
+			final JLabel main = new JLabel(mainText);
 			main.setFont(preferUiFont(15f));
 			main.setForeground(TEXT);
 
