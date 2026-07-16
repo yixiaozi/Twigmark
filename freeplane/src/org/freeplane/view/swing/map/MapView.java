@@ -87,7 +87,6 @@ import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.map.SessionViewStateStore;
 import org.freeplane.features.map.SummaryNode;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
@@ -430,6 +429,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	private boolean initialSelectionPending = true;
 	/** While true, unfolding must not fill an empty selection with ancestors (esp. root). */
 	private boolean restoringSelection = false;
+	private int lastSelectedRestoreAttempts = 0;
 	final private Selection selection = new Selection();
 	private int siblingMaxLevel;
 	private float zoom = 1F;
@@ -1871,6 +1871,11 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 			selectSavedOrLastModifiedOrRoot();
 			return;
 		}
+		// Unfolding during restore marks selection invalid; do not recurse into
+		// selectSavedOrLastModifiedOrRoot or fall back to root mid-restore.
+		if (restoringSelection) {
+			return;
+		}
 		final NodeView selectedView = getSelected();
 		if(selectedView == null){
 			selectSavedOrLastModifiedOrRoot();
@@ -1904,67 +1909,109 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
 	private void selectSavedOrLastModifiedOrRoot() {
 		final MapModel map = getModel();
-		final File mapFile = map != null ? map.getFile() : null;
-		final String mapAttrId = readLastSelectedIdFromMap(map);
-		final String sessionId = mapFile != null
-				? SessionViewStateStore.getInstance().getLastSelectedNodeId(mapFile) : null;
-		final String rootId = map != null && map.getRootNode() != null ? map.getRootNode().createID() : null;
+		LastSelectionMapExtensionIO.ensureLoadedFromUnknownElements(map);
+		final String savedId = LastSelectionMapExtensionIO.readLastSelectedId(map);
+		if (savedId != null && !savedId.isEmpty()) {
+			lastSelectedRestoreAttempts = 0;
+			if (trySelectLastSelectedNode(savedId)) {
+				return;
+			}
+			// Keep a temporary selection so callers of getSelected() do not NPE
+			// while deferred restore retries.
+			ensureTemporaryRootSelection();
+			scheduleLastSelectedRestore(savedId);
+			return;
+		}
+		selectLastModifiedOrRoot();
+	}
 
-		// Session covers unsaved selection changes. Prefer it when it points at a
-		// real non-root node. If session was poisoned with root (common after a
-		// failed earlier restore), honor .mm last_selected_id instead.
-		String savedId = null;
-		if (isUsableNodeId(map, sessionId) && (rootId == null || !rootId.equals(sessionId))) {
-			savedId = sessionId;
+	private void ensureTemporaryRootSelection() {
+		if (selection.selectedNode != null) {
+			return;
 		}
-		else if (isUsableNodeId(map, mapAttrId)) {
-			savedId = mapAttrId;
+		final NodeView root = getRoot();
+		if (root == null) {
+			return;
 		}
-		else if (isUsableNodeId(map, sessionId)) {
-			savedId = sessionId;
-		}
-		else if (mapAttrId != null && !mapAttrId.isEmpty()) {
-			savedId = mapAttrId;
-		}
-		else if (sessionId != null && !sessionId.isEmpty()) {
-			savedId = sessionId;
-		}
-
 		restoringSelection = true;
 		LastSelectionMapExtensionIO.setSuppressRememberSelection(true);
 		try {
-			if (savedId != null && !savedId.isEmpty() && map != null) {
-				// Keep extension aligned with the id we are trying to restore; do not
-				// overwrite with root when restore fails (that poisoned session before).
-				LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
-				if (mapFile != null) {
-					SessionViewStateStore.getInstance().setLastSelectedNode(mapFile, savedId);
-				}
-				final NodeModel savedNode = map.getNodeForID(savedId);
-				if (savedNode != null && selectNodeIfPossible(savedNode)) {
-					LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
-					LastSelectionMapExtensionIO.rememberSelection(savedNode, false);
+			selection.select(root);
+		}
+		finally {
+			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
+			restoringSelection = false;
+		}
+	}
+
+	private void scheduleLastSelectedRestore(final String savedId) {
+		final int attempt = ++lastSelectedRestoreAttempts;
+		if (attempt > 5) {
+			org.freeplane.core.util.LogUtils.warn("Could not restore last_selected_id=" + savedId
+					+ " after retries; falling back");
+			selectLastModifiedOrRoot();
+			return;
+		}
+		java.awt.EventQueue.invokeLater(new Runnable() {
+			public void run() {
+				if (getModel() == null) {
 					return;
 				}
-			}
-			final NodeModel lastModified = LastModifiedNodeSelector.find(getModel().getRootNode());
-			if (lastModified != null && selectNodeIfPossible(lastModified)) {
-				if (savedId == null || savedId.isEmpty()) {
-					LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(lastModified.createID());
-					LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
-					LastSelectionMapExtensionIO.rememberSelection(lastModified, false);
+				if (trySelectLastSelectedNode(savedId)) {
+					return;
 				}
+				scheduleLastSelectedRestore(savedId);
+			}
+		});
+	}
+
+	private boolean trySelectLastSelectedNode(final String savedId) {
+		final MapModel map = getModel();
+		if (map == null || savedId == null || savedId.isEmpty()) {
+			return false;
+		}
+		final NodeModel savedNode = map.getNodeForID(savedId);
+		if (savedNode == null) {
+			org.freeplane.core.util.LogUtils.warn("last_selected_id not found in map: " + savedId);
+			return false;
+		}
+		restoringSelection = true;
+		LastSelectionMapExtensionIO.setSuppressRememberSelection(true);
+		try {
+			if (!selectNodeIfPossible(savedNode)) {
+				return false;
+			}
+			final NodeView selected = selection.selectedNode;
+			if (selected == null || selected.getModel() != savedNode) {
+				return false;
+			}
+			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(savedId);
+			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
+			LastSelectionMapExtensionIO.rememberSelection(savedNode, false);
+			return true;
+		}
+		finally {
+			LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
+			restoringSelection = false;
+		}
+	}
+
+	private void selectLastModifiedOrRoot() {
+		restoringSelection = true;
+		LastSelectionMapExtensionIO.setSuppressRememberSelection(true);
+		try {
+			final MapModel map = getModel();
+			final NodeModel lastModified = LastModifiedNodeSelector.find(map.getRootNode());
+			if (lastModified != null && selectNodeIfPossible(lastModified)) {
+				LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(lastModified.createID());
+				LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
+				LastSelectionMapExtensionIO.rememberSelection(lastModified, false);
 				return;
 			}
 			final NodeView root = getRoot();
-			selectAsTheOnlyOneSelected(root);
-			centerNode(root, false);
-			// Only record root when we had no better target id.
-			if (map != null && root != null && root.getModel() != null
-					&& (savedId == null || savedId.isEmpty())) {
-				LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(root.getModel().createID());
-				LastSelectionMapExtensionIO.setSuppressRememberSelection(false);
-				LastSelectionMapExtensionIO.rememberSelection(root.getModel(), false);
+			if (root != null) {
+				selectAsTheOnlyOneSelected(root);
+				centerNode(root, false);
 			}
 		}
 		finally {
@@ -1973,65 +2020,44 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 	}
 
-	private static boolean isUsableNodeId(final MapModel map, final String nodeId) {
-		return map != null && nodeId != null && !nodeId.isEmpty() && map.getNodeForID(nodeId) != null;
-	}
-
-	private static String readLastSelectedIdFromMap(final MapModel map) {
-		final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(map);
-		if (lastSelection != null) {
-			final String id = lastSelection.getLastSelectedNodeId();
-			if (id != null && !id.isEmpty()) {
-				return id;
-			}
-		}
-		// Fallback: attribute may have been kept as unknown if the handler was
-		// missing when the map was last loaded by an older build.
-		if (map != null) {
-			final org.freeplane.core.io.UnknownElements unknown = map.getExtension(org.freeplane.core.io.UnknownElements.class);
-			if (unknown != null && unknown.getUnknownElements() != null) {
-				final String fromUnknown = unknown.getUnknownElements().getAttribute(
-						LastSelectionMapExtensionIO.LAST_SELECTED_ID_ATTR, null);
-				if (fromUnknown != null && !fromUnknown.trim().isEmpty()) {
-					final String trimmed = fromUnknown.trim();
-					LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(trimmed);
-					return trimmed;
-				}
-			}
-		}
-		return null;
-	}
-
 	private boolean selectNodeIfPossible(final NodeModel node) {
 		if (node == null) {
 			return false;
 		}
-		unfoldAncestorsOf(node);
-		if (!node.isVisible()) {
+		try {
+			// displayNode unfolds root→leaf (correct order) and clears filters if needed.
 			getModeController().getMapController().displayNode(node);
+		}
+		catch (Exception e) {
+			return false;
 		}
 		NodeView nodeView = getNodeView(node);
 		if (nodeView == null) {
-			// Avoid validate() here: it re-enters validateSelecteds and can stick on root.
 			revalidate();
 			doLayout();
 			nodeView = getNodeView(node);
 		}
+		if (nodeView == null) {
+			// Public selection path creates/centers views more aggressively.
+			try {
+				getModeController().getMapController().select(node);
+				nodeView = getNodeView(node);
+			}
+			catch (Exception e) {
+				return false;
+			}
+		}
 		if (nodeView == null || !nodeView.getModel().isVisible()) {
 			return false;
 		}
-		selectAsTheOnlyOneSelected(nodeView);
-		centerNode(nodeView, false);
-		return true;
-	}
-
-	private void unfoldAncestorsOf(final NodeModel node) {
-		final MapController mapController = getModeController().getMapController();
-		for (NodeModel parent = node.getParentNode(); parent != null; parent = parent.getParentNode()) {
-			if (mapController.isFolded(parent)) {
-				mapController.setFolded(parent, false);
-			}
+		try {
+			selectAsTheOnlyOneSelected(nodeView);
+			centerNode(nodeView, false);
 		}
+		catch (AssertionError e) {
+			return false;
+		}
+		return selection.selectedNode != null && selection.selectedNode.getModel() == node;
 	}
 
 	/*
