@@ -15,14 +15,16 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 
 /**
- * Persists recent @ map and @@ icon-node selections under {@code _data/quickcommand/}.
+ * Persists recent @ map, @@/* node, and # file selections under {@code _data/quickcommand/}.
  */
 final class QuickCommandHistory {
 	private static final String DIR_NAME = "quickcommand";
 	private static final String MAPS_FILE = "recent-maps.txt";
 	private static final String NODES_FILE = "recent-icon-nodes.txt";
+	private static final String FILES_FILE = "recent-files.txt";
 	private static final int MAX_MAPS = 40;
 	private static final int MAX_NODES = 40;
+	private static final int MAX_FILES = 40;
 	private static final String SEP = "\u001f";
 
 	private static final QuickCommandHistory INSTANCE = new QuickCommandHistory();
@@ -30,6 +32,7 @@ final class QuickCommandHistory {
 	private final Object lock = new Object();
 	private List recentMaps = null;
 	private List recentNodes = null;
+	private List recentFiles = null;
 
 	private QuickCommandHistory() {
 	}
@@ -49,6 +52,13 @@ final class QuickCommandHistory {
 		ensureLoaded();
 		synchronized (lock) {
 			return new ArrayList(recentNodes);
+		}
+	}
+
+	List getRecentFiles() {
+		ensureLoaded();
+		synchronized (lock) {
+			return new ArrayList(recentFiles);
 		}
 	}
 
@@ -127,14 +137,64 @@ final class QuickCommandHistory {
 		}
 	}
 
+	int fileRank(final File file) {
+		if (file == null) {
+			return -1;
+		}
+		ensureLoaded();
+		final String path = file.getAbsolutePath();
+		synchronized (lock) {
+			for (int i = recentFiles.size() - 1; i >= 0; i--) {
+				if (path.equalsIgnoreCase((String) recentFiles.get(i))) {
+					return i;
+				}
+			}
+		}
+		return -1;
+	}
+
+	void recordFile(final File file) {
+		if (file == null) {
+			return;
+		}
+		final String path = file.getAbsolutePath();
+		if (path.length() == 0) {
+			return;
+		}
+		ensureLoaded();
+		synchronized (lock) {
+			for (int i = recentFiles.size() - 1; i >= 0; i--) {
+				if (path.equalsIgnoreCase((String) recentFiles.get(i))) {
+					recentFiles.remove(i);
+				}
+			}
+			recentFiles.add(path);
+			trim(recentFiles, MAX_FILES);
+			saveLines(FILES_FILE, recentFiles);
+		}
+	}
+
 	private void ensureLoaded() {
 		synchronized (lock) {
-			if (recentMaps != null && recentNodes != null) {
+			if (recentMaps != null && recentNodes != null && recentFiles != null) {
 				return;
 			}
 			recentMaps = loadMapLines();
 			recentNodes = loadNodeLines();
+			recentFiles = loadFileLines();
 		}
+	}
+
+	private List loadFileLines() {
+		final List lines = readLines(FILES_FILE);
+		final List out = new ArrayList();
+		for (int i = 0; i < lines.size(); i++) {
+			final String line = ((String) lines.get(i)).trim();
+			if (line.length() > 0) {
+				out.add(line);
+			}
+		}
+		return out;
 	}
 
 	private List loadMapLines() {

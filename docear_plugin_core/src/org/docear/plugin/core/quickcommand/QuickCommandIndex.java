@@ -17,16 +17,19 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
 /**
- * In-memory indexes for maps, icon nodes, and quick-launch files.
+ * In-memory indexes for maps, icon nodes, workspace files, all nodes, and quick-launch files.
  */
 final class QuickCommandIndex {
 	private static final String PROP_LAUNCH_FOLDERS = "quickcommand.launch_folders";
 	private static final String SKIP_ICON = "button_ok";
 	private static final int MAX_ICON_NODES = 20000;
+	private static final int MAX_ALL_NODES = 50000;
+	private static final int MAX_WORKSPACE_FILES = 40000;
 	private static final int MAX_LAUNCH = 5000;
 
 	private static final QuickCommandIndex INSTANCE = new QuickCommandIndex();
@@ -34,11 +37,17 @@ final class QuickCommandIndex {
 	private final Object lock = new Object();
 	private List mapEntries = Collections.EMPTY_LIST;
 	private List iconEntries = Collections.EMPTY_LIST;
+	private List allNodeEntries = Collections.EMPTY_LIST;
+	private List fileEntries = Collections.EMPTY_LIST;
 	private List launchEntries = Collections.EMPTY_LIST;
 	private final AtomicBoolean mapsReady = new AtomicBoolean();
 	private final AtomicBoolean iconsReady = new AtomicBoolean();
+	private final AtomicBoolean allNodesReady = new AtomicBoolean();
+	private final AtomicBoolean filesReady = new AtomicBoolean();
 	private final AtomicBoolean launchReady = new AtomicBoolean();
 	private final AtomicBoolean iconsScanning = new AtomicBoolean();
+	private final AtomicBoolean allNodesScanning = new AtomicBoolean();
+	private final AtomicBoolean filesScanning = new AtomicBoolean();
 
 	private QuickCommandIndex() {
 	}
@@ -73,6 +82,42 @@ final class QuickCommandIndex {
 				}
 			}
 		}, "QuickCommand-IconIndex");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	void ensureAllNodesAsync() {
+		if (allNodesReady.get() || !allNodesScanning.compareAndSet(false, true)) {
+			return;
+		}
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					rebuildAllNodes();
+				}
+				finally {
+					allNodesScanning.set(false);
+				}
+			}
+		}, "QuickCommand-AllNodeIndex");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	void ensureFilesAsync() {
+		if (filesReady.get() || !filesScanning.compareAndSet(false, true)) {
+			return;
+		}
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					rebuildFiles();
+				}
+				finally {
+					filesScanning.set(false);
+				}
+			}
+		}, "QuickCommand-FileIndex");
 		thread.setDaemon(true);
 		thread.start();
 	}
@@ -144,6 +189,47 @@ final class QuickCommandIndex {
 			launchEntries = entries;
 			launchReady.set(true);
 		}
+	}
+
+	void rebuildFiles() {
+		List source = WorkspaceSideTabScanCache.getAllFilesSnapshot();
+		if (source == null) {
+			WorkspaceSideTabScanCache.schedulePreload();
+			source = collectWorkspaceFilesFallback();
+		}
+		final List entries = new ArrayList();
+		for (int i = 0; i < source.size() && entries.size() < MAX_WORKSPACE_FILES; i++) {
+			final File file = (File) source.get(i);
+			if (file == null || !file.isFile()) {
+				continue;
+			}
+			final String name = file.getName();
+			if (name.length() == 0 || name.startsWith("~") || name.startsWith(".")) {
+				continue;
+			}
+			entries.add(new FileEntry(name, shortParent(file), file, PinyinMatch.fullPinyin(name),
+			        PinyinMatch.initials(name), file.lastModified()));
+		}
+		synchronized (lock) {
+			fileEntries = entries;
+			filesReady.set(true);
+		}
+		LogUtils.info("QuickCommand: indexed " + entries.size() + " workspace files.");
+	}
+
+	void rebuildAllNodes() {
+		final List files = new ArrayList();
+		MindMapDataRootResolver.collectMindmapFiles(files);
+		final List entries = new ArrayList();
+		for (int i = 0; i < files.size() && entries.size() < MAX_ALL_NODES; i++) {
+			final File file = (File) files.get(i);
+			scanAllNodes(file, entries);
+		}
+		synchronized (lock) {
+			allNodeEntries = entries;
+			allNodesReady.set(true);
+		}
+		LogUtils.info("QuickCommand: indexed " + entries.size() + " nodes (full library).");
 	}
 
 	List filterMaps(final String query, final int limit) {
@@ -307,8 +393,181 @@ final class QuickCommandIndex {
 		return take(out, limit);
 	}
 
+	List filterFiles(final String query, final int limit) {
+		final String q = normalize(query);
+		final List source;
+		synchronized (lock) {
+			source = fileEntries;
+		}
+		if (!filesReady.get()) {
+			ensureFilesAsync();
+			final List pending = new ArrayList();
+			pending.add(QuickCommandCandidate.hint("正在扫描导图系统内文件…", "完成后继续输入；或输入 allfiles 强制重建"));
+			return pending;
+		}
+		final QuickCommandHistory history = QuickCommandHistory.getInstance();
+		final List scored = new ArrayList();
+		final Set seen = new HashSet();
+		if (q.length() == 0) {
+			final List recent = history.getRecentFiles();
+			for (int i = recent.size() - 1; i >= 0; i--) {
+				final String path = (String) recent.get(i);
+				final FileEntry entry = findFileEntryByPath(source, path);
+				if (entry != null && seen.add(entry.file.getAbsolutePath())) {
+					scored.add(QuickCommandCandidate.file(entry.name, entry.detail, entry.file, true, i,
+					        entry.modifiedAt));
+				}
+				else if (entry == null && path != null) {
+					final File file = new File(path);
+					if (file.isFile() && seen.add(file.getAbsolutePath())) {
+						scored.add(QuickCommandCandidate.file(file.getName(), shortParent(file), file, true, i,
+						        file.lastModified()));
+					}
+				}
+			}
+			if (scored.isEmpty()) {
+				for (int i = 0; i < source.size() && scored.size() < limit; i++) {
+					final FileEntry entry = (FileEntry) source.get(i);
+					if (seen.add(entry.file.getAbsolutePath())) {
+						scored.add(QuickCommandCandidate.file(entry.name, entry.detail, entry.file, false, -1,
+						        entry.modifiedAt));
+					}
+				}
+			}
+			sortByModifiedDesc(scored);
+			return take(scored, limit);
+		}
+		for (int i = 0; i < source.size(); i++) {
+			final FileEntry entry = (FileEntry) source.get(i);
+			if (!PinyinMatch.matches(entry.name, entry.fullPinyin, entry.initials, q)
+			        && !PinyinMatch.matches(entry.detail, null, null, q)) {
+				continue;
+			}
+			if (!seen.add(entry.file.getAbsolutePath())) {
+				continue;
+			}
+			final int rank = history.fileRank(entry.file);
+			scored.add(QuickCommandCandidate.file(entry.name, entry.detail, entry.file, rank >= 0, rank,
+			        entry.modifiedAt));
+		}
+		sortByModifiedDesc(scored);
+		return take(scored, limit);
+	}
+
+	List filterAllNodes(final String query, final int limit) {
+		final String q = normalize(query);
+		final List source;
+		synchronized (lock) {
+			source = allNodeEntries;
+		}
+		if (!allNodesReady.get()) {
+			ensureAllNodesAsync();
+			final List pending = new ArrayList();
+			pending.add(QuickCommandCandidate.hint("正在索引全库节点…", "完成后继续输入；或输入 allnodes 强制重建"));
+			return pending;
+		}
+		final QuickCommandHistory history = QuickCommandHistory.getInstance();
+		final List scored = new ArrayList();
+		final Set seen = new HashSet();
+		if (q.length() == 0) {
+			final List recent = history.getRecentIconNodes();
+			for (int i = recent.size() - 1; i >= 0; i--) {
+				final QuickCommandHistory.RecentIcon recentIcon = (QuickCommandHistory.RecentIcon) recent.get(i);
+				final IconEntry entry = findIconEntry(source, recentIcon);
+				if (entry != null && seen.add(iconKey(entry))) {
+					scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, true,
+					        i, entry.modifiedAt));
+				}
+				else if (entry == null && recentIcon.mapPath != null) {
+					final File file = new File(recentIcon.mapPath);
+					if (file.isFile() && seen.add(recentIcon.nodeId + "|" + recentIcon.mapPath)) {
+						scored.add(QuickCommandCandidate.iconNode(recentIcon.text, recentIcon.mapName, file,
+						        recentIcon.nodeId, true, i, file.lastModified()));
+					}
+				}
+			}
+			sortByModifiedDesc(scored);
+			return take(scored, limit);
+		}
+		for (int i = 0; i < source.size(); i++) {
+			final IconEntry entry = (IconEntry) source.get(i);
+			if (!PinyinMatch.matches(entry.text, entry.fullPinyin, entry.initials, q)
+			        && !PinyinMatch.matches(entry.mapName, entry.mapFullPinyin, entry.mapInitials, q)) {
+				continue;
+			}
+			if (!seen.add(iconKey(entry))) {
+				continue;
+			}
+			final int rank = history.iconRank(entry.nodeId, entry.file);
+			scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, rank >= 0,
+			        rank, entry.modifiedAt));
+		}
+		sortByModifiedDesc(scored);
+		return take(scored, limit);
+	}
+
+	FileEntry findFileExact(final String query, final QuickCommandCandidate selected) {
+		if (selected != null && selected.kind == QuickCommandCandidate.Kind.FILE && selected.launchFile != null) {
+			final File file = selected.launchFile;
+			return new FileEntry(file.getName(), shortParent(file), file, PinyinMatch.fullPinyin(file.getName()),
+			        PinyinMatch.initials(file.getName()), file.lastModified());
+		}
+		final String q = normalize(query);
+		if (q.length() == 0) {
+			return null;
+		}
+		synchronized (lock) {
+			FileEntry contains = null;
+			for (int i = 0; i < fileEntries.size(); i++) {
+				final FileEntry entry = (FileEntry) fileEntries.get(i);
+				if (entry.name.equalsIgnoreCase(q)) {
+					return entry;
+				}
+				if (contains == null && PinyinMatch.matches(entry.name, entry.fullPinyin, entry.initials, q)) {
+					contains = entry;
+				}
+			}
+			return contains;
+		}
+	}
+
+	IconEntry findAllNode(final String query, final QuickCommandCandidate selected) {
+		if (selected != null && selected.kind == QuickCommandCandidate.Kind.ICON_NODE && selected.mapFile != null
+		        && selected.nodeId != null) {
+			return new IconEntry(selected.label, selected.detail, selected.mapFile, selected.nodeId,
+			        PinyinMatch.fullPinyin(selected.label), PinyinMatch.initials(selected.label),
+			        PinyinMatch.fullPinyin(selected.detail), PinyinMatch.initials(selected.detail),
+			        selected.mapFile.lastModified());
+		}
+		final String q = normalize(query);
+		if (q.length() == 0) {
+			return null;
+		}
+		synchronized (lock) {
+			IconEntry contains = null;
+			for (int i = 0; i < allNodeEntries.size(); i++) {
+				final IconEntry entry = (IconEntry) allNodeEntries.get(i);
+				if (entry.text.equalsIgnoreCase(q)) {
+					return entry;
+				}
+				if (contains == null && PinyinMatch.matches(entry.text, entry.fullPinyin, entry.initials, q)) {
+					contains = entry;
+				}
+			}
+			return contains;
+		}
+	}
+
 	boolean iconsReady() {
 		return iconsReady.get();
+	}
+
+	boolean allNodesReady() {
+		return allNodesReady.get();
+	}
+
+	boolean filesReady() {
+		return filesReady.get();
 	}
 
 	private static MapEntry findMapEntryByName(final List source, final String name) {
@@ -366,6 +625,106 @@ final class QuickCommandIndex {
 
 	private static String iconKey(final IconEntry entry) {
 		return entry.nodeId + "|" + entry.file.getAbsolutePath();
+	}
+
+	private static FileEntry findFileEntryByPath(final List source, final String path) {
+		if (path == null || path.length() == 0) {
+			return null;
+		}
+		for (int i = 0; i < source.size(); i++) {
+			final FileEntry entry = (FileEntry) source.get(i);
+			if (path.equalsIgnoreCase(entry.file.getAbsolutePath())) {
+				return entry;
+			}
+		}
+		return null;
+	}
+
+	private static String shortParent(final File file) {
+		if (file == null) {
+			return "";
+		}
+		final File parent = file.getParentFile();
+		if (parent == null) {
+			return "";
+		}
+		final String parentName = parent.getName();
+		final File grand = parent.getParentFile();
+		if (grand == null || grand.getName().length() == 0) {
+			return parentName;
+		}
+		return grand.getName() + "/" + parentName;
+	}
+
+	private static List collectWorkspaceFilesFallback() {
+		final List files = new ArrayList();
+		final Set seen = new HashSet();
+		final File[] roots = MindMapDataRootResolver.getScanRoots();
+		if (roots == null) {
+			return files;
+		}
+		for (int i = 0; i < roots.length; i++) {
+			collectWorkspaceFiles(roots[i], files, seen);
+		}
+		return files;
+	}
+
+	private static void collectWorkspaceFiles(final File dir, final List result, final Set seen) {
+		if (dir == null || !dir.isDirectory() || result.size() >= MAX_WORKSPACE_FILES) {
+			return;
+		}
+		final File[] children = dir.listFiles();
+		if (children == null) {
+			return;
+		}
+		for (int i = 0; i < children.length && result.size() < MAX_WORKSPACE_FILES; i++) {
+			final File child = children[i];
+			if (child.isDirectory()) {
+				final String name = child.getName();
+				if (!name.startsWith(".") && !name.startsWith("_")) {
+					collectWorkspaceFiles(child, result, seen);
+				}
+			}
+			else if (child.isFile()) {
+				final String key = child.getAbsolutePath();
+				if (seen.add(key)) {
+					result.add(child);
+				}
+			}
+		}
+	}
+
+	private static void scanAllNodes(final File file, final List entries) {
+		if (file == null || !file.isFile() || file.getName().startsWith("~") || entries.size() >= MAX_ALL_NODES) {
+			return;
+		}
+		try {
+			final SAXParserFactory factory = SAXParserFactory.newInstance();
+			factory.setNamespaceAware(false);
+			final SAXParser parser = factory.newSAXParser();
+			final String mapName = stripMm(file.getName());
+			final String mapFull = PinyinMatch.fullPinyin(mapName);
+			final String mapInit = PinyinMatch.initials(mapName);
+			final long modifiedAt = file.lastModified();
+			parser.parse(file, new DefaultHandler() {
+				public void startElement(final String uri, final String localName, final String qName,
+				        final Attributes attributes) {
+					if (!"node".equals(qName) || entries.size() >= MAX_ALL_NODES) {
+						return;
+					}
+					final String id = attributes.getValue("ID");
+					final String text = normalizeText(attributes.getValue("TEXT"));
+					if (id == null || text.length() == 0 || "bin".equalsIgnoreCase(text)) {
+						return;
+					}
+					entries.add(new IconEntry(text, mapName, file, id, PinyinMatch.fullPinyin(text),
+					        PinyinMatch.initials(text), mapFull, mapInit, modifiedAt));
+				}
+			});
+		}
+		catch (Exception e) {
+			LogUtils.warn("QuickCommand: all-node scan failed for " + file, e);
+		}
 	}
 
 	private static void scanIconNodes(final File file, final List entries) {
@@ -544,6 +903,25 @@ final class QuickCommandIndex {
 			this.file = file;
 			this.fullPinyin = fullPinyin;
 			this.initials = initials;
+		}
+	}
+
+	static final class FileEntry {
+		final String name;
+		final String detail;
+		final File file;
+		final String fullPinyin;
+		final String initials;
+		final long modifiedAt;
+
+		FileEntry(final String name, final String detail, final File file, final String fullPinyin,
+		        final String initials, final long modifiedAt) {
+			this.name = name;
+			this.detail = detail;
+			this.file = file;
+			this.fullPinyin = fullPinyin;
+			this.initials = initials;
+			this.modifiedAt = modifiedAt;
 		}
 	}
 }

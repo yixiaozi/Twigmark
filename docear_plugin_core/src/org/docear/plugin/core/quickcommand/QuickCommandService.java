@@ -32,6 +32,8 @@ public final class QuickCommandService {
 							QuickCommandIndex.getInstance().ensureMaps();
 							QuickCommandIndex.getInstance().ensureLaunch();
 							QuickCommandIndex.getInstance().ensureIconsAsync();
+							QuickCommandIndex.getInstance().ensureFilesAsync();
+							QuickCommandIndex.getInstance().ensureAllNodesAsync();
 						}
 						catch (Exception e) {
 							LogUtils.warn("QuickCommand: warm index failed.", e);

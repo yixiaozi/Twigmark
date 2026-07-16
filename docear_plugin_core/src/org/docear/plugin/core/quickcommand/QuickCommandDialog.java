@@ -252,7 +252,7 @@ final class QuickCommandDialog extends JDialog {
 		updateHint();
 	}
 
-	/** Query portion used for red match highlighting (@ / @@ suffix, else whole input). */
+	/** Query portion used for red match highlighting (@ / @@ / # / * suffix, else whole input). */
 	private static String extractHighlightQuery(final String raw) {
 		if (raw == null) {
 			return "";
@@ -260,6 +260,14 @@ final class QuickCommandDialog extends JDialog {
 		final int atAt = raw.indexOf("@@");
 		if (atAt >= 0) {
 			return raw.substring(atAt + 2).trim();
+		}
+		final int star = raw.lastIndexOf('*');
+		if (star >= 0) {
+			return raw.substring(star + 1).trim();
+		}
+		final int hash = raw.lastIndexOf('#');
+		if (hash >= 0) {
+			return raw.substring(hash + 1).trim();
 		}
 		final int at = raw.lastIndexOf('@');
 		if (at >= 0) {
@@ -271,13 +279,19 @@ final class QuickCommandDialog extends JDialog {
 	private void updateHint() {
 		final String text = input.getText() == null ? "" : input.getText();
 		if (text.indexOf("@@") >= 0) {
-			hintLabel.setText("@@ 节点 · Enter 打开/添加 · Shift+Enter 提醒 · 空查询仅最近使用 · Esc 关闭");
+			hintLabel.setText("@@ 图标节点 · Enter 打开/添加 · Shift+Enter 提醒 · 空查询仅最近使用 · Esc 关闭");
+		}
+		else if (text.indexOf('*') >= 0) {
+			hintLabel.setText("* 全库节点 · Enter 打开 · 左侧写文字可添加子节点 · Esc 关闭");
+		}
+		else if (text.indexOf('#') >= 0) {
+			hintLabel.setText("# 系统内文件 · Enter 打开 · 空查询最近文件 · Esc 关闭");
 		}
 		else if (text.indexOf('@') >= 0) {
 			hintLabel.setText("@ 导图 · 拼音/首字母/混输均可 · 结果按修改时间倒序 · Esc 关闭");
 		}
 		else if (text.trim().length() == 0) {
-			hintLabel.setText("最近选择 · Enter 打开 · @ 导图 · @@ 节点 · Esc 关闭");
+			hintLabel.setText("最近选择 · @ 导图 · @@ 图标节点 · # 文件 · * 全库节点 · Esc 关闭");
 		}
 		else {
 			hintLabel.setText("快速启动 · 支持拼音模糊 · Esc 关闭");
@@ -355,6 +369,8 @@ final class QuickCommandDialog extends JDialog {
 		QuickCommandIndex.getInstance().ensureMaps();
 		QuickCommandIndex.getInstance().ensureLaunch();
 		QuickCommandIndex.getInstance().ensureIconsAsync();
+		QuickCommandIndex.getInstance().ensureFilesAsync();
+		QuickCommandIndex.getInstance().ensureAllNodesAsync();
 		current = new QuickCommandDialog();
 		current.setVisible(true);
 	}
@@ -450,8 +466,8 @@ final class QuickCommandDialog extends JDialog {
 			final JPanel texts = new JPanel(new BorderLayout(0, 0));
 			texts.setOpaque(false);
 			texts.add(main, BorderLayout.CENTER);
-			if (item != null && item.kind == QuickCommandCandidate.Kind.ICON_NODE && detail != null
-			        && detail.length() > 0) {
+			if (item != null && (item.kind == QuickCommandCandidate.Kind.ICON_NODE
+			        || item.kind == QuickCommandCandidate.Kind.FILE) && detail != null && detail.length() > 0) {
 				texts.add(sub, BorderLayout.EAST);
 			}
 			else if (item != null && item.kind == QuickCommandCandidate.Kind.HINT) {

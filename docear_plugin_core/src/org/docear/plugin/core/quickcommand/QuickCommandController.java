@@ -38,8 +38,10 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
  * @@图标节点             → open map and select icon node
  * note@@图标节点         → add plain child under icon node
  * note@@图标节点 + Shift → add reminder child under icon node
+ * #文件名               → search/open files under mindmap data roots
+ * *节点文字             → search/open any node across all maps
  * chrome / notepad      → quick launch
- * mindmaps / allicons   → rebuild indexes
+ * mindmaps / allicons / allnodes / allfiles → rebuild indexes
  * </pre>
  */
 final class QuickCommandController {
@@ -49,19 +51,25 @@ final class QuickCommandController {
 	static List suggest(final String rawInput) {
 		final String input = rawInput == null ? "" : rawInput;
 		final String trimmed = input.trim();
-		if (trimmed.equalsIgnoreCase("mindmaps") || trimmed.toLowerCase(Locale.ROOT).startsWith("allicon")
-		        || trimmed.toLowerCase(Locale.ROOT).startsWith("allnode")) {
+		if (isCommand(trimmed)) {
 			final java.util.ArrayList list = new java.util.ArrayList();
-			list.add(QuickCommandCandidate.command(trimmed.toLowerCase(Locale.ROOT).startsWith("mind")
-			        ? "mindmaps"
-			        : (trimmed.toLowerCase(Locale.ROOT).startsWith("allnode") ? "allnodes" : "allicons"),
-			        "回车执行索引重建"));
+			list.add(QuickCommandCandidate.command(normalizeCommand(trimmed), "回车执行索引重建"));
 			return list;
 		}
 		final int atAt = indexOfAtAt(input);
 		if (atAt >= 0) {
 			final String query = input.substring(atAt + 2).trim();
 			return QuickCommandIndex.getInstance().filterIconNodes(query, 40);
+		}
+		final int star = input.lastIndexOf('*');
+		if (star >= 0) {
+			final String query = input.substring(star + 1).trim();
+			return QuickCommandIndex.getInstance().filterAllNodes(query, 40);
+		}
+		final int hash = input.lastIndexOf('#');
+		if (hash >= 0) {
+			final String query = input.substring(hash + 1).trim();
+			return QuickCommandIndex.getInstance().filterFiles(query, 40);
 		}
 		final int at = input.lastIndexOf('@');
 		if (at >= 0) {
@@ -78,6 +86,8 @@ final class QuickCommandController {
 		final java.util.ArrayList hints = new java.util.ArrayList();
 		hints.add(QuickCommandCandidate.hint("@导图名", "打开导图；左侧写文字可添加节点"));
 		hints.add(QuickCommandCandidate.hint("@@图标节点", "跳转到带图标的节点；左侧写文字可添加子节点"));
+		hints.add(QuickCommandCandidate.hint("#文件名", "搜索导图系统内文件并打开"));
+		hints.add(QuickCommandCandidate.hint("*节点文字", "全库节点搜索并跳转"));
 		hints.add(QuickCommandCandidate.hint("拼音 / 首字母", "例如 jc 可匹配「教程」"));
 		return hints;
 	}
@@ -108,9 +118,20 @@ final class QuickCommandController {
 			if (selected != null && selected.kind == QuickCommandCandidate.Kind.LAUNCH) {
 				return launch(selected.launchFile);
 			}
+			if (selected != null && selected.kind == QuickCommandCandidate.Kind.FILE) {
+				return openWorkspaceFile(selected.launchFile);
+			}
 			final int atAt = indexOfAtAt(input);
 			if (atAt >= 0) {
 				return executeAtAt(input, atAt, selected, asTask);
+			}
+			final int star = input.lastIndexOf('*');
+			if (star >= 0) {
+				return executeStar(input, star, selected, asTask);
+			}
+			final int hash = input.lastIndexOf('#');
+			if (hash >= 0) {
+				return executeHash(input, hash, selected);
 			}
 			final int at = input.lastIndexOf('@');
 			if (at >= 0) {
@@ -160,6 +181,18 @@ final class QuickCommandController {
 				return null;
 			}
 			return left + "@@" + selected.label;
+		}
+		final int star = input.lastIndexOf('*');
+		if (star >= 0 && selected.kind == QuickCommandCandidate.Kind.ICON_NODE) {
+			final String left = input.substring(0, star).trim();
+			final String right = input.substring(star + 1).trim();
+			if (left.length() == 0) {
+				return null;
+			}
+			if (right.equals(selected.label)) {
+				return null;
+			}
+			return left + "*" + selected.label;
 		}
 		final int at = input.lastIndexOf('@');
 		if (at >= 0 && selected.kind == QuickCommandCandidate.Kind.MAP) {
@@ -220,6 +253,45 @@ final class QuickCommandController {
 		return addUnderNode(entry.file, entry.nodeId, left, asTask);
 	}
 
+	private static boolean executeStar(final String input, final int star, final QuickCommandCandidate selected,
+	        final boolean asTask) {
+		final String left = input.substring(0, star).trim();
+		final String right = input.substring(star + 1).trim();
+		final QuickCommandIndex.IconEntry entry = QuickCommandIndex.getInstance().findAllNode(right, selected);
+		if (entry == null) {
+			LogUtils.warn("QuickCommand: node not found: " + right);
+			return false;
+		}
+		QuickCommandHistory.getInstance().recordIconNode(entry.text, entry.mapName, entry.file, entry.nodeId);
+		QuickCommandHistory.getInstance().recordMap(entry.mapName);
+		if (left.length() == 0) {
+			return openMapAndSelect(entry.file, entry.nodeId);
+		}
+		return addUnderNode(entry.file, entry.nodeId, left, asTask);
+	}
+
+	private static boolean executeHash(final String input, final int hash, final QuickCommandCandidate selected) {
+		final String right = input.substring(hash + 1).trim();
+		final QuickCommandIndex.FileEntry entry = QuickCommandIndex.getInstance().findFileExact(right, selected);
+		if (entry == null || entry.file == null) {
+			LogUtils.warn("QuickCommand: file not found: " + right);
+			return false;
+		}
+		return openWorkspaceFile(entry.file);
+	}
+
+	private static boolean openWorkspaceFile(final File file) {
+		if (file == null || !file.isFile()) {
+			return false;
+		}
+		QuickCommandHistory.getInstance().recordFile(file);
+		final String name = file.getName().toLowerCase(Locale.ROOT);
+		if (name.endsWith(".mm")) {
+			return openMap(file);
+		}
+		return launch(file);
+	}
+
 	private static boolean runCommand(final String command) {
 		if ("mindmaps".equals(command)) {
 			QuickCommandIndex.getInstance().rebuildMaps();
@@ -230,24 +302,31 @@ final class QuickCommandController {
 			return false;
 		}
 		if ("allnodes".equals(command) || "allnode".equals(command)) {
-			QuickCommandIndex.getInstance().rebuildIcons();
+			QuickCommandIndex.getInstance().rebuildAllNodes();
+			return false;
+		}
+		if ("allfiles".equals(command) || "allfile".equals(command)) {
+			QuickCommandIndex.getInstance().rebuildFiles();
 			return false;
 		}
 		return false;
 	}
 
 	private static boolean isCommand(final String input) {
-		final String c = input.toLowerCase(Locale.ROOT);
-		return "mindmaps".equals(c) || c.startsWith("allicon") || c.startsWith("allnode");
+		final String c = input == null ? "" : input.toLowerCase(Locale.ROOT).trim();
+		return "mindmaps".equals(c) || c.startsWith("allicon") || c.startsWith("allnode") || c.startsWith("allfile");
 	}
 
 	private static String normalizeCommand(final String input) {
-		final String c = input.toLowerCase(Locale.ROOT);
+		final String c = input.toLowerCase(Locale.ROOT).trim();
 		if (c.startsWith("mind")) {
 			return "mindmaps";
 		}
 		if (c.startsWith("allnode")) {
 			return "allnodes";
+		}
+		if (c.startsWith("allfile")) {
+			return "allfiles";
 		}
 		return "allicons";
 	}

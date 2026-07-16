@@ -7,7 +7,7 @@ import java.io.File;
  */
 final class QuickCommandCandidate {
 	enum Kind {
-		MAP, ICON_NODE, LAUNCH, COMMAND, HINT
+		MAP, ICON_NODE, FILE, LAUNCH, COMMAND, HINT
 	}
 
 	final Kind kind;
@@ -49,6 +49,12 @@ final class QuickCommandCandidate {
 		        null, null, recent, historyRank, modifiedAt);
 	}
 
+	static QuickCommandCandidate file(final String fileName, final String detail, final File file, final boolean recent,
+	        final int historyRank, final long modifiedAt) {
+		return new QuickCommandCandidate(Kind.FILE, fileName, detail == null ? "" : detail, null, null, file, null,
+		        recent, historyRank, modifiedAt);
+	}
+
 	static QuickCommandCandidate launch(final String label, final File file) {
 		final long modified = file != null ? file.lastModified() : 0L;
 		return new QuickCommandCandidate(Kind.LAUNCH, label, "启动", null, null, file, null, false, -1, modified);
@@ -68,6 +74,8 @@ final class QuickCommandCandidate {
 				return "导图";
 			case ICON_NODE:
 				return "节点";
+			case FILE:
+				return "文件";
 			case LAUNCH:
 				return "启动";
 			case COMMAND:
