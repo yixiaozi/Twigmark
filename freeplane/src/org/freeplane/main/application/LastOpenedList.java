@@ -358,17 +358,28 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			persistOpenedNowTimer.stop();
 			persistOpenedNowTimer = null;
 		}
-		syncCurrentlyOpenedFromViews();
-		persistOpenedNowNow();
+		// Snapshot open maps while views still exist, then freeze so the subsequent
+		// quit-time tab closes cannot rewrite the file to open.count=0.
+		if (!SessionOpenMapsStore.getInstance().isFrozen()) {
+			syncCurrentlyOpenedFromViews();
+			persistOpenedNowNow();
+			SessionOpenMapsStore.getInstance().freeze();
+		}
 		ResourceController.getResourceController().setProperty(LAST_OPENED,
 		    ConfigurationUtils.encodeListValue(lastOpenedList, true));
 	}
 
 	private void schedulePersistOpenedNow() {
+		if (SessionOpenMapsStore.getInstance().isFrozen()) {
+			return;
+		}
 		if (persistOpenedNowTimer == null) {
 			persistOpenedNowTimer = new Timer(400, new java.awt.event.ActionListener() {
 				public void actionPerformed(final java.awt.event.ActionEvent e) {
 					((Timer) e.getSource()).stop();
+					if (SessionOpenMapsStore.getInstance().isFrozen()) {
+						return;
+					}
 					syncCurrentlyOpenedFromViews();
 					persistOpenedNowNow();
 				}
@@ -379,6 +390,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	private void persistOpenedNowNow() {
+		if (SessionOpenMapsStore.getInstance().isFrozen()) {
+			return;
+		}
 		final String encoded = ConfigurationUtils.encodeListValue(currenlyOpenedList, true);
 		ResourceController.getResourceController().setProperty(OPENED_NOW, encoded);
 

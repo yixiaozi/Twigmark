@@ -19,6 +19,8 @@ import org.freeplane.core.util.MindMapDataRootResolver;
  * <p>
  * Stored as {@code {dataRoot}/_data/session-open-maps.properties} and rewritten on every
  * open / close / focus change so a crash still restores the full open set next launch.
+ * During application quit the store is {@link #freeze() frozen} after the last good
+ * snapshot so closing tabs one-by-one cannot wipe the file to {@code open.count=0}.
  * Does not store last-selected node ids (those live in each {@code .mm} as
  * {@code last_selected_id}).
  */
@@ -34,6 +36,8 @@ public final class SessionOpenMapsStore {
 
 	private final Properties properties = new Properties();
 	private boolean loaded;
+	/** Once true, refuse further writes so quit-time tab closes cannot wipe the list. */
+	private volatile boolean frozen;
 
 	private SessionOpenMapsStore() {
 	}
@@ -45,8 +49,23 @@ public final class SessionOpenMapsStore {
 		return instance;
 	}
 
+	/**
+	 * Stop accepting updates. Call after the last good open-map snapshot is written
+	 * during application shutdown, before tabs are closed one-by-one.
+	 */
+	public void freeze() {
+		frozen = true;
+	}
+
+	public boolean isFrozen() {
+		return frozen;
+	}
+
 	/** Replace the open-map list and optionally the focused map; writes to disk immediately. */
 	public synchronized void saveOpenMaps(final List<String> restoreables, final String lastRestoreable) {
+		if (frozen) {
+			return;
+		}
 		ensureLoaded();
 		final List<String> cleaned = cleanList(restoreables);
 		final String last = lastRestoreable != null && lastRestoreable.trim().length() > 0
