@@ -68,16 +68,17 @@ final class QuickCommandController {
 			final String query = input.substring(at + 1).trim();
 			return QuickCommandIndex.getInstance().filterMaps(query, 40);
 		}
-		if (trimmed.length() >= 1) {
-			final List launch = QuickCommandIndex.getInstance().filterLaunch(trimmed, 30);
-			if (!launch.isEmpty()) {
-				return launch;
-			}
+		if (trimmed.length() == 0) {
+			return QuickCommandIndex.getInstance().filterMaps("", 40);
+		}
+		final List launch = QuickCommandIndex.getInstance().filterLaunch(trimmed, 30);
+		if (!launch.isEmpty()) {
+			return launch;
 		}
 		final java.util.ArrayList hints = new java.util.ArrayList();
 		hints.add(QuickCommandCandidate.hint("@导图名", "打开导图；左侧写文字可添加节点"));
 		hints.add(QuickCommandCandidate.hint("@@图标节点", "跳转到带图标的节点；左侧写文字可添加子节点"));
-		hints.add(QuickCommandCandidate.hint("文字 + Enter", "快速启动；Shift+Enter 在 @/@@ 时添加提醒任务"));
+		hints.add(QuickCommandCandidate.hint("拼音 / 首字母", "例如 jc 可匹配「教程」"));
 		return hints;
 	}
 
@@ -86,10 +87,18 @@ final class QuickCommandController {
 	 */
 	static boolean execute(final String rawInput, final QuickCommandCandidate selected, final boolean asTask) {
 		final String input = rawInput == null ? "" : rawInput.trim();
-		if (input.length() == 0) {
-			return false;
-		}
 		try {
+			if (input.length() == 0) {
+				if (selected != null && selected.kind == QuickCommandCandidate.Kind.MAP) {
+					return openMap(selected.mapFile);
+				}
+				if (selected != null && selected.kind == QuickCommandCandidate.Kind.ICON_NODE) {
+					QuickCommandHistory.getInstance().recordIconNode(selected.label, selected.detail, selected.mapFile,
+					        selected.nodeId);
+					return openMapAndSelect(selected.mapFile, selected.nodeId);
+				}
+				return false;
+			}
 			if (selected != null && selected.kind == QuickCommandCandidate.Kind.COMMAND) {
 				return runCommand(selected.command);
 			}
@@ -187,6 +196,7 @@ final class QuickCommandController {
 			LogUtils.warn("QuickCommand: map not found: " + right);
 			return false;
 		}
+		QuickCommandHistory.getInstance().recordMap(right);
 		if (left.length() == 0) {
 			return openMap(mapFile);
 		}
@@ -202,6 +212,8 @@ final class QuickCommandController {
 			LogUtils.warn("QuickCommand: icon node not found: " + right);
 			return false;
 		}
+		QuickCommandHistory.getInstance().recordIconNode(entry.text, entry.mapName, entry.file, entry.nodeId);
+		QuickCommandHistory.getInstance().recordMap(entry.mapName);
 		if (left.length() == 0) {
 			return openMapAndSelect(entry.file, entry.nodeId);
 		}
@@ -268,6 +280,13 @@ final class QuickCommandController {
 			if (!mapViewManager.tryToChangeToMapView(url)) {
 				Controller.getCurrentModeController().getMapController().newMap(url);
 			}
+			final String mapName = mapFile.getName();
+			if (mapName.toLowerCase(Locale.ROOT).endsWith(".mm")) {
+				QuickCommandHistory.getInstance().recordMap(mapName.substring(0, mapName.length() - 3));
+			}
+			else {
+				QuickCommandHistory.getInstance().recordMap(mapName);
+			}
 			return true;
 		}
 		catch (Exception e) {
@@ -277,6 +296,9 @@ final class QuickCommandController {
 	}
 
 	static boolean openMapAndSelect(final File mapFile, final String nodeId) {
+		if (mapFile == null || nodeId == null) {
+			return false;
+		}
 		if (!openMap(mapFile)) {
 			return false;
 		}

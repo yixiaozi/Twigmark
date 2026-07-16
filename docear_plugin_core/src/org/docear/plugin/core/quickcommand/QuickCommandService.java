@@ -100,6 +100,18 @@ public final class QuickCommandService {
 			if (ribbonBuilder == null) {
 				return;
 			}
+			// Reclaim Shift+Space from ShowNextChild (same pattern as QuickCapture vs presentation).
+			final AFreeplaneAction nextChild = modeController.getAction("ShowNextChildAction");
+			if (nextChild == null) {
+				final AFreeplaneAction globalNextChild = Controller.getCurrentController()
+				        .getAction("ShowNextChildAction");
+				if (globalNextChild != null) {
+					ribbonBuilder.getAcceleratorManager().setAccelerator(globalNextChild, null);
+				}
+			}
+			else {
+				ribbonBuilder.getAcceleratorManager().setAccelerator(nextChild, null);
+			}
 			final KeyStroke keyStroke = UITools.getKeyStroke("shift SPACE");
 			if (keyStroke != null) {
 				ribbonBuilder.getAcceleratorManager().setAccelerator(action, keyStroke);
