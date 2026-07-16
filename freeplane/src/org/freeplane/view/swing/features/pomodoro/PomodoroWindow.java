@@ -19,6 +19,8 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
+import java.awt.event.MouseWheelListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
@@ -41,10 +43,10 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.plaf.basic.BasicButtonUI;
 import javax.swing.plaf.basic.BasicScrollBarUI;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.features.text.TextController;
 
 /**
  * Compact always-on-top pomodoro dock. Quiet chrome; optional left history
@@ -53,14 +55,19 @@ import org.freeplane.features.text.TextController;
 final class PomodoroWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
 
-	private static final int RIGHT_W = 400;
+	private static final int RIGHT_W = 252;
 	private static final int DEFAULT_H = 160;
 	private static final int COLLAPSED_W = 168;
 	private static final int COLLAPSED_H = 34;
 	private static final int MARGIN = 16;
-	private static final int HISTORY_DEFAULT = 320;
-	private static final int HISTORY_MIN = 180;
+	/** Left history default — wider so titles are readable. */
+	private static final int HISTORY_DEFAULT = 360;
+	private static final int HISTORY_MIN = 200;
 	private static final int HISTORY_MAX = 640;
+	private static final String PROP_OPACITY = "pomodoro_window_opacity";
+	private static final float OPACITY_MIN = 0.40f;
+	private static final float OPACITY_MAX = 1.00f;
+	private static final float OPACITY_STEP = 0.05f;
 
 	private final PomodoroSessionManager manager;
 	private final JPanel expandedPanel = new JPanel(new BorderLayout(0, 0));
@@ -88,6 +95,7 @@ final class PomodoroWindow extends JFrame {
 	private boolean historyExpanded;
 	private int historyWidth = HISTORY_DEFAULT;
 	private boolean closingEndsSession = true;
+	private float windowOpacity = OPACITY_MAX;
 	private PomodoroTheme theme = PomodoroTheme.current();
 	private final Timer pulseTimer;
 	private double pulsePhase;
@@ -162,7 +170,9 @@ final class PomodoroWindow extends JFrame {
 		});
 
 		buildUi();
+		windowOpacity = loadOpacity();
 		applyTheme();
+		applyOpacity();
 		setHistoryExpanded(false);
 		setBarCollapsed(false);
 		dockBottomRight();
@@ -329,6 +339,12 @@ final class PomodoroWindow extends JFrame {
 		enableDrag(collapsedClock);
 		enableDrag(brand);
 		enableDrag(titleLabel);
+		enableOpacityWheel(collapsedPanel);
+		enableOpacityWheel(expandedPanel);
+		enableOpacityWheel(rightPanel);
+		enableOpacityWheel(leftPanel);
+		enableOpacityWheel(clockLabel);
+		enableOpacityWheel(titleLabel);
 	}
 
 	private JPanel leftWrap;
@@ -496,6 +512,60 @@ final class PomodoroWindow extends JFrame {
 		return Math.max(min, Math.min(max, v));
 	}
 
+	private void enableOpacityWheel(final Component c) {
+		c.addMouseWheelListener(new MouseWheelListener() {
+			public void mouseWheelMoved(final MouseWheelEvent e) {
+				// Wheel up → more opaque; wheel down → more transparent (floor OPACITY_MIN).
+				final float delta = e.getWheelRotation() < 0 ? OPACITY_STEP : -OPACITY_STEP;
+				final float next = clampFloat(windowOpacity + delta, OPACITY_MIN, OPACITY_MAX);
+				if (Math.abs(next - windowOpacity) < 0.001f) {
+					return;
+				}
+				windowOpacity = next;
+				saveOpacity(windowOpacity);
+				applyOpacity();
+				e.consume();
+			}
+		});
+	}
+
+	private void applyOpacity() {
+		try {
+			setOpacity(windowOpacity);
+		}
+		catch (Exception e) {
+			try {
+				// Older JREs / platforms that reject per-pixel opacity.
+				com.sun.awt.AWTUtilities.setWindowOpacity(this, windowOpacity);
+			}
+			catch (Throwable t) {
+			}
+		}
+	}
+
+	private static float loadOpacity() {
+		try {
+			final String raw = ResourceController.getResourceController().getProperty(PROP_OPACITY, "1.0");
+			return clampFloat(Float.parseFloat(raw), OPACITY_MIN, OPACITY_MAX);
+		}
+		catch (Exception e) {
+			return OPACITY_MAX;
+		}
+	}
+
+	private static void saveOpacity(final float opacity) {
+		try {
+			ResourceController.getResourceController().setProperty(PROP_OPACITY,
+					String.valueOf(Math.round(opacity * 100f) / 100f));
+		}
+		catch (Exception e) {
+		}
+	}
+
+	private static float clampFloat(final float v, final float min, final float max) {
+		return Math.max(min, Math.min(max, v));
+	}
+
 	private void enableDrag(final Component c) {
 		final MouseAdapter drag = new MouseAdapter() {
 			private Point press;
@@ -552,6 +622,7 @@ final class PomodoroWindow extends JFrame {
 
 	public void setVisible(final boolean visible) {
 		if (visible) {
+			applyOpacity();
 			dockBottomRight();
 		}
 		else {
@@ -642,19 +713,16 @@ final class PomodoroWindow extends JFrame {
 		clockLabel.setText(PomodoroFormatter.formatClock(segment));
 		final int maxChars = Math.max(18, historyExpanded ? 36 : 28);
 		final String name = plainText(node, maxChars);
-		if (running) {
-			titleLabel.setText("▶  " + name);
-			titleLabel.setForeground(theme.text);
-		}
-		else if (paused) {
-			titleLabel.setText("❚❚  " + name);
-			titleLabel.setForeground(theme.text);
-		}
-		else {
-			titleLabel.setText(name.length() == 0 ? "选中节点后开始" : name);
+		if (name.length() == 0) {
+			titleLabel.setText("选中节点后开始");
 			titleLabel.setForeground(theme.muted);
 		}
-		collapsedClock.setText(PomodoroFormatter.formatClock(segment) + (running ? " ▶" : (paused ? " ❚❚" : "")));
+		else {
+			titleLabel.setText(name);
+			titleLabel.setForeground(running || paused ? theme.text : theme.muted);
+		}
+		collapsedClock.setText(PomodoroFormatter.formatClock(segment)
+				+ (running ? " ▶" : (paused ? " ❚❚" : "")));
 		updateControlButtons(running, paused);
 		wasRunning = running;
 		if (running) {
@@ -670,20 +738,16 @@ final class PomodoroWindow extends JFrame {
 		}
 	}
 
+	/** Raw node title without pomodoro display chip (⏱ / ▶ / ❚❚). */
 	private static String plainText(final NodeModel node, final int maxLen) {
 		if (node == null) {
 			return "";
 		}
-		try {
-			final Object text = TextController.getController().getPlainTextContent(node);
-			if (text != null) {
-				final String plain = HtmlUtils.htmlToPlain(text.toString()).replaceAll("\\s+", " ").trim();
-				return plain.length() > maxLen ? plain.substring(0, maxLen) + "…" : plain;
-			}
-		}
-		catch (Exception e) {
-		}
-		final String t = node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		String t = node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		t = t.replaceAll("\\s+", " ").trim();
+		// Strip accidental chip leftovers if present in stored text.
+		t = t.replaceAll("\\s*⏱[^\\s]*(\\s*·\\s*Σ[^\\s]*)?(\\s*[▶❚]+)?\\s*$", "").trim();
+		t = t.replaceAll("^[▶❚\\s]+", "").trim();
 		return t.length() > maxLen ? t.substring(0, maxLen) + "…" : t;
 	}
 
