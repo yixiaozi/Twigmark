@@ -8,16 +8,15 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Frame;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.Window;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.ComponentAdapter;
-import java.awt.event.ComponentEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
@@ -28,15 +27,19 @@ import javax.swing.BorderFactory;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
+import javax.swing.plaf.basic.BasicButtonUI;
+import javax.swing.plaf.basic.BasicScrollBarUI;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
@@ -44,47 +47,46 @@ import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
 
 /**
- * Floating pomodoro dock: opaque dark chrome, contextual controls, optional history.
+ * Compact always-on-top pomodoro dock. Quiet chrome; optional left history
+ * that resizes independently of the fixed timer column.
  */
 final class PomodoroWindow extends JFrame {
 	private static final long serialVersionUID = 1L;
 
-	private static final int MIN_W = 220;
-	private static final int MIN_H = 140;
-	private static final int DEFAULT_W = 268;
-	private static final int DEFAULT_W_HISTORY = 520;
-	private static final int DEFAULT_H = 168;
-	private static final int COLLAPSED_W = 172;
+	private static final int RIGHT_W = 400;
+	private static final int DEFAULT_H = 160;
+	private static final int COLLAPSED_W = 168;
 	private static final int COLLAPSED_H = 34;
 	private static final int MARGIN = 16;
-	private static final int HISTORY_W = 248;
+	private static final int HISTORY_DEFAULT = 320;
+	private static final int HISTORY_MIN = 180;
+	private static final int HISTORY_MAX = 640;
 
 	private final PomodoroSessionManager manager;
-	private final JPanel rootPanel = new JPanel(new BorderLayout());
-	private final JPanel expandedPanel = new JPanel(new BorderLayout(8, 0));
+	private final JPanel expandedPanel = new JPanel(new BorderLayout(0, 0));
 	private final JPanel collapsedPanel = new JPanel(new BorderLayout(4, 0));
-	private final JPanel leftPanel = new JPanel(new BorderLayout(0, 4));
+	private final JPanel leftPanel = new JPanel(new BorderLayout(0, 2));
+	private final JPanel leftResizeStrip = new JPanel();
+	private final JPanel rightPanel = new JPanel(new BorderLayout(2, 4));
 	private final JLabel clockLabel = new JLabel("00:00", SwingConstants.CENTER);
-	private final JLabel titleLabel = new JLabel(" ", SwingConstants.LEFT);
-	private final JPanel titleBar = new JPanel(new BorderLayout(6, 0));
+	private final JLabel titleLabel = new JLabel(" ", SwingConstants.CENTER);
 	private final JLabel collapsedClock = new JLabel("00:00", SwingConstants.CENTER);
 	private final JLabel brand = new JLabel("番茄钟");
 	private final JLabel leftTitle = new JLabel("今日记录");
 	private final DefaultListModel historyModel = new DefaultListModel();
 	private final JList historyList = new JList(historyModel);
 	private final JScrollPane leftScroll;
-	private final JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 0));
+	private final JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 6, 0));
 	private final JButton startBtn;
 	private final JButton pauseBtn;
 	private final JButton stopBtn;
-	private final JButton historyToggleBtn;
-	private final JButton skinBtn;
-	private final JButton minimizeBtn;
-	private final JButton closeBtn;
-	private final JLabel resizeGrip = new JLabel("◢");
+	private final JLabel historyToggle;
+	private final JLabel skinToggle;
+	private final JLabel minimizeLbl;
 	private NodeModel focusedNode;
 	private boolean barCollapsed;
 	private boolean historyExpanded;
+	private int historyWidth = HISTORY_DEFAULT;
 	private boolean closingEndsSession = true;
 	private PomodoroTheme theme = PomodoroTheme.current();
 	private final Timer pulseTimer;
@@ -98,22 +100,22 @@ final class PomodoroWindow extends JFrame {
 		setUndecorated(true);
 		setType(Window.Type.UTILITY);
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
-		setResizable(true);
-		setMinimumSize(new Dimension(MIN_W, MIN_H));
+		setResizable(false);
 		leftScroll = new JScrollPane(historyList);
-		pulseTimer = new Timer(40, new ActionListener() {
+		pulseTimer = new Timer(50, new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				if (!wasRunning) {
 					return;
 				}
-				pulsePhase += 0.045;
-				clockLabel.setForeground(pulseClockColor(pulsePhase));
-				collapsedClock.setForeground(pulseClockColor(pulsePhase));
+				pulsePhase += 0.05;
+				final Color c = pulseClockColor(pulsePhase);
+				clockLabel.setForeground(c);
+				collapsedClock.setForeground(c);
 			}
 		});
 		pulseTimer.setRepeats(true);
 
-		startBtn = actionButton("▶  继续", new ActionListener() {
+		startBtn = iconChip("▶", "开始 / 继续", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -121,7 +123,7 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		pauseBtn = actionButton("❚❚  暂停", new ActionListener() {
+		pauseBtn = iconChip("❚❚", "暂停", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -129,7 +131,7 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		stopBtn = actionButton("■  结束", new ActionListener() {
+		stopBtn = iconChip("■", "结束并关闭", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -137,34 +139,25 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		historyToggleBtn = topButton("记录");
-		historyToggleBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
+		historyToggle = linkLabel("记录");
+		historyToggle.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
 				setHistoryExpanded(!historyExpanded);
 			}
 		});
-		skinBtn = topButton("皮肤");
-		skinBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
+		skinToggle = linkLabel("皮肤");
+		skinToggle.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
 				PomodoroTheme.setSkin(PomodoroTheme.nextSkin(theme.name));
 				applyTheme();
 				refresh();
 			}
 		});
-		minimizeBtn = topButton("—");
-		minimizeBtn.setToolTipText("最小化");
-		minimizeBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
+		minimizeLbl = linkLabel("▾");
+		minimizeLbl.setToolTipText("最小化");
+		minimizeLbl.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
 				setBarCollapsed(true);
-			}
-		});
-		closeBtn = topButton("×");
-		closeBtn.setToolTipText("结束并关闭");
-		closeBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				closingEndsSession = true;
-				manager.endRunningOnWindowClose();
-				hideQuietly();
 			}
 		});
 
@@ -181,23 +174,12 @@ final class PomodoroWindow extends JFrame {
 				hideQuietly();
 			}
 		});
-		addComponentListener(new ComponentAdapter() {
-			public void componentResized(final ComponentEvent e) {
-				if (!barCollapsed && historyExpanded) {
-					leftPanel.setPreferredSize(new Dimension(Math.max(HISTORY_W, getWidth() / 2), 1));
-					leftPanel.revalidate();
-				}
-			}
-		});
 	}
 
 	private void buildUi() {
-		rootPanel.setBorder(BorderFactory.createEmptyBorder(1, 1, 1, 1));
 		getContentPane().setLayout(new BorderLayout());
-		getContentPane().add(rootPanel, BorderLayout.CENTER);
 
-		// collapsed strip
-		collapsedPanel.setBorder(new EmptyBorder(4, 10, 4, 6));
+		collapsedPanel.setBorder(new EmptyBorder(4, 10, 4, 8));
 		collapsedClock.setFont(new Font("SansSerif", Font.BOLD, 13));
 		collapsedClock.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		collapsedClock.addMouseListener(new MouseAdapter() {
@@ -206,21 +188,21 @@ final class PomodoroWindow extends JFrame {
 			}
 		});
 		collapsedPanel.add(collapsedClock, BorderLayout.CENTER);
-		final JButton expandBtn = topButton("▴");
-		expandBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
+		final JLabel expandLbl = linkLabel("▴");
+		expandLbl.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
 				setBarCollapsed(false);
 			}
 		});
-		collapsedPanel.add(expandBtn, BorderLayout.EAST);
+		collapsedPanel.add(expandLbl, BorderLayout.EAST);
 
-		// left history
+		// Left history — resize strip on outer (left) edge
 		leftPanel.setOpaque(true);
-		leftTitle.setFont(new Font("SansSerif", Font.PLAIN, 11));
-		leftTitle.setBorder(new EmptyBorder(0, 2, 2, 0));
+		leftTitle.setFont(new Font("SansSerif", Font.PLAIN, 10));
+		leftTitle.setBorder(new EmptyBorder(4, 8, 2, 8));
 		leftPanel.add(leftTitle, BorderLayout.NORTH);
 		historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		historyList.setFixedCellHeight(22);
+		historyList.setFixedCellHeight(20);
 		historyList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 
@@ -230,8 +212,8 @@ final class PomodoroWindow extends JFrame {
 				setOpaque(true);
 				setBackground(isSelected ? theme.border : theme.card);
 				setForeground(theme.text);
-				setFont(new Font("SansSerif", Font.PLAIN, 12));
-				setBorder(new EmptyBorder(2, 6, 2, 6));
+				setFont(new Font("SansSerif", Font.PLAIN, 11));
+				setBorder(new EmptyBorder(1, 8, 1, 8));
 				if (value instanceof HistoryRow) {
 					setText(((HistoryRow) value).display);
 				}
@@ -254,35 +236,69 @@ final class PomodoroWindow extends JFrame {
 			}
 		});
 		leftScroll.setBorder(null);
-		leftScroll.getViewport().setOpaque(true);
-		leftPanel.setPreferredSize(new Dimension(HISTORY_W, 120));
+		leftScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		leftScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+		leftScroll.getVerticalScrollBar().setUnitIncrement(16);
 		leftPanel.add(leftScroll, BorderLayout.CENTER);
 		leftPanel.setVisible(false);
 
-		// right timer column
-		final JPanel right = new JPanel(new BorderLayout(0, 6));
-		right.setOpaque(false);
-		right.setBorder(new EmptyBorder(8, 10, 8, 10));
+		leftResizeStrip.setPreferredSize(new Dimension(5, 1));
+		leftResizeStrip.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
+		leftResizeStrip.setToolTipText("向左拖动加宽记录区");
+		final MouseAdapter leftResize = new MouseAdapter() {
+			private Point press;
+			private int startHistory;
+			private int startX;
+
+			public void mousePressed(final MouseEvent e) {
+				press = e.getLocationOnScreen();
+				startHistory = historyWidth;
+				startX = getLocationOnScreen().x;
+			}
+
+			public void mouseDragged(final MouseEvent e) {
+				if (press == null || !historyExpanded || barCollapsed) {
+					return;
+				}
+				// Dragging left edge left → wider history; window grows leftward, right stays put.
+				final int delta = press.x - e.getLocationOnScreen().x;
+				historyWidth = clamp(startHistory + delta, HISTORY_MIN, HISTORY_MAX);
+				final int newW = historyWidth + RIGHT_W;
+				final int rightEdge = startX + startHistory + RIGHT_W;
+				setBounds(rightEdge - newW, getY(), newW, getHeight());
+				leftPanel.setPreferredSize(new Dimension(historyWidth, 1));
+				leftPanel.revalidate();
+			}
+		};
+		leftResizeStrip.addMouseListener(leftResize);
+		leftResizeStrip.addMouseMotionListener(leftResize);
+
+		final JPanel leftWrap = new JPanel(new BorderLayout());
+		leftWrap.setOpaque(false);
+		leftWrap.add(leftResizeStrip, BorderLayout.WEST);
+		leftWrap.add(leftPanel, BorderLayout.CENTER);
+		leftWrap.setVisible(false);
+		this.leftWrap = leftWrap;
+
+		// Right timer column — fixed width
+		rightPanel.setOpaque(true);
+		rightPanel.setPreferredSize(new Dimension(RIGHT_W, DEFAULT_H));
+		rightPanel.setBorder(new EmptyBorder(6, 10, 8, 10));
 
 		final JPanel topBar = new JPanel(new BorderLayout());
 		topBar.setOpaque(false);
-		brand.setFont(new Font("SansSerif", Font.BOLD, 11));
+		brand.setFont(new Font("SansSerif", Font.PLAIN, 10));
 		topBar.add(brand, BorderLayout.WEST);
-		final JPanel topBtns = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
-		topBtns.setOpaque(false);
-		topBtns.add(historyToggleBtn);
-		topBtns.add(skinBtn);
-		topBtns.add(minimizeBtn);
-		topBtns.add(closeBtn);
-		topBar.add(topBtns, BorderLayout.EAST);
-		right.add(topBar, BorderLayout.NORTH);
+		final JPanel topLinks = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+		topLinks.setOpaque(false);
+		topLinks.add(historyToggle);
+		topLinks.add(skinToggle);
+		topLinks.add(minimizeLbl);
+		topBar.add(topLinks, BorderLayout.EAST);
+		rightPanel.add(topBar, BorderLayout.NORTH);
 
-		clockLabel.setFont(new Font("SansSerif", Font.BOLD, 34));
-		clockLabel.setHorizontalAlignment(SwingConstants.CENTER);
-
-		titleBar.setOpaque(true);
-		titleBar.setBorder(new EmptyBorder(6, 8, 6, 8));
-		titleLabel.setFont(new Font("SansSerif", Font.PLAIN, 12));
+		clockLabel.setFont(new Font("SansSerif", Font.BOLD, 30));
+		titleLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
 		titleLabel.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		titleLabel.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
@@ -291,65 +307,31 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		titleBar.add(titleLabel, BorderLayout.CENTER);
-
-		final JPanel mid = new JPanel(new GridBagLayout());
+		final JPanel mid = new JPanel(new GridLayout(2, 1, 0, 2));
 		mid.setOpaque(false);
-		final GridBagConstraints gc = new GridBagConstraints();
-		gc.gridx = 0;
-		gc.gridy = 0;
-		gc.weightx = 1;
-		gc.fill = GridBagConstraints.HORIZONTAL;
-		mid.add(clockLabel, gc);
-		gc.gridy = 1;
-		gc.insets = new Insets(4, 0, 0, 0);
-		mid.add(titleBar, gc);
-		right.add(mid, BorderLayout.CENTER);
+		mid.add(clockLabel);
+		mid.add(titleLabel);
+		rightPanel.add(mid, BorderLayout.CENTER);
 
 		buttonRow.setOpaque(false);
 		buttonRow.add(startBtn);
 		buttonRow.add(pauseBtn);
 		buttonRow.add(stopBtn);
-		right.add(buttonRow, BorderLayout.SOUTH);
+		rightPanel.add(buttonRow, BorderLayout.SOUTH);
 
-		expandedPanel.setOpaque(true);
-		expandedPanel.add(leftPanel, BorderLayout.WEST);
-		expandedPanel.add(right, BorderLayout.CENTER);
-
-		resizeGrip.setHorizontalAlignment(SwingConstants.RIGHT);
-		resizeGrip.setFont(new Font("SansSerif", Font.PLAIN, 10));
-		resizeGrip.setBorder(new EmptyBorder(0, 0, 2, 4));
-		resizeGrip.setCursor(Cursor.getPredefinedCursor(Cursor.SE_RESIZE_CURSOR));
-		resizeGrip.setToolTipText("拖动调整大小");
-		final MouseAdapter resize = new MouseAdapter() {
-			private Point press;
-			private Dimension startSize;
-
-			public void mousePressed(final MouseEvent e) {
-				press = e.getLocationOnScreen();
-				startSize = getSize();
-			}
-
-			public void mouseDragged(final MouseEvent e) {
-				if (press == null || startSize == null || barCollapsed) {
-					return;
-				}
-				final int nw = Math.max(MIN_W, startSize.width + e.getLocationOnScreen().x - press.x);
-				final int nh = Math.max(MIN_H, startSize.height + e.getLocationOnScreen().y - press.y);
-				setSize(nw, nh);
-			}
-		};
-		resizeGrip.addMouseListener(resize);
-		resizeGrip.addMouseMotionListener(resize);
-		expandedPanel.add(resizeGrip, BorderLayout.SOUTH);
+		expandedPanel.add(leftWrap, BorderLayout.WEST);
+		expandedPanel.add(rightPanel, BorderLayout.CENTER);
 
 		enableDrag(collapsedPanel);
 		enableDrag(expandedPanel);
+		enableDrag(rightPanel);
 		enableDrag(clockLabel);
 		enableDrag(collapsedClock);
 		enableDrag(brand);
-		enableDrag(titleBar);
+		enableDrag(titleLabel);
 	}
+
+	private JPanel leftWrap;
 
 	void hideQuietly() {
 		closingEndsSession = false;
@@ -360,112 +342,147 @@ final class PomodoroWindow extends JFrame {
 	private void setHistoryExpanded(final boolean expanded) {
 		historyExpanded = expanded;
 		leftPanel.setVisible(expanded);
-		historyToggleBtn.setText(expanded ? "收起" : "记录");
+		leftWrap.setVisible(expanded);
+		historyToggle.setText(expanded ? "收起" : "记录");
 		if (!barCollapsed) {
-			final int h = Math.max(MIN_H, getHeight() > 0 ? getHeight() : DEFAULT_H);
-			if (expanded) {
-				setSize(Math.max(DEFAULT_W_HISTORY, getWidth()), h);
-				leftPanel.setPreferredSize(new Dimension(HISTORY_W, 1));
-			}
-			else {
-				setSize(Math.max(DEFAULT_W, Math.min(getWidth(), DEFAULT_W + 40)), h);
-			}
-			dockBottomRight();
+			applyExpandedSize(true);
 		}
 		revalidate();
 		repaint();
 	}
 
+	private void applyExpandedSize(final boolean keepRightEdge) {
+		final int w = historyExpanded ? historyWidth + RIGHT_W : RIGHT_W;
+		final int h = Math.max(DEFAULT_H, getHeight() > 40 ? getHeight() : DEFAULT_H);
+		leftPanel.setPreferredSize(new Dimension(historyWidth, 1));
+		rightPanel.setPreferredSize(new Dimension(RIGHT_W, 1));
+		if (keepRightEdge && isShowing()) {
+			final int rightEdge = getLocationOnScreen().x + getWidth();
+			setBounds(rightEdge - w, getY(), w, h);
+		}
+		else {
+			setSize(w, h);
+			dockBottomRight();
+		}
+	}
+
 	void applyTheme() {
 		theme = PomodoroTheme.current();
-		rootPanel.setBorder(BorderFactory.createLineBorder(theme.border, 1));
-		rootPanel.setBackground(theme.bg);
+		getRootPane().setBorder(BorderFactory.createLineBorder(theme.border, 1));
 		getContentPane().setBackground(theme.bg);
 		collapsedPanel.setBackground(theme.bg);
 		expandedPanel.setBackground(theme.bg);
+		rightPanel.setBackground(theme.bg);
 		leftPanel.setBackground(theme.card);
-		leftPanel.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, theme.border));
+		leftResizeStrip.setBackground(theme.bg);
 		historyList.setBackground(theme.card);
 		historyList.setForeground(theme.text);
 		leftScroll.getViewport().setBackground(theme.card);
+		styleScrollBar(leftScroll.getVerticalScrollBar());
 		clockLabel.setForeground(theme.accent);
 		collapsedClock.setForeground(theme.accent);
 		brand.setForeground(theme.muted);
 		leftTitle.setForeground(theme.muted);
-		titleBar.setBackground(theme.card);
-		titleLabel.setForeground(theme.text);
-		styleTopButton(historyToggleBtn, false);
-		styleTopButton(skinBtn, false);
-		styleTopButton(minimizeBtn, false);
-		styleTopButton(closeBtn, true);
-		styleActionButton(startBtn, false);
-		styleActionButton(pauseBtn, false);
-		styleActionButton(stopBtn, true);
-		if (resizeGrip != null) {
-			resizeGrip.setForeground(theme.muted);
-			resizeGrip.setBackground(theme.bg);
-			resizeGrip.setOpaque(true);
-		}
+		titleLabel.setForeground(theme.muted);
+		styleLink(historyToggle);
+		styleLink(skinToggle);
+		styleLink(minimizeLbl);
+		styleChip(startBtn);
+		styleChip(pauseBtn);
+		styleChip(stopBtn);
 		repaint();
 	}
 
-	private JButton topButton(final String text) {
-		final JButton b = new JButton(text);
-		b.setFont(new Font("SansSerif", Font.PLAIN, 11));
-		b.setFocusPainted(false);
-		b.setMargin(new Insets(2, 8, 2, 8));
-		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-		return b;
+	private void styleScrollBar(final JScrollBar bar) {
+		bar.setOpaque(true);
+		bar.setBackground(theme.card);
+		bar.setPreferredSize(new Dimension(6, 0));
+		bar.setUI(new BasicScrollBarUI() {
+			protected void configureScrollBarColors() {
+				thumbColor = theme.border;
+				trackColor = theme.card;
+			}
+
+			protected JButton createDecreaseButton(final int orientation) {
+				return zeroButton();
+			}
+
+			protected JButton createIncreaseButton(final int orientation) {
+				return zeroButton();
+			}
+
+			private JButton zeroButton() {
+				final JButton b = new JButton();
+				b.setPreferredSize(new Dimension(0, 0));
+				b.setMinimumSize(new Dimension(0, 0));
+				b.setMaximumSize(new Dimension(0, 0));
+				return b;
+			}
+
+			protected void paintThumb(final Graphics g, final JComponent c, final Rectangle thumbBounds) {
+				if (thumbBounds.isEmpty() || !bar.isEnabled()) {
+					return;
+				}
+				final Graphics2D g2 = (Graphics2D) g.create();
+				g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+				g2.setColor(theme.border);
+				g2.fillRoundRect(thumbBounds.x + 1, thumbBounds.y + 2, Math.max(4, thumbBounds.width - 2),
+						thumbBounds.height - 4, 4, 4);
+				g2.dispose();
+			}
+
+			protected void paintTrack(final Graphics g, final JComponent c, final Rectangle trackBounds) {
+				g.setColor(theme.card);
+				g.fillRect(trackBounds.x, trackBounds.y, trackBounds.width, trackBounds.height);
+			}
+		});
 	}
 
-	private void styleTopButton(final JButton b, final boolean danger) {
-		b.setOpaque(true);
-		b.setContentAreaFilled(true);
-		b.setBorderPainted(false);
-		b.setBackground(danger ? theme.accent : theme.card);
-		b.setForeground(danger ? theme.text : theme.muted);
-		b.setBorder(new EmptyBorder(3, 8, 3, 8));
+	private JLabel linkLabel(final String text) {
+		final JLabel l = new JLabel(text);
+		l.setFont(new Font("SansSerif", Font.PLAIN, 10));
+		l.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		return l;
 	}
 
-	private JButton actionButton(final String text, final ActionListener listener) {
-		final JButton b = new JButton(text);
+	private void styleLink(final JLabel l) {
+		l.setForeground(theme.muted);
+		l.setOpaque(false);
+	}
+
+	private JButton iconChip(final String icon, final String tip, final ActionListener listener) {
+		final JButton b = new JButton(icon);
+		b.setUI(new BasicButtonUI());
+		b.setToolTipText(tip);
 		b.setFont(new Font("SansSerif", Font.PLAIN, 12));
 		b.setFocusPainted(false);
-		b.setMargin(new Insets(5, 14, 5, 14));
+		b.setMargin(new java.awt.Insets(2, 10, 2, 10));
 		b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		b.addActionListener(listener);
 		return b;
 	}
 
-	private void styleActionButton(final JButton b, final boolean primary) {
+	private void styleChip(final JButton b) {
+		b.setUI(new BasicButtonUI());
 		b.setOpaque(true);
 		b.setContentAreaFilled(true);
 		b.setBorderPainted(false);
-		if (primary) {
-			b.setBackground(theme.accent);
-			b.setForeground(theme.text);
-		}
-		else {
-			b.setBackground(theme.card);
-			b.setForeground(theme.text);
-		}
-		b.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(theme.border),
-				new EmptyBorder(4, 10, 4, 10)));
+		b.setBackground(theme.card);
+		b.setForeground(theme.text);
+		b.setBorder(new EmptyBorder(4, 12, 4, 12));
 	}
 
 	private void updateControlButtons(final boolean running, final boolean paused) {
-		// Running: Pause + Stop. Paused/Idle: Start + Stop (stop only if paused or has segment).
 		startBtn.setVisible(!running);
 		pauseBtn.setVisible(running);
 		stopBtn.setVisible(running || paused);
-		startBtn.setText(paused ? "▶  继续" : "▶  开始");
 		buttonRow.revalidate();
 		buttonRow.repaint();
 	}
 
 	private Color pulseClockColor(final double phase) {
 		final double t = 0.5 + 0.5 * Math.sin(phase);
-		return blend(theme.accent, brighten(theme.accent, 0.45f), (float) t);
+		return blend(theme.accent, blend(theme.accent, Color.WHITE, 0.35f), (float) t);
 	}
 
 	private static Color blend(final Color a, final Color b, final float t) {
@@ -475,8 +492,8 @@ final class PomodoroWindow extends JFrame {
 				(int) (a.getBlue() + (b.getBlue() - a.getBlue()) * u));
 	}
 
-	private static Color brighten(final Color c, final float amount) {
-		return blend(c, Color.WHITE, amount);
+	private static int clamp(final int v, final int min, final int max) {
+		return Math.max(min, Math.min(max, v));
 	}
 
 	private void enableDrag(final Component c) {
@@ -501,18 +518,16 @@ final class PomodoroWindow extends JFrame {
 
 	void setBarCollapsed(final boolean collapsed) {
 		this.barCollapsed = collapsed;
-		rootPanel.removeAll();
+		getContentPane().removeAll();
 		if (collapsed) {
-			setResizable(false);
-			rootPanel.add(collapsedPanel, BorderLayout.CENTER);
+			getContentPane().add(collapsedPanel, BorderLayout.CENTER);
 			setSize(COLLAPSED_W, COLLAPSED_H);
+			dockBottomRight();
 		}
 		else {
-			setResizable(true);
-			rootPanel.add(expandedPanel, BorderLayout.CENTER);
-			setSize(historyExpanded ? Math.max(DEFAULT_W_HISTORY, getWidth()) : DEFAULT_W, DEFAULT_H);
+			getContentPane().add(expandedPanel, BorderLayout.CENTER);
+			applyExpandedSize(false);
 		}
-		dockBottomRight();
 		revalidate();
 		repaint();
 	}
@@ -530,7 +545,7 @@ final class PomodoroWindow extends JFrame {
 		if (bounds == null) {
 			bounds = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
 		}
-		final int w = getWidth() > 0 ? getWidth() : DEFAULT_W;
+		final int w = getWidth() > 0 ? getWidth() : RIGHT_W;
 		final int h = getHeight() > 0 ? getHeight() : DEFAULT_H;
 		setLocation(bounds.x + bounds.width - w - MARGIN, bounds.y + bounds.height - h - MARGIN);
 	}
@@ -555,7 +570,7 @@ final class PomodoroWindow extends JFrame {
 		if (focusedNode != null) {
 			return focusedNode;
 		}
-		NodeModel running = manager.getRunningNode();
+		final NodeModel running = manager.getRunningNode();
 		if (running != null) {
 			return running;
 		}
@@ -579,13 +594,11 @@ final class PomodoroWindow extends JFrame {
 				running = node;
 				continue;
 			}
-			if (PomodoroExtension.STATE_PAUSED.equals(state)) {
-				if (paused == null) {
-					paused = node;
-				}
+			if (PomodoroExtension.STATE_PAUSED.equals(state) && paused == null) {
+				paused = node;
 			}
 			if (PomodoroExtension.STATE_PAUSED.equals(state) || ext.getLog().length() > 0 || ext.getTotalMs() > 0) {
-				historyModel.addElement(new HistoryRow(node, now));
+				historyModel.addElement(new HistoryRow(node, now, historyWidth));
 			}
 		}
 		if (running != null) {
@@ -627,28 +640,21 @@ final class PomodoroWindow extends JFrame {
 		final boolean running = ext != null && PomodoroExtension.STATE_RUNNING.equals(ext.getState());
 		final boolean paused = ext != null && PomodoroExtension.STATE_PAUSED.equals(ext.getState());
 		clockLabel.setText(PomodoroFormatter.formatClock(segment));
-		final String name = plainText(node, historyExpanded ? 48 : 36);
+		final int maxChars = Math.max(18, historyExpanded ? 36 : 28);
+		final String name = plainText(node, maxChars);
 		if (running) {
 			titleLabel.setText("▶  " + name);
 			titleLabel.setForeground(theme.text);
-			titleBar.setBackground(theme.border);
-			titleBar.setBorder(BorderFactory.createCompoundBorder(
-					BorderFactory.createMatteBorder(0, 3, 0, 0, theme.accent), new EmptyBorder(6, 8, 6, 8)));
 		}
 		else if (paused) {
 			titleLabel.setText("❚❚  " + name);
 			titleLabel.setForeground(theme.text);
-			titleBar.setBackground(theme.card);
-			titleBar.setBorder(BorderFactory.createCompoundBorder(
-					BorderFactory.createMatteBorder(0, 3, 0, 0, theme.muted), new EmptyBorder(6, 8, 6, 8)));
 		}
 		else {
 			titleLabel.setText(name.length() == 0 ? "选中节点后开始" : name);
 			titleLabel.setForeground(theme.muted);
-			titleBar.setBackground(theme.card);
-			titleBar.setBorder(new EmptyBorder(6, 8, 6, 8));
 		}
-		collapsedClock.setText(PomodoroFormatter.formatClock(segment) + (running ? "  ▶" : (paused ? "  ❚❚" : "")));
+		collapsedClock.setText(PomodoroFormatter.formatClock(segment) + (running ? " ▶" : (paused ? " ❚❚" : "")));
 		updateControlButtons(running, paused);
 		wasRunning = running;
 		if (running) {
@@ -685,7 +691,7 @@ final class PomodoroWindow extends JFrame {
 		final NodeModel node;
 		final String display;
 
-		HistoryRow(final NodeModel node, final long now) {
+		HistoryRow(final NodeModel node, final long now, final int panelWidth) {
 			this.node = node;
 			final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 			final String state = ext == null ? PomodoroExtension.STATE_IDLE : ext.getState();
@@ -694,7 +700,8 @@ final class PomodoroWindow extends JFrame {
 				mark = "❚❚";
 			}
 			final long total = ext == null ? 0L : ext.liveTotalMs(now);
-			display = mark + "  " + plainText(node, 64) + "   " + PomodoroFormatter.formatDuration(total);
+			final int chars = Math.max(24, panelWidth / 7);
+			display = mark + " " + plainText(node, chars) + "  " + PomodoroFormatter.formatDuration(total);
 		}
 
 		public String toString() {
