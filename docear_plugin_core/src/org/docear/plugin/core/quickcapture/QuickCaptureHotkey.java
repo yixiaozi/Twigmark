@@ -8,21 +8,25 @@ import com.sun.jna.platform.win32.User32;
 import com.sun.jna.platform.win32.WinUser;
 
 /**
- * Registers Ctrl+Shift+Space as a system-wide hotkey on Windows (Docear must be running).
+ * Registers system-wide hotkeys on Windows (Docear must be running):
+ * Ctrl+Shift+Space → quick capture, Ctrl+Space → show/hide, Shift+Space → command palette.
  * RegisterHotKey and the message loop run on the same dedicated thread (required by Win32).
  */
 final class QuickCaptureHotkey {
 	private static final int HOTKEY_ID_CAPTURE = 0x7CE0;
 	private static final int HOTKEY_ID_TOGGLE = 0x7CE1;
+	private static final int HOTKEY_ID_COMMAND = 0x7CE2;
 	private static final int MOD_NOREPEAT = 0x4000;
 	private static final int MODIFIERS_CAPTURE = WinUser.MOD_CONTROL | WinUser.MOD_SHIFT | MOD_NOREPEAT;
 	private static final int MODIFIERS_TOGGLE = WinUser.MOD_CONTROL | MOD_NOREPEAT;
+	private static final int MODIFIERS_COMMAND = WinUser.MOD_SHIFT | MOD_NOREPEAT;
 	private static final int VK_SPACE = 0x20;
 	private static final int PM_REMOVE = 0x0001;
 
 	private static volatile boolean running;
 	private static volatile boolean registeredCapture;
 	private static volatile boolean registeredToggle;
+	private static volatile boolean registeredCommand;
 	private static volatile boolean threadStarted;
 	private static volatile boolean shutdownHookAdded;
 
@@ -83,7 +87,17 @@ final class QuickCaptureHotkey {
 				LogUtils.info("QuickCapture: global hotkey Ctrl+Space registered.");
 			}
 
-			if (!registeredCapture && !registeredToggle) {
+			if (!User32.INSTANCE.RegisterHotKey(null, HOTKEY_ID_COMMAND, MODIFIERS_COMMAND, VK_SPACE)) {
+				final int err = Kernel32.INSTANCE.GetLastError();
+				LogUtils.warn("QuickCapture: RegisterHotKey failed for Shift+Space (Win32 error " + err
+				        + "). May be used by another program.");
+			}
+			else {
+				registeredCommand = true;
+				LogUtils.info("QuickCapture: global hotkey Shift+Space registered.");
+			}
+
+			if (!registeredCapture && !registeredToggle && !registeredCommand) {
 				return;
 			}
 
@@ -101,6 +115,9 @@ final class QuickCaptureHotkey {
 						}
 						else if (msg.wParam.intValue() == HOTKEY_ID_TOGGLE) {
 							toggleDocearVisibility();
+						}
+						else if (msg.wParam.intValue() == HOTKEY_ID_COMMAND) {
+							org.docear.plugin.core.quickcommand.QuickCommandService.showDialog();
 						}
 					}
 					User32.INSTANCE.TranslateMessage(msg);
@@ -179,15 +196,23 @@ final class QuickCaptureHotkey {
 	}
 
 	private static void unregister() {
+		boolean any = false;
 		if (registeredCapture) {
 			User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_CAPTURE);
 			registeredCapture = false;
+			any = true;
 		}
 		if (registeredToggle) {
 			User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_TOGGLE);
 			registeredToggle = false;
+			any = true;
 		}
-		if (registeredCapture || registeredToggle) {
+		if (registeredCommand) {
+			User32.INSTANCE.UnregisterHotKey(null, HOTKEY_ID_COMMAND);
+			registeredCommand = false;
+			any = true;
+		}
+		if (any) {
 			LogUtils.info("QuickCapture: global hotkeys unregistered.");
 		}
 	}
