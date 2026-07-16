@@ -90,13 +90,9 @@ final class QuickCommandIndex {
 			if (name.length() == 0 || name.startsWith("~")) {
 				continue;
 			}
-			entries.add(new MapEntry(name, file, PinyinMatch.fullPinyin(name), PinyinMatch.initials(name)));
+			entries.add(new MapEntry(name, file, PinyinMatch.fullPinyin(name), PinyinMatch.initials(name),
+			        file.lastModified()));
 		}
-		Collections.sort(entries, new Comparator() {
-			public int compare(final Object a, final Object b) {
-				return ((MapEntry) a).name.compareToIgnoreCase(((MapEntry) b).name);
-			}
-		});
 		synchronized (lock) {
 			mapEntries = entries;
 			mapsReady.set(true);
@@ -162,13 +158,15 @@ final class QuickCommandIndex {
 		final Set seen = new HashSet();
 		if (q.length() == 0) {
 			final List recent = history.getRecentMaps();
-			for (int i = recent.size() - 1; i >= 0 && scored.size() < limit; i--) {
+			for (int i = recent.size() - 1; i >= 0; i--) {
 				final String name = (String) recent.get(i);
 				final MapEntry entry = findMapEntryByName(source, name);
 				if (entry != null && seen.add(key(entry.name))) {
-					scored.add(QuickCommandCandidate.map(entry.name, entry.file, true, i));
+					scored.add(QuickCommandCandidate.map(entry.name, entry.file, true, i, entry.modifiedAt));
 				}
 			}
+			sortByModifiedDesc(scored);
+			return take(scored, limit);
 		}
 		for (int i = 0; i < source.size(); i++) {
 			final MapEntry entry = (MapEntry) source.get(i);
@@ -179,9 +177,9 @@ final class QuickCommandIndex {
 				continue;
 			}
 			final int rank = history.mapRank(entry.name);
-			scored.add(QuickCommandCandidate.map(entry.name, entry.file, rank >= 0, rank));
+			scored.add(QuickCommandCandidate.map(entry.name, entry.file, rank >= 0, rank, entry.modifiedAt));
 		}
-		sortByHistoryThenLabel(scored);
+		sortByModifiedDesc(scored);
 		return take(scored, limit);
 	}
 
@@ -225,21 +223,23 @@ final class QuickCommandIndex {
 		final Set seen = new HashSet();
 		if (q.length() == 0) {
 			final List recent = history.getRecentIconNodes();
-			for (int i = recent.size() - 1; i >= 0 && scored.size() < limit; i--) {
+			for (int i = recent.size() - 1; i >= 0; i--) {
 				final QuickCommandHistory.RecentIcon recentIcon = (QuickCommandHistory.RecentIcon) recent.get(i);
 				final IconEntry entry = findIconEntry(source, recentIcon);
 				if (entry != null && seen.add(iconKey(entry))) {
 					scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, true,
-					        i));
+					        i, entry.modifiedAt));
 				}
 				else if (entry == null && recentIcon.mapPath != null) {
 					final File file = new File(recentIcon.mapPath);
 					if (file.isFile() && seen.add(recentIcon.nodeId + "|" + recentIcon.mapPath)) {
 						scored.add(QuickCommandCandidate.iconNode(recentIcon.text, recentIcon.mapName, file,
-						        recentIcon.nodeId, true, i));
+						        recentIcon.nodeId, true, i, file.lastModified()));
 					}
 				}
 			}
+			sortByModifiedDesc(scored);
+			return take(scored, limit);
 		}
 		for (int i = 0; i < source.size(); i++) {
 			final IconEntry entry = (IconEntry) source.get(i);
@@ -252,9 +252,9 @@ final class QuickCommandIndex {
 			}
 			final int rank = history.iconRank(entry.nodeId, entry.file);
 			scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, rank >= 0,
-			        rank));
+			        rank, entry.modifiedAt));
 		}
-		sortByHistoryThenLabel(scored);
+		sortByModifiedDesc(scored);
 		return take(scored, limit);
 	}
 
@@ -263,7 +263,8 @@ final class QuickCommandIndex {
 		        && selected.nodeId != null) {
 			return new IconEntry(selected.label, selected.detail, selected.mapFile, selected.nodeId,
 			        PinyinMatch.fullPinyin(selected.label), PinyinMatch.initials(selected.label),
-			        PinyinMatch.fullPinyin(selected.detail), PinyinMatch.initials(selected.detail));
+			        PinyinMatch.fullPinyin(selected.detail), PinyinMatch.initials(selected.detail),
+			        selected.mapFile.lastModified());
 		}
 		final String q = normalize(query);
 		if (q.length() == 0) {
@@ -295,14 +296,15 @@ final class QuickCommandIndex {
 			source = launchEntries;
 		}
 		final List out = new ArrayList();
-		for (int i = 0; i < source.size() && out.size() < limit; i++) {
+		for (int i = 0; i < source.size(); i++) {
 			final LaunchEntry entry = (LaunchEntry) source.get(i);
 			if (PinyinMatch.matches(entry.label, entry.fullPinyin, entry.initials, q)
 			        || PinyinMatch.matches(entry.file.getName(), entry.fullPinyin, entry.initials, q)) {
 				out.add(QuickCommandCandidate.launch(entry.label, entry.file));
 			}
 		}
-		return out;
+		sortByModifiedDesc(out);
+		return take(out, limit);
 	}
 
 	boolean iconsReady() {
@@ -330,16 +332,13 @@ final class QuickCommandIndex {
 		return null;
 	}
 
-	private static void sortByHistoryThenLabel(final List scored) {
+	private static void sortByModifiedDesc(final List scored) {
 		Collections.sort(scored, new Comparator() {
 			public int compare(final Object a, final Object b) {
 				final QuickCommandCandidate ca = (QuickCommandCandidate) a;
 				final QuickCommandCandidate cb = (QuickCommandCandidate) b;
-				if (ca.recent != cb.recent) {
-					return ca.recent ? -1 : 1;
-				}
-				if (ca.recent && cb.recent) {
-					return cb.historyRank - ca.historyRank;
+				if (ca.modifiedAt != cb.modifiedAt) {
+					return ca.modifiedAt > cb.modifiedAt ? -1 : 1;
 				}
 				return ca.label.compareToIgnoreCase(cb.label);
 			}
@@ -395,7 +394,7 @@ final class QuickCommandIndex {
 						if (node[0] != null && node[1] != null && node[1].length() > 0
 						        && !"bin".equalsIgnoreCase(node[1]) && entries.size() < MAX_ICON_NODES) {
 							entries.add(new IconEntry(node[1], mapName, file, node[0], PinyinMatch.fullPinyin(node[1]),
-							        PinyinMatch.initials(node[1]), mapFull, mapInit));
+							        PinyinMatch.initials(node[1]), mapFull, mapInit, file.lastModified()));
 						}
 					}
 				}
@@ -488,12 +487,15 @@ final class QuickCommandIndex {
 		final File file;
 		final String fullPinyin;
 		final String initials;
+		final long modifiedAt;
 
-		MapEntry(final String name, final File file, final String fullPinyin, final String initials) {
+		MapEntry(final String name, final File file, final String fullPinyin, final String initials,
+		        final long modifiedAt) {
 			this.name = name;
 			this.file = file;
 			this.fullPinyin = fullPinyin;
 			this.initials = initials;
+			this.modifiedAt = modifiedAt;
 		}
 	}
 
@@ -506,9 +508,11 @@ final class QuickCommandIndex {
 		final String initials;
 		final String mapFullPinyin;
 		final String mapInitials;
+		final long modifiedAt;
 
 		IconEntry(final String text, final String mapName, final File file, final String nodeId,
-		        final String fullPinyin, final String initials, final String mapFullPinyin, final String mapInitials) {
+		        final String fullPinyin, final String initials, final String mapFullPinyin, final String mapInitials,
+		        final long modifiedAt) {
 			this.text = text;
 			this.mapName = mapName;
 			this.file = file;
@@ -517,6 +521,7 @@ final class QuickCommandIndex {
 			this.initials = initials;
 			this.mapFullPinyin = mapFullPinyin;
 			this.mapInitials = mapInitials;
+			this.modifiedAt = modifiedAt;
 		}
 	}
 
