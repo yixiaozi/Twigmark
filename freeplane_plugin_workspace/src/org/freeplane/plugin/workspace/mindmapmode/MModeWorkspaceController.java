@@ -418,7 +418,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				sideTabLoaded.put(tabId, Boolean.TRUE);
 			}
 		}
-		applySideTabIcons();
 		sideTabs.addChangeListener(new ChangeListener() {
 			private String previousTabId = TAB_WORKSPACE;
 
@@ -765,7 +764,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else {
 			sideTabOrder.add(TAB_REPORTS);
 		}
-		persistSideTabOrder();
+		// Do not persist here during startup load; saveSideTabOrder runs from drag/reorder paths.
+		saveSideTabOrder();
 	}
 
 	/** Keep「红旗」immediately to the right of 报表 (or Git if reports missing). */
@@ -792,7 +792,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else {
 			sideTabOrder.add(TAB_NEXT_ACTIONS);
 		}
-		persistSideTabOrder();
+		saveSideTabOrder();
 	}
 
 	private void saveSideTabOrder() {
@@ -942,66 +942,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 	}
 
-	private void applySideTabIcons() {
-		if (sideTabs == null) {
-			return;
-		}
-		for (int i = 0; i < sideTabOrder.size() && i < sideTabs.getTabCount(); i++) {
-			final javax.swing.Icon icon = sideTabIcon(sideTabOrder.get(i));
-			if (icon != null) {
-				sideTabs.setIconAt(i, icon);
-			}
-		}
-	}
-
-	private javax.swing.Icon sideTabIcon(final String tabId) {
-		String iconName = null;
-		if (TAB_WORKSPACE.equals(tabId)) {
-			iconName = "folder";
-		}
-		else if (TAB_FAVORITES.equals(tabId)) {
-			iconName = "bookmark";
-		}
-		else if (TAB_FILE_SEARCH.equals(tabId)) {
-			iconName = "attach";
-		}
-		else if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
-			iconName = "xmag";
-		}
-		else if (TAB_SEARCH.equals(tabId)) {
-			iconName = "xmag";
-		}
-		else if (TAB_ACTIVITY.equals(tabId)) {
-			iconName = "wizard";
-		}
-		else if (TAB_GRAPH.equals(tabId)) {
-			iconName = "group";
-		}
-		else if (TAB_GIT.equals(tabId)) {
-			iconName = "prepare";
-		}
-		else if (TAB_REPORTS.equals(tabId)) {
-			iconName = "list";
-		}
-		else if (TAB_NEXT_ACTIONS.equals(tabId)) {
-			iconName = "flag";
-		}
-		if (iconName == null) {
-			return null;
-		}
-		try {
-			final org.freeplane.features.icon.MindIcon mind = org.freeplane.features.icon.factory.IconStoreFactory
-			        .create().getMindIcon(iconName);
-			if (mind == null || mind instanceof org.freeplane.features.icon.IconNotFound) {
-				return null;
-			}
-			return mind.getIcon();
-		}
-		catch (final Exception e) {
-			return null;
-		}
-	}
-
 	private JComponent createSideTabPlaceholder(final String tabId) {
 		if (TAB_WORKSPACE.equals(tabId)) {
 			return getWorkspaceView();
@@ -1068,7 +1008,6 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 			sideTabs.add(getSideTabTitle(tabId), component);
 		}
-		applySideTabIcons();
 		final int selectedIndex = sideTabOrder.indexOf(selectedTabId);
 		if (selectedIndex >= 0) {
 			sideTabs.setSelectedIndex(selectedIndex);
@@ -1115,7 +1054,16 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			panel = new GitTabPanel();
 		}
 		else if (TAB_REPORTS.equals(tabId)) {
-			panel = new ReportsTabPanel();
+			try {
+				panel = new ReportsTabPanel();
+			}
+			catch (final Throwable t) {
+				LogUtils.warn("ReportsTabPanel failed to load", t);
+				final JPanel fallback = new JPanel(new BorderLayout());
+				fallback.add(new JLabel("<html>报表面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>"),
+				        BorderLayout.CENTER);
+				panel = fallback;
+			}
 		}
 		else if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			panel = new EnhancedAllFlagsTabPanel();

@@ -109,9 +109,8 @@ public final class SideTabTitleUpdater {
 			    ? SideTabMetricRegistry.get(metricKey, 0)
 			    : -1;
 			tabs.setTitleAt(i, TabCountLabels.format(baseTitle, value));
-			final javax.swing.Icon icon = tabs.getIconAt(i);
-			if (value >= 0 || icon != null) {
-				tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value, icon));
+			if (value >= 0) {
+				tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value));
 			}
 			else {
 				tabs.setTabComponentAt(i, null);
