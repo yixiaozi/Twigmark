@@ -4,17 +4,25 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Structured report for the center viewport: charts + detail lines.
+ * Structured report for the center viewport: KPIs + charts + detail lines.
  */
 public final class ReportViewModel {
 	public final String title;
 	public final String subtitle;
+	public final List kpis = new ArrayList(); // ReportKpi
 	public final List charts = new ArrayList(); // ReportChartSeries
 	public final List details = new ArrayList(); // String
+	public String decision = "";
+	public String dataSource = "";
+	public String emptyHint = "";
 
 	public ReportViewModel(final String title, final String subtitle) {
 		this.title = title == null ? "报表" : title;
 		this.subtitle = subtitle == null ? "" : subtitle;
+	}
+
+	public void addKpi(final String label, final String value, final String hint) {
+		kpis.add(new ReportKpi(label, value, hint));
 	}
 
 	public void addChart(final ReportChartSeries series) {
@@ -31,5 +39,9 @@ public final class ReportViewModel {
 
 	public boolean hasCharts() {
 		return !charts.isEmpty();
+	}
+
+	public boolean hasKpis() {
+		return !kpis.isEmpty();
 	}
 }

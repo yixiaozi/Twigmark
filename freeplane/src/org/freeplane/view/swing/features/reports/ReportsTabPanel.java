@@ -49,7 +49,7 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("点报表名称 → 在导图位置显示图表");
+	private final JLabel statusLabel = new JLabel("每种报表回答一个决策问题；点选后在导图区出图");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -126,7 +126,7 @@ public class ReportsTabPanel extends JPanel {
 		add(north, BorderLayout.NORTH);
 
 		reportList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		reportList.setFixedCellHeight(42);
+		reportList.setFixedCellHeight(58);
 		reportList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 
@@ -135,7 +135,8 @@ public class ReportsTabPanel extends JPanel {
 				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				if (value instanceof ReportDefinition) {
 					final ReportDefinition def = (ReportDefinition) value;
-					setText("<html><b>" + escape(def.title) + "</b><br><font color='#666666' size='2'>"
+					setText("<html><b>" + escape(def.title) + "</b><br><font color='#2F6FED' size='2'>"
+					        + escape(def.decision) + "</font><br><font color='#666666' size='2'>"
 					        + escape(def.description) + "</font></html>");
 					setIcon(loadIcon(def.iconName));
 					setVerticalTextPosition(SwingConstants.CENTER);
@@ -146,8 +147,9 @@ public class ReportsTabPanel extends JPanel {
 				return this;
 			}
 		});
+		reportList.setFixedCellHeight(58);
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder("报表（点击在导图区显示图表）"));
+		scroll.setBorder(BorderFactory.createTitledBorder("报表（点选 → 中间出图）"));
 		add(scroll, BorderLayout.CENTER);
 
 		final JPanel south = new JPanel(new GridLayout(1, 3, 4, 0));
@@ -240,16 +242,19 @@ public class ReportsTabPanel extends JPanel {
 		statusLabel.setText("正在生成「" + def.title + "」…");
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
+				ReportViewModel viewModel = null;
 				ReportNodeSpec tree = null;
 				Exception error = null;
 				try {
-					tree = ReportEngine.generate(def, query);
+					viewModel = ReportEngine.generateView(def, query);
+					tree = ReportEngine.toTree(viewModel);
 				}
 				catch (Exception e) {
 					error = e;
 					LogUtils.warn("ReportsTabPanel generate failed", e);
 				}
-				final ReportNodeSpec result = tree;
+				final ReportViewModel resultView = viewModel;
+				final ReportNodeSpec resultTree = tree;
 				final Exception fail = error;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
@@ -260,24 +265,23 @@ public class ReportsTabPanel extends JPanel {
 								        JOptionPane.ERROR_MESSAGE);
 								return;
 							}
-							final ReportViewModel view = ReportViewFactory.fromTree(def, query, result);
 							final ReportViewportService service = ReportViewportService.get();
 							if (service == null) {
 								statusLabel.setText("无法打开报表视图");
 								return;
 							}
-							service.showReport(view, result);
+							service.showReport(resultView, resultTree);
 							if (writeToMindMap) {
-								final NodeModel written = ReportMindMapWriter.writeUnderSelection(result);
+								final NodeModel written = ReportMindMapWriter.writeUnderSelection(resultTree);
 								if (written == null) {
 									statusLabel.setText("图表已显示；写入失败：未选中节点");
 								}
 								else {
-									statusLabel.setText("已显示图表，并写入「" + def.title + "」");
+									statusLabel.setText("已显示「" + def.title + "」，并写入节点");
 								}
 							}
 							else {
-								statusLabel.setText("已在导图位置显示「" + def.title + "」");
+								statusLabel.setText("已显示「" + def.title + "」· " + def.decision);
 							}
 						}
 						catch (Exception e) {
