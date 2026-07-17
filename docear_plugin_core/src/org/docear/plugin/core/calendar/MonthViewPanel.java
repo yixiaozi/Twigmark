@@ -33,12 +33,23 @@ final class MonthViewPanel extends JPanel {
 		void onDayActivated(Date dayStart);
 	}
 
+	interface AppointmentListener {
+		void onAppointmentClicked(CalendarAppointment appt);
+
+		void onAppointmentActivated(CalendarAppointment appt);
+
+		void onAppointmentPopup(CalendarAppointment appt, int x, int y);
+	}
+
 	private final SimpleDateFormat dayNumFormat = new SimpleDateFormat("d", Locale.CHINA);
 	private Date monthStart = firstOfMonth(new Date());
 	private Date selectedDay = DayViewPanel.startOfDay(new Date());
 	private List appointments = Collections.EMPTY_LIST;
 	private DayHandler dayHandler;
+	private AppointmentListener appointmentListener;
 	private int hoverIndex = -1;
+	/** Cached chip bounds from last paint: [x, y, w, h, apptIndexInDayList encoded via hit list]. */
+	private final ArrayList chipHits = new ArrayList();
 
 	MonthViewPanel() {
 		setOpaque(true);
@@ -58,7 +69,38 @@ final class MonthViewPanel extends JPanel {
 				repaint();
 			}
 
+			public void mousePressed(final MouseEvent e) {
+				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+					final CalendarAppointment hit = appointmentAt(e.getX(), e.getY());
+					if (hit != null && appointmentListener != null) {
+						appointmentListener.onAppointmentPopup(hit, e.getX(), e.getY());
+					}
+				}
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				if (e.isPopupTrigger()) {
+					final CalendarAppointment hit = appointmentAt(e.getX(), e.getY());
+					if (hit != null && appointmentListener != null) {
+						appointmentListener.onAppointmentPopup(hit, e.getX(), e.getY());
+					}
+				}
+			}
+
 			public void mouseClicked(final MouseEvent e) {
+				if (e.getButton() == MouseEvent.BUTTON3) {
+					return;
+				}
+				final CalendarAppointment hit = appointmentAt(e.getX(), e.getY());
+				if (hit != null && appointmentListener != null) {
+					if (e.getClickCount() >= 2) {
+						appointmentListener.onAppointmentActivated(hit);
+					}
+					else {
+						appointmentListener.onAppointmentClicked(hit);
+					}
+					return;
+				}
 				final Date day = dayAt(e.getX(), e.getY());
 				if (day == null) {
 					return;
@@ -81,6 +123,24 @@ final class MonthViewPanel extends JPanel {
 
 	void setDayHandler(final DayHandler handler) {
 		this.dayHandler = handler;
+	}
+
+	void setAppointmentListener(final AppointmentListener listener) {
+		this.appointmentListener = listener;
+	}
+
+	CalendarAppointment appointmentAt(final int x, final int y) {
+		for (int i = chipHits.size() - 1; i >= 0; i--) {
+			final Object[] hit = (Object[]) chipHits.get(i);
+			final int hx = ((Integer) hit[0]).intValue();
+			final int hy = ((Integer) hit[1]).intValue();
+			final int hw = ((Integer) hit[2]).intValue();
+			final int hh = ((Integer) hit[3]).intValue();
+			if (x >= hx && x <= hx + hw && y >= hy && y <= hy + hh) {
+				return (CalendarAppointment) hit[4];
+			}
+		}
+		return null;
 	}
 
 	void setMonthStart(final Date date) {
@@ -157,6 +217,7 @@ final class MonthViewPanel extends JPanel {
 
 		final Font dayFont = CalendarTheme.font(13f, Font.BOLD);
 		final Font eventFont = CalendarTheme.font(10f);
+		chipHits.clear();
 		int index = 0;
 		for (int row = 0; row < rows; row++) {
 			for (int col = 0; col < 7; col++) {
@@ -212,10 +273,16 @@ final class MonthViewPanel extends JPanel {
 				for (int e = 0; e < dayEvents.size() && e < maxLines; e++) {
 					final CalendarAppointment appt = (CalendarAppointment) dayEvents.get(e);
 					final Color c = appt.color != null ? appt.color : CalendarTheme.eventColor(e);
+					final int chipX = x + 8;
+					final int chipY = ey;
+					final int chipW = cellW - 16;
+					final int chipH = 14;
 					g2.setColor(c);
-					g2.fillRoundRect(x + 8, ey, cellW - 16, 14, 6, 6);
+					g2.fillRoundRect(chipX, chipY, chipW, chipH, 6, 6);
 					g2.setColor(Color.WHITE);
 					g2.drawString(clip(appt.title, efm, cellW - 24), x + 12, ey + 11);
+					chipHits.add(new Object[] { Integer.valueOf(chipX), Integer.valueOf(chipY),
+					        Integer.valueOf(chipW), Integer.valueOf(chipH), appt });
 					ey += 16;
 				}
 				if (dayEvents.size() > maxLines) {

@@ -25,7 +25,9 @@ import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
@@ -50,13 +52,15 @@ final class CalendarViewportPanel extends JPanel {
 	private final JScrollPane timedScroll;
 	private final JLabel titleLabel = new JLabel("安排中心");
 	private final JLabel subtitleLabel = new JLabel(" ");
-	private final JLabel statusLabel = new JLabel("拖拽可选分钟级时间 · 双击日期进入日视图 · 任务数据后续接入");
+	private final JLabel statusLabel = new JLabel("加载任务中…");
 	private final SimpleDateFormat monthTitle = new SimpleDateFormat("yyyy年M月", Locale.CHINA);
 	private final SimpleDateFormat dayTitle = new SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA);
 	private final SimpleDateFormat rangeTitle = new SimpleDateFormat("M月d日", Locale.CHINA);
+	private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.CHINA);
 
 	private int mode = MODE_WEEK;
 	private List appointments = Collections.EMPTY_LIST;
+	private int loadGeneration;
 	private final JToggleButton monthBtn = segment("月");
 	private final JToggleButton weekBtn = segment("周");
 	private final JToggleButton dayBtn = segment("日");
@@ -171,9 +175,64 @@ final class CalendarViewportPanel extends JPanel {
 				jumpToDay(dayStart, MODE_DAY);
 			}
 		});
+		monthView.setAppointmentListener(new MonthViewPanel.AppointmentListener() {
+			public void onAppointmentClicked(final CalendarAppointment appt) {
+				CalendarTaskService.open(appt);
+				statusLabel.setText("已打开节点：" + appt.title);
+			}
+
+			public void onAppointmentActivated(final CalendarAppointment appt) {
+				final boolean ok = CalendarTaskService.checkInOrComplete(appt);
+				statusLabel.setText(ok ? "已打卡/完成：" + appt.title : "打卡已取消");
+				if (ok) {
+					reloadTasksAsync();
+				}
+			}
+
+			public void onAppointmentPopup(final CalendarAppointment appt, final int x, final int y) {
+				showAppointmentMenu(appt, monthView, x, y);
+			}
+		});
 		dayView.setDayHeaderListener(new DayViewPanel.DayHeaderListener() {
 			public void onDayHeaderClicked(final Date dayStart) {
 				jumpToDay(dayStart, MODE_DAY);
+			}
+		});
+		dayView.setAppointmentListener(new DayViewPanel.AppointmentListener() {
+			public void onAppointmentClicked(final CalendarAppointment appt) {
+				CalendarTaskService.open(appt);
+				statusLabel.setText("已打开节点：" + appt.title);
+			}
+
+			public void onAppointmentActivated(final CalendarAppointment appt) {
+				final boolean ok = CalendarTaskService.checkInOrComplete(appt);
+				statusLabel.setText(ok ? "已打卡/完成：" + appt.title : "打卡已取消");
+				if (ok) {
+					reloadTasksAsync();
+				}
+			}
+
+			public void onAppointmentMoved(final CalendarAppointment appt, final long newStartMillis) {
+				final boolean ok = CalendarTaskService.reschedule(appt, newStartMillis);
+				if (ok) {
+					statusLabel.setText("已改期到 " + timeFmt.format(new Date(newStartMillis)) + "（记得保存导图）· "
+					        + appt.title);
+					reloadTasksAsync();
+				}
+				else {
+					statusLabel.setText("改期失败：" + appt.title);
+					reloadTasksAsync();
+				}
+			}
+
+			public void onAppointmentPopup(final CalendarAppointment appt, final int x, final int y) {
+				showAppointmentMenu(appt, dayView, x, y);
+			}
+		});
+		dayView.setSelectionListener(new DayViewPanel.SelectionListener() {
+			public void onTimeSelected(final Date start, final Date end) {
+				statusLabel.setText("选中时间 " + timeFmt.format(start) + " – " + timeFmt.format(end)
+				        + "（新建任务后续接入）");
 			}
 		});
 
@@ -185,6 +244,7 @@ final class CalendarViewportPanel extends JPanel {
 		miniMonth.setSelectedDay(new Date());
 		setMode(MODE_WEEK);
 		scrollToWorkHours();
+		reloadTasksAsync();
 	}
 
 	void setAppointments(final List list) {
@@ -193,9 +253,86 @@ final class CalendarViewportPanel extends JPanel {
 		dayView.setAppointments(appointments);
 	}
 
+	void reloadTasksAsync() {
+		final int gen = ++loadGeneration;
+		statusLabel.setText("正在扫描导图提醒…");
+		final long[] range = visibleRange();
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				final List loaded = CalendarTaskService.loadAppointments(range[0], range[1]);
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (gen != loadGeneration) {
+							return;
+						}
+						setAppointments(loaded);
+						statusLabel.setText("已加载 " + loaded.size() + " 条安排 · 单击打开 · 拖拽改期 · 双击打卡/完成 · 右键更多");
+						refreshChrome();
+					}
+				});
+			}
+		}, "Calendar-LoadReminders");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	private long[] visibleRange() {
+		final Calendar start = Calendar.getInstance();
+		final Calendar end = Calendar.getInstance();
+		if (mode == MODE_MONTH) {
+			start.setTime(MonthViewPanel.firstOfMonth(monthView.getMonthStart()));
+			start.add(Calendar.DAY_OF_MONTH, -7);
+			end.setTime(MonthViewPanel.firstOfMonth(monthView.getMonthStart()));
+			end.add(Calendar.MONTH, 1);
+			end.add(Calendar.DAY_OF_MONTH, 7);
+		}
+		else if (mode == MODE_WEEK) {
+			start.setTime(dayView.getStartDate());
+			end.setTime(dayView.getStartDate());
+			end.add(Calendar.DAY_OF_MONTH, 7);
+		}
+		else {
+			start.setTime(DayViewPanel.startOfDay(dayView.getStartDate()));
+			end.setTime(start.getTime());
+			end.add(Calendar.DAY_OF_MONTH, 1);
+		}
+		return new long[] { start.getTimeInMillis(), end.getTimeInMillis() };
+	}
+
+	private void showAppointmentMenu(final CalendarAppointment appt, final java.awt.Component invoker, final int x,
+	        final int y) {
+		final JPopupMenu menu = new JPopupMenu();
+		final JMenuItem open = new JMenuItem("打开节点");
+		final JMenuItem checkIn = new JMenuItem("打卡 / 完成");
+		final JMenuItem refresh = new JMenuItem("刷新任务");
+		open.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				CalendarTaskService.open(appt);
+			}
+		});
+		checkIn.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				if (CalendarTaskService.checkInOrComplete(appt)) {
+					reloadTasksAsync();
+				}
+			}
+		});
+		refresh.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				reloadTasksAsync();
+			}
+		});
+		menu.add(open);
+		menu.add(checkIn);
+		menu.addSeparator();
+		menu.add(refresh);
+		menu.show(invoker, x, y);
+	}
+
 	void refreshChrome() {
 		if (mode == MODE_MONTH) {
-			subtitleLabel.setText(monthTitle.format(monthView.getMonthStart()) + "  ·  月视图");
+			subtitleLabel.setText(monthTitle.format(monthView.getMonthStart()) + "  ·  月视图  ·  "
+			        + appointments.size() + " 条");
 			cards.show(cardHost, CARD_MONTH);
 		}
 		else if (mode == MODE_WEEK) {
@@ -204,12 +341,12 @@ final class CalendarViewportPanel extends JPanel {
 			end.setTime(start);
 			end.add(Calendar.DAY_OF_MONTH, 6);
 			subtitleLabel.setText(rangeTitle.format(start) + " — " + rangeTitle.format(end.getTime()) + "  ·  周视图 · "
-			        + dayView.getTimeScaleMinutes() + " 分钟刻度");
+			        + dayView.getTimeScaleMinutes() + " 分钟 · " + appointments.size() + " 条");
 			cards.show(cardHost, CARD_TIMED);
 		}
 		else {
 			subtitleLabel.setText(dayTitle.format(dayView.getStartDate()) + "  ·  日视图 · "
-			        + dayView.getTimeScaleMinutes() + " 分钟刻度");
+			        + dayView.getTimeScaleMinutes() + " 分钟 · " + appointments.size() + " 条");
 			cards.show(cardHost, CARD_TIMED);
 		}
 		setScaleEnabled(mode != MODE_MONTH);
@@ -234,6 +371,7 @@ final class CalendarViewportPanel extends JPanel {
 			scrollToWorkHours();
 		}
 		refreshChrome();
+		reloadTasksAsync();
 		revalidate();
 		repaint();
 	}
@@ -270,6 +408,7 @@ final class CalendarViewportPanel extends JPanel {
 			miniMonth.setSelectedDay(cal.getTime());
 		}
 		refreshChrome();
+		reloadTasksAsync();
 	}
 
 	private void goToday() {
@@ -287,6 +426,7 @@ final class CalendarViewportPanel extends JPanel {
 		miniMonth.setSelectedDay(today);
 		refreshChrome();
 		scrollToWorkHours();
+		reloadTasksAsync();
 	}
 
 	private JPanel buildHero() {
@@ -318,10 +458,12 @@ final class CalendarViewportPanel extends JPanel {
 		final JButton prev = heroBtn("◀");
 		final JButton next = heroBtn("▶");
 		final JButton today = heroBtn("今天");
+		final JButton refresh = heroBtn("刷新");
 		final JButton close = heroBtn("返回导图");
 		controls.add(prev);
 		controls.add(next);
 		controls.add(today);
+		controls.add(refresh);
 		controls.add(spacer());
 		controls.add(monthBtn);
 		controls.add(weekBtn);
@@ -350,6 +492,11 @@ final class CalendarViewportPanel extends JPanel {
 		today.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				goToday();
+			}
+		});
+		refresh.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				reloadTasksAsync();
 			}
 		});
 		close.addActionListener(new ActionListener() {

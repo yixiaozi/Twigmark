@@ -104,6 +104,7 @@ public final class CalendarViewportService implements IExtension {
 				final CalendarViewportPanel calendar = getPanel();
 				sizeToViewport(mapViewController.getScrollPane(), calendar);
 				calendar.refreshChrome();
+				calendar.reloadTasksAsync();
 				mapViewController.refreshViewportView(calendar);
 				calendar.revalidate();
 				mapViewController.getScrollPane().validate();

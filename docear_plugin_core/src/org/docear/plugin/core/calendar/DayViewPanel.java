@@ -41,6 +41,16 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		void onDayHeaderClicked(Date dayStart);
 	}
 
+	interface AppointmentListener {
+		void onAppointmentClicked(CalendarAppointment appt);
+
+		void onAppointmentActivated(CalendarAppointment appt);
+
+		void onAppointmentMoved(CalendarAppointment appt, long newStartMillis);
+
+		void onAppointmentPopup(CalendarAppointment appt, int x, int y);
+	}
+
 	private final SimpleDateFormat dayHeaderFormat = new SimpleDateFormat("M/d EEE", Locale.CHINA);
 	private final SimpleDateFormat hourFormat = new SimpleDateFormat("H:mm", Locale.CHINA);
 
@@ -54,16 +64,29 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	private Date selectionEnd;
 	private SelectionListener selectionListener;
 	private DayHeaderListener dayHeaderListener;
+	private AppointmentListener appointmentListener;
+	private CalendarAppointment selectedAppointment;
+	private CalendarAppointment draggingAppointment;
+	private long draggingDurationMs;
+	private Date dragAnchorTime;
+	private boolean dragMoved;
+	private int pressX;
+	private int pressY;
 
 	DayViewPanel() {
 		setBackground(CalendarTheme.CANVAS);
 		setOpaque(true);
 		setFocusable(true);
 		final MouseAdapter mouse = new MouseAdapter() {
-			private Date dragStart;
+			private Date emptyDragStart;
 
 			public void mousePressed(final MouseEvent e) {
 				requestFocusInWindow();
+				pressX = e.getX();
+				pressY = e.getY();
+				dragMoved = false;
+				draggingAppointment = null;
+				emptyDragStart = null;
 				if (e.getY() < DAY_HEADER_HEIGHT && e.getX() >= HOUR_LABEL_WIDTH) {
 					final Date day = dayAtX(e.getX());
 					if (day != null && dayHeaderListener != null) {
@@ -71,27 +94,60 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					}
 					return;
 				}
-				dragStart = getTimeAt(e.getX(), e.getY());
-				selectionStart = dragStart;
-				selectionEnd = dragStart == null ? null
-				        : new Date(dragStart.getTime() + timeScaleMinutes * 60L * 1000L);
+				final CalendarAppointment hit = getAppointmentAt(e.getX(), e.getY());
+				if (hit != null) {
+					selectedAppointment = hit;
+					draggingAppointment = hit;
+					draggingDurationMs = Math.max(60L * 1000L, hit.endMillis() - hit.startMillis());
+					dragAnchorTime = getTimeAt(e.getX(), e.getY());
+					selectionStart = null;
+					selectionEnd = null;
+					if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+						if (appointmentListener != null) {
+							appointmentListener.onAppointmentPopup(hit, e.getX(), e.getY());
+						}
+					}
+					repaint();
+					return;
+				}
+				selectedAppointment = null;
+				emptyDragStart = getTimeAt(e.getX(), e.getY());
+				selectionStart = emptyDragStart;
+				selectionEnd = emptyDragStart == null ? null
+				        : new Date(emptyDragStart.getTime() + timeScaleMinutes * 60L * 1000L);
 				repaint();
 			}
 
 			public void mouseDragged(final MouseEvent e) {
-				if (dragStart == null) {
+				if (Math.abs(e.getX() - pressX) + Math.abs(e.getY() - pressY) > 3) {
+					dragMoved = true;
+				}
+				if (draggingAppointment != null) {
+					final Date at = getTimeAt(e.getX(), e.getY());
+					if (at == null || dragAnchorTime == null) {
+						return;
+					}
+					final long delta = at.getTime() - dragAnchorTime.getTime();
+					final long newStart = draggingAppointment.startMillis() + delta;
+					final Date ns = new Date(newStart);
+					selectionStart = ns;
+					selectionEnd = new Date(newStart + draggingDurationMs);
+					repaint();
+					return;
+				}
+				if (emptyDragStart == null) {
 					return;
 				}
 				final Date at = getTimeAt(e.getX(), e.getY());
 				if (at == null) {
 					return;
 				}
-				if (at.before(dragStart)) {
+				if (at.before(emptyDragStart)) {
 					selectionStart = at;
-					selectionEnd = dragStart;
+					selectionEnd = emptyDragStart;
 				}
 				else {
-					selectionStart = dragStart;
+					selectionStart = emptyDragStart;
 					selectionEnd = at;
 				}
 				if (selectionEnd.getTime() - selectionStart.getTime() < 60L * 1000L) {
@@ -101,9 +157,36 @@ final class DayViewPanel extends JPanel implements Scrollable {
 			}
 
 			public void mouseReleased(final MouseEvent e) {
-				if (selectionListener != null && selectionStart != null && selectionEnd != null) {
+				if (e.isPopupTrigger() && selectedAppointment != null && appointmentListener != null) {
+					appointmentListener.onAppointmentPopup(selectedAppointment, e.getX(), e.getY());
+					draggingAppointment = null;
+					return;
+				}
+				if (draggingAppointment != null) {
+					if (dragMoved && selectionStart != null && appointmentListener != null) {
+						appointmentListener.onAppointmentMoved(draggingAppointment, selectionStart.getTime());
+					}
+					else if (!dragMoved && appointmentListener != null) {
+						if (e.getClickCount() >= 2) {
+							appointmentListener.onAppointmentActivated(draggingAppointment);
+						}
+						else {
+							appointmentListener.onAppointmentClicked(draggingAppointment);
+						}
+					}
+					draggingAppointment = null;
+					selectionStart = null;
+					selectionEnd = null;
+					repaint();
+					return;
+				}
+				if (!dragMoved && selectionListener != null && selectionStart != null && selectionEnd != null) {
 					selectionListener.onTimeSelected(selectionStart, selectionEnd);
 				}
+			}
+
+			public void mouseClicked(final MouseEvent e) {
+				// double-click handled in released for appointments
 			}
 		};
 		addMouseListener(mouse);
@@ -116,6 +199,37 @@ final class DayViewPanel extends JPanel implements Scrollable {
 
 	void setDayHeaderListener(final DayHeaderListener listener) {
 		this.dayHeaderListener = listener;
+	}
+
+	void setAppointmentListener(final AppointmentListener listener) {
+		this.appointmentListener = listener;
+	}
+
+	CalendarAppointment getAppointmentAt(final int x, final int y) {
+		final int bodyWidth = Math.max(1, getWidth() - HOUR_LABEL_WIDTH);
+		final int dayWidth = Math.max(1, bodyWidth / daysToShow);
+		for (int i = appointments.size() - 1; i >= 0; i--) {
+			final CalendarAppointment appt = (CalendarAppointment) appointments.get(i);
+			final int day = dayIndexFor(appt.start);
+			if (day < 0) {
+				continue;
+			}
+			final int ax = HOUR_LABEL_WIDTH + day * dayWidth + 3;
+			final int y1 = yForTime(appt.start);
+			Date end = appt.end;
+			if (end == null || !end.after(appt.start)) {
+				end = new Date(appt.start.getTime() + timeScaleMinutes * 60L * 1000L);
+			}
+			int y2 = yForTime(end);
+			if (y2 <= y1) {
+				y2 = y1 + Math.max(slotHeight / 2, 10);
+			}
+			final int w = dayWidth - 6;
+			if (x >= ax && x <= ax + w && y >= y1 && y <= y2) {
+				return appt;
+			}
+		}
+		return null;
 	}
 
 	void setStartDate(final Date date) {
@@ -307,10 +421,20 @@ final class DayViewPanel extends JPanel implements Scrollable {
 			}
 		}
 
-		paintTimeRange(g2, selectionStart, selectionEnd, CalendarTheme.SELECTION, dayWidth);
+		if (draggingAppointment == null) {
+			paintTimeRange(g2, selectionStart, selectionEnd, CalendarTheme.SELECTION, dayWidth);
+		}
 
 		for (int i = 0; i < appointments.size(); i++) {
-			paintAppointment(g2, (CalendarAppointment) appointments.get(i), dayWidth, i);
+			final CalendarAppointment appt = (CalendarAppointment) appointments.get(i);
+			if (draggingAppointment == appt && selectionStart != null) {
+				final CalendarAppointment ghost = new CalendarAppointment(selectionStart,
+				        new Date(selectionStart.getTime() + draggingDurationMs), appt.title, appt.color, appt.userData);
+				paintAppointment(g2, ghost, dayWidth, i, true);
+			}
+			else {
+				paintAppointment(g2, appt, dayWidth, i, appt == selectedAppointment);
+			}
 		}
 
 		final Date now = new Date();
@@ -332,7 +456,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	}
 
 	private void paintAppointment(final Graphics2D g2, final CalendarAppointment appt, final int dayWidth,
-	        final int index) {
+	        final int index, final boolean selected) {
 		if (appt == null || appt.start == null) {
 			return;
 		}
@@ -357,6 +481,11 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		g2.fillRoundRect(x, y1, w, h, 8, 8);
 		g2.setColor(new Color(255, 255, 255, 60));
 		g2.fillRoundRect(x, y1, w, Math.min(10, h / 3), 8, 8);
+		if (selected) {
+			g2.setColor(CalendarTheme.TEXT);
+			g2.drawRoundRect(x, y1, w, h, 8, 8);
+			g2.drawRoundRect(x + 1, y1 + 1, w - 2, h - 2, 7, 7);
+		}
 		g2.setColor(Color.WHITE);
 		g2.setFont(CalendarTheme.font(11f, Font.BOLD));
 		final FontMetrics fm = g2.getFontMetrics();
