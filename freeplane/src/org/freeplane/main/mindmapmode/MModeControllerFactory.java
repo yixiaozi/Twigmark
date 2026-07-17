@@ -191,6 +191,12 @@ public class MModeControllerFactory {
 		catch (Exception e) {
 			org.freeplane.core.util.LogUtils.severe("Pomodoro install failed; continuing without it", e);
 		}
+		try {
+			org.freeplane.view.swing.features.finance.FinanceController.install(modeController);
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.severe("Finance install failed; continuing without it", e);
+		}
 		final JComponent tabs = (JComponent) modeController.getUserInputListenerFactory().getToolBar("/format").getComponent(1);
 		tabs.add("\u63d0\u9192", new ReminderTabPanel(modeController));
 		tabs.add("\u5168\u90e8\u63d0\u9192", new EnhancedAllRemindersTabPanel());
