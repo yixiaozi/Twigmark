@@ -130,11 +130,46 @@ public final class ReminderCalendarBridge {
 	}
 
 	/**
-	 * Create a child node under {@code parent} (or selected node) with a one-time reminder
-	 * at {@code startMs}; optional duration stored as task time minutes.
+	 * Show calendar create dialog (title / cycle / duration / level / urgency) and
+	 * create a child reminder under the selected node (or map root).
+	 *
+	 * @return {@link Boolean#TRUE} created, {@link Boolean#FALSE} failed, {@code null} cancelled
+	 */
+	public static Boolean promptAndCreateReminderTask(final java.awt.Component owner, final long startMs,
+	        final long endMs) {
+		final NodeModel parent = resolveCreateParent();
+		if (parent == null) {
+			return Boolean.FALSE;
+		}
+		final CalendarCreateReminderDialog.Result result = CalendarCreateReminderDialog.show(owner, startMs, endMs);
+		if (result == null) {
+			return null;
+		}
+		final boolean ok = createReminderTask(parent, result.title, result.startMs, result.cycleConfig.remindType,
+		        result.cycleConfig.interval, result.cycleConfig.weekDays, result.taskConfig.taskTime,
+		        result.taskConfig.taskLevel, result.taskConfig.jinji);
+		return Boolean.valueOf(ok);
+	}
+
+	/**
+	 * Create a child node under {@code parent} with a one-time reminder at {@code startMs};
+	 * optional duration stored as task time minutes.
 	 */
 	public static boolean createReminderTask(final NodeModel parent, final String title, final long startMs,
 	        final int durationMinutes) {
+		return createReminderTask(parent, title, startMs, ReminderCycleAttributes.TYPE_ONETIME, 1, "",
+		        durationMinutes, 0, 0);
+	}
+
+	/**
+	 * Create a child reminder with full cycle + task metadata (same fields as the reminder editor).
+	 *
+	 * @param remindType one of onetime/hour/day/week/month/year/eb
+	 * @param weekDays   weekday mask for week cycles, e.g. {@code "135"} (Mon=1 … Sun=7)
+	 */
+	public static boolean createReminderTask(final NodeModel parent, final String title, final long startMs,
+	        final String remindType, final int interval, final String weekDays, final int durationMinutes,
+	        final int taskLevel, final int jinji) {
 		if (parent == null || startMs <= 0L) {
 			return false;
 		}
@@ -153,11 +188,23 @@ public final class ReminderCalendarBridge {
 			if (reminderHook == null) {
 				return false;
 			}
+			final ReminderCycleAttributes.CycleConfig cycleConfig = buildCycleConfig(remindType, interval, weekDays);
 			final ReminderExtension reminderExtension = new ReminderExtension(child);
 			reminderExtension.setRemindUserAt(startMs);
+			if (cycleConfig.isRecurring()) {
+				reminderExtension.setPeriod(cycleConfig.interval <= 0 ? 1 : cycleConfig.interval);
+				reminderExtension.setPeriodUnit(periodUnitForRemindType(cycleConfig.remindType));
+			}
+			else {
+				reminderExtension.setPeriodUnit(PeriodUnit.DAY);
+				reminderExtension.setPeriod(1);
+			}
+			reminderExtension.setScript(null);
 			reminderHook.undoableActivateHook(child, reminderExtension);
-			if (durationMinutes > 0) {
-				ReminderTaskAttributes.writeFull(child, durationMinutes, 0, 0);
+			ReminderCycleAttributes.writeToNode(child, cycleConfig);
+			final int minutes = Math.max(0, durationMinutes);
+			if (minutes > 0 || taskLevel != 0 || jinji != 0) {
+				ReminderTaskAttributes.writeFull(child, minutes, taskLevel, jinji);
 			}
 			mapController.setSaved(child.getMap(), false);
 			final File mapFile = child.getMap().getFile();
@@ -173,6 +220,60 @@ public final class ReminderCalendarBridge {
 			LogUtils.warn("ReminderCalendarBridge.createReminderTask failed", e);
 			return false;
 		}
+	}
+
+	private static NodeModel resolveCreateParent() {
+		try {
+			final NodeModel selected = Controller.getCurrentController().getSelection().getSelected();
+			if (selected != null) {
+				return selected;
+			}
+		}
+		catch (Exception e) {
+		}
+		try {
+			return Controller.getCurrentController().getMap().getRootNode();
+		}
+		catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static ReminderCycleAttributes.CycleConfig buildCycleConfig(final String remindType, final int interval,
+	        final String weekDays) {
+		final String type = remindType == null || remindType.trim().length() == 0
+		        ? ReminderCycleAttributes.TYPE_ONETIME : remindType.trim();
+		if (ReminderCycleAttributes.TYPE_ONETIME.equalsIgnoreCase(type)) {
+			return ReminderCycleAttributes.CycleConfig.oneTime();
+		}
+		if (ReminderCycleAttributes.TYPE_EB.equalsIgnoreCase(type)) {
+			return new ReminderCycleAttributes.CycleConfig(ReminderCycleAttributes.TYPE_EB, 1, "", 0);
+		}
+		final int safeInterval = interval <= 0 ? 1 : interval;
+		if (ReminderCycleAttributes.TYPE_WEEK.equalsIgnoreCase(type)) {
+			String days = weekDays == null ? "" : weekDays.trim();
+			if (days.length() == 0) {
+				days = "1";
+			}
+			return new ReminderCycleAttributes.CycleConfig(ReminderCycleAttributes.TYPE_WEEK, safeInterval, days, 0);
+		}
+		return new ReminderCycleAttributes.CycleConfig(type, safeInterval, "", 0);
+	}
+
+	private static PeriodUnit periodUnitForRemindType(final String remindType) {
+		if (ReminderCycleAttributes.TYPE_HOUR.equals(remindType)) {
+			return PeriodUnit.HOUR;
+		}
+		if (ReminderCycleAttributes.TYPE_WEEK.equals(remindType)) {
+			return PeriodUnit.WEEK;
+		}
+		if (ReminderCycleAttributes.TYPE_MONTH.equals(remindType)) {
+			return PeriodUnit.MONTH;
+		}
+		if (ReminderCycleAttributes.TYPE_YEAR.equals(remindType)) {
+			return PeriodUnit.YEAR;
+		}
+		return PeriodUnit.DAY;
 	}
 
 	public static void openNode(final File file, final String nodeId) {

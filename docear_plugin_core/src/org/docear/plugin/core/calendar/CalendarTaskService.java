@@ -143,6 +143,15 @@ final class CalendarTaskService {
 		ReminderCalendarBridge.openNode(ref.file, ref.nodeId);
 	}
 
+	/**
+	 * Open create dialog (title / cycle / duration / level / urgency) and write the reminder.
+	 *
+	 * @return {@link Boolean#TRUE} created, {@link Boolean#FALSE} failed, {@code null} cancelled
+	 */
+	static Boolean promptCreateTask(final java.awt.Component owner, final long startMs, final long endMs) {
+		return ReminderCalendarBridge.promptAndCreateReminderTask(owner, startMs, endMs);
+	}
+
 	static boolean createTask(final String title, final long startMs, final long endMs) {
 		NodeModel parent = null;
 		try {

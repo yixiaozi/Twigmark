@@ -530,21 +530,16 @@ final class CalendarViewportPanel extends JPanel {
 			start = cal.getTime();
 			end = new Date(start.getTime() + 30L * 60L * 1000L);
 		}
-		final String title = JOptionPane.showInputDialog(this,
-		        "在选中节点下新建子节点，并设置提醒：\n" + timeFmt.format(start) + " – " + timeFmt.format(end), "新安排");
-		if (title == null) {
-			return;
-		}
-		final boolean ok = CalendarTaskService.createTask(title, start.getTime(), end.getTime());
-		if (ok) {
-			statusLabel.setText("已新建：" + title + "（未保存也会显示；记得保存导图）");
+		final Boolean ok = CalendarTaskService.promptCreateTask(this, start.getTime(), end.getTime());
+		if (Boolean.TRUE.equals(ok)) {
+			statusLabel.setText("已新建安排（含周期/时长/等级/紧急程度；未保存也会显示）");
 			miniMonth.setSelectedDay(start);
 			dayView.clearSelection();
 			pendingCreateStart = start;
 			pendingCreateEnd = end;
 			reloadTasksAsync(true);
 		}
-		else {
+		else if (Boolean.FALSE.equals(ok)) {
 			statusLabel.setText("新建失败：请先打开一张导图");
 		}
 	}
