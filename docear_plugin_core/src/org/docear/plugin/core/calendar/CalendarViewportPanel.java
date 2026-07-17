@@ -94,18 +94,20 @@ final class CalendarViewportPanel extends JPanel {
 
 		final JPanel body = new JPanel(new BorderLayout(0, 0));
 		body.setOpaque(false);
-		body.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
+		body.setBorder(BorderFactory.createEmptyBorder(8, 4, 8, 8));
 
 		final JPanel side = new JPanel(new BorderLayout(0, 0));
 		side.setOpaque(false);
 		side.setMinimumSize(new Dimension(160, 0));
-		side.setPreferredSize(new Dimension(220, 0));
+		side.setPreferredSize(new Dimension(200, 0));
 
 		final JPanel sideTop = new JPanel();
 		sideTop.setLayout(new BoxLayout(sideTop, BoxLayout.Y_AXIS));
 		sideTop.setOpaque(false);
+		sideTop.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		final JPanel miniNav = new JPanel(new BorderLayout(4, 0));
 		miniNav.setOpaque(false);
+		miniNav.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		miniNav.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		final JButton miniPrev = ghost("<");
 		final JButton miniNext = ghost(">");
@@ -116,7 +118,7 @@ final class CalendarViewportPanel extends JPanel {
 		sideTop.add(miniMonth);
 		final JPanel legend = new JPanel(new GridLayout(0, 1, 0, 2));
 		legend.setOpaque(false);
-		legend.setBorder(BorderFactory.createEmptyBorder(6, 4, 4, 4));
+		legend.setBorder(BorderFactory.createEmptyBorder(4, 2, 2, 2));
 		legend.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		legend.setMaximumSize(new Dimension(Integer.MAX_VALUE, 54));
 		legend.add(legendLine(CalendarTheme.EVENT_A, "安排"));
@@ -128,7 +130,7 @@ final class CalendarViewportPanel extends JPanel {
 		taskHead.setOpaque(false);
 		taskHead.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		taskHead.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-		taskHead.setBorder(BorderFactory.createEmptyBorder(8, 2, 4, 2));
+		taskHead.setBorder(BorderFactory.createEmptyBorder(6, 0, 2, 0));
 		dayTaskHeader.setFont(CalendarTheme.font(12f, Font.BOLD));
 		dayTaskHeader.setForeground(CalendarTheme.TEXT);
 		taskHead.add(dayTaskHeader, BorderLayout.WEST);
@@ -158,12 +160,17 @@ final class CalendarViewportPanel extends JPanel {
 		split.setOpaque(false);
 		split.setBorder(null);
 		split.setContinuousLayout(true);
-		split.setOneTouchExpandable(true);
+		split.setOneTouchExpandable(false);
 		split.setResizeWeight(0.0);
-		split.setDividerSize(6);
-		split.setDividerLocation(220);
+		split.setDividerSize(5);
+		split.setDividerLocation(200);
 		body.add(split, BorderLayout.CENTER);
 		add(body, BorderLayout.CENTER);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				split.setDividerLocation(200);
+			}
+		});
 
 		statusLabel.setFont(CalendarTheme.font(11f));
 		statusLabel.setForeground(CalendarTheme.TEXT_MUTED);
@@ -324,13 +331,30 @@ final class CalendarViewportPanel extends JPanel {
 				}
 				final boolean ok = CalendarTaskService.reschedule(appt, newStartMillis);
 				if (ok) {
-					statusLabel.setText("已改期到 " + timeFmt.format(new Date(newStartMillis)) + "（记得保存导图）· "
-					        + appt.title);
-					reloadTasksAsync();
+					statusLabel.setText("已改期到 " + timeFmt.format(new Date(newStartMillis)) + "（记得保存导图）");
+					reloadTasksAsync(false);
 				}
 				else {
 					statusLabel.setText("改期失败：" + appt.title);
+					reloadTasksAsync(true);
+				}
+			}
+
+			public void onAppointmentResized(final CalendarAppointment appt, final long newEndMillis) {
+				if (CalendarTaskService.isPomodoro(appt)) {
+					statusLabel.setText("番茄钟时段不可调整时长");
 					reloadTasksAsync();
+					return;
+				}
+				final boolean ok = CalendarTaskService.resizeDuration(appt, newEndMillis);
+				if (ok) {
+					final int minutes = (int) Math.max(5L, (newEndMillis - appt.startMillis()) / 60000L);
+					statusLabel.setText("已调整时长为 " + minutes + " 分钟（记得保存导图）");
+					reloadTasksAsync(false);
+				}
+				else {
+					statusLabel.setText("调整时长失败：" + appt.title);
+					reloadTasksAsync(true);
 				}
 			}
 
@@ -604,6 +628,13 @@ final class CalendarViewportPanel extends JPanel {
 		});
 		menu.add(open);
 		if (!CalendarTaskService.isPomodoro(appt)) {
+			final JMenuItem edit = new JMenuItem("编辑安排");
+			edit.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					promptEditTask(appt);
+				}
+			});
+			menu.add(edit);
 			final JMenuItem checkIn = new JMenuItem("打卡 / 完成");
 			checkIn.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
@@ -623,6 +654,17 @@ final class CalendarViewportPanel extends JPanel {
 		menu.addSeparator();
 		menu.add(refresh);
 		menu.show(invoker, x, y);
+	}
+
+	private void promptEditTask(final CalendarAppointment appt) {
+		final Boolean ok = CalendarTaskService.promptEditTask(this, appt);
+		if (Boolean.TRUE.equals(ok)) {
+			statusLabel.setText("已更新安排（记得保存导图）");
+			reloadTasksAsync(true);
+		}
+		else if (Boolean.FALSE.equals(ok)) {
+			statusLabel.setText("编辑失败");
+		}
 	}
 
 	void refreshChrome() {
@@ -891,7 +933,8 @@ final class CalendarViewportPanel extends JPanel {
 		final JButton button = new JButton(text);
 		button.setFont(CalendarTheme.font(12f));
 		button.setFocusable(false);
-		button.setBorder(BorderFactory.createEmptyBorder(2, 8, 2, 8));
+		button.setMargin(new java.awt.Insets(0, 0, 0, 0));
+		button.setBorder(BorderFactory.createEmptyBorder(2, 2, 2, 2));
 		return button;
 	}
 

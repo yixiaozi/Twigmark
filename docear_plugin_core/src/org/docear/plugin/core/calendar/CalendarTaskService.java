@@ -82,7 +82,7 @@ final class CalendarTaskService {
 		final Date start = new Date(ref.occurrenceAt);
 		final Date end = new Date(ref.occurrenceAt + minutes * 60L * 1000L);
 		final Color color = colorFor(ref, index);
-		final String title = (ref.recurring ? "↻ " : "") + (ref.nodeText == null ? "" : ref.nodeText);
+		final String title = ref.nodeText == null ? "" : ref.nodeText;
 		return new CalendarAppointment(start, end, title, color, ref);
 	}
 
@@ -143,6 +143,15 @@ final class CalendarTaskService {
 		ReminderCalendarBridge.openNode(ref.file, ref.nodeId);
 	}
 
+	static boolean resizeDuration(final CalendarAppointment appt, final long newEndMillis) {
+		final ReminderCalendarBridge.OccurrenceRef ref = asRef(appt);
+		if (ref == null || appt.start == null) {
+			return false;
+		}
+		final int minutes = (int) Math.max(5L, (newEndMillis - appt.startMillis()) / 60000L);
+		return ReminderCalendarBridge.updateTaskDuration(ref.file, ref.nodeId, minutes);
+	}
+
 	/**
 	 * Open create dialog (title / cycle / duration / level / urgency) and write the reminder.
 	 *
@@ -150,6 +159,15 @@ final class CalendarTaskService {
 	 */
 	static Boolean promptCreateTask(final java.awt.Component owner, final long startMs, final long endMs) {
 		return ReminderCalendarBridge.promptAndCreateReminderTask(owner, startMs, endMs);
+	}
+
+	/** @return {@link Boolean#TRUE} updated, {@link Boolean#FALSE} failed, {@code null} cancelled */
+	static Boolean promptEditTask(final java.awt.Component owner, final CalendarAppointment appt) {
+		final ReminderCalendarBridge.OccurrenceRef ref = asRef(appt);
+		if (ref == null) {
+			return Boolean.FALSE;
+		}
+		return ReminderCalendarBridge.promptAndUpdateReminderTask(owner, ref);
 	}
 
 	static boolean createTask(final String title, final long startMs, final long endMs) {

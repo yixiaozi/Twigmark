@@ -41,7 +41,7 @@ final class MiniMonthPanel extends JPanel {
 	MiniMonthPanel() {
 		setOpaque(true);
 		setBackground(CalendarTheme.SURFACE);
-		setPreferredSize(new Dimension(214, PANEL_H));
+		setPreferredSize(new Dimension(196, PANEL_H));
 		setMaximumSize(new Dimension(Integer.MAX_VALUE, PANEL_H));
 		setAlignmentX(LEFT_ALIGNMENT);
 		setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -109,15 +109,15 @@ final class MiniMonthPanel extends JPanel {
 
 		g2.setFont(CalendarTheme.font(12f, Font.BOLD));
 		g2.setColor(CalendarTheme.TEXT);
-		g2.drawString(titleFormat.format(monthStart), 10, 18);
+		g2.drawString(titleFormat.format(monthStart), 4, 18);
 
-		final int cellW = Math.max(24, (w - 12) / 7);
+		final int cellW = Math.max(22, (w - 8) / 7);
 		g2.setFont(CalendarTheme.font(10f));
 		for (int i = 0; i < 7; i++) {
 			g2.setColor(CalendarTheme.TEXT_FAINT);
 			final FontMetrics hfm = g2.getFontMetrics();
 			final String label = HEADERS[i];
-			g2.drawString(label, 6 + i * cellW + (cellW - hfm.stringWidth(label)) / 2, GRID_TOP - 8);
+			g2.drawString(label, 4 + i * cellW + (cellW - hfm.stringWidth(label)) / 2, GRID_TOP - 8);
 		}
 
 		final Calendar cursor = Calendar.getInstance();
@@ -139,7 +139,7 @@ final class MiniMonthPanel extends JPanel {
 		final FontMetrics fm = g2.getFontMetrics();
 		for (int row = 0; row < 6; row++) {
 			for (int col = 0; col < 7; col++) {
-				final int x = 6 + col * cellW;
+				final int x = 4 + col * cellW;
 				final int y = GRID_TOP + row * CELL_H;
 				final boolean inMonth = cursor.get(Calendar.MONTH) == month.get(Calendar.MONTH);
 				final boolean isToday = sameDay(cursor, today);
@@ -191,11 +191,11 @@ final class MiniMonthPanel extends JPanel {
 	}
 
 	private Date dayAt(final int px, final int py) {
-		final int cellW = Math.max(24, (getWidth() - 12) / 7);
-		if (px < 6 || py < GRID_TOP) {
+		final int cellW = Math.max(22, (getWidth() - 8) / 7);
+		if (px < 4 || py < GRID_TOP) {
 			return null;
 		}
-		final int col = (px - 6) / cellW;
+		final int col = (px - 4) / cellW;
 		final int row = (py - GRID_TOP) / CELL_H;
 		if (col < 0 || col > 6 || row < 0 || row > 5) {
 			return null;

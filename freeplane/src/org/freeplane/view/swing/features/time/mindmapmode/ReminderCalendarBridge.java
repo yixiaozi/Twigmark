@@ -141,7 +141,7 @@ public final class ReminderCalendarBridge {
 		if (parent == null) {
 			return Boolean.FALSE;
 		}
-		final CalendarCreateReminderDialog.Result result = CalendarCreateReminderDialog.show(owner, startMs, endMs);
+		final CalendarCreateReminderDialog.Result result = CalendarCreateReminderDialog.showCreate(owner, startMs, endMs);
 		if (result == null) {
 			return null;
 		}
@@ -274,6 +274,114 @@ public final class ReminderCalendarBridge {
 			return PeriodUnit.YEAR;
 		}
 		return PeriodUnit.DAY;
+	}
+
+	/**
+	 * Edit an existing reminder via the same calendar form (title / cycle / duration / level / urgency).
+	 *
+	 * @return {@link Boolean#TRUE} updated, {@link Boolean#FALSE} failed, {@code null} cancelled
+	 */
+	public static Boolean promptAndUpdateReminderTask(final java.awt.Component owner, final OccurrenceRef ref) {
+		if (ref == null || ref.nodeId == null) {
+			return Boolean.FALSE;
+		}
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
+			MapModel map = findOpenMap(mapViewManager, ref.file);
+			if (map == null && ref.file != null) {
+				final java.net.URL url = ref.file.toURI().toURL();
+				if (!mapViewManager.tryToChangeToMapView(url)) {
+					modeController.getMapController().newMap(url);
+				}
+				map = findOpenMap(mapViewManager, ref.file);
+			}
+			if (map == null) {
+				return Boolean.FALSE;
+			}
+			final NodeModel node = map.getNodeForID(ref.nodeId);
+			if (node == null) {
+				return Boolean.FALSE;
+			}
+			final ReminderCycleAttributes.CycleConfig cycle = ReminderCycleAttributes.readFromNode(node);
+			final ReminderTaskAttributes.TaskConfig task = ReminderTaskAttributes.readFromNode(node);
+			final String currentTitle = node.getText() == null ? ref.nodeText
+			        : org.freeplane.core.util.HtmlUtils.htmlToPlain(node.getText()).replaceAll("\\s+", " ").trim();
+			final CalendarCreateReminderDialog.Result result = CalendarCreateReminderDialog.showEdit(owner,
+			        currentTitle, ref.occurrenceAt, cycle, task);
+			if (result == null) {
+				return null;
+			}
+			((org.freeplane.features.text.mindmapmode.MTextController) org.freeplane.features.text.TextController
+			        .getController()).setNodeText(node, result.title);
+			final long delta = result.startMs - ref.occurrenceAt;
+			final long newStored = ref.storedRemindAt + delta;
+			final ReminderHook reminderHook = (ReminderHook) modeController.getExtension(ReminderHook.class);
+			final ReminderExtension reminder = ReminderExtension.getExtension(node);
+			if (reminderHook == null || reminder == null) {
+				return Boolean.FALSE;
+			}
+			final ReminderCycleAttributes.CycleConfig cycleConfig = result.cycleConfig;
+			if (cycleConfig.isRecurring()) {
+				reminder.setPeriod(cycleConfig.interval <= 0 ? 1 : cycleConfig.interval);
+				reminder.setPeriodUnit(periodUnitForRemindType(cycleConfig.remindType));
+			}
+			else {
+				reminder.setPeriodUnit(PeriodUnit.DAY);
+				reminder.setPeriod(1);
+			}
+			updateReminderTime(modeController, reminderHook, node, reminder, reminder.getRemindUserAt(), newStored);
+			ReminderCycleAttributes.writeToNode(node, cycleConfig);
+			ReminderTaskAttributes.writeFull(node, result.taskConfig.taskTime, result.taskConfig.taskLevel,
+			        result.taskConfig.jinji);
+			modeController.getMapController().setSaved(map, false);
+			if (ref.file != null) {
+				invalidateReminderCache(ref.file);
+			}
+			else {
+				invalidateReminderCache();
+			}
+			return Boolean.TRUE;
+		}
+		catch (Exception e) {
+			LogUtils.warn("ReminderCalendarBridge.promptAndUpdateReminderTask failed", e);
+			return Boolean.FALSE;
+		}
+	}
+
+	/** Update TASKTIME minutes; preserve existing level / urgency from the node. */
+	public static boolean updateTaskDuration(final File file, final String nodeId, final int durationMinutes) {
+		if (file == null || nodeId == null || durationMinutes <= 0) {
+			return false;
+		}
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
+			MapModel map = findOpenMap(mapViewManager, file);
+			if (map == null) {
+				final java.net.URL url = file.toURI().toURL();
+				if (!mapViewManager.tryToChangeToMapView(url)) {
+					modeController.getMapController().newMap(url);
+				}
+				map = findOpenMap(mapViewManager, file);
+			}
+			if (map == null) {
+				return false;
+			}
+			final NodeModel node = map.getNodeForID(nodeId);
+			if (node == null) {
+				return false;
+			}
+			final ReminderTaskAttributes.TaskConfig current = ReminderTaskAttributes.readFromNode(node);
+			ReminderTaskAttributes.writeFull(node, durationMinutes, current.taskLevel, current.jinji);
+			modeController.getMapController().setSaved(map, false);
+			invalidateReminderCache(file);
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("ReminderCalendarBridge.updateTaskDuration failed", e);
+			return false;
+		}
 	}
 
 	public static void openNode(final File file, final String nodeId) {

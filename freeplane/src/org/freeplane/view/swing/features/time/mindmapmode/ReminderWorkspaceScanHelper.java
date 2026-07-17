@@ -16,7 +16,6 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
@@ -78,15 +77,9 @@ final class ReminderWorkspaceScanHelper {
 	}
 
 	private static String plainNodeText(final NodeModel node) {
-		try {
-			final String text = TextController.getController().getPlainTextContent(node);
-			if (text != null) {
-				return HtmlUtils.htmlToPlain(text).replaceAll("\\s+", " ").trim();
-			}
-		}
-		catch (Exception e) {
-		}
-		if (node.getText() == null) {
+		// Use raw node text — getPlainTextContent applies ReminderTextTransformer and
+		// injects "7月17日 13:00 [每2天] 90" prefixes that clutter calendar labels.
+		if (node == null || node.getText() == null) {
 			return "";
 		}
 		return HtmlUtils.htmlToPlain(node.getText()).replaceAll("\\s+", " ").trim();

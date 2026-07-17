@@ -1,6 +1,7 @@
 package org.docear.plugin.core.calendar;
 
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -48,6 +49,8 @@ final class DayViewPanel extends JPanel implements Scrollable {
 
 		void onAppointmentMoved(CalendarAppointment appt, long newStartMillis);
 
+		void onAppointmentResized(CalendarAppointment appt, long newEndMillis);
+
 		void onAppointmentPopup(CalendarAppointment appt, int x, int y);
 	}
 
@@ -65,6 +68,8 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	private int timeScaleMinutes = 30;
 	private int slotHeight = 22;
 	private List appointments = Collections.EMPTY_LIST;
+	private static final int RESIZE_EDGE_PX = 7;
+
 	private Date selectionStart;
 	private Date selectionEnd;
 	private SelectionListener selectionListener;
@@ -76,6 +81,8 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	private CalendarAppointment draggingAppointment;
 	private long draggingDurationMs;
 	private Date dragAnchorTime;
+	private int dragDayIndex = -1;
+	private boolean resizingAppointment;
 	private boolean dragMoved;
 	private int pressX;
 	private int pressY;
@@ -93,6 +100,8 @@ final class DayViewPanel extends JPanel implements Scrollable {
 				pressY = e.getY();
 				dragMoved = false;
 				draggingAppointment = null;
+				resizingAppointment = false;
+				dragDayIndex = -1;
 				emptyDragStart = null;
 				if (e.getY() < DAY_HEADER_HEIGHT && e.getX() >= HOUR_LABEL_WIDTH) {
 					final Date day = dayAtX(e.getX());
@@ -106,13 +115,18 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					selectedAppointment = hit;
 					draggingAppointment = hit;
 					draggingDurationMs = Math.max(60L * 1000L, hit.endMillis() - hit.startMillis());
-					dragAnchorTime = snapTime(getTimeAt(e.getX(), e.getY()));
-					selectionStart = null;
-					selectionEnd = null;
+					dragDayIndex = dayIndexFor(hit.start);
+					resizingAppointment = isResizeEdge(hit, e.getX(), e.getY());
+					dragAnchorTime = snapTime(getTimeAtLockedDay(e.getY(), dragDayIndex));
+					selectionStart = hit.start;
+					selectionEnd = hit.end != null ? hit.end
+					        : new Date(hit.startMillis() + draggingDurationMs);
 					if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
 						if (appointmentListener != null) {
 							appointmentListener.onAppointmentPopup(hit, e.getX(), e.getY());
 						}
+						draggingAppointment = null;
+						resizingAppointment = false;
 					}
 					repaint();
 					return;
@@ -135,14 +149,25 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					dragMoved = true;
 				}
 				if (draggingAppointment != null) {
-					final Date at = snapTime(getTimeAt(e.getX(), e.getY()));
+					if (resizingAppointment) {
+						final Date at = snapTime(getTimeAtLockedDay(e.getY(), dragDayIndex));
+						if (at == null || selectionStart == null) {
+							return;
+						}
+						final long minEnd = selectionStart.getTime() + timeScaleMinutes * 60L * 1000L;
+						selectionEnd = new Date(Math.max(minEnd, at.getTime()));
+						draggingDurationMs = selectionEnd.getTime() - selectionStart.getTime();
+						setCursor(Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR));
+						repaint();
+						return;
+					}
+					final Date at = snapTime(getTimeAtLockedDay(e.getY(), dragDayIndex));
 					if (at == null || dragAnchorTime == null) {
 						return;
 					}
 					final long delta = at.getTime() - dragAnchorTime.getTime();
 					final long newStart = draggingAppointment.startMillis() + delta;
-					final Date ns = new Date(newStart);
-					selectionStart = ns;
+					selectionStart = new Date(newStart);
 					selectionEnd = new Date(newStart + draggingDurationMs);
 					repaint();
 					return;
@@ -168,27 +193,58 @@ final class DayViewPanel extends JPanel implements Scrollable {
 				repaint();
 			}
 
+			public void mouseMoved(final MouseEvent e) {
+				final CalendarAppointment hit = getAppointmentAt(e.getX(), e.getY());
+				if (hit != null && isResizeEdge(hit, e.getX(), e.getY())) {
+					setCursor(Cursor.getPredefinedCursor(Cursor.S_RESIZE_CURSOR));
+				}
+				else {
+					setCursor(Cursor.getDefaultCursor());
+				}
+			}
+
 			public void mouseReleased(final MouseEvent e) {
+				setCursor(Cursor.getDefaultCursor());
 				if (e.isPopupTrigger() && selectedAppointment != null && appointmentListener != null) {
 					appointmentListener.onAppointmentPopup(selectedAppointment, e.getX(), e.getY());
 					draggingAppointment = null;
+					resizingAppointment = false;
 					return;
 				}
 				if (draggingAppointment != null) {
-					if (dragMoved && selectionStart != null && appointmentListener != null) {
-						appointmentListener.onAppointmentMoved(draggingAppointment, selectionStart.getTime());
-					}
-					else if (!dragMoved && appointmentListener != null) {
-						if (e.getClickCount() >= 2) {
-							appointmentListener.onAppointmentActivated(draggingAppointment);
+					final CalendarAppointment source = draggingAppointment;
+					final boolean wasResize = resizingAppointment;
+					final Date newStart = selectionStart;
+					final Date newEnd = selectionEnd;
+					if (dragMoved && newStart != null && newEnd != null && appointmentListener != null) {
+						// Optimistic local update first so the block does not snap back
+						// while the async reload runs.
+						replaceAppointmentLocally(source, newStart, newEnd);
+						draggingAppointment = null;
+						resizingAppointment = false;
+						selectionStart = null;
+						selectionEnd = null;
+						repaint();
+						if (wasResize) {
+							appointmentListener.onAppointmentResized(source, newEnd.getTime());
 						}
 						else {
-							appointmentListener.onAppointmentClicked(draggingAppointment);
+							appointmentListener.onAppointmentMoved(source, newStart.getTime());
 						}
+						return;
 					}
 					draggingAppointment = null;
+					resizingAppointment = false;
 					selectionStart = null;
 					selectionEnd = null;
+					if (!dragMoved && appointmentListener != null) {
+						if (e.getClickCount() >= 2) {
+							appointmentListener.onAppointmentActivated(source);
+						}
+						else {
+							appointmentListener.onAppointmentClicked(source);
+						}
+					}
 					repaint();
 					return;
 				}
@@ -203,7 +259,6 @@ final class DayViewPanel extends JPanel implements Scrollable {
 			}
 
 			public void mouseClicked(final MouseEvent e) {
-				// double-click handled in released for appointments
 			}
 		};
 		addMouseListener(mouse);
@@ -344,7 +399,68 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		return yForTime(time);
 	}
 
-	/** Pixel → Date with 1-minute precision. */
+	/** Pixel → Date; day column locked so vertical drag does not jump across days. */
+	Date getTimeAtLockedDay(final int y, final int dayIndex) {
+		if (y < DAY_HEADER_HEIGHT || dayIndex < 0 || dayIndex >= daysToShow) {
+			return null;
+		}
+		final int slotsFromTop = Math.max(0, (y - DAY_HEADER_HEIGHT) / slotHeight);
+		final int totalMinutes = START_HOUR * 60 + slotsFromTop * timeScaleMinutes;
+		final Calendar cal = Calendar.getInstance();
+		cal.setTime(startDate);
+		cal.add(Calendar.DAY_OF_MONTH, dayIndex);
+		cal.set(Calendar.HOUR_OF_DAY, 0);
+		cal.set(Calendar.MINUTE, 0);
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		cal.add(Calendar.MINUTE, Math.min(END_HOUR * 60 - timeScaleMinutes, totalMinutes));
+		return cal.getTime();
+	}
+
+	private boolean isResizeEdge(final CalendarAppointment appt, final int x, final int y) {
+		if (appt == null || appt.start == null) {
+			return false;
+		}
+		final int bodyWidth = Math.max(1, getWidth() - HOUR_LABEL_WIDTH);
+		final int dayWidth = Math.max(1, bodyWidth / daysToShow);
+		final int day = dayIndexFor(appt.start);
+		if (day < 0) {
+			return false;
+		}
+		final int ax = HOUR_LABEL_WIDTH + day * dayWidth + 3;
+		final int w = dayWidth - 6;
+		Date end = appt.end;
+		if (end == null || !end.after(appt.start)) {
+			end = new Date(appt.start.getTime() + timeScaleMinutes * 60L * 1000L);
+		}
+		int y2 = yForTime(end);
+		final int y1 = yForTime(appt.start);
+		if (y2 <= y1) {
+			y2 = y1 + Math.max(slotHeight / 2, 10);
+		}
+		return x >= ax && x <= ax + w && y >= y2 - RESIZE_EDGE_PX && y <= y2 + 2;
+	}
+
+	/**
+	 * Replace an appointment in the local list so the UI stays at the dragged
+	 * position until the async reload finishes (avoids snap-back jump).
+	 */
+	void replaceAppointmentLocally(final CalendarAppointment oldAppt, final Date newStart, final Date newEnd) {
+		if (oldAppt == null || newStart == null || appointments == null || appointments.isEmpty()) {
+			return;
+		}
+		final ArrayList copy = new ArrayList(appointments);
+		for (int i = 0; i < copy.size(); i++) {
+			if (copy.get(i) == oldAppt) {
+				copy.set(i, new CalendarAppointment(newStart, newEnd, oldAppt.title, oldAppt.color, oldAppt.userData));
+				appointments = copy;
+				selectedAppointment = (CalendarAppointment) copy.get(i);
+				return;
+			}
+		}
+	}
+
+	/** Pixel → Date with slot-grid precision. */
 	Date getTimeAt(final int x, final int y) {
 		if (y < DAY_HEADER_HEIGHT || x < HOUR_LABEL_WIDTH) {
 			return null;
@@ -586,7 +702,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		g2.setColor(Color.WHITE);
 		g2.setFont(CalendarTheme.font(11f, Font.BOLD));
 		final FontMetrics fm = g2.getFontMetrics();
-		final String line = hourFormat.format(appt.start) + "  " + appt.title;
+		final String line = appt.title == null ? "" : appt.title;
 		g2.drawString(clip(line, fm, w - 10), x + 6, y1 + Math.min(h - 4, fm.getAscent() + 3));
 	}
 
