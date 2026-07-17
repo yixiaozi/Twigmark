@@ -514,6 +514,10 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (mContentComponent != null) {
 			mContentComponent.setVisible(true);
 			mTabbedPane.setComponentAt(selectedIndex, mContentComponent);
+			mContentComponent.revalidate();
+			mContentComponent.repaint();
+			mTabbedPane.revalidate();
+			mTabbedPane.repaint();
 		}
 	}
 
@@ -592,9 +596,7 @@ class MapViewTabs implements IMapViewChangeListener {
 				// Handler updated the cascade and refreshed the strip; just select.
 				final int idx = visibleTabKeys.indexOf(tabKey);
 				if (idx >= 0) {
-					if (mTabbedPane.getSelectedIndex() != idx) {
-						mTabbedPane.setSelectedIndex(idx);
-					}
+					selectVisibleIndex(idx);
 					return;
 				}
 			}
@@ -602,13 +604,50 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (tabKey != null && isAllowedByFilter(tabKey) && stripMatchesFilter()) {
 			final int idx = visibleTabKeys.indexOf(tabKey);
 			if (idx >= 0) {
-				if (mTabbedPane.getSelectedIndex() != idx) {
-					mTabbedPane.setSelectedIndex(idx);
-				}
+				selectVisibleIndex(idx);
 				return;
 			}
 		}
 		rebuildVisibleTabs(tabKey);
+	}
+
+	/**
+	 * Selects a visible tab and guarantees its real content is mounted.
+	 * Non-selected tabs only hold empty placeholder panels; when the target index is
+	 * already selected, {@link JTabbedPane#setSelectedIndex(int)} does not fire a
+	 * ChangeEvent, so {@link #tabSelectionChanged()} would never run — leaving a gray
+	 * page until the user switches tabs. A stuck {@code ChangedEventConsumed} flag can
+	 * also swallow the next selection event; heal by mounting content explicitly.
+	 */
+	private void selectVisibleIndex(final int idx) {
+		if (idx < 0 || idx >= mTabbedPane.getTabCount()) {
+			return;
+		}
+		if (mTabbedPane.getSelectedIndex() != idx) {
+			mTabbedPane.setSelectedIndex(idx);
+		}
+		ensureSelectedTabContentMounted();
+	}
+
+	/** True when the selected tab still shows the shared map/document content component. */
+	private boolean isSelectedTabContentMounted() {
+		final int selectedIndex = mTabbedPane.getSelectedIndex();
+		return selectedIndex >= 0 && mContentComponent != null
+				&& mTabbedPane.getComponentAt(selectedIndex) == mContentComponent;
+	}
+
+	/**
+	 * Re-attaches {@link #mContentComponent} when the selected tab is still a gray
+	 * placeholder (or after a selection ChangeEvent was incorrectly consumed).
+	 */
+	private void ensureSelectedTabContentMounted() {
+		if (isSelectedTabContentMounted()) {
+			mContentComponent.setVisible(true);
+			mContentComponent.revalidate();
+			mContentComponent.repaint();
+			return;
+		}
+		tabSelectionChanged();
 	}
 
 	private boolean stripMatchesFilter() {
@@ -687,8 +726,13 @@ class MapViewTabs implements IMapViewChangeListener {
 				selectVisible = 0;
 			}
 			if (selectVisible >= 0) {
+				// Suppress the ChangeListener only for this setSelectedIndex call.
+				// If the index is unchanged, Swing may not fire ChangeEvent — clear the
+				// flag immediately so a later real tab switch is not swallowed (that left
+				// the new tab on an empty gray placeholder panel).
 				mTabbedPane.putClientProperty("ChangedEventConsumed", "true");
 				mTabbedPane.setSelectedIndex(selectVisible);
+				mTabbedPane.putClientProperty("ChangedEventConsumed", null);
 			}
 			mTabbedPaneSelectionUpdate = true;
 			tabSelectionChanged();
