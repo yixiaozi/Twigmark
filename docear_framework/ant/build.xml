@@ -867,11 +867,11 @@
 		<ant antfile="ant/build.xml" target="clean" inheritall="false" 
 			  dir="${workspace}/docear_plugin_services" />
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
-			  dir="${workspace}/docear_plugin_drawio" failonerror="false"/>
+			  dir="${workspace}/docear_plugin_drawio"/>
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
-			  dir="${workspace}/docear_plugin_ai" failonerror="false"/>
+			  dir="${workspace}/docear_plugin_ai"/>
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
-			  dir="${workspace}/docear_plugin_mcp" failonerror="false"/>
+			  dir="${workspace}/docear_plugin_mcp"/>
 	</target>
 
 </project>
