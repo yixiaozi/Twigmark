@@ -56,11 +56,7 @@ public final class ReminderCalendarBridge {
 	public static List loadOccurrences(final long rangeStart, final long rangeEnd) {
 		final List out = new ArrayList();
 		try {
-			final List files = collectMindmapFilesIncludingOpenMaps();
-			final List entries = new ArrayList();
-			for (int i = 0; i < files.size(); i++) {
-				entries.addAll(ReminderWorkspaceScanHelper.scanRemindersFromFile((File) files.get(i)));
-			}
+			final List entries = ReminderWorkspaceEntryCache.getAllEntries();
 			final List occurrences = ReminderWorkspaceScanHelper.buildTimelineOccurrences(entries, rangeStart, rangeEnd);
 			for (int i = 0; i < occurrences.size(); i++) {
 				final ReminderWorkspaceScanHelper.TimelineOccurrence occ = (ReminderWorkspaceScanHelper.TimelineOccurrence) occurrences
@@ -76,44 +72,24 @@ public final class ReminderCalendarBridge {
 		return out;
 	}
 
-	/** Workspace scan roots plus any currently open map files (in case they sit outside roots). */
-	private static List collectMindmapFilesIncludingOpenMaps() {
-		final List files = new ArrayList(ReminderWorkspaceScanHelper.collectAllMindmapFiles());
-		final java.util.HashSet seen = new java.util.HashSet();
-		for (int i = 0; i < files.size(); i++) {
-			final File f = (File) files.get(i);
-			try {
-				seen.add(f.getCanonicalPath());
-			}
-			catch (Exception e) {
-				seen.add(f.getAbsolutePath());
-			}
-		}
+	/** Day-start millis → occurrence count in range (uses same entry cache). */
+	public static Map loadDayCounts(final long rangeStart, final long rangeEnd) {
 		try {
-			final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
-			final Map maps = mapViewManager.getMaps(MModeController.MODENAME);
-			for (final Object mapObj : maps.values()) {
-				final MapModel map = (MapModel) mapObj;
-				final File file = map.getFile();
-				if (file == null || !file.isFile()) {
-					continue;
-				}
-				String key;
-				try {
-					key = file.getCanonicalPath();
-				}
-				catch (Exception e) {
-					key = file.getAbsolutePath();
-				}
-				if (seen.add(key)) {
-					files.add(file);
-				}
-			}
+			return ReminderWorkspaceEntryCache.buildDayCounts(ReminderWorkspaceEntryCache.getAllEntries(), rangeStart,
+			        rangeEnd);
 		}
 		catch (Exception e) {
-			LogUtils.warn(e);
+			LogUtils.warn("ReminderCalendarBridge.loadDayCounts failed", e);
+			return new java.util.HashMap();
 		}
-		return files;
+	}
+
+	public static void invalidateReminderCache() {
+		ReminderWorkspaceEntryCache.invalidateAll();
+	}
+
+	public static void invalidateReminderCache(final File file) {
+		ReminderWorkspaceEntryCache.invalidateFile(file);
 	}
 
 	public static void openNode(final File file, final String nodeId) {
@@ -159,6 +135,7 @@ public final class ReminderCalendarBridge {
 			}
 			updateReminderTime(modeController, reminderHook, node, reminder, oldTime, newRemindAt);
 			modeController.getMapController().setSaved(map, false);
+			invalidateReminderCache(file);
 			return true;
 		}
 		catch (Exception e) {
@@ -220,6 +197,7 @@ public final class ReminderCalendarBridge {
 			}
 			reminderHook.undoableToggleHook(node);
 			modeController.getMapController().setSaved(node.getMap(), false);
+			invalidateReminderCache(file);
 			return true;
 		}
 		catch (Exception e) {

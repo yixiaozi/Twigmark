@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge;
@@ -28,6 +29,16 @@ final class CalendarTaskService {
 			LogUtils.warn("CalendarTaskService.loadAppointments failed", e);
 		}
 		return appointments;
+	}
+
+	static Map loadDayCounts(final long rangeStart, final long rangeEnd) {
+		try {
+			return ReminderCalendarBridge.loadDayCounts(rangeStart, rangeEnd);
+		}
+		catch (Exception e) {
+			LogUtils.warn("CalendarTaskService.loadDayCounts failed", e);
+			return new java.util.HashMap();
+		}
 	}
 
 	static CalendarAppointment toAppointment(final ReminderCalendarBridge.OccurrenceRef ref, final int index) {

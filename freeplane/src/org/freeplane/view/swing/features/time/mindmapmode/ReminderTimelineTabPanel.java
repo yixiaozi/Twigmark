@@ -8,10 +8,8 @@ import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -41,18 +39,6 @@ public class ReminderTimelineTabPanel extends JPanel {
 	private static final String[] TABLE_COLUMNS = { "\u65f6\u95f4", "\u7c7b\u578b", "\u65f6\u957f", "\u7b49\u7ea7",
 			"\u7d27\u6025", "\u4efb\u52a1", "\u5bfc\u56fe" };
 
-	private static final class CachedFileResult {
-		private final long modified;
-		private final long length;
-		private final List entries;
-
-		private CachedFileResult(final long modified, final long length, final List entries) {
-			this.modified = modified;
-			this.length = length;
-			this.entries = entries;
-		}
-	}
-
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
 	private final JButton prevDayButton = new JButton("\u25C0");
 	private final JButton nextDayButton = new JButton("\u25B6");
@@ -70,7 +56,6 @@ public class ReminderTimelineTabPanel extends JPanel {
 	private final JTable table = new JTable(tableModel);
 	private final SimpleDateFormat dayTitleFormat = new SimpleDateFormat("yyyy\u5e74M\u6708d\u65e5 EEEE", Locale.CHINA);
 	private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
-	private final Map cacheByFile = new HashMap();
 	private final List allEntries = new ArrayList();
 	private long selectedDayStart = ReminderCycleScheduler.startOfDay(System.currentTimeMillis());
 	private SwingWorker activeWorker;
@@ -131,6 +116,7 @@ public class ReminderTimelineTabPanel extends JPanel {
 
 		refreshButton.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(final java.awt.event.ActionEvent e) {
+				ReminderWorkspaceEntryCache.invalidateAll();
 				refreshInBackground();
 			}
 		});
@@ -161,16 +147,8 @@ public class ReminderTimelineTabPanel extends JPanel {
 		rescanRequested = false;
 		activeWorker = new SwingWorker() {
 			protected Object doInBackground() throws Exception {
-				final List files = ReminderWorkspaceScanHelper.collectAllMindmapFiles();
-				cleanupCache(files);
 				allEntries.clear();
-				for (int i = 0; i < files.size(); i++) {
-					if (isCancelled()) {
-						break;
-					}
-					final File file = (File) files.get(i);
-					allEntries.addAll(getEntriesForFile(file));
-				}
+				allEntries.addAll(ReminderWorkspaceEntryCache.getAllEntries());
 				return null;
 			}
 
@@ -188,34 +166,6 @@ public class ReminderTimelineTabPanel extends JPanel {
 			}
 		};
 		activeWorker.execute();
-	}
-
-	private List getEntriesForFile(final File file) {
-		final long modified = file.lastModified();
-		final long length = file.length();
-		final CachedFileResult cached = (CachedFileResult) cacheByFile.get(file.getAbsolutePath());
-		if (cached != null && cached.modified == modified && cached.length == length) {
-			return cached.entries;
-		}
-		final List entries = ReminderWorkspaceScanHelper.scanRemindersFromFile(file);
-		cacheByFile.put(file.getAbsolutePath(), new CachedFileResult(modified, length, entries));
-		return entries;
-	}
-
-	private void cleanupCache(final List currentFiles) {
-		final Map currentPaths = new HashMap();
-		for (int i = 0; i < currentFiles.size(); i++) {
-			currentPaths.put(((File) currentFiles.get(i)).getAbsolutePath(), Boolean.TRUE);
-		}
-		final List toRemove = new ArrayList();
-		for (final Object key : cacheByFile.keySet()) {
-			if (!currentPaths.containsKey(key)) {
-				toRemove.add(key);
-			}
-		}
-		for (int i = 0; i < toRemove.size(); i++) {
-			cacheByFile.remove(toRemove.get(i));
-		}
 	}
 
 	private void rebuildTableForSelectedDay() {

@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.ButtonGroup;
@@ -31,6 +32,9 @@ import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 import javax.swing.SwingUtilities;
+
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
+import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge;
 
 /**
  * Scheduling hub: MonthView + timed Week/Day (DocearReminder calendar frameworks).
@@ -80,24 +84,27 @@ final class CalendarViewportPanel extends JPanel {
 		body.setOpaque(false);
 		body.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
 
-		final JPanel side = new JPanel(new BorderLayout(0, 8));
+		final JPanel side = new JPanel();
+		side.setLayout(new javax.swing.BoxLayout(side, javax.swing.BoxLayout.Y_AXIS));
 		side.setOpaque(false);
-		side.setPreferredSize(new Dimension(232, 0));
+		side.setPreferredSize(new Dimension(220, 0));
 		final JPanel miniNav = new JPanel(new BorderLayout(4, 0));
 		miniNav.setOpaque(false);
+		miniNav.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		final JButton miniPrev = ghost("<");
 		final JButton miniNext = ghost(">");
 		miniNav.add(miniPrev, BorderLayout.WEST);
 		miniNav.add(miniNext, BorderLayout.EAST);
-		side.add(miniNav, BorderLayout.NORTH);
-		side.add(miniMonth, BorderLayout.CENTER);
+		side.add(miniNav);
+		side.add(miniMonth);
 		final JPanel legend = new JPanel(new GridLayout(0, 1, 0, 4));
 		legend.setOpaque(false);
 		legend.setBorder(BorderFactory.createEmptyBorder(8, 4, 0, 4));
+		legend.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		legend.add(legendLine(CalendarTheme.EVENT_A, "安排 / 任务"));
 		legend.add(legendLine(CalendarTheme.EVENT_D, "周期提醒"));
 		legend.add(legendLine(CalendarTheme.NOW, "当前时间"));
-		side.add(legend, BorderLayout.SOUTH);
+		side.add(legend);
 
 		timedScroll = new JScrollPane(dayView);
 		timedScroll.setBorder(BorderFactory.createLineBorder(CalendarTheme.HAIRLINE));
@@ -153,11 +160,13 @@ final class CalendarViewportPanel extends JPanel {
 		miniPrev.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				miniMonth.shiftMonth(-1);
+				reloadDayCountsOnly();
 			}
 		});
 		miniNext.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				miniMonth.shiftMonth(1);
+				reloadDayCountsOnly();
 			}
 		});
 		miniMonth.setListener(new MiniMonthPanel.Listener() {
@@ -244,34 +253,64 @@ final class CalendarViewportPanel extends JPanel {
 		miniMonth.setSelectedDay(new Date());
 		setMode(MODE_WEEK);
 		scrollToWorkHours();
+		warmReminderCacheAsync();
 		reloadTasksAsync();
 	}
 
-	void setAppointments(final List list) {
+	private static void warmReminderCacheAsync() {
+		WorkspaceSideTabScanCache.schedulePreload();
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					ReminderCalendarBridge.loadDayCounts(0L, Long.MAX_VALUE);
+				}
+				catch (Exception e) {
+				}
+			}
+		}, "Calendar-WarmReminderCache");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	void setAppointments(final List list, final Map dayCounts) {
 		appointments = list == null ? Collections.EMPTY_LIST : list;
 		monthView.setAppointments(appointments);
 		dayView.setAppointments(appointments);
+		miniMonth.setDayCounts(dayCounts);
 	}
 
 	void reloadTasksAsync() {
+		reloadTasksAsync(false);
+	}
+
+	void reloadTasksAsync(final boolean forceRescan) {
 		final int gen = ++loadGeneration;
-		statusLabel.setText("正在扫描导图提醒…");
+		if (forceRescan) {
+			ReminderCalendarBridge.invalidateReminderCache();
+		}
+		statusLabel.setText(forceRescan ? "正在重新扫描导图提醒…" : "正在加载提醒…");
+		WorkspaceSideTabScanCache.schedulePreload();
 		final long[] range = visibleRange();
+		final long[] monthRange = miniMonthVisibleRange();
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
+				final long t0 = System.currentTimeMillis();
 				final List loaded = CalendarTaskService.loadAppointments(range[0], range[1]);
+				final Map counts = CalendarTaskService.loadDayCounts(monthRange[0], monthRange[1]);
+				final long elapsed = System.currentTimeMillis() - t0;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
 						if (gen != loadGeneration) {
 							return;
 						}
-						setAppointments(loaded);
+						setAppointments(loaded, counts);
 						if (loaded.isEmpty()) {
-							statusLabel.setText("当前视图范围内暂无提醒 · 确认节点含提醒时间且导图在扫描目录内 · 点「刷新」重试");
+							statusLabel.setText("当前视图范围内暂无提醒 · 确认节点含提醒时间且导图在扫描目录内 · 点「刷新」重试（"
+							        + elapsed + "ms）");
 						}
 						else {
 							statusLabel.setText("已加载 " + loaded.size()
-							        + " 条安排 · 单击打开 · 拖拽改期 · 双击打卡/完成 · 右键更多");
+							        + " 条安排 · 单击打开 · 拖拽改期 · 双击打卡/完成 · 右键更多（" + elapsed + "ms）");
 						}
 						refreshChrome();
 					}
@@ -280,6 +319,33 @@ final class CalendarViewportPanel extends JPanel {
 		}, "Calendar-LoadReminders");
 		thread.setDaemon(true);
 		thread.start();
+	}
+
+	private void reloadDayCountsOnly() {
+		final long[] monthRange = miniMonthVisibleRange();
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				final Map counts = CalendarTaskService.loadDayCounts(monthRange[0], monthRange[1]);
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						miniMonth.setDayCounts(counts);
+					}
+				});
+			}
+		}, "Calendar-DayCounts");
+		thread.setDaemon(true);
+		thread.start();
+	}
+
+	private long[] miniMonthVisibleRange() {
+		final Calendar start = Calendar.getInstance();
+		start.setTime(MonthViewPanel.firstOfMonth(miniMonth.getMonthStart()));
+		start.add(Calendar.DAY_OF_MONTH, -7);
+		final Calendar end = Calendar.getInstance();
+		end.setTime(MonthViewPanel.firstOfMonth(miniMonth.getMonthStart()));
+		end.add(Calendar.MONTH, 1);
+		end.add(Calendar.DAY_OF_MONTH, 7);
+		return new long[] { start.getTimeInMillis(), end.getTimeInMillis() };
 	}
 
 	private long[] visibleRange() {
@@ -502,7 +568,7 @@ final class CalendarViewportPanel extends JPanel {
 		});
 		refresh.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				reloadTasksAsync();
+				reloadTasksAsync(true);
 			}
 		});
 		close.addActionListener(new ActionListener() {
