@@ -193,7 +193,7 @@ Relationship graph source check FAILED:
 
 <#
 .SYNOPSIS
-  Ensure scheduling-hub (安排中心) classes shipped after calendar work.
+  Ensure scheduling-hub calendar classes shipped after calendar work.
 #>
 function Assert-CalendarHubLayout {
     param(
@@ -233,7 +233,8 @@ function Assert-CalendarHubLayout {
 Calendar hub check ($Context) FAILED:
   $editorJar is missing ReminderCalendarBridge
 
-  安排中心将无法加载提醒（日历会是空的）。请确认源码已是最新 master，并完整重新编译。
+  Scheduling hub cannot load reminders (calendar will stay empty).
+  Pull latest master and run a full rebuild.
 "@
     }
 

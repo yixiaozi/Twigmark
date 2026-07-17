@@ -1,15 +1,14 @@
-# 一键编译 Docear → 发布到 E:\Temp\DocearDist → 解压 → 启动 docear.exe
-# 导图数据仍在 E:\yixiaozi，本脚本不会动你的思维导图。
+# Build Docear -> publish to E:\Temp\DocearDist -> extract -> launch docear.exe
+# Mind-map data under E:\yixiaozi is NOT touched.
 #
-# 用法（任选其一）:
-#   双击仓库根目录: 一键编译并启动.bat
-#   或在仓库根目录执行:
-#     powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
+# Usage:
+#   Double-click: build-docear.bat  (or 一键编译并启动.bat)
+#   Or: powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
 #
-# 可选参数:
-#   -SkipBuild          跳过 ant，只用已有 docear_windows.zip 部署
-#   -TargetDir <path>   安装目录（默认 E:\Temp\DocearDist）
-#   -NoLaunch           编完不自动启动
+# Options:
+#   -SkipBuild          reuse existing docear_windows.zip
+#   -TargetDir <path>   install dir (default E:\Temp\DocearDist)
+#   -NoLaunch           do not start Docear after deploy
 
 param(
     [switch] $SkipBuild,
@@ -18,7 +17,6 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $antPath = Join-Path $repoRoot "tools\apache-ant-1.10.14\bin\ant.bat"
@@ -35,26 +33,26 @@ function Write-Step([string] $Message) {
 }
 
 Write-Host ""
-Write-Host "Docear 一键编译 / 部署" -ForegroundColor Green
-Write-Host "仓库: $repoRoot"
-Write-Host "目标: $TargetDir"
+Write-Host "Docear build and deploy" -ForegroundColor Green
+Write-Host "Repo:   $repoRoot"
+Write-Host "Target: $TargetDir"
 Write-Host ""
 
 & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "ensure-build-metadata.ps1") | Out-Null
 
-Write-Step "检查关系图源码清单"
+Write-Step "Check relationship-graph source manifest"
 Assert-RelationshipGraphSourceManifest -RepoRoot $repoRoot
 
-Write-Step "定位 JDK 8"
+Write-Step "Locate JDK 8"
 $jdkHome = Find-Jdk8Home
 if ($null -eq $jdkHome) {
     throw @"
-未找到 JDK 8（需要带 javac 的 JDK，不是仅 JRE）。
+JDK 8 not found (need full JDK with javac, not JRE only).
 
-请安装 Eclipse Temurin / Adoptium JDK 8，常见路径:
+Install Eclipse Temurin / Adoptium JDK 8, e.g.:
   C:\Program Files\Eclipse Adoptium\jdk-8.0.xxx-hotspot
 
-或设置环境变量 JAVA_HOME 指向 JDK 8 根目录后再运行本脚本。
+Or set JAVA_HOME to your JDK 8 root and run again.
 "@
 }
 $env:JAVA_HOME = $jdkHome
@@ -63,19 +61,19 @@ Write-Host "JAVA_HOME = $env:JAVA_HOME"
 & java -version 2>&1 | ForEach-Object { Write-Host $_ }
 
 if (!(Test-Path $antPath)) {
-    throw "找不到 Ant: $antPath（仓库应自带 tools\apache-ant-1.10.14）"
+    throw "Ant not found: $antPath (repo should include tools\apache-ant-1.10.14)"
 }
 if (!(Test-Path $buildFile)) {
-    throw "找不到构建文件: $buildFile"
+    throw "Build file not found: $buildFile"
 }
 
 if (-not $SkipBuild) {
-    Write-Step "开始 Ant 完整构建（含 freeplane jar + 插件 + Windows zip，可能需几分钟）"
+    Write-Step "Ant full build (freeplane jars + plugins + Windows zip; may take several minutes)"
     Push-Location $repoRoot
     try {
         & $antPath -f $buildFile docear-dist
         if ($LASTEXITCODE -ne 0) {
-            throw "Docear 构建失败，退出码 $LASTEXITCODE。请向上翻看 ant 报错。"
+            throw "Docear build failed with exit code $LASTEXITCODE. Scroll up for ant errors."
         }
     }
     finally {
@@ -83,12 +81,12 @@ if (-not $SkipBuild) {
     }
 
     if (Test-Path $frameworkBuildPlugins) {
-        Write-Step "校验构建产物（关系图）"
+        Write-Step "Verify build output (relationship graph)"
         Assert-RelationshipGraphPluginLayout -PluginsRoot $frameworkBuildPlugins -Context "docear_framework/build/plugins"
     }
 }
 else {
-    Write-Host "已跳过编译（-SkipBuild），使用现有 zip 部署。"
+    Write-Host "Skipped build (-SkipBuild); deploying existing zip."
 }
 
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
@@ -102,13 +100,13 @@ foreach ($pat in $patterns) {
 
 $windowsZip = Join-Path $distDir "docear_windows.zip"
 if (!(Test-Path $windowsZip)) {
-    throw "未找到打包结果: $windowsZip（请去掉 -SkipBuild 重新完整编译）"
+    throw "Package not found: $windowsZip (run without -SkipBuild for a full build)"
 }
 
 $extractDir = Join-Path $TargetDir "docear_windows"
-Write-Step "停止正在运行的 Docear"
+Write-Step "Stop running Docear"
 Stop-RunningDocear
-Write-Host "解压到 $extractDir ..."
+Write-Host "Extracting to $extractDir ..."
 
 if (Test-Path $extractDir) {
     try {
@@ -116,36 +114,36 @@ if (Test-Path $extractDir) {
     }
     catch {
         $backupName = "docear_windows.old." + (Get-Date -Format "yyyyMMdd-HHmmss")
-        Write-Warning "无法删除旧目录（文件可能被占用），改名为 $backupName"
-        Write-Warning "若仍异常，请手动关掉 Docear 后再运行。"
+        Write-Warning "Could not delete $extractDir (files in use?). Renaming to $backupName"
+        Write-Warning "Close Docear if it is running from the old install, then retry."
         Rename-Item -Path $extractDir -NewName $backupName -Force
     }
 }
 
 Expand-Archive -Path $windowsZip -DestinationPath $extractDir -Force
-Write-Host "解压完成。"
+Write-Host "Extraction done."
 
 $installDir = Find-DocearInstallDir -RootDir $extractDir
 if ($null -eq $installDir) {
-    throw "在 $extractDir 下找不到 Docear 安装目录（缺少 freeplanelauncher.jar）"
+    throw "Docear install folder not found under $extractDir (missing freeplanelauncher.jar)"
 }
 
-Write-Step "校验安装目录"
+Write-Step "Verify installed layout"
 $installPlugins = Join-Path $installDir "plugins"
 Assert-RelationshipGraphPluginLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
 Assert-CalendarHubLayout -InstallDir $installDir -Context "installed $installDir"
 
 Write-Host ""
-Write-Host "发布完成" -ForegroundColor Green
-Write-Host "  包目录: $TargetDir"
-Write-Host "  程序目录: $installDir"
-Write-Host "  安排中心快捷键: Ctrl+Shift+D"
+Write-Host "Deploy complete" -ForegroundColor Green
+Write-Host "  Packages: $TargetDir"
+Write-Host "  Install:  $installDir"
+Write-Host "  Scheduling hub shortcut: Ctrl+Shift+D"
 Write-Host ""
 
 if (-not $NoLaunch) {
-    Write-Step "启动 Docear"
+    Write-Step "Launch Docear"
     Start-DocearFromInstallDir -InstallDir $installDir | Out-Null
 }
 else {
-    Write-Host "已跳过启动（-NoLaunch）。可手动运行: $installDir\docear.exe"
+    Write-Host "Skipped launch (-NoLaunch). Run: $installDir\docear.exe"
 }

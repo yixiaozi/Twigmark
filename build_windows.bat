@@ -1,11 +1,11 @@
 @echo off
 chcp 65001 >nul
-title Docear Windows 构建
+title Docear Windows Build
 cd /d "%~dp0"
 
 echo.
-echo 调用 scripts\build-docear-to-dist.ps1 ...
-echo （编完会部署到 E:\Temp\DocearDist 并启动；加参数 -NoLaunch 可只编译）
+echo Calling scripts\build-docear-to-dist.ps1 ...
+echo Deploy target: E:\Temp\DocearDist (add -NoLaunch to build only)
 echo.
 
 if /I "%~1"=="-NoLaunch" (
@@ -19,9 +19,9 @@ if /I "%~1"=="-NoLaunch" (
 set ERR=%ERRORLEVEL%
 echo.
 if %ERR% neq 0 (
-  echo [失败] 退出码 %ERR%
+  echo [FAILED] exit code %ERR%
 ) else (
-  echo [完成]
+  echo [OK]
 )
 pause
 exit /b %ERR%
