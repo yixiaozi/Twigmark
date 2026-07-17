@@ -9,8 +9,6 @@ import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -33,6 +31,8 @@ import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
@@ -42,14 +42,14 @@ import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.map.NodeModel;
 
 /**
- * Left sidebar tab: pick a report, set time range, write result under the selected mind-map node.
+ * Left sidebar tab: pick a report → show charts in the mind-map viewport.
  */
 public class ReportsTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("对齐 DocearReminder 报表；点名称写入选中节点");
+	private final JLabel statusLabel = new JLabel("点报表名称 → 在导图位置显示图表");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -58,9 +58,11 @@ public class ReportsTabPanel extends JPanel {
 	private final JPanel customRangePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList reportList = new JList(listModel);
-	private final JButton generateButton = new JButton("生成到选中节点");
-	private final JButton refreshButton = new JButton("刷新列表");
+	private final JButton showButton = new JButton("显示图表");
+	private final JButton writeButton = new JButton("写入节点");
+	private final JButton refreshButton = new JButton("刷新");
 	private volatile boolean generating;
+	private boolean suppressSelectionEvent;
 
 	public ReportsTabPanel() {
 		super(new BorderLayout(4, 4));
@@ -145,13 +147,15 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder("报表（前6项=原DocearReminder）"));
+		scroll.setBorder(BorderFactory.createTitledBorder("报表（点击在导图区显示图表）"));
 		add(scroll, BorderLayout.CENTER);
 
-		final JPanel south = new JPanel(new GridLayout(1, 2, 4, 0));
-		generateButton.setToolTipText("在当前选中节点下写入该报表树（带图标）");
+		final JPanel south = new JPanel(new GridLayout(1, 3, 4, 0));
+		showButton.setToolTipText("在中间导图位置显示折线/饼图/柱状图");
+		writeButton.setToolTipText("可选：把报表树写入当前选中导图节点");
 		refreshButton.setToolTipText("重新加载报表目录");
-		south.add(generateButton);
+		south.add(showButton);
+		south.add(writeButton);
 		south.add(refreshButton);
 		add(south, BorderLayout.SOUTH);
 		setPreferredSize(new Dimension(220, 400));
@@ -164,9 +168,14 @@ public class ReportsTabPanel extends JPanel {
 				revalidate();
 			}
 		});
-		generateButton.addActionListener(new ActionListener() {
+		showButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				generateSelected();
+				runSelected(false);
+			}
+		});
+		writeButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				runSelected(true);
 			}
 		});
 		refreshButton.addActionListener(new ActionListener() {
@@ -175,28 +184,37 @@ public class ReportsTabPanel extends JPanel {
 				statusLabel.setText("已刷新 · 共 " + ReportCatalog.all().size() + " 种报表");
 			}
 		});
-		reportList.addMouseListener(new MouseAdapter() {
-			public void mouseClicked(final MouseEvent e) {
-				if (e.getClickCount() >= 2) {
-					generateSelected();
+		reportList.addListSelectionListener(new ListSelectionListener() {
+			public void valueChanged(final ListSelectionEvent e) {
+				if (e.getValueIsAdjusting() || suppressSelectionEvent) {
+					return;
+				}
+				if (reportList.getSelectedIndex() >= 0) {
+					runSelected(false);
 				}
 			}
 		});
 	}
 
 	private void reloadCatalog() {
-		listModel.clear();
-		final List all = ReportCatalog.all();
-		for (int i = 0; i < all.size(); i++) {
-			listModel.addElement(all.get(i));
+		suppressSelectionEvent = true;
+		try {
+			listModel.clear();
+			final List all = ReportCatalog.all();
+			for (int i = 0; i < all.size(); i++) {
+				listModel.addElement(all.get(i));
+			}
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_REPORTS, all.size());
+			if (!all.isEmpty()) {
+				reportList.setSelectedIndex(0);
+			}
 		}
-		SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_REPORTS, all.size());
-		if (!all.isEmpty()) {
-			reportList.setSelectedIndex(0);
+		finally {
+			suppressSelectionEvent = false;
 		}
 	}
 
-	private void generateSelected() {
+	private void runSelected(final boolean writeToMindMap) {
 		if (generating) {
 			return;
 		}
@@ -217,7 +235,8 @@ public class ReportsTabPanel extends JPanel {
 		}
 		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
 		generating = true;
-		generateButton.setEnabled(false);
+		showButton.setEnabled(false);
+		writeButton.setEnabled(false);
 		statusLabel.setText("正在生成「" + def.title + "」…");
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
@@ -241,12 +260,25 @@ public class ReportsTabPanel extends JPanel {
 								        JOptionPane.ERROR_MESSAGE);
 								return;
 							}
-							final NodeModel written = ReportMindMapWriter.writeUnderSelection(result);
-							if (written == null) {
-								statusLabel.setText("写入失败：未选中节点");
+							final ReportViewModel view = ReportViewFactory.fromTree(def, query, result);
+							final ReportViewportService service = ReportViewportService.get();
+							if (service == null) {
+								statusLabel.setText("无法打开报表视图");
 								return;
 							}
-							statusLabel.setText("已写入「" + def.title + "」到选中节点");
+							service.showReport(view, result);
+							if (writeToMindMap) {
+								final NodeModel written = ReportMindMapWriter.writeUnderSelection(result);
+								if (written == null) {
+									statusLabel.setText("图表已显示；写入失败：未选中节点");
+								}
+								else {
+									statusLabel.setText("已显示图表，并写入「" + def.title + "」");
+								}
+							}
+							else {
+								statusLabel.setText("已在导图位置显示「" + def.title + "」");
+							}
 						}
 						catch (Exception e) {
 							statusLabel.setText(e.getMessage());
@@ -255,7 +287,8 @@ public class ReportsTabPanel extends JPanel {
 						}
 						finally {
 							generating = false;
-							generateButton.setEnabled(true);
+							showButton.setEnabled(true);
+							writeButton.setEnabled(true);
 						}
 					}
 				});

@@ -182,6 +182,7 @@ public class MModeControllerFactory {
 	private void createAddIns() {
 		LastSelectionMapExtensionIO.install(modeController);
 		UsageStatsReportService.install(modeController);
+		ReportViewportService.install(modeController);
 		// Pomodoro must install before its sidebar tab (tab ctor/reload uses SessionManager).
 		try {
 			PomodoroController.install(modeController);

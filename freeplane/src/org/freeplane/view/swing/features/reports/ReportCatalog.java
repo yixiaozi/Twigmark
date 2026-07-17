@@ -56,39 +56,39 @@ public final class ReportCatalog {
 		final List list = new ArrayList();
 		// Order matches DocearReminder 报表 menu
 		list.add(new ReportDefinition(ID_TIME_BLOCK, "时间块",
-		        "原版「时间块」：按时段汇总计划工时，按导图/分类占比（饼图式树）", "clock", true));
+		        "按时段汇总计划工时，中间区饼图看分类占比", "clock", true));
 		list.add(new ReportDefinition(ID_USE_TIME, "使用记录",
-		        "原版「使用记录」：导图打开/有效使用时长，按小时与导图分解", "wizard", true));
+		        "导图打开/有效使用时长，中间区折线/柱状看时段与导图", "wizard", true));
 		list.add(new ReportDefinition(ID_KEYBOARD, "键盘分析",
-		        "原版「键盘分析」：读取 key.txt 击键日志（若存在）按时段统计", "pencil", true));
+		        "key.txt 击键统计，中间区看时段分布图", "pencil", true));
 		list.add(new ReportDefinition(ID_TREND, "趋势",
-		        "原版「趋势」：每日计划工时 / 番茄 / 使用时长走势与均值", "up", true));
+		        "每日计划工时 / 番茄 / 使用时长走势折线图", "up", true));
 		list.add(new ReportDefinition(ID_TARGET, "目标",
-		        "原版「目标」：扫描「目标」节点下子项，并匹配相关安排工时", "launch", true));
+		        "「目标」节点相关安排工时占比图", "launch", true));
 		list.add(new ReportDefinition(ID_MINDMAP_ANALYSIS, "导图分析",
-		        "原版「导图分析」：节点修改按日/小时/星期/导图分布", "folder", true));
+		        "节点修改按日/小时分布图", "folder", true));
 
-		list.add(new ReportDefinition(ID_TODAY_DASHBOARD, "今日仪表盘", "今天的逾期、安排、待办与番茄专注一览", "idea",
+		list.add(new ReportDefinition(ID_TODAY_DASHBOARD, "今日仪表盘", "今天的逾期、安排、待办与番茄一览图", "idea",
 		        true));
-		list.add(new ReportDefinition(ID_WORK_HOURS, "工数统计一览", "按日/导图汇总安排的计划工时（taskTime）", "full-5",
+		list.add(new ReportDefinition(ID_WORK_HOURS, "工数统计一览", "按日/导图计划工时柱状图", "full-5",
 		        true));
-		list.add(new ReportDefinition(ID_SCHEDULE, "时段安排清单", "选定时间范围内的全部提醒发生（含周期展开）", "calendar",
+		list.add(new ReportDefinition(ID_SCHEDULE, "时段安排清单", "选定时段安排列表（可图可明细）", "calendar",
 		        true));
-		list.add(new ReportDefinition(ID_OVERDUE, "逾期提醒", "已过期仍未处理的一次性提醒", "messagebox_warning",
+		list.add(new ReportDefinition(ID_OVERDUE, "逾期提醒", "逾期提醒分布图", "messagebox_warning",
 		        false));
-		list.add(new ReportDefinition(ID_URGENT, "紧急事项", "紧急度（jinji）≥1 的安排", "flag-orange", true));
-		list.add(new ReportDefinition(ID_RECURRING, "周期提醒台账", "全部周期提醒与周期类型", "prepare", false));
-		list.add(new ReportDefinition(ID_TODOS, "待办汇总", "工作区全部 hourglass 待办，按导图分组", "hourglass",
+		list.add(new ReportDefinition(ID_URGENT, "紧急事项", "紧急度分布图", "flag-orange", true));
+		list.add(new ReportDefinition(ID_RECURRING, "周期提醒台账", "周期类型分布图", "prepare", false));
+		list.add(new ReportDefinition(ID_TODOS, "待办汇总", "待办按导图分布图", "hourglass",
 		        false));
-		list.add(new ReportDefinition(ID_FLAGS, "红旗行动项", "标记了 flag 图标的节点清单", "flag", false));
-		list.add(new ReportDefinition(ID_POMODORO, "番茄专注报告", "选定时段内番茄钟专注时长（按日/节点）", "clock2",
+		list.add(new ReportDefinition(ID_FLAGS, "红旗行动项", "红旗项按导图分布图", "flag", false));
+		list.add(new ReportDefinition(ID_POMODORO, "番茄专注报告", "番茄专注时长折线/柱状图", "clock2",
 		        true));
-		list.add(new ReportDefinition(ID_MAP_LOAD, "导图负荷", "各导图的提醒数、待办数与计划工时", "list", true));
-		list.add(new ReportDefinition(ID_DURATION_BUCKETS, "时长分布", "安排计划时长分桶（15/30/60/120+）", "full-3",
+		list.add(new ReportDefinition(ID_MAP_LOAD, "导图负荷", "各导图提醒/待办/工时负荷图", "list", true));
+		list.add(new ReportDefinition(ID_DURATION_BUCKETS, "时长分布", "计划时长分桶饼图", "full-3",
 		        true));
-		list.add(new ReportDefinition(ID_PUBLISHED, "发布内容清单", "带 internet 发布图标的节点", "internet",
+		list.add(new ReportDefinition(ID_PUBLISHED, "发布内容清单", "发布节点按导图分布", "internet",
 		        false));
-		list.add(new ReportDefinition(ID_RECENT, "最近变更速览", "选定时段内修改过的节点（按时间倒序）", "attach",
+		list.add(new ReportDefinition(ID_RECENT, "最近变更速览", "最近修改量趋势/分布", "attach",
 		        true));
 		return Collections.unmodifiableList(list);
 	}
