@@ -370,9 +370,9 @@
 
 	<target name="bundle_javafx_jre.copy" if="javafx.jre.cache.present">
 		<mkdir dir="${build}"/>
-		<delete dir="${javafx.jre.build}" quiet="true" failonerror="false"/>
+		<delete dir="${javafx.jre.build}" quiet="true"/>
 		<mkdir dir="${javafx.jre.build}"/>
-		<copy todir="${javafx.jre.build}" failonerror="false">
+		<copy todir="${javafx.jre.build}">
 			<fileset dir="${javafx.jre.cache}"/>
 		</copy>
 		<echo message="Bundled JavaFX JRE into ${javafx.jre.build} (optional; deploy script also injects from cache)"/>
