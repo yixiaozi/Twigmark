@@ -134,6 +134,7 @@ import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.git.GitTabPanel;
+import org.freeplane.view.swing.features.reports.ReportsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllFlagsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
@@ -151,6 +152,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_ALL_FILE_SEARCH = "all_file_search";
 	private static final String TAB_ACTIVITY = "activity";
 	private static final String TAB_GIT = "git";
+	private static final String TAB_REPORTS = "reports";
 	private static final String TAB_GRAPH = "relationship_graph";
 	private static final String TAB_NEXT_ACTIONS = "next_actions";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
@@ -160,7 +162,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH,
-			TAB_GIT, TAB_NEXT_ACTIONS
+			TAB_GIT, TAB_REPORTS, TAB_NEXT_ACTIONS
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -416,6 +418,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				sideTabLoaded.put(tabId, Boolean.TRUE);
 			}
 		}
+		applySideTabIcons();
 		sideTabs.addChangeListener(new ChangeListener() {
 			private String previousTabId = TAB_WORKSPACE;
 
@@ -697,6 +700,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		normalizeSearchTabOrder();
 		normalizeSideTabOrder();
+		normalizeReportsTabOrder();
 		normalizeNextActionsTabOrder();
 	}
 
@@ -740,23 +744,50 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		persistSideTabOrder();
 	}
 
-	/** Keep「红旗」immediately to the right of Git. */
+	/** Keep「报表」immediately to the right of Git. */
+	private void normalizeReportsTabOrder() {
+		if (!sideTabOrder.contains(TAB_REPORTS)) {
+			return;
+		}
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		final int currentIndex = sideTabOrder.indexOf(TAB_REPORTS);
+		if (gitIndex >= 0 && currentIndex == gitIndex + 1) {
+			return;
+		}
+		if (gitIndex < 0 && currentIndex >= 0) {
+			return;
+		}
+		sideTabOrder.remove(TAB_REPORTS);
+		if (gitIndex >= 0) {
+			final int insertAt = sideTabOrder.indexOf(TAB_GIT) + 1;
+			sideTabOrder.add(insertAt, TAB_REPORTS);
+		}
+		else {
+			sideTabOrder.add(TAB_REPORTS);
+		}
+		persistSideTabOrder();
+	}
+
+	/** Keep「红旗」immediately to the right of 报表 (or Git if reports missing). */
 	private void normalizeNextActionsTabOrder() {
 		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
 			return;
 		}
+		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
 		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		final int anchorIndex = reportsIndex >= 0 ? reportsIndex : gitIndex;
 		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
-		if (gitIndex >= 0 && currentIndex == gitIndex + 1) {
+		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
 			return;
 		}
-		if (gitIndex < 0 && currentIndex == sideTabOrder.size() - 1) {
+		if (anchorIndex < 0 && currentIndex == sideTabOrder.size() - 1) {
 			return;
 		}
 		sideTabOrder.remove(TAB_NEXT_ACTIONS);
-		if (gitIndex >= 0) {
-			final int insertAt = sideTabOrder.indexOf(TAB_GIT) + 1;
-			sideTabOrder.add(insertAt, TAB_NEXT_ACTIONS);
+		if (anchorIndex >= 0) {
+			final int refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS) >= 0
+			        ? sideTabOrder.indexOf(TAB_REPORTS) : sideTabOrder.indexOf(TAB_GIT);
+			sideTabOrder.add(refreshedAnchor + 1, TAB_NEXT_ACTIONS);
 		}
 		else {
 			sideTabOrder.add(TAB_NEXT_ACTIONS);
@@ -820,6 +851,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_GIT.equals(tabId)) {
 			return "Git";
 		}
+		if (TAB_REPORTS.equals(tabId)) {
+			return "\u62a5\u8868";
+		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return "\u7ea2\u65d7";
 		}
@@ -850,6 +884,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (TAB_GIT.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_GIT;
+		}
+		if (TAB_REPORTS.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_REPORTS;
 		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_NEXT_ACTIONS;
@@ -902,6 +939,66 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		catch (final Exception e) {
 			// ignore
+		}
+	}
+
+	private void applySideTabIcons() {
+		if (sideTabs == null) {
+			return;
+		}
+		for (int i = 0; i < sideTabOrder.size() && i < sideTabs.getTabCount(); i++) {
+			final javax.swing.Icon icon = sideTabIcon(sideTabOrder.get(i));
+			if (icon != null) {
+				sideTabs.setIconAt(i, icon);
+			}
+		}
+	}
+
+	private javax.swing.Icon sideTabIcon(final String tabId) {
+		String iconName = null;
+		if (TAB_WORKSPACE.equals(tabId)) {
+			iconName = "folder";
+		}
+		else if (TAB_FAVORITES.equals(tabId)) {
+			iconName = "bookmark";
+		}
+		else if (TAB_FILE_SEARCH.equals(tabId)) {
+			iconName = "attach";
+		}
+		else if (TAB_ALL_FILE_SEARCH.equals(tabId)) {
+			iconName = "xmag";
+		}
+		else if (TAB_SEARCH.equals(tabId)) {
+			iconName = "xmag";
+		}
+		else if (TAB_ACTIVITY.equals(tabId)) {
+			iconName = "wizard";
+		}
+		else if (TAB_GRAPH.equals(tabId)) {
+			iconName = "group";
+		}
+		else if (TAB_GIT.equals(tabId)) {
+			iconName = "prepare";
+		}
+		else if (TAB_REPORTS.equals(tabId)) {
+			iconName = "list";
+		}
+		else if (TAB_NEXT_ACTIONS.equals(tabId)) {
+			iconName = "flag";
+		}
+		if (iconName == null) {
+			return null;
+		}
+		try {
+			final org.freeplane.features.icon.MindIcon mind = org.freeplane.features.icon.factory.IconStoreFactory
+			        .create().getMindIcon(iconName);
+			if (mind == null || mind instanceof org.freeplane.features.icon.IconNotFound) {
+				return null;
+			}
+			return mind.getIcon();
+		}
+		catch (final Exception e) {
+			return null;
 		}
 	}
 
@@ -971,6 +1068,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 			sideTabs.add(getSideTabTitle(tabId), component);
 		}
+		applySideTabIcons();
 		final int selectedIndex = sideTabOrder.indexOf(selectedTabId);
 		if (selectedIndex >= 0) {
 			sideTabs.setSelectedIndex(selectedIndex);
@@ -1015,6 +1113,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		else if (TAB_GIT.equals(tabId)) {
 			panel = new GitTabPanel();
+		}
+		else if (TAB_REPORTS.equals(tabId)) {
+			panel = new ReportsTabPanel();
 		}
 		else if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			panel = new EnhancedAllFlagsTabPanel();

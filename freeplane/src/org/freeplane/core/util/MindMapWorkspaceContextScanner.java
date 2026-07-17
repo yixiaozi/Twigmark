@@ -82,12 +82,14 @@ public final class MindMapWorkspaceContextScanner {
 		public final List reminders;
 		public final List todos;
 		public final List published;
+		public final List flags;
 		public final List modifiedNodes;
 
-		private FileScanResult(List reminders, List todos, List published, List modifiedNodes) {
+		private FileScanResult(List reminders, List todos, List published, List flags, List modifiedNodes) {
 			this.reminders = reminders;
 			this.todos = todos;
 			this.published = published;
+			this.flags = flags;
 			this.modifiedNodes = modifiedNodes;
 		}
 	}
@@ -208,6 +210,26 @@ public final class MindMapWorkspaceContextScanner {
 		}
 		sortIconItems(published);
 		return published;
+	}
+
+	/** Nodes with flag / flag-* icons (matches left「红旗」tab). */
+	public static List scanFlagItems() {
+		final List files = collectMindmapFiles();
+		final List flags = new ArrayList();
+		final Set seenKeys = new HashSet();
+		for (int i = 0; i < files.size(); i++) {
+			File file = (File) files.get(i);
+			FileScanResult result = scanFile(file);
+			for (int j = 0; j < result.flags.size(); j++) {
+				IconItem item = (IconItem) result.flags.get(j);
+				String key = iconItemKey(item);
+				if (seenKeys.add(key)) {
+					flags.add(item);
+				}
+			}
+		}
+		sortIconItems(flags);
+		return flags;
 	}
 
 	public static List scanRecentlyModified(final int limit) {
@@ -370,7 +392,7 @@ public final class MindMapWorkspaceContextScanner {
 	private static FileScanResult scanFile(final File file) {
 		if (!isValidMindmapFile(file)) {
 			return new FileScanResult(Collections.EMPTY_LIST, Collections.EMPTY_LIST, Collections.EMPTY_LIST,
-					Collections.EMPTY_LIST);
+					Collections.EMPTY_LIST, Collections.EMPTY_LIST);
 		}
 		long modified = file.lastModified();
 		long length = file.length();
@@ -385,6 +407,7 @@ public final class MindMapWorkspaceContextScanner {
 		final List reminders = new ArrayList();
 		final List todos = new ArrayList();
 		final List published = new ArrayList();
+		final List flags = new ArrayList();
 		final List modifiedNodes = new ArrayList();
 		try {
 			SAXParserFactory factory = SAXParserFactory.newInstance();
@@ -425,6 +448,9 @@ public final class MindMapWorkspaceContextScanner {
 								else if (PUBLISH_ICON_NAME.equalsIgnoreCase(iconName)) {
 									published.add(new IconItem(file, nodeInfo[0], nodeText));
 								}
+								else if (isFlagIconName(iconName)) {
+									flags.add(new IconItem(file, nodeInfo[0], nodeText));
+								}
 							}
 						}
 					}
@@ -463,11 +489,19 @@ public final class MindMapWorkspaceContextScanner {
 					+ e.getMessage());
 		}
 
-		FileScanResult result = new FileScanResult(reminders, todos, published, modifiedNodes);
+		FileScanResult result = new FileScanResult(reminders, todos, published, flags, modifiedNodes);
 		synchronized (fileCache) {
 			fileCache.put(cacheKey, new CachedFileScan(modified, length, result));
 		}
 		return result;
+	}
+
+	private static boolean isFlagIconName(final String iconName) {
+		if (iconName == null || iconName.length() == 0) {
+			return false;
+		}
+		final String lower = iconName.toLowerCase();
+		return "flag".equals(lower) || lower.startsWith("flag-");
 	}
 
 	private static String normalizeNodeText(String text) {
