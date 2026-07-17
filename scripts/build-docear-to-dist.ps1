@@ -58,7 +58,6 @@ Or set JAVA_HOME to your JDK 8 root and run again.
 $env:JAVA_HOME = $jdkHome
 $env:Path = "$($env:JAVA_HOME)\bin;$env:Path"
 Write-Host "JAVA_HOME = $env:JAVA_HOME"
-& java -version 2>&1 | ForEach-Object { Write-Host $_ }
 
 if (!(Test-Path $antPath)) {
     throw "Ant not found: $antPath (repo should include tools\apache-ant-1.10.14)"
