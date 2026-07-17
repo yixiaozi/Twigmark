@@ -52,6 +52,7 @@ import org.docear.plugin.core.listeners.PropertyListener;
 import org.docear.plugin.core.listeners.PropertyLoadListener;
 import org.docear.plugin.core.listeners.WorkspaceOpenDocumentListener;
 import org.docear.plugin.core.quickcapture.QuickCaptureService;
+import org.docear.plugin.core.calendar.CalendarViewportIntegration;
 import org.docear.plugin.core.mapswitcher.MapSwitcherService;
 import org.docear.plugin.core.quickcommand.QuickCommandService;
 import org.docear.plugin.core.graph.RelationshipGraphIntegration;
@@ -551,6 +552,7 @@ public class CoreConfiguration extends ALanguageController {
 		QuickCaptureService.install(modeController);
 		QuickCommandService.install(modeController);
 		MapSwitcherService.install(modeController);
+		CalendarViewportIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
 		TodoistIntegrationService.install(modeController);
 		RelationshipGraphIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
 		modeController.addAction(new DocearRemoveNodeLinkAction());

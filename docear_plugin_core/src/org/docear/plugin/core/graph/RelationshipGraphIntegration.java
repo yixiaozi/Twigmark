@@ -4,6 +4,7 @@ import java.awt.Component;
 
 import javax.swing.JComponent;
 
+import org.docear.plugin.core.calendar.CalendarViewportService;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.main.application.MapViewTabOrder;
@@ -25,21 +26,30 @@ public final class RelationshipGraphIntegration {
 		RelationshipGraphService.install(modeController);
 		MapViewTabOrder.setSameTabClickListener(new MapViewTabOrder.SameTabClickListener() {
 			public boolean onSameTabClicked(final int tabIndex, final Component mapView) {
+				boolean handled = false;
 				final RelationshipGraphService service = RelationshipGraphService.getService();
-				if (service == null || !service.isHoldingViewport()) {
-					return false;
+				if (service != null && service.isHoldingViewport()) {
+					exitGraphViewDueToMapSwitch();
+					handled = true;
 				}
-				exitGraphViewDueToMapSwitch();
-				return true;
+				final CalendarViewportService calendar = CalendarViewportService.getService();
+				if (calendar != null && calendar.isHoldingViewport()) {
+					calendar.hideFromViewport();
+					handled = true;
+				}
+				return handled;
 			}
 		});
 		MapViewTabOrder.setMapTabActivationListener(new MapViewTabOrder.MapTabActivationListener() {
 			public void onMapTabActivated(final Component mapView) {
 				final RelationshipGraphService service = RelationshipGraphService.getService();
-				if (service == null || !service.isHoldingViewport()) {
-					return;
+				if (service != null && service.isHoldingViewport()) {
+					exitGraphViewDueToMapSwitch();
 				}
-				exitGraphViewDueToMapSwitch();
+				final CalendarViewportService calendar = CalendarViewportService.getService();
+				if (calendar != null && calendar.isHoldingViewport()) {
+					calendar.hideFromViewport();
+				}
 			}
 		});
 		RelationshipGraphTabBridge.setProvider(new RelationshipGraphTabBridge.Provider() {
