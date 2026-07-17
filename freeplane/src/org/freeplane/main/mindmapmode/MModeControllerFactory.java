@@ -140,6 +140,7 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTabPanel;
 import org.freeplane.view.swing.features.pomodoro.PomodoroController;
 import org.freeplane.view.swing.features.pomodoro.PomodoroTabPanel;
+import org.freeplane.view.swing.features.reports.ReportViewportService;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTimelineTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.TodoTabPanel;
 import org.freeplane.view.swing.map.ShowNotesInMapAction;
