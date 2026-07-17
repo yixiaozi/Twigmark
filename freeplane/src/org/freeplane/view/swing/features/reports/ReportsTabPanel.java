@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
@@ -48,10 +49,12 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("选择报表后单击生成，写入当前选中节点");
+	private final JLabel statusLabel = new JLabel("对齐 DocearReminder 报表；点名称写入选中节点");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
+	private final JTextField includeField = new JTextField();
+	private final JTextField excludeField = new JTextField();
 	private final JPanel customRangePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList reportList = new JList(listModel);
@@ -69,12 +72,16 @@ public class ReportsTabPanel extends JPanel {
 	}
 
 	private void buildUi() {
-		final JPanel north = new JPanel(new BorderLayout(0, 4));
+		final JPanel north = new JPanel();
+		north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
 		statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, 11f));
 		statusLabel.setForeground(new Color(0x55, 0x55, 0x55));
-		north.add(statusLabel, BorderLayout.NORTH);
+		statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+		north.add(statusLabel);
 
 		final JPanel rangeRow = new JPanel(new BorderLayout(4, 0));
+		rangeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		rangeRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
 		final JLabel rangeLabel = new JLabel("时间");
 		rangeCombo.addItem("今天");
 		rangeCombo.addItem("昨天");
@@ -86,9 +93,10 @@ public class ReportsTabPanel extends JPanel {
 		rangeCombo.setSelectedIndex(ReportTimeRange.PRESET_THIS_WEEK);
 		rangeRow.add(rangeLabel, BorderLayout.WEST);
 		rangeRow.add(rangeCombo, BorderLayout.CENTER);
-		north.add(rangeRow, BorderLayout.CENTER);
+		north.add(rangeRow);
 
 		customRangePanel.setVisible(false);
+		customRangePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		customRangePanel.add(new JLabel("从"));
 		customRangePanel.add(startField);
 		customRangePanel.add(new JLabel("到"));
@@ -97,7 +105,22 @@ public class ReportsTabPanel extends JPanel {
 		endField.setText(DAY.format(cal.getTime()));
 		cal.add(Calendar.DAY_OF_MONTH, -6);
 		startField.setText(DAY.format(cal.getTime()));
-		north.add(customRangePanel, BorderLayout.SOUTH);
+		north.add(customRangePanel);
+
+		final JPanel filterRow = new JPanel(new GridLayout(2, 1, 0, 2));
+		filterRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		filterRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 2, 0));
+		final JPanel includeRow = new JPanel(new BorderLayout(4, 0));
+		includeField.setToolTipText("对应原版报表「搜索」：只保留包含该关键词的项");
+		includeRow.add(new JLabel("包含"), BorderLayout.WEST);
+		includeRow.add(includeField, BorderLayout.CENTER);
+		final JPanel excludeRow = new JPanel(new BorderLayout(4, 0));
+		excludeField.setToolTipText("对应原版报表「排除」：去掉包含该关键词的项");
+		excludeRow.add(new JLabel("排除"), BorderLayout.WEST);
+		excludeRow.add(excludeField, BorderLayout.CENTER);
+		filterRow.add(includeRow);
+		filterRow.add(excludeRow);
+		north.add(filterRow);
 		add(north, BorderLayout.NORTH);
 
 		reportList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -122,7 +145,7 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder("报表（" + ReportCatalog.all().size() + "）"));
+		scroll.setBorder(BorderFactory.createTitledBorder("报表（前6项=原DocearReminder）"));
 		add(scroll, BorderLayout.CENTER);
 
 		final JPanel south = new JPanel(new GridLayout(1, 2, 4, 0));
@@ -192,6 +215,7 @@ public class ReportsTabPanel extends JPanel {
 			JOptionPane.showMessageDialog(this, e.getMessage(), "时间范围", JOptionPane.WARNING_MESSAGE);
 			return;
 		}
+		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
 		generating = true;
 		generateButton.setEnabled(false);
 		statusLabel.setText("正在生成「" + def.title + "」…");
@@ -200,7 +224,7 @@ public class ReportsTabPanel extends JPanel {
 				ReportNodeSpec tree = null;
 				Exception error = null;
 				try {
-					tree = ReportEngine.generate(def, range);
+					tree = ReportEngine.generate(def, query);
 				}
 				catch (Exception e) {
 					error = e;
