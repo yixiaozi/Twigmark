@@ -21,8 +21,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge
 final class CalendarTaskService {
 	static final String KIND_REMINDER = "reminder";
 	static final String KIND_POMODORO = "pomodoro";
-	static final Color POMODORO_COLOR = new Color(0xE1, 0x1D, 0x48);
-	static final Color POMODORO_LIVE = new Color(0xF4, 0x3F, 0x5E);
+	static final Color POMODORO_COLOR = new Color(0xC4, 0xA4, 0xA8);
+	static final Color POMODORO_LIVE = new Color(0xB0, 0x8A, 0x90);
 
 	private CalendarTaskService() {
 	}

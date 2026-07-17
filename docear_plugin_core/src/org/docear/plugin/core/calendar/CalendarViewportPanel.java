@@ -79,10 +79,8 @@ final class CalendarViewportPanel extends JPanel {
 	private final JToggleButton monthBtn = segment("月");
 	private final JToggleButton weekBtn = segment("周");
 	private final JToggleButton dayBtn = segment("日");
-	private final JToggleButton scale5 = scale("5分");
-	private final JToggleButton scale15 = scale("15分");
-	private final JToggleButton scale30 = scale("30分");
-	private final JToggleButton scale60 = scale("60分");
+	private final JToggleButton rangeAllDay = scale("全天");
+	private final JToggleButton rangeWork = scale("4–22");
 	private final JToggleButton pomodoroToggle = segment("番茄");
 
 	CalendarViewportPanel() {
@@ -183,11 +181,9 @@ final class CalendarViewportPanel extends JPanel {
 		viewGroup.add(dayBtn);
 		weekBtn.setSelected(true);
 		final ButtonGroup scaleGroup = new ButtonGroup();
-		scaleGroup.add(scale5);
-		scaleGroup.add(scale15);
-		scaleGroup.add(scale30);
-		scaleGroup.add(scale60);
-		scale30.setSelected(true);
+		scaleGroup.add(rangeAllDay);
+		scaleGroup.add(rangeWork);
+		rangeWork.setSelected(true);
 
 		monthBtn.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -204,10 +200,16 @@ final class CalendarViewportPanel extends JPanel {
 				setMode(MODE_DAY);
 			}
 		});
-		scale5.addActionListener(scaleAction(5));
-		scale15.addActionListener(scaleAction(15));
-		scale30.addActionListener(scaleAction(30));
-		scale60.addActionListener(scaleAction(60));
+		rangeAllDay.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				applyHourRange(0, 24);
+			}
+		});
+		rangeWork.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				applyHourRange(4, 22);
+			}
+		});
 		pomodoroToggle.setSelected(true);
 		pomodoroToggle.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -391,15 +393,24 @@ final class CalendarViewportPanel extends JPanel {
 		});
 
 		dayView.setDaysToShow(7);
-		dayView.setTimeScaleMinutes(30);
+		dayView.setHourRange(4, 22);
 		dayView.setStartDate(DayViewPanel.startOfWeekMonday(new Date()));
 		monthView.setMonthStart(MonthViewPanel.firstOfMonth(new Date()));
 		monthView.setSelectedDay(new Date());
 		miniMonth.setSelectedDay(new Date());
 		setMode(MODE_WEEK);
-		scrollToWorkHours();
+		timedScroll.getViewport().addComponentListener(new java.awt.event.ComponentAdapter() {
+			public void componentResized(final java.awt.event.ComponentEvent e) {
+				fitDayViewIfNeeded();
+			}
+		});
 		ReminderCalendarBridge.warmEntriesAsync();
 		reloadTasksAsync();
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				fitDayViewIfNeeded();
+			}
+		});
 	}
 
 	void setAppointments(final List list, final Map dayCounts) {
@@ -483,7 +494,9 @@ final class CalendarViewportPanel extends JPanel {
 				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				if (value instanceof CalendarAppointment) {
 					final CalendarAppointment appt = (CalendarAppointment) value;
-					setText(timeFmt.format(appt.start) + "  " + appt.title);
+					final String start = timeFmt.format(appt.start);
+					final String end = appt.end != null ? timeFmt.format(appt.end) : "";
+					setText(end.length() > 0 ? start + "–" + end + "  " + appt.title : start + "  " + appt.title);
 					setForeground(appt.color != null ? appt.color.darker() : CalendarTheme.TEXT);
 				}
 				else {
@@ -679,12 +692,12 @@ final class CalendarViewportPanel extends JPanel {
 			end.setTime(start);
 			end.add(Calendar.DAY_OF_MONTH, 6);
 			subtitleLabel.setText(rangeTitle.format(start) + " — " + rangeTitle.format(end.getTime()) + "  ·  周视图 · "
-			        + dayView.getTimeScaleMinutes() + " 分钟 · " + appointments.size() + " 条");
+			        + dayView.getRangeLabel() + " · " + appointments.size() + " 条");
 			cards.show(cardHost, CARD_TIMED);
 		}
 		else {
 			subtitleLabel.setText(dayTitle.format(dayView.getStartDate()) + "  ·  日视图 · "
-			        + dayView.getTimeScaleMinutes() + " 分钟 · " + appointments.size() + " 条");
+			        + dayView.getRangeLabel() + " · " + appointments.size() + " 条");
 			cards.show(cardHost, CARD_TIMED);
 		}
 		setScaleEnabled(mode != MODE_MONTH);
@@ -702,11 +715,11 @@ final class CalendarViewportPanel extends JPanel {
 		else if (mode == MODE_WEEK) {
 			dayView.setDaysToShow(7);
 			dayView.setStartDate(DayViewPanel.startOfWeekMonday(dayView.getStartDate()));
-			scrollToWorkHours();
+			fitDayViewIfNeeded();
 		}
 		else {
 			dayView.setDaysToShow(1);
-			scrollToWorkHours();
+			fitDayViewIfNeeded();
 		}
 		refreshChrome();
 		reloadTasksAsync();
@@ -763,7 +776,7 @@ final class CalendarViewportPanel extends JPanel {
 		}
 		miniMonth.setSelectedDay(today);
 		refreshChrome();
-		scrollToWorkHours();
+		fitDayViewIfNeeded();
 		reloadTasksAsync();
 	}
 
@@ -809,10 +822,8 @@ final class CalendarViewportPanel extends JPanel {
 		controls.add(spacer());
 		controls.add(pomodoroToggle);
 		controls.add(spacer());
-		controls.add(scale5);
-		controls.add(scale15);
-		controls.add(scale30);
-		controls.add(scale60);
+		controls.add(rangeAllDay);
+		controls.add(rangeWork);
 		controls.add(spacer());
 		controls.add(close);
 
@@ -847,34 +858,32 @@ final class CalendarViewportPanel extends JPanel {
 		return hero;
 	}
 
-	private ActionListener scaleAction(final int minutes) {
-		return new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				dayView.setTimeScaleMinutes(minutes);
-				timedScroll.getVerticalScrollBar().setUnitIncrement(dayView.getSlotHeight());
-				refreshChrome();
-				scrollToWorkHours();
-			}
-		};
+	private void applyHourRange(final int startHour, final int endHour) {
+		dayView.setHourRange(startHour, endHour);
+		fitDayViewIfNeeded();
+		refreshChrome();
+		statusLabel.setText("时段 " + startHour + ":00–" + endHour + ":00 · 滚轮缩放 · 1分钟精度");
 	}
 
-	private void setScaleEnabled(final boolean enabled) {
-		scale5.setEnabled(enabled);
-		scale15.setEnabled(enabled);
-		scale30.setEnabled(enabled);
-		scale60.setEnabled(enabled);
-	}
-
-	private void scrollToWorkHours() {
+	private void fitDayViewIfNeeded() {
 		if (mode == MODE_MONTH) {
 			return;
 		}
-		SwingUtilities.invokeLater(new Runnable() {
-			public void run() {
-				final int y = 36 + (8 * 60 / dayView.getTimeScaleMinutes()) * dayView.getSlotHeight();
-				timedScroll.getVerticalScrollBar().setValue(Math.max(0, y - 48));
-			}
-		});
+		final int h = timedScroll.getViewport().getHeight();
+		if (h < 80) {
+			return;
+		}
+		timedScroll.getVerticalScrollBar().setUnitIncrement(dayView.getSlotHeight());
+		if (dayView.isUserZoomed()) {
+			return;
+		}
+		dayView.fitToViewportHeight(h);
+		timedScroll.getVerticalScrollBar().setValue(0);
+	}
+
+	private void setScaleEnabled(final boolean enabled) {
+		rangeAllDay.setEnabled(enabled);
+		rangeWork.setEnabled(enabled);
 	}
 
 	private static JLabel spacer() {
