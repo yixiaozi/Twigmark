@@ -2,7 +2,7 @@
 # Mind-map data under E:\yixiaozi is NOT touched.
 #
 # Usage:
-#   Double-click: build-docear.bat  (or 一键编译并启动.bat)
+#   Double-click: build-docear.bat
 #   Or: powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
 #
 # Options:

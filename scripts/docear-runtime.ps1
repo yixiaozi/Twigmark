@@ -136,7 +136,7 @@ Relationship graph check ($Context) FAILED:
 
   Without that export, org.docear.plugin.core hits:
   NoClassDefFoundError: .../tagfilter/TagGroupCascadeBar
-  and the left 「关系图」tab stays blank / load-failed.
+  and the left relationship-graph tab stays blank / load-failed.
 "@
     }
 
