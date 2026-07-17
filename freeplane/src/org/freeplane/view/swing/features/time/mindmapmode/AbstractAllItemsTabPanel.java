@@ -154,6 +154,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	protected final Map itemKeysByFile = new HashMap();
 	protected SwingWorker activeWorker;
 	protected boolean rescanRequested;
+	/** Queued force-disk flag when a rescan is requested while another is still running. */
+	private boolean pendingForceDiskRescan;
 	protected Set lastActiveFileKeys = new HashSet();
 	protected final Timer autoRefreshTimer;
 	private final Timer liveRefreshTimer;
@@ -248,7 +250,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		refreshButton.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
-				triggerRescan();
+				triggerRescan(true);
 			}
 		});
 
@@ -293,14 +295,17 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 				}
 
 				public void onRemove(final MapModel map) {
+					invalidateCacheForMap(map);
 					scheduleLiveRefresh();
 				}
 
 				public void onSavedAs(final MapModel map) {
+					invalidateCacheForMap(map);
 					scheduleLiveRefresh();
 				}
 
 				public void onSaved(final MapModel map) {
+					invalidateCacheForMap(map);
 					scheduleLiveRefresh();
 				}
 			});
@@ -318,17 +323,43 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		liveRefreshTimer.restart();
 	}
 
+	/** Drop disk-parse cache for one map so the next scan re-reads it; keep the visible list. */
+	private void invalidateCacheForMap(final MapModel map) {
+		if (map == null || map.getFile() == null) {
+			return;
+		}
+		cacheByFile.remove(fileKey(map.getFile()));
+	}
+
 	protected void triggerRescan() {
+		triggerRescan(false);
+	}
+
+	/**
+	 * Background refresh that keeps the current tree/status until a full pass finishes.
+	 * Unlike the old clear-then-fill path, the list is not emptied on save.
+	 *
+	 * @param forceDiskRescan when true (Refresh button), ignore file mtime cache and re-parse
+	 *        closed maps from disk; still keeps {@link #itemsByKey} until merge completes.
+	 */
+	protected void triggerRescan(final boolean forceDiskRescan) {
 		if (activeWorker != null) {
 			rescanRequested = true;
+			if (forceDiskRescan) {
+				pendingForceDiskRescan = true;
+			}
 			return;
 		}
 
 		rescanRequested = false;
-		cacheByFile.clear();
-		itemsByKey.clear();
-		itemKeysByFile.clear();
+		final boolean forceDisk = forceDiskRescan || pendingForceDiskRescan;
+		pendingForceDiskRescan = false;
+		if (forceDisk) {
+			cacheByFile.clear();
+		}
 		activeWorker = new SwingWorker() {
+			private volatile boolean completedPass;
+
 			protected Object doInBackground() throws Exception {
 				List files = collectAllMindmapFiles();
 				Set activeFileKeys = new HashSet();
@@ -340,7 +371,6 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 					activeFileKeys.add((String) keyObj);
 				}
 				lastActiveFileKeys = activeFileKeys;
-				purgeStaleItems(activeFileKeys);
 				final Set scannedOpenKeys = new HashSet();
 				int progress = 0;
 				final int total = files.size() + openByKey.size();
@@ -373,27 +403,29 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 					progress++;
 					publish(new ScanChunk(key, items, progress, total));
 				}
+				completedPass = true;
 				return null;
 			}
 
 			protected void process(List chunks) {
 				for (int i = 0; i < chunks.size(); i++) {
-					ScanChunk chunk = (ScanChunk) chunks.get(i);
-					mergeChunk(chunk);
-					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size() + " (" + chunk.scanned + "/"
-							+ chunk.total + ")");
-					publishItemCountMetric(itemsByKey.size());
+					mergeChunk((ScanChunk) chunks.get(i));
 				}
+				// Keep status/badge stable during scan — no "N (scanned/total)" flicker.
 			}
 
 			protected void done() {
 				activeWorker = null;
-				purgeStaleItems(lastActiveFileKeys);
-				rebuildTreeFromCache();
-				statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
-				publishItemCountMetric(itemsByKey.size());
+				if (completedPass) {
+					purgeStaleItems(lastActiveFileKeys);
+					rebuildTreeFromCache();
+					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
+					publishItemCountMetric(itemsByKey.size());
+				}
+				// Another save/icon change arrived mid-pass: keep the previous tree and
+				// start a fresh complete scan (do not rebuild from partial merges).
 				if (rescanRequested) {
-					triggerRescan();
+					triggerRescan(pendingForceDiskRescan);
 				}
 			}
 		};
