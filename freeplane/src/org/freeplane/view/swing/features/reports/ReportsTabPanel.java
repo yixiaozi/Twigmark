@@ -147,7 +147,6 @@ public class ReportsTabPanel extends JPanel {
 				return this;
 			}
 		});
-		reportList.setFixedCellHeight(58);
 		final JScrollPane scroll = new JScrollPane(reportList);
 		scroll.setBorder(BorderFactory.createTitledBorder("报表（点选 → 中间出图）"));
 		add(scroll, BorderLayout.CENTER);
