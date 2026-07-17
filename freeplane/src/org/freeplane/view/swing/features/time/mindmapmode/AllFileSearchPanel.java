@@ -352,11 +352,30 @@ public class AllFileSearchPanel extends JPanel {
 		}
 		
 		try {
-			openFileWithSystemApp(result.file);
+			openFile(result.file);
 		} catch (Exception e) {
 			LogUtils.warn("无法打开文件: " + e.getMessage());
 			JOptionPane.showMessageDialog(this, "无法打开文件: " + e.getMessage(), "错误", JOptionPane.ERROR_MESSAGE);
 		}
+	}
+
+	/** Open .mm inside Docear; other files via the OS association. */
+	private void openFile(final File file) throws Exception {
+		if (file == null || !file.exists()) {
+			return;
+		}
+		final String name = file.getName().toLowerCase(Locale.ENGLISH);
+		if (name.endsWith(".mm")) {
+			final org.freeplane.features.mode.Controller controller = org.freeplane.features.mode.Controller
+			        .getCurrentController();
+			final org.freeplane.features.ui.IMapViewManager mapViewManager = controller.getMapViewManager();
+			final java.net.URL url = file.toURI().toURL();
+			if (!mapViewManager.tryToChangeToMapView(url)) {
+				controller.getModeController().getMapController().newMap(url);
+			}
+			return;
+		}
+		openFileWithSystemApp(file);
 	}
 	
 	private void showPopupMenu(java.awt.event.MouseEvent e) {

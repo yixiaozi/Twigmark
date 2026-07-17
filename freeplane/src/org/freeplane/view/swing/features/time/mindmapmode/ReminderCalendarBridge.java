@@ -56,7 +56,7 @@ public final class ReminderCalendarBridge {
 	public static List loadOccurrences(final long rangeStart, final long rangeEnd) {
 		final List out = new ArrayList();
 		try {
-			final List files = ReminderWorkspaceScanHelper.collectAllMindmapFiles();
+			final List files = collectMindmapFilesIncludingOpenMaps();
 			final List entries = new ArrayList();
 			for (int i = 0; i < files.size(); i++) {
 				entries.addAll(ReminderWorkspaceScanHelper.scanRemindersFromFile((File) files.get(i)));
@@ -74,6 +74,46 @@ public final class ReminderCalendarBridge {
 			LogUtils.warn("ReminderCalendarBridge.loadOccurrences failed", e);
 		}
 		return out;
+	}
+
+	/** Workspace scan roots plus any currently open map files (in case they sit outside roots). */
+	private static List collectMindmapFilesIncludingOpenMaps() {
+		final List files = new ArrayList(ReminderWorkspaceScanHelper.collectAllMindmapFiles());
+		final java.util.HashSet seen = new java.util.HashSet();
+		for (int i = 0; i < files.size(); i++) {
+			final File f = (File) files.get(i);
+			try {
+				seen.add(f.getCanonicalPath());
+			}
+			catch (Exception e) {
+				seen.add(f.getAbsolutePath());
+			}
+		}
+		try {
+			final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
+			final Map maps = mapViewManager.getMaps(MModeController.MODENAME);
+			for (final Object mapObj : maps.values()) {
+				final MapModel map = (MapModel) mapObj;
+				final File file = map.getFile();
+				if (file == null || !file.isFile()) {
+					continue;
+				}
+				String key;
+				try {
+					key = file.getCanonicalPath();
+				}
+				catch (Exception e) {
+					key = file.getAbsolutePath();
+				}
+				if (seen.add(key)) {
+					files.add(file);
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+		return files;
 	}
 
 	public static void openNode(final File file, final String nodeId) {

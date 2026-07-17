@@ -62,7 +62,7 @@ public final class CalendarViewportIntegration {
 			if (ribbonBuilder == null) {
 				return;
 			}
-			final KeyStroke keyStroke = UITools.getKeyStroke("control shift C");
+			final KeyStroke keyStroke = UITools.getKeyStroke("control shift D");
 			if (keyStroke != null) {
 				ribbonBuilder.getAcceleratorManager().setAccelerator(action, keyStroke);
 			}

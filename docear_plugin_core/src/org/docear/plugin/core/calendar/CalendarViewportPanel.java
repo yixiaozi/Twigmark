@@ -85,8 +85,8 @@ final class CalendarViewportPanel extends JPanel {
 		side.setPreferredSize(new Dimension(232, 0));
 		final JPanel miniNav = new JPanel(new BorderLayout(4, 0));
 		miniNav.setOpaque(false);
-		final JButton miniPrev = ghost("◀");
-		final JButton miniNext = ghost("▶");
+		final JButton miniPrev = ghost("<");
+		final JButton miniNext = ghost(">");
 		miniNav.add(miniPrev, BorderLayout.WEST);
 		miniNav.add(miniNext, BorderLayout.EAST);
 		side.add(miniNav, BorderLayout.NORTH);
@@ -266,7 +266,13 @@ final class CalendarViewportPanel extends JPanel {
 							return;
 						}
 						setAppointments(loaded);
-						statusLabel.setText("已加载 " + loaded.size() + " 条安排 · 单击打开 · 拖拽改期 · 双击打卡/完成 · 右键更多");
+						if (loaded.isEmpty()) {
+							statusLabel.setText("当前视图范围内暂无提醒 · 确认节点含提醒时间且导图在扫描目录内 · 点「刷新」重试");
+						}
+						else {
+							statusLabel.setText("已加载 " + loaded.size()
+							        + " 条安排 · 单击打开 · 拖拽改期 · 双击打卡/完成 · 右键更多");
+						}
 						refreshChrome();
 					}
 				});
@@ -455,8 +461,8 @@ final class CalendarViewportPanel extends JPanel {
 
 		final JPanel controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 		controls.setOpaque(false);
-		final JButton prev = heroBtn("◀");
-		final JButton next = heroBtn("▶");
+		final JButton prev = heroBtn("<");
+		final JButton next = heroBtn(">");
 		final JButton today = heroBtn("今天");
 		final JButton refresh = heroBtn("刷新");
 		final JButton close = heroBtn("返回导图");
