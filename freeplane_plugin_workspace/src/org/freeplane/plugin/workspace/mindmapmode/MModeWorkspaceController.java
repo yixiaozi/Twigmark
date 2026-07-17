@@ -134,6 +134,7 @@ import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 import org.freeplane.view.swing.features.git.GitTabPanel;
+import org.freeplane.view.swing.features.finance.FinanceTabPanel;
 import org.freeplane.view.swing.features.reports.ReportsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllFlagsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
@@ -153,6 +154,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_ACTIVITY = "activity";
 	private static final String TAB_GIT = "git";
 	private static final String TAB_REPORTS = "reports";
+	private static final String TAB_FINANCE = "finance";
 	private static final String TAB_GRAPH = "relationship_graph";
 	private static final String TAB_NEXT_ACTIONS = "next_actions";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
@@ -162,7 +164,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH,
-			TAB_GIT, TAB_REPORTS, TAB_NEXT_ACTIONS
+			TAB_GIT, TAB_REPORTS, TAB_FINANCE, TAB_NEXT_ACTIONS
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -700,6 +702,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		normalizeSearchTabOrder();
 		normalizeSideTabOrder();
 		normalizeReportsTabOrder();
+		normalizeFinanceTabOrder();
 		normalizeNextActionsTabOrder();
 	}
 
@@ -768,14 +771,42 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		saveSideTabOrder();
 	}
 
-	/** Keep「红旗」immediately to the right of 报表 (or Git if reports missing). */
-	private void normalizeNextActionsTabOrder() {
-		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+	/** Keep「财务」immediately to the right of 报表 (or Git if reports missing). */
+	private void normalizeFinanceTabOrder() {
+		if (!sideTabOrder.contains(TAB_FINANCE)) {
 			return;
 		}
 		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
 		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
 		final int anchorIndex = reportsIndex >= 0 ? reportsIndex : gitIndex;
+		final int currentIndex = sideTabOrder.indexOf(TAB_FINANCE);
+		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
+			return;
+		}
+		if (anchorIndex < 0 && currentIndex >= 0) {
+			return;
+		}
+		sideTabOrder.remove(TAB_FINANCE);
+		if (anchorIndex >= 0) {
+			final int refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS) >= 0
+			        ? sideTabOrder.indexOf(TAB_REPORTS) : sideTabOrder.indexOf(TAB_GIT);
+			sideTabOrder.add(refreshedAnchor + 1, TAB_FINANCE);
+		}
+		else {
+			sideTabOrder.add(TAB_FINANCE);
+		}
+		saveSideTabOrder();
+	}
+
+	/** Keep「红旗」immediately to the right of 财务 (else 报表 / Git). */
+	private void normalizeNextActionsTabOrder() {
+		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+			return;
+		}
+		final int financeIndex = sideTabOrder.indexOf(TAB_FINANCE);
+		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		final int anchorIndex = financeIndex >= 0 ? financeIndex : (reportsIndex >= 0 ? reportsIndex : gitIndex);
 		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
 			return;
@@ -785,8 +816,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		sideTabOrder.remove(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0) {
-			final int refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS) >= 0
-			        ? sideTabOrder.indexOf(TAB_REPORTS) : sideTabOrder.indexOf(TAB_GIT);
+			int refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS);
+			}
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_GIT);
+			}
 			sideTabOrder.add(refreshedAnchor + 1, TAB_NEXT_ACTIONS);
 		}
 		else {
@@ -854,6 +890,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_REPORTS.equals(tabId)) {
 			return "\u62a5\u8868";
 		}
+		if (TAB_FINANCE.equals(tabId)) {
+			return "\u8d22\u52a1";
+		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return "\u7ea2\u65d7";
 		}
@@ -887,6 +926,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (TAB_REPORTS.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_REPORTS;
+		}
+		if (TAB_FINANCE.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_FINANCE;
 		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_NEXT_ACTIONS;
@@ -1061,6 +1103,18 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				LogUtils.warn("ReportsTabPanel failed to load", t);
 				final JPanel fallback = new JPanel(new BorderLayout());
 				fallback.add(new JLabel("<html>报表面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>"),
+				        BorderLayout.CENTER);
+				panel = fallback;
+			}
+		}
+		else if (TAB_FINANCE.equals(tabId)) {
+			try {
+				panel = new FinanceTabPanel();
+			}
+			catch (final Throwable t) {
+				LogUtils.warn("FinanceTabPanel failed to load", t);
+				final JPanel fallback = new JPanel(new BorderLayout());
+				fallback.add(new JLabel("<html>财务面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>"),
 				        BorderLayout.CENTER);
 				panel = fallback;
 			}

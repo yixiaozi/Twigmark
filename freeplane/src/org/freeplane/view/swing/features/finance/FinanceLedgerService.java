@@ -609,11 +609,14 @@ public final class FinanceLedgerService {
 			if (txn.dateYmd == null || !txn.dateYmd.startsWith(summary.period)) {
 				continue;
 			}
-			if (FinanceAttributes.FLOW_INCOME.equals(txn.flow)) {
+			if (FinanceAttributes.FLOW_INCOME.equals(txn.flow)
+					|| FinanceAttributes.FLOW_BORROW.equals(txn.flow)) {
+				// Borrow increases available cash (liability), counted with income for net cash view.
 				summary.incomeCents += Math.abs(txn.amountCents);
 			}
 			else if (FinanceAttributes.FLOW_EXPENSE.equals(txn.flow)
-					|| FinanceAttributes.FLOW_CREDIT.equals(txn.flow)) {
+					|| FinanceAttributes.FLOW_CREDIT.equals(txn.flow)
+					|| FinanceAttributes.FLOW_LEND.equals(txn.flow)) {
 				summary.expenseCents += Math.abs(txn.amountCents);
 				final String cat = txn.categoryName == null || txn.categoryName.length() == 0 ? "其他"
 						: txn.categoryName;
