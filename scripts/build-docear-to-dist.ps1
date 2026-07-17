@@ -61,6 +61,7 @@ Write-Host "JAVA_HOME = $env:JAVA_HOME"
 
 Write-Step "Prepare JavaFX JRE cache (Draw.io embed)"
 $setupJavaFx = Join-Path $PSScriptRoot "setup-drawio-javafx.ps1"
+$javaFxCacheJre = Join-Path $repoRoot "docear_framework\cache\javafx\jre"
 if (Test-Path $setupJavaFx) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $setupJavaFx
     if ($LASTEXITCODE -ne 0) {
@@ -78,13 +79,33 @@ if (!(Test-Path $buildFile)) {
     throw "Build file not found: $buildFile"
 }
 
+# Avoid Windows file-lock failures: never leave a JRE under build\ before ant clean.
+$staleBuildJre = Join-Path $repoRoot "docear_framework\build\jre"
+if (Test-Path $staleBuildJre) {
+    Write-Step "Remove stale build\jre before ant clean"
+    try {
+        Remove-Item -Path $staleBuildJre -Recurse -Force -ErrorAction Stop
+    }
+    catch {
+        Write-Warning "Could not delete $staleBuildJre fully: $_. Ant clean may still succeed."
+    }
+}
+
 if (-not $SkipBuild) {
     Write-Step "Ant full build (freeplane jars + plugins + Windows zip; may take several minutes)"
+    $antLog = Join-Path $distDir "ant-docear-dist.log"
+    New-Item -ItemType Directory -Force -Path $distDir | Out-Null
     Push-Location $repoRoot
     try {
-        & $antPath -f $buildFile docear-dist
-        if ($LASTEXITCODE -ne 0) {
-            throw "Docear build failed with exit code $LASTEXITCODE. Scroll up for ant errors."
+        & cmd /c "`"$antPath`" -f `"$buildFile`" docear-dist > `"$antLog`" 2>&1"
+        $antExit = $LASTEXITCODE
+        if (Test-Path $antLog) {
+            Write-Host "---- ant log (tail) ----"
+            Get-Content -Path $antLog -Tail 80 | ForEach-Object { Write-Host $_ }
+            Write-Host "---- end ant log ----"
+        }
+        if ($antExit -ne 0) {
+            throw "Docear build failed with exit code $antExit. Full log: $antLog"
         }
     }
     finally {
@@ -148,10 +169,22 @@ $drawioPlugin = Join-Path $installPlugins "org.docear.plugin.drawio"
 if (!(Test-Path $drawioPlugin)) {
     throw "Draw.io plugin missing from install: $drawioPlugin"
 }
+
+Write-Step "Inject JavaFX JRE for Draw.io"
 $bundledJre = Join-Path $installDir "jre"
 $jfxJar = Join-Path $bundledJre "lib\ext\jfxrt.jar"
 if (!(Test-Path $jfxJar)) {
-    throw "Bundled JavaFX JRE missing ($jfxJar). setup-drawio-javafx.ps1 must succeed before packaging."
+    if (!(Test-JavaFxJreRoot $javaFxCacheJre)) {
+        throw "JavaFX JRE cache missing at $javaFxCacheJre. Re-run scripts\setup-drawio-javafx.ps1."
+    }
+    if (Test-Path $bundledJre) {
+        Remove-Item -Path $bundledJre -Recurse -Force
+    }
+    Write-Host "Copying $javaFxCacheJre -> $bundledJre"
+    Copy-Item -Path $javaFxCacheJre -Destination $bundledJre -Recurse -Force
+}
+if (!(Test-Path $jfxJar)) {
+    throw "Bundled JavaFX JRE missing ($jfxJar) after inject."
 }
 Write-Host "Draw.io plugin + JavaFX JRE OK"
 
@@ -161,6 +194,7 @@ Write-Host "  Packages: $TargetDir"
 Write-Host "  Install:  $installDir"
 Write-Host "  Scheduling hub shortcut: Ctrl+Shift+D"
 Write-Host "  Draw.io: open a .drawio file from the workspace"
+Write-Host "  Launch: prefer docear.bat (uses bundled jre)"
 Write-Host ""
 
 if (-not $NoLaunch) {

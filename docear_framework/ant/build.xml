@@ -350,9 +350,10 @@
 	</target>
 
 	<!--
-	  Copy Liberica Full JRE (with JavaFX) into build/jre for the Windows zip.
-	  Cache is populated by scripts/setup-drawio-javafx.ps1 (Windows) and survives ant clean.
-	  Missing cache is a warning only so non-Windows / compile-only builds still succeed.
+	  Optionally copy Liberica Full JRE into build/jre for the Windows zip.
+	  Prefer populate-cache via scripts/setup-drawio-javafx.ps1 and inject at deploy
+	  time (build-docear-to-dist.ps1) — copying into build/ before ant clean locks
+	  files on Windows. This target is best-effort and must not fail the build.
 	-->
 	<target name="bundle_javafx_jre">
 		<property name="javafx.jre.cache" location="${root}/cache/javafx/jre"/>
@@ -369,16 +370,16 @@
 
 	<target name="bundle_javafx_jre.copy" if="javafx.jre.cache.present">
 		<mkdir dir="${build}"/>
-		<delete dir="${javafx.jre.build}" quiet="true"/>
+		<delete dir="${javafx.jre.build}" quiet="true" failonerror="false"/>
 		<mkdir dir="${javafx.jre.build}"/>
-		<copy todir="${javafx.jre.build}">
+		<copy todir="${javafx.jre.build}" failonerror="false">
 			<fileset dir="${javafx.jre.cache}"/>
 		</copy>
-		<echo message="Bundled JavaFX JRE into ${javafx.jre.build}"/>
+		<echo message="Bundled JavaFX JRE into ${javafx.jre.build} (optional; deploy script also injects from cache)"/>
 	</target>
 
 	<target name="bundle_javafx_jre.missing" unless="javafx.jre.cache.present">
-		<echo level="warning" message="JavaFX JRE cache missing at ${javafx.jre.cache}. Draw.io embed needs scripts/setup-drawio-javafx.ps1 before packaging."/>
+		<echo message="JavaFX JRE cache missing at ${javafx.jre.cache}. Draw.io embed will be injected at deploy time if cache is prepared."/>
 	</target>
 
 	
@@ -466,10 +467,12 @@
 		</exec>
 	</target>
 
-	<target name="binzip" depends="build, bundle_javafx_jre">
+	<target name="binzip" depends="build">
 		<zip destfile="${dist}/${ApplicationNameToLowerCase}_windows.zip" compress="true">
 			<zipfileset dir="${build}" prefix="${ApplicationNameToLowerCase}-${ver}">
 				<exclude name="${ApplicationNameToLowerCase}.sh" />
+				<!-- JavaFX JRE is injected at deploy time from cache/javafx/jre (avoid clean lock + huge zip). -->
+				<exclude name="jre/**" />
 			</zipfileset>
 			<zipfileset dir="${root}" prefix="${ApplicationNameToLowerCase}-${ver}">
 				<include name="${license}" />
@@ -864,7 +867,7 @@
 		<ant antfile="ant/build.xml" target="clean" inheritall="false" 
 			  dir="${workspace}/docear_plugin_services" />
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
-			  dir="${workspace}/docear_plugin_drawio" />
+			  dir="${workspace}/docear_plugin_drawio" failonerror="false"/>
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
 			  dir="${workspace}/docear_plugin_ai" failonerror="false"/>
 		<ant antfile="ant/build.xml" target="clean" inheritall="false"
