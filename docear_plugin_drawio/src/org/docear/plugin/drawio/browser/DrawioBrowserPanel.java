@@ -2,10 +2,14 @@ package org.docear.plugin.drawio.browser;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 import javax.swing.JButton;
 import javax.swing.JLabel;
@@ -23,6 +27,10 @@ import org.freeplane.core.util.LogUtils;
 public final class DrawioBrowserPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
+	private static final int BRIDGE_MAX_ATTEMPTS = 200;
+	private static final int BRIDGE_RETRY_MS = 100;
+	private static final int EDITOR_READY_TIMEOUT_MS = 45000;
+
 	private static volatile boolean javafxChecked;
 	private static volatile boolean javafxAvailable;
 
@@ -31,7 +39,11 @@ public final class DrawioBrowserPanel extends JPanel {
 	private Object webEngine;
 	private Object jfxPanel;
 	private boolean loaded;
+	private boolean disposed;
+	private boolean editorInitReceived;
 	private String pendingLoadMessage;
+	private File diagramFile;
+	private javax.swing.Timer readyWatchdog;
 
 	public DrawioBrowserPanel(final DrawioEditorListener listener) {
 		this.listener = listener;
@@ -39,8 +51,12 @@ public final class DrawioBrowserPanel extends JPanel {
 		add(browserHost, BorderLayout.CENTER);
 	}
 
+	public void setDiagramFile(final File file) {
+		this.diagramFile = file;
+	}
+
 	public void ensureLoaded() {
-		if (loaded) {
+		if (loaded || disposed) {
 			return;
 		}
 		if (!isJavaFxAvailable()) {
@@ -62,7 +78,7 @@ public final class DrawioBrowserPanel extends JPanel {
 
 	public void loadDiagram(final String xml, final String title) {
 		final String message = DrawioJson.buildLoadMessage(xml, title);
-		if (webEngine == null) {
+		if (webEngine == null || !editorInitReceived) {
 			pendingLoadMessage = message;
 			return;
 		}
@@ -70,16 +86,19 @@ public final class DrawioBrowserPanel extends JPanel {
 	}
 
 	public void disposeBrowser() {
+		disposed = true;
+		stopReadyWatchdog();
 		webEngine = null;
 		jfxPanel = null;
 		browserHost.removeAll();
 	}
 
 	private void initBrowserAsync() {
-		if (loaded) {
+		if (loaded || disposed) {
 			return;
 		}
 		try {
+			showLoading("正在启动 Draw.io 编辑器…");
 			final Class<?> jfxPanelClass = Class.forName("javafx.embed.swing.JFXPanel");
 			jfxPanel = jfxPanelClass.newInstance();
 			browserHost.removeAll();
@@ -119,11 +138,13 @@ public final class DrawioBrowserPanel extends JPanel {
 		webEngine = invokeAccessible(webView, "getEngine");
 
 		final Object bridge = new DrawioJsBridge(listener, this);
-
 		invokeAccessible(webEngine, "setJavaScriptEnabled", new Class[] { boolean.class }, Boolean.TRUE);
+		attachLoadWorkerListener(bridge);
 
+		final String shellUrl = DrawioEmbedServer.getShellUrl();
+		LogUtils.info("Draw.io loading shell: " + shellUrl);
 		final Method loadMethod = accessibleMethod(webEngine.getClass(), "load", String.class);
-		loadMethod.invoke(webEngine, DrawioEmbedServer.getShellUrl());
+		loadMethod.invoke(webEngine, shellUrl);
 
 		final Class<?> sceneClass = Class.forName("javafx.scene.Scene");
 		final Constructor<?> sceneCtor = sceneClass.getConstructor(Class.forName("javafx.scene.Parent"));
@@ -133,16 +154,92 @@ public final class DrawioBrowserPanel extends JPanel {
 		setScene.invoke(jfxPanel, scene);
 
 		scheduleBridgeInstallAttempt(bridge, 0);
+		startReadyWatchdog();
+	}
+
+	private void attachLoadWorkerListener(final Object bridge) {
+		try {
+			final Object loadWorker = invokeAccessible(webEngine, "getLoadWorker");
+			final Object stateProperty = invokeAccessible(loadWorker, "stateProperty");
+			final Class<?> changeListenerClass = Class.forName("javafx.beans.value.ChangeListener");
+			final Object listenerProxy = Proxy.newProxyInstance(changeListenerClass.getClassLoader(),
+			        new Class[] { changeListenerClass }, new InvocationHandler() {
+				        public Object invoke(final Object proxy, final Method method, final Object[] args)
+				                throws Throwable {
+					        if ("changed".equals(method.getName()) && args != null && args.length >= 3) {
+						        final Object newValue = args[2];
+						        if (newValue != null && "SUCCEEDED".equals(String.valueOf(newValue))) {
+							        scheduleBridgeInstallAttempt(bridge, 0);
+						        }
+						        else if (newValue != null && "FAILED".equals(String.valueOf(newValue))) {
+							        Object ex = null;
+							        try {
+								        ex = invokeAccessible(loadWorker, "getException");
+							        }
+							        catch (Exception ignore) {
+							        }
+							        final String detail = ex != null ? String.valueOf(ex) : "unknown error";
+							        LogUtils.warn("Draw.io shell page failed to load: " + detail);
+							        SwingUtilities.invokeLater(new Runnable() {
+								        public void run() {
+									        showError("无法加载 Draw.io 外壳页：\n" + detail
+									                + "\n\n请检查本机回环地址 127.0.0.1 是否可用。");
+								        }
+							        });
+						        }
+					        }
+					        return null;
+				        }
+			        });
+			final Method addListener = accessibleMethod(stateProperty.getClass(), "addListener",
+			        changeListenerClass);
+			addListener.invoke(stateProperty, listenerProxy);
+		}
+		catch (Exception e) {
+			LogUtils.warn("Draw.io LoadWorker listener attach failed; falling back to bridge polling", e);
+		}
+	}
+
+	private void startReadyWatchdog() {
+		stopReadyWatchdog();
+		readyWatchdog = new javax.swing.Timer(EDITOR_READY_TIMEOUT_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				if (disposed || editorInitReceived) {
+					return;
+				}
+				LogUtils.warn("Draw.io editor init timed out after " + EDITOR_READY_TIMEOUT_MS + "ms");
+				showError("Draw.io 编辑器未能在限定时间内就绪。\n\n常见原因：\n"
+				        + "1. 无法访问 embed.diagrams.net（需联网，或改用本地 embed URL）\n"
+				        + "2. 当前 Java 无 JavaFX（请用发行包内 jre 启动）\n"
+				        + "3. 公司代理/防火墙拦截了 iframe\n\n"
+				        + "可在偏好中设置 drawio.embed.url，或用系统程序打开 .drawio 文件。");
+			}
+		});
+		readyWatchdog.setRepeats(false);
+		readyWatchdog.start();
+	}
+
+	private void stopReadyWatchdog() {
+		if (readyWatchdog != null) {
+			readyWatchdog.stop();
+			readyWatchdog = null;
+		}
 	}
 
 	private void scheduleBridgeInstallAttempt(final Object bridge, final int attempt) throws Exception {
-		if (attempt >= 100) {
-			LogUtils.warn("Draw.io bridge install timed out");
+		if (disposed || editorInitReceived) {
+			return;
+		}
+		if (attempt >= BRIDGE_MAX_ATTEMPTS) {
+			LogUtils.warn("Draw.io bridge install timed out after " + BRIDGE_MAX_ATTEMPTS + " attempts");
 			return;
 		}
 		runOnFxThread(new Runnable() {
 			public void run() {
 				try {
+					if (disposed) {
+						return;
+					}
 					if (tryInstallBridge(bridge)) {
 						return;
 					}
@@ -150,7 +247,7 @@ public final class DrawioBrowserPanel extends JPanel {
 				catch (Exception e) {
 					LogUtils.warn("Draw.io bridge install attempt failed", e);
 				}
-				final javax.swing.Timer timer = new javax.swing.Timer(100, new ActionListener() {
+				final javax.swing.Timer timer = new javax.swing.Timer(BRIDGE_RETRY_MS, new ActionListener() {
 					public void actionPerformed(final ActionEvent e) {
 						try {
 							scheduleBridgeInstallAttempt(bridge, attempt + 1);
@@ -167,6 +264,9 @@ public final class DrawioBrowserPanel extends JPanel {
 	}
 
 	private boolean tryInstallBridge(final Object bridge) throws Exception {
+		if (webEngine == null) {
+			return false;
+		}
 		final Method executeScript = accessibleMethod(webEngine.getClass(), "executeScript", String.class);
 		final Object readyState = executeScript.invoke(webEngine, "document.readyState");
 		if (readyState == null) {
@@ -182,9 +282,26 @@ public final class DrawioBrowserPanel extends JPanel {
 
 	private static Method accessibleMethod(final Class<?> clazz, final String name, final Class<?>... parameterTypes)
 	        throws NoSuchMethodException {
-		final Method method = clazz.getMethod(name, parameterTypes);
-		method.setAccessible(true);
-		return method;
+		Class<?> search = clazz;
+		while (search != null) {
+			try {
+				final Method method = search.getDeclaredMethod(name, parameterTypes);
+				method.setAccessible(true);
+				return method;
+			}
+			catch (NoSuchMethodException e) {
+				// try public API next
+			}
+			try {
+				final Method method = search.getMethod(name, parameterTypes);
+				method.setAccessible(true);
+				return method;
+			}
+			catch (NoSuchMethodException e) {
+				search = search.getSuperclass();
+			}
+		}
+		throw new NoSuchMethodException(clazz.getName() + "." + name);
 	}
 
 	private static Object invokeAccessible(final Object target, final String name, final Class<?>[] parameterTypes,
@@ -203,6 +320,12 @@ public final class DrawioBrowserPanel extends JPanel {
 		if (window != null) {
 			final Method setMember = accessibleMethod(JSObjectClass, "setMember", String.class, Object.class);
 			setMember.invoke(window, "javaBridge", bridge);
+			try {
+				invokeAccessible(webEngine, "executeScript", new Class[] { String.class },
+				        "window.__docearBridgeReady=true;");
+			}
+			catch (Exception ignore) {
+			}
 		}
 	}
 
@@ -220,11 +343,13 @@ public final class DrawioBrowserPanel extends JPanel {
 			return;
 		}
 		if ("init".equals(event)) {
-			listener.onEditorReady();
+			editorInitReceived = true;
+			stopReadyWatchdog();
 			if (pendingLoadMessage != null) {
 				postToEditor(pendingLoadMessage);
 				pendingLoadMessage = null;
 			}
+			listener.onEditorReady();
 		}
 		else if ("save".equals(event) || "autosave".equals(event)) {
 			final String xml = DrawioJson.getXml(json);
@@ -237,7 +362,7 @@ public final class DrawioBrowserPanel extends JPanel {
 	}
 
 	private void postToEditor(final String jsonMessage) {
-		if (webEngine == null) {
+		if (webEngine == null || disposed) {
 			return;
 		}
 		final String script = "if(window.postToEditor){window.postToEditor(" + jsonMessage + ");}";
@@ -266,6 +391,12 @@ public final class DrawioBrowserPanel extends JPanel {
 
 	private static void runOnFxThread(final Runnable runnable) throws Exception {
 		final Class<?> platformClass = Class.forName("javafx.application.Platform");
+		final Method isFxThread = accessibleMethod(platformClass, "isFxApplicationThread");
+		final Boolean onFx = (Boolean) isFxThread.invoke(null);
+		if (Boolean.TRUE.equals(onFx)) {
+			runnable.run();
+			return;
+		}
 		final Method runLater = accessibleMethod(platformClass, "runLater", Runnable.class);
 		runLater.invoke(null, runnable);
 	}
@@ -274,14 +405,24 @@ public final class DrawioBrowserPanel extends JPanel {
 		if (!javafxChecked) {
 			try {
 				Class.forName("javafx.embed.swing.JFXPanel");
+				Class.forName("javafx.scene.web.WebView");
 				javafxAvailable = true;
 			}
 			catch (Throwable t) {
 				javafxAvailable = false;
+				LogUtils.warn("JavaFX not available for Draw.io: " + t);
 			}
 			javafxChecked = true;
 		}
 		return javafxAvailable;
+	}
+
+	private void showLoading(final String message) {
+		browserHost.removeAll();
+		browserHost.add(new JLabel("<html><div style='padding:16px'>" + message + "</div></html>"),
+		        BorderLayout.CENTER);
+		revalidate();
+		repaint();
 	}
 
 	private void showJavaFxMissingHelp() {
@@ -289,25 +430,52 @@ public final class DrawioBrowserPanel extends JPanel {
 		panel.add(new JLabel("<html><b>Draw.io 内嵌编辑器需要 JavaFX</b><br><br>"
 		        + "当前 Java 运行环境不含 JavaFX（例如 Eclipse Adoptium JDK 8）。<br><br>"
 		        + "解决方法（任选其一）：<br>"
-		        + "1. 使用带 JavaFX 的 Docear 发行包（含 <code>jre</code> 目录）<br>"
+		        + "1. 使用带 JavaFX 的 Docear 发行包（含 <code>jre</code> 目录），用 <code>docear.bat</code> 启动<br>"
 		        + "2. 在项目根目录运行：<code>scripts\\setup-drawio-javafx.ps1</code> 后重新构建<br>"
 		        + "3. 安装 BellSoft Liberica JDK 8 <i>Full</i> 版，并用其启动 Docear</html>"), BorderLayout.CENTER);
 		final JButton openExternal = new JButton("用系统默认程序打开 .drawio");
-		openExternal.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(final java.awt.event.ActionEvent e) {
-				// parent DrawioDocumentView handles external open if needed
+		openExternal.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				openDiagramExternally();
 			}
 		});
-		openExternal.setVisible(false);
+		openExternal.setEnabled(diagramFile != null && diagramFile.exists());
+		panel.add(openExternal, BorderLayout.SOUTH);
 		browserHost.removeAll();
 		browserHost.add(panel, BorderLayout.CENTER);
 		revalidate();
 		repaint();
 	}
 
+	private void openDiagramExternally() {
+		if (diagramFile == null || !diagramFile.exists()) {
+			return;
+		}
+		try {
+			if (Desktop.isDesktopSupported()) {
+				Desktop.getDesktop().open(diagramFile);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Could not open .drawio externally: " + diagramFile, e);
+			showError("无法用系统程序打开：\n" + e.getMessage());
+		}
+	}
+
 	private void showError(final String message) {
+		final JPanel panel = new JPanel(new BorderLayout(8, 8));
+		panel.add(new JLabel("<html><div style='padding:12px'>" + message.replace("\n", "<br>")
+		        + "</div></html>"), BorderLayout.CENTER);
+		final JButton openExternal = new JButton("用系统默认程序打开 .drawio");
+		openExternal.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				openDiagramExternally();
+			}
+		});
+		openExternal.setEnabled(diagramFile != null && diagramFile.exists());
+		panel.add(openExternal, BorderLayout.SOUTH);
 		browserHost.removeAll();
-		browserHost.add(new JLabel("<html>" + message.replace("\n", "<br>") + "</html>"), BorderLayout.CENTER);
+		browserHost.add(panel, BorderLayout.CENTER);
 		revalidate();
 		repaint();
 	}

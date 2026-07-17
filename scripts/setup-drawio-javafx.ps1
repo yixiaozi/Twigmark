@@ -1,15 +1,14 @@
 # Download and install a Java 8 JRE with JavaFX (BellSoft Liberica Full)
 # for embedded Draw.io in Docear.
 #
-# NOTE: Draw.io embed is disabled in this fork. This script is kept for reference only.
-# Usage:
+# Usage (run before packaging, or let build-docear-to-dist.ps1 call it):
 #   powershell -ExecutionPolicy Bypass -File .\scripts\setup-drawio-javafx.ps1
 #
-# Output:
-#   docear_framework\build\jre\   (bundled into docear_windows.zip)
+# Cache (survives "ant clean"):
+#   docear_framework\cache\javafx\jre
 #
-# Download cache (persists across "ant clean"):
-#   docear_framework\cache\javafx\
+# Ant target bundle_javafx_jre copies the cache into docear_framework\build\jre
+# so docear_windows.zip includes JavaFX after clean+binzip.
 
 param(
     [string] $Version = "8u462+11"

@@ -75,8 +75,16 @@ public final class DrawioEmbedServer {
 
 	private static final class ShellHandler implements HttpHandler {
 		public void handle(final HttpExchange exchange) throws IOException {
+			if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+				exchange.getResponseHeaders().set("Cache-Control", "no-store");
+				exchange.sendResponseHeaders(200, -1);
+				exchange.close();
+				return;
+			}
 			final byte[] bytes = shellHtml.getBytes(UTF8);
 			exchange.getResponseHeaders().set("Content-Type", "text/html; charset=UTF-8");
+			exchange.getResponseHeaders().set("Cache-Control", "no-store");
 			exchange.sendResponseHeaders(200, bytes.length);
 			final OutputStream out = exchange.getResponseBody();
 			out.write(bytes);

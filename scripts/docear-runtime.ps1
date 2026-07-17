@@ -45,6 +45,19 @@ function Find-DocearInstallDir {
     return $null
 }
 
+function Test-JavaFxJreRoot {
+    param([string] $JreRoot)
+    if ([string]::IsNullOrWhiteSpace($JreRoot)) {
+        return $false
+    }
+    $javaExe = Join-Path $JreRoot "bin\javaw.exe"
+    if (!(Test-Path $javaExe)) {
+        $javaExe = Join-Path $JreRoot "bin\java.exe"
+    }
+    $jfx = Join-Path $JreRoot "lib\ext\jfxrt.jar"
+    return (Test-Path $javaExe) -and (Test-Path $jfx)
+}
+
 function Start-DocearFromInstallDir {
     param(
         [string] $InstallDir
@@ -54,16 +67,49 @@ function Start-DocearFromInstallDir {
         return $false
     }
 
+    $launcherJar = Join-Path $InstallDir "freeplanelauncher.jar"
+    $bundledJre = Join-Path $InstallDir "jre"
+    if ((Test-Path $launcherJar) -and (Test-JavaFxJreRoot $bundledJre)) {
+        $javaExe = Join-Path $bundledJre "bin\javaw.exe"
+        if (!(Test-Path $javaExe)) {
+            $javaExe = Join-Path $bundledJre "bin\java.exe"
+        }
+        $resourceDir = Join-Path $InstallDir "resources"
+        Write-Output "Launching Docear with bundled JavaFX JRE: $javaExe"
+        Start-Process -FilePath $javaExe -ArgumentList @(
+            "-Xmx512m",
+            "-Xss2m",
+            "-Dorg.freeplane.globalresourcedir=$resourceDir",
+            "-jar",
+            $launcherJar
+        ) -WorkingDirectory $InstallDir
+        return $true
+    }
+
+    $batLauncher = Join-Path $InstallDir "docear-javafx.bat"
+    if (Test-Path $batLauncher) {
+        Write-Output "Launching Docear from $batLauncher ..."
+        Start-Process -FilePath $batLauncher -WorkingDirectory $InstallDir
+        return $true
+    }
+
+    $batLauncher = Join-Path $InstallDir "docear.bat"
+    if (Test-Path $batLauncher) {
+        Write-Output "Launching Docear from $batLauncher ..."
+        Start-Process -FilePath $batLauncher -WorkingDirectory $InstallDir
+        return $true
+    }
+
     $launcherPath = Join-Path $InstallDir "docear.exe"
     if (!(Test-Path $launcherPath)) {
         $launcherPath = Join-Path $InstallDir "Docear.exe"
     }
     if (!(Test-Path $launcherPath)) {
-        Write-Warning "Docear.exe not found in $InstallDir"
+        Write-Warning "Docear launcher not found in $InstallDir"
         return $false
     }
 
-    Write-Output "Launching Docear from $launcherPath ..."
+    Write-Warning "Bundled JavaFX JRE not found; launching $launcherPath (Draw.io embed may fail)."
     Start-Process -FilePath $launcherPath
     return $true
 }

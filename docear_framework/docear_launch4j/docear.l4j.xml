@@ -14,7 +14,10 @@
   <manifest></manifest>
   <icon>docear.ico</icon>
   <jre>
-    <minVersion>1.6.0</minVersion>
+    <path>jre</path>
+    <bundledJre64Bit>true</bundledJre64Bit>
+    <bundledJreAsFallback>false</bundledJreAsFallback>
+    <minVersion>1.8.0</minVersion>
     <maxVersion></maxVersion>
     <jdkPreference>preferJre</jdkPreference>
   </jre>

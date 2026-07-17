@@ -59,6 +59,18 @@ $env:JAVA_HOME = $jdkHome
 $env:Path = "$($env:JAVA_HOME)\bin;$env:Path"
 Write-Host "JAVA_HOME = $env:JAVA_HOME"
 
+Write-Step "Prepare JavaFX JRE cache (Draw.io embed)"
+$setupJavaFx = Join-Path $PSScriptRoot "setup-drawio-javafx.ps1"
+if (Test-Path $setupJavaFx) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $setupJavaFx
+    if ($LASTEXITCODE -ne 0) {
+        throw "setup-drawio-javafx.ps1 failed with exit code $LASTEXITCODE"
+    }
+}
+else {
+    Write-Warning "Missing $setupJavaFx — Draw.io embed JRE will not be bundled."
+}
+
 if (!(Test-Path $antPath)) {
     throw "Ant not found: $antPath (repo should include tools\apache-ant-1.10.14)"
 }
@@ -132,11 +144,23 @@ $installPlugins = Join-Path $installDir "plugins"
 Assert-RelationshipGraphPluginLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
 Assert-CalendarHubLayout -InstallDir $installDir -Context "installed $installDir"
 
+$drawioPlugin = Join-Path $installPlugins "org.docear.plugin.drawio"
+if (!(Test-Path $drawioPlugin)) {
+    throw "Draw.io plugin missing from install: $drawioPlugin"
+}
+$bundledJre = Join-Path $installDir "jre"
+$jfxJar = Join-Path $bundledJre "lib\ext\jfxrt.jar"
+if (!(Test-Path $jfxJar)) {
+    throw "Bundled JavaFX JRE missing ($jfxJar). setup-drawio-javafx.ps1 must succeed before packaging."
+}
+Write-Host "Draw.io plugin + JavaFX JRE OK"
+
 Write-Host ""
 Write-Host "Deploy complete" -ForegroundColor Green
 Write-Host "  Packages: $TargetDir"
 Write-Host "  Install:  $installDir"
 Write-Host "  Scheduling hub shortcut: Ctrl+Shift+D"
+Write-Host "  Draw.io: open a .drawio file from the workspace"
 Write-Host ""
 
 if (-not $NoLaunch) {

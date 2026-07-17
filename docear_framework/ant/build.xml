@@ -340,7 +340,6 @@
 		</antcall>
 	</target>
 
-	<!-- Draw.io embed + JavaFX JRE bundling disabled (use external app for .drawio files)
 	<target name="build_docear_drawio" unless="skip_docear">
 		<antcall target="makePlugin" inheritall="false">
 			<param name="anttarget" value="dist"/>
@@ -349,7 +348,38 @@
 			<param name="pluginname" value="org.docear.plugin.drawio"/>
 		</antcall>
 	</target>
+
+	<!--
+	  Copy Liberica Full JRE (with JavaFX) into build/jre for the Windows zip.
+	  Cache is populated by scripts/setup-drawio-javafx.ps1 (Windows) and survives ant clean.
+	  Missing cache is a warning only so non-Windows / compile-only builds still succeed.
 	-->
+	<target name="bundle_javafx_jre">
+		<property name="javafx.jre.cache" location="${root}/cache/javafx/jre"/>
+		<property name="javafx.jre.build" location="${build}/jre"/>
+		<condition property="javafx.jre.cache.present">
+			<and>
+				<available file="${javafx.jre.cache}/bin/java.exe"/>
+				<available file="${javafx.jre.cache}/lib/ext/jfxrt.jar"/>
+			</and>
+		</condition>
+		<antcall target="bundle_javafx_jre.copy"/>
+		<antcall target="bundle_javafx_jre.missing"/>
+	</target>
+
+	<target name="bundle_javafx_jre.copy" if="javafx.jre.cache.present">
+		<mkdir dir="${build}"/>
+		<delete dir="${javafx.jre.build}" quiet="true"/>
+		<mkdir dir="${javafx.jre.build}"/>
+		<copy todir="${javafx.jre.build}">
+			<fileset dir="${javafx.jre.cache}"/>
+		</copy>
+		<echo message="Bundled JavaFX JRE into ${javafx.jre.build}"/>
+	</target>
+
+	<target name="bundle_javafx_jre.missing" unless="javafx.jre.cache.present">
+		<echo level="warning" message="JavaFX JRE cache missing at ${javafx.jre.cache}. Draw.io embed needs scripts/setup-drawio-javafx.ps1 before packaging."/>
+	</target>
 
 	
 	<target name="build_docear_jabref">
@@ -374,12 +404,13 @@
 			<fileset dir="docear_launch4j" includes="*.exe" />
 			<fileset dir="docear_launch4j" includes="*.ini" />
 			<fileset dir="${script}" includes="docear.bat" />
+			<fileset dir="${script}" includes="docear-javafx.bat" />
 		</copy>
 		<chmod file="${build}/${ApplicationNameToLowerCase}.sh" perm="ugo+rx" />
 	</target>
 
 	<target name="build" depends="build_core, build_latex, build_svg, build_script, build_formula, build_bugreport, build_openmaps
-		   , build_workspace, build_docear_core, build_docear_services, build_docear_pdfutilities, build_docear_bibtex, build_docear_ai, build_docear_mcp
+		   , build_workspace, build_docear_core, build_docear_services, build_docear_pdfutilities, build_docear_bibtex, build_docear_ai, build_docear_mcp, build_docear_drawio
 		   , build_launcher, git_version_info">
 		<mkdir dir="${build.resources}" />
 		<copy todir="${build.resources}">
@@ -435,7 +466,7 @@
 		</exec>
 	</target>
 
-	<target name="binzip" depends="build">
+	<target name="binzip" depends="build, bundle_javafx_jre">
 		<zip destfile="${dist}/${ApplicationNameToLowerCase}_windows.zip" compress="true">
 			<zipfileset dir="${build}" prefix="${ApplicationNameToLowerCase}-${ver}">
 				<exclude name="${ApplicationNameToLowerCase}.sh" />
@@ -832,6 +863,12 @@
 			  dir="${workspace}/docear_plugin_bibtex" />
 		<ant antfile="ant/build.xml" target="clean" inheritall="false" 
 			  dir="${workspace}/docear_plugin_services" />
+		<ant antfile="ant/build.xml" target="clean" inheritall="false"
+			  dir="${workspace}/docear_plugin_drawio" />
+		<ant antfile="ant/build.xml" target="clean" inheritall="false"
+			  dir="${workspace}/docear_plugin_ai" failonerror="false"/>
+		<ant antfile="ant/build.xml" target="clean" inheritall="false"
+			  dir="${workspace}/docear_plugin_mcp" failonerror="false"/>
 	</target>
 
 </project>

@@ -38,7 +38,12 @@ public final class DrawioJson {
 				sb.append("\\t");
 				break;
 			default:
-				sb.append(c);
+				if (c < 0x20) {
+					sb.append(String.format("\\u%04x", (int) c));
+				}
+				else {
+					sb.append(c);
+				}
 			}
 		}
 		sb.append('"');

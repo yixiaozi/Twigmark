@@ -34,6 +34,7 @@ public class DrawioDocumentView extends JPanel implements IDocumentTabView, Draw
 			diagramXml = readUtf8(file);
 		}
 		browser = new DrawioBrowserPanel(this);
+		browser.setDiagramFile(file);
 		add(browser, BorderLayout.CENTER);
 		setName(file.getName());
 	}
