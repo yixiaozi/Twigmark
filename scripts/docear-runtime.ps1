@@ -190,3 +190,130 @@ Relationship graph source check FAILED:
 
     Write-Output "Relationship graph source check OK (MANIFEST Export-Package + factory)."
 }
+
+<#
+.SYNOPSIS
+  Ensure scheduling-hub (安排中心) classes shipped after calendar work.
+#>
+function Assert-CalendarHubLayout {
+    param(
+        [Parameter(Mandatory = $true)][string] $InstallDir,
+        [string] $Context = "install"
+    )
+
+    if (!(Test-Path $InstallDir)) {
+        throw "Calendar hub check ($Context): install dir not found: $InstallDir"
+    }
+
+    $coreCandidates = @(
+        (Join-Path $InstallDir "core\org.freeplane.core\lib\freeplaneeditor.jar"),
+        (Join-Path $InstallDir "core\org.freeplane.core\freeplaneeditor.jar")
+    )
+    $editorJar = $null
+    foreach ($candidate in $coreCandidates) {
+        if (Test-Path $candidate) {
+            $editorJar = $candidate
+            break
+        }
+    }
+    if ($null -eq $editorJar) {
+        $found = Get-ChildItem -Path (Join-Path $InstallDir "core") -Recurse -Filter "freeplaneeditor.jar" -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -ne $found) {
+            $editorJar = $found.FullName
+        }
+    }
+    if ($null -eq $editorJar) {
+        throw "Calendar hub check ($Context): freeplaneeditor.jar not found under $InstallDir\core"
+    }
+
+    $bridgeEntry = "org/freeplane/view/swing/features/time/mindmapmode/ReminderCalendarBridge.class"
+    if (-not (Test-JarContainsEntry -JarPath $editorJar -EntryPath $bridgeEntry)) {
+        throw @"
+Calendar hub check ($Context) FAILED:
+  $editorJar is missing ReminderCalendarBridge
+
+  安排中心将无法加载提醒（日历会是空的）。请确认源码已是最新 master，并完整重新编译。
+"@
+    }
+
+    $coreJar = Join-Path $InstallDir "plugins\org.docear.plugin.core\lib\plugin.jar"
+    if (!(Test-Path $coreJar)) {
+        $foundCore = Get-ChildItem -Path (Join-Path $InstallDir "plugins") -Recurse -Filter "plugin.jar" -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'org\.docear\.plugin\.core' } |
+            Select-Object -First 1
+        if ($null -ne $foundCore) {
+            $coreJar = $foundCore.FullName
+        }
+    }
+    if (!(Test-Path $coreJar)) {
+        throw "Calendar hub check ($Context): org.docear.plugin.core plugin.jar not found"
+    }
+
+    $requiredCore = @(
+        "org/docear/plugin/core/calendar/CalendarViewportPanel.class",
+        "org/docear/plugin/core/calendar/CalendarTaskService.class",
+        "org/docear/plugin/core/calendar/CalendarViewportService.class"
+    )
+    foreach ($entry in $requiredCore) {
+        if (-not (Test-JarContainsEntry -JarPath $coreJar -EntryPath $entry)) {
+            throw "Calendar hub check ($Context): $coreJar is missing $entry"
+        }
+    }
+
+    Write-Output "Calendar hub check OK ($Context): ReminderCalendarBridge + CalendarTaskService present."
+}
+
+function Find-Jdk8Home {
+    $explicit = @(
+        $env:JAVA_HOME,
+        "C:\Program Files\Eclipse Adoptium\jdk-8.0.482.8-hotspot",
+        "C:\Program Files\Eclipse Adoptium\jdk-8.0.412.8-hotspot",
+        "C:\Program Files\Eclipse Adoptium\jdk-8.0.392.8-hotspot",
+        "C:\Program Files\Temurin\jdk-8*",
+        "C:\Program Files\Java\jdk1.8*",
+        "C:\Program Files\Microsoft\jdk-8*",
+        "C:\Program Files\Zulu\zulu-8*"
+    )
+    foreach ($path in $explicit) {
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        if ($path -match '[\*\?]') {
+            $globHits = @(Get-Item -Path $path -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)
+            foreach ($m in $globHits) {
+                if (Test-Path (Join-Path $m.FullName "bin\javac.exe")) {
+                    return $m.FullName
+                }
+            }
+            continue
+        }
+        if (Test-Path (Join-Path $path "bin\javac.exe")) {
+            return $path
+        }
+    }
+
+    $whereJava = Get-Command java -ErrorAction SilentlyContinue
+    if ($null -ne $whereJava) {
+        try {
+            $ver = & java -version 2>&1 | Out-String
+            if ($ver -match 'version "1\.8' -or $ver -match 'version "8') {
+                $javaHomeProp = & java -XshowSettings:properties -version 2>&1 |
+                    Select-String -Pattern 'java\.home\s*=\s*(.+)' |
+                    Select-Object -First 1
+                if ($null -ne $javaHomeProp) {
+                    $home = $javaHomeProp.Matches[0].Groups[1].Value.Trim()
+                    if ($home -match '\\jre$') {
+                        $parent = Split-Path $home -Parent
+                        if (Test-Path (Join-Path $parent "bin\javac.exe")) {
+                            return $parent
+                        }
+                    }
+                    if (Test-Path (Join-Path $home "bin\javac.exe")) {
+                        return $home
+                    }
+                }
+            }
+        }
+        catch { }
+    }
+    return $null
+}
