@@ -51,6 +51,11 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		void onAppointmentPopup(CalendarAppointment appt, int x, int y);
 	}
 
+	interface EmptyPopupListener {
+		/** Right-click on empty grid (or current time selection) to create a task. */
+		void onEmptyPopup(Date start, Date end, int x, int y);
+	}
+
 	private final SimpleDateFormat dayHeaderFormat = new SimpleDateFormat("M/d EEE", Locale.CHINA);
 	private final SimpleDateFormat hourFormat = new SimpleDateFormat("H:mm", Locale.CHINA);
 
@@ -65,6 +70,8 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	private SelectionListener selectionListener;
 	private DayHeaderListener dayHeaderListener;
 	private AppointmentListener appointmentListener;
+	private EmptyPopupListener emptyPopupListener;
+	private Date selectedDayHighlight;
 	private CalendarAppointment selectedAppointment;
 	private CalendarAppointment draggingAppointment;
 	private long draggingDurationMs;
@@ -111,7 +118,12 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					return;
 				}
 				selectedAppointment = null;
-				emptyDragStart = snapTime(getTimeAt(e.getX(), e.getY()));
+				final Date at = snapTime(getTimeAt(e.getX(), e.getY()));
+				if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
+					fireEmptyPopup(at, e.getX(), e.getY());
+					return;
+				}
+				emptyDragStart = at;
 				selectionStart = emptyDragStart;
 				selectionEnd = emptyDragStart == null ? null
 				        : new Date(emptyDragStart.getTime() + timeScaleMinutes * 60L * 1000L);
@@ -180,6 +192,11 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					repaint();
 					return;
 				}
+				if (e.isPopupTrigger()) {
+					final Date at = snapTime(getTimeAt(e.getX(), e.getY()));
+					fireEmptyPopup(at, e.getX(), e.getY());
+					return;
+				}
 				if (selectionListener != null && selectionStart != null && selectionEnd != null) {
 					selectionListener.onTimeSelected(selectionStart, selectionEnd);
 				}
@@ -203,6 +220,34 @@ final class DayViewPanel extends JPanel implements Scrollable {
 
 	void setAppointmentListener(final AppointmentListener listener) {
 		this.appointmentListener = listener;
+	}
+
+	void setEmptyPopupListener(final EmptyPopupListener listener) {
+		this.emptyPopupListener = listener;
+	}
+
+	void setSelectedDayHighlight(final Date day) {
+		this.selectedDayHighlight = day == null ? null : startOfDay(day);
+		repaint();
+	}
+
+	private void fireEmptyPopup(final Date clicked, final int x, final int y) {
+		if (emptyPopupListener == null) {
+			return;
+		}
+		Date start = selectionStart;
+		Date end = selectionEnd;
+		if (start == null || end == null) {
+			start = clicked;
+			end = clicked == null ? null : new Date(clicked.getTime() + timeScaleMinutes * 60L * 1000L);
+		}
+		if (start == null || end == null) {
+			return;
+		}
+		selectionStart = start;
+		selectionEnd = end;
+		repaint();
+		emptyPopupListener.onEmptyPopup(start, end, x, y);
 	}
 
 	CalendarAppointment getAppointmentAt(final int x, final int y) {
@@ -287,7 +332,16 @@ final class DayViewPanel extends JPanel implements Scrollable {
 			});
 			appointments = copy;
 		}
+		revalidate();
 		repaint();
+	}
+
+	/** Scroll helper: pixel Y of a time, or -1. */
+	int getYForTime(final Date time) {
+		if (time == null) {
+			return -1;
+		}
+		return yForTime(time);
 	}
 
 	/** Pixel → Date with 1-minute precision. */
@@ -366,17 +420,20 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	}
 
 	private int dayIndexFor(final Date time) {
-		if (time == null) {
+		if (time == null || startDate == null) {
 			return -1;
 		}
-		final long dayMs = 24L * 60L * 60L * 1000L;
-		final long start = startOfDay(startDate).getTime();
-		final long t = startOfDay(time).getTime();
-		final int idx = (int) ((t - start) / dayMs);
-		if (idx < 0 || idx >= daysToShow) {
-			return -1;
+		final Calendar cursor = Calendar.getInstance();
+		cursor.setTime(startOfDay(startDate));
+		final Calendar target = Calendar.getInstance();
+		target.setTime(startOfDay(time));
+		for (int idx = 0; idx < daysToShow; idx++) {
+			if (sameDay(cursor, target)) {
+				return idx;
+			}
+			cursor.add(Calendar.DAY_OF_MONTH, 1);
 		}
-		return idx;
+		return -1;
 	}
 
 	public Dimension getPreferredSize() {
@@ -409,7 +466,15 @@ final class DayViewPanel extends JPanel implements Scrollable {
 			final boolean isToday = sameDay(day, todayStart);
 			final boolean weekend = day.get(Calendar.DAY_OF_WEEK) == Calendar.SATURDAY
 			        || day.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY;
-			g2.setColor(isToday ? CalendarTheme.ACCENT_WASH : (weekend ? CalendarTheme.WEEKEND_WASH : CalendarTheme.SURFACE));
+			final boolean isSelectedDay = selectedDayHighlight != null
+			        && sameDay(day, startOfDayCalendar(selectedDayHighlight));
+			if (isSelectedDay) {
+				g2.setColor(CalendarTheme.CHIP_BG);
+			}
+			else {
+				g2.setColor(isToday ? CalendarTheme.ACCENT_WASH
+				        : (weekend ? CalendarTheme.WEEKEND_WASH : CalendarTheme.SURFACE));
+			}
 			g2.fillRect(x, DAY_HEADER_HEIGHT, dayWidth, height - DAY_HEADER_HEIGHT);
 
 			if (isToday) {
@@ -453,14 +518,19 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		}
 
 		for (int i = 0; i < appointments.size(); i++) {
-			final CalendarAppointment appt = (CalendarAppointment) appointments.get(i);
-			if (draggingAppointment == appt && selectionStart != null) {
-				final CalendarAppointment ghost = new CalendarAppointment(selectionStart,
-				        new Date(selectionStart.getTime() + draggingDurationMs), appt.title, appt.color, appt.userData);
-				paintAppointment(g2, ghost, dayWidth, i, true);
+			try {
+				final CalendarAppointment appt = (CalendarAppointment) appointments.get(i);
+				if (draggingAppointment == appt && selectionStart != null) {
+					final CalendarAppointment ghost = new CalendarAppointment(selectionStart,
+					        new Date(selectionStart.getTime() + draggingDurationMs), appt.title, appt.color,
+					        appt.userData);
+					paintAppointment(g2, ghost, dayWidth, i, true);
+				}
+				else {
+					paintAppointment(g2, appt, dayWidth, i, appt == selectedAppointment);
+				}
 			}
-			else {
-				paintAppointment(g2, appt, dayWidth, i, appt == selectedAppointment);
+			catch (Exception ignore) {
 			}
 		}
 
@@ -551,6 +621,12 @@ final class DayViewPanel extends JPanel implements Scrollable {
 
 	private static boolean sameDay(final Calendar a, final Calendar b) {
 		return a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR);
+	}
+
+	private static Calendar startOfDayCalendar(final Date date) {
+		final Calendar cal = Calendar.getInstance();
+		cal.setTime(startOfDay(date));
+		return cal;
 	}
 
 	static Date startOfDay(final Date date) {

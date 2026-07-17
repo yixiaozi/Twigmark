@@ -11,8 +11,12 @@ import java.util.Set;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
 
+import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.text.TextController;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
@@ -37,6 +41,55 @@ final class ReminderWorkspaceScanHelper {
 			collectMindmapFiles((File) root, files);
 		}
 		return files;
+	}
+
+	/**
+	 * Walk an open {@link MapModel} so unsaved reminder creates/edits appear in
+	 * calendar / timeline without requiring a disk save first.
+	 */
+	static List scanRemindersFromOpenMap(final MapModel map, final File file) {
+		final List reminders = new ArrayList();
+		if (map == null || map.getRootNode() == null) {
+			return reminders;
+		}
+		collectRemindersFromNode(map.getRootNode(), file != null ? file : map.getFile(), reminders);
+		return reminders;
+	}
+
+	private static void collectRemindersFromNode(final NodeModel node, final File file, final List reminders) {
+		if (node == null) {
+			return;
+		}
+		final ReminderExtension extension = ReminderExtension.getExtension(node);
+		if (extension != null && extension.getRemindUserAt() > 0L) {
+			final String nodeText = plainNodeText(node);
+			if (nodeText.length() > 0 && !"bin".equalsIgnoreCase(nodeText)) {
+				final ReminderCycleAttributes.CycleConfig cycleConfig = ReminderCycleAttributes.readFromNode(node);
+				final ReminderTaskAttributes.TaskConfig taskConfig = ReminderTaskAttributes.readFromNode(node);
+				final String nodeId = node.getID() != null ? node.getID() : node.createID();
+				reminders.add(new ReminderCalendarEntry(file, nodeId, nodeText, extension.getRemindUserAt(),
+				        cycleConfig.isRecurring(), cycleConfig, taskConfig.taskTime, taskConfig.taskLevel,
+				        taskConfig.jinji));
+			}
+		}
+		for (int i = 0; i < node.getChildCount(); i++) {
+			collectRemindersFromNode((NodeModel) node.getChildAt(i), file, reminders);
+		}
+	}
+
+	private static String plainNodeText(final NodeModel node) {
+		try {
+			final String text = TextController.getController().getPlainTextContent(node);
+			if (text != null) {
+				return HtmlUtils.htmlToPlain(text).replaceAll("\\s+", " ").trim();
+			}
+		}
+		catch (Exception e) {
+		}
+		if (node.getText() == null) {
+			return "";
+		}
+		return HtmlUtils.htmlToPlain(node.getText()).replaceAll("\\s+", " ").trim();
 	}
 
 	static List scanRemindersFromFile(final File file) {

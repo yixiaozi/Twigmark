@@ -160,7 +160,13 @@ public final class ReminderCalendarBridge {
 				ReminderTaskAttributes.writeFull(child, durationMinutes, 0, 0);
 			}
 			mapController.setSaved(child.getMap(), false);
-			invalidateReminderCache(child.getMap().getFile());
+			final File mapFile = child.getMap().getFile();
+			if (mapFile != null) {
+				invalidateReminderCache(mapFile);
+			}
+			else {
+				invalidateReminderCache();
+			}
 			return true;
 		}
 		catch (Exception e) {

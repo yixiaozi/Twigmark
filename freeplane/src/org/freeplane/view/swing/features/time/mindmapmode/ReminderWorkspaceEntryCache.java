@@ -70,27 +70,57 @@ final class ReminderWorkspaceEntryCache {
 	}
 
 	static synchronized List getAllEntries() {
+		final List openMaps = collectOpenMaps();
 		final List files = collectMindmapFilesIncludingOpenMaps();
-		final String signature = signatureOf(files);
+		// Open maps are read live (unsaved creates/edits). Include a dirty marker in the
+		// signature so a pure in-memory change still forces a rebuild.
+		final String signature = signatureOf(files) + "|open=" + openMapsSignature(openMaps);
 		if (signature.equals(filesSignature) && allEntriesSnapshot != null && !allEntriesSnapshot.isEmpty()) {
-			boolean allFresh = true;
-			for (int i = 0; i < files.size(); i++) {
-				final File file = (File) files.get(i);
-				final String path = canonicalPath(file);
-				final CachedFileResult cached = (CachedFileResult) CACHE_BY_PATH.get(path);
-				if (cached == null || cached.modified != file.lastModified() || cached.length != file.length()) {
-					allFresh = false;
+			// Dirty open maps can gain/lose reminders without mtime or saved-flag changes
+			// between two creates; never reuse the snapshot while any open map is dirty.
+			boolean anyOpenDirty = false;
+			for (int i = 0; i < openMaps.size(); i++) {
+				if (!((MapModel) openMaps.get(i)).isSaved()) {
+					anyOpenDirty = true;
 					break;
 				}
 			}
-			if (allFresh) {
-				return allEntriesSnapshot;
+			if (!anyOpenDirty) {
+				boolean allFresh = true;
+				for (int i = 0; i < files.size(); i++) {
+					final File file = (File) files.get(i);
+					if (findOpenMap(openMaps, file) != null) {
+						continue;
+					}
+					final String path = canonicalPath(file);
+					final CachedFileResult cached = (CachedFileResult) CACHE_BY_PATH.get(path);
+					if (cached == null || cached.modified != file.lastModified() || cached.length != file.length()) {
+						allFresh = false;
+						break;
+					}
+				}
+				if (allFresh) {
+					return allEntriesSnapshot;
+				}
 			}
 		}
 		cleanupCache(files);
 		final List all = new ArrayList();
+		final Set coveredPaths = new HashSet();
+		for (int i = 0; i < openMaps.size(); i++) {
+			final MapModel map = (MapModel) openMaps.get(i);
+			final File file = map.getFile();
+			all.addAll(ReminderWorkspaceScanHelper.scanRemindersFromOpenMap(map, file));
+			if (file != null) {
+				coveredPaths.add(canonicalPath(file));
+			}
+		}
 		for (int i = 0; i < files.size(); i++) {
-			all.addAll(getEntriesForFile((File) files.get(i)));
+			final File file = (File) files.get(i);
+			if (coveredPaths.contains(canonicalPath(file))) {
+				continue;
+			}
+			all.addAll(getEntriesForFileFromDisk(file));
 		}
 		allEntriesSnapshot = all;
 		filesSignature = signature;
@@ -149,7 +179,18 @@ final class ReminderWorkspaceEntryCache {
 		return sb.toString();
 	}
 
-	private static List getEntriesForFile(final File file) {
+	static List getEntriesForFile(final File file) {
+		if (file == null) {
+			return Collections.EMPTY_LIST;
+		}
+		final MapModel open = findOpenMapByFile(file);
+		if (open != null) {
+			return ReminderWorkspaceScanHelper.scanRemindersFromOpenMap(open, file);
+		}
+		return getEntriesForFileFromDisk(file);
+	}
+
+	private static List getEntriesForFileFromDisk(final File file) {
 		if (file == null || !file.isFile()) {
 			return Collections.EMPTY_LIST;
 		}
@@ -163,6 +204,54 @@ final class ReminderWorkspaceEntryCache {
 		final List entries = ReminderWorkspaceScanHelper.scanRemindersFromFile(file);
 		CACHE_BY_PATH.put(path, new CachedFileResult(modified, length, entries));
 		return entries;
+	}
+
+	private static List collectOpenMaps() {
+		final List openMaps = new ArrayList();
+		try {
+			final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
+			final Map maps = mapViewManager.getMaps(MModeController.MODENAME);
+			for (final Object mapObj : maps.values()) {
+				final MapModel map = (MapModel) mapObj;
+				if (map != null && map.getRootNode() != null) {
+					openMaps.add(map);
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn(e);
+		}
+		return openMaps;
+	}
+
+	private static String openMapsSignature(final List openMaps) {
+		final StringBuilder sb = new StringBuilder(openMaps.size() * 24);
+		for (int i = 0; i < openMaps.size(); i++) {
+			final MapModel map = (MapModel) openMaps.get(i);
+			final File file = map.getFile();
+			sb.append(file == null ? "unsaved:" + System.identityHashCode(map) : canonicalPath(file));
+			sb.append('|').append(map.isSaved() ? '1' : '0').append(';');
+		}
+		return sb.toString();
+	}
+
+	private static MapModel findOpenMap(final List openMaps, final File file) {
+		if (file == null || openMaps == null) {
+			return null;
+		}
+		final String path = canonicalPath(file);
+		for (int i = 0; i < openMaps.size(); i++) {
+			final MapModel map = (MapModel) openMaps.get(i);
+			final File mapFile = map.getFile();
+			if (mapFile != null && path.equals(canonicalPath(mapFile))) {
+				return map;
+			}
+		}
+		return null;
+	}
+
+	private static MapModel findOpenMapByFile(final File file) {
+		return findOpenMap(collectOpenMaps(), file);
 	}
 
 	private static void cleanupCache(final List currentFiles) {

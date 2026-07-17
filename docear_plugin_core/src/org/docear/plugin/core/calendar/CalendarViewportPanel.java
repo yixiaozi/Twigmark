@@ -23,12 +23,14 @@ import java.util.Locale;
 import java.util.Map;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JSplitPane;
 import javax.swing.DefaultListModel;
 import javax.swing.JList;
 import javax.swing.JOptionPane;
@@ -91,14 +93,18 @@ final class CalendarViewportPanel extends JPanel {
 
 		add(buildHero(), BorderLayout.NORTH);
 
-		final JPanel body = new JPanel(new BorderLayout(10, 0));
+		final JPanel body = new JPanel(new BorderLayout(0, 0));
 		body.setOpaque(false);
 		body.setBorder(BorderFactory.createEmptyBorder(10, 12, 12, 12));
 
-		final JPanel side = new JPanel();
-		side.setLayout(new javax.swing.BoxLayout(side, javax.swing.BoxLayout.Y_AXIS));
+		final JPanel side = new JPanel(new BorderLayout(0, 0));
 		side.setOpaque(false);
+		side.setMinimumSize(new Dimension(160, 0));
 		side.setPreferredSize(new Dimension(220, 0));
+
+		final JPanel sideTop = new JPanel();
+		sideTop.setLayout(new BoxLayout(sideTop, BoxLayout.Y_AXIS));
+		sideTop.setOpaque(false);
 		final JPanel miniNav = new JPanel(new BorderLayout(4, 0));
 		miniNav.setOpaque(false);
 		miniNav.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
@@ -106,8 +112,9 @@ final class CalendarViewportPanel extends JPanel {
 		final JButton miniNext = ghost(">");
 		miniNav.add(miniPrev, BorderLayout.WEST);
 		miniNav.add(miniNext, BorderLayout.EAST);
-		side.add(miniNav);
-		side.add(miniMonth);
+		sideTop.add(miniNav);
+		miniMonth.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
+		sideTop.add(miniMonth);
 		final JPanel legend = new JPanel(new GridLayout(0, 1, 0, 2));
 		legend.setOpaque(false);
 		legend.setBorder(BorderFactory.createEmptyBorder(6, 4, 4, 4));
@@ -116,7 +123,7 @@ final class CalendarViewportPanel extends JPanel {
 		legend.add(legendLine(CalendarTheme.EVENT_A, "安排"));
 		legend.add(legendLine(CalendarTheme.EVENT_D, "周期"));
 		legend.add(legendLine(CalendarTaskService.POMODORO_COLOR, "番茄钟"));
-		side.add(legend);
+		sideTop.add(legend);
 
 		final JPanel taskHead = new JPanel(new BorderLayout(4, 0));
 		taskHead.setOpaque(false);
@@ -127,17 +134,16 @@ final class CalendarViewportPanel extends JPanel {
 		dayTaskHeader.setForeground(CalendarTheme.TEXT);
 		taskHead.add(dayTaskHeader, BorderLayout.WEST);
 		taskHead.add(newTaskBtn, BorderLayout.EAST);
-		side.add(taskHead);
+		sideTop.add(taskHead);
+		side.add(sideTop, BorderLayout.NORTH);
 
 		dayTaskList.setFont(CalendarTheme.font(11f));
 		dayTaskList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		dayTaskList.setFixedCellHeight(22);
 		dayTaskList.setBackground(CalendarTheme.SURFACE);
 		final JScrollPane taskScroll = new JScrollPane(dayTaskList);
-		taskScroll.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		taskScroll.setBorder(BorderFactory.createLineBorder(CalendarTheme.HAIRLINE));
-		taskScroll.setPreferredSize(new Dimension(214, 180));
-		side.add(taskScroll);
+		side.add(taskScroll, BorderLayout.CENTER);
 
 		timedScroll = new JScrollPane(dayView);
 		timedScroll.setBorder(BorderFactory.createLineBorder(CalendarTheme.HAIRLINE));
@@ -149,8 +155,15 @@ final class CalendarViewportPanel extends JPanel {
 		cardHost.add(monthView, CARD_MONTH);
 		cardHost.add(timedScroll, CARD_TIMED);
 
-		body.add(side, BorderLayout.WEST);
-		body.add(cardHost, BorderLayout.CENTER);
+		final JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, side, cardHost);
+		split.setOpaque(false);
+		split.setBorder(null);
+		split.setContinuousLayout(true);
+		split.setOneTouchExpandable(true);
+		split.setResizeWeight(0.0);
+		split.setDividerSize(6);
+		split.setDividerLocation(220);
+		body.add(split, BorderLayout.CENTER);
 		add(body, BorderLayout.CENTER);
 
 		statusLabel.setFont(CalendarTheme.font(11f));
@@ -233,7 +246,18 @@ final class CalendarViewportPanel extends JPanel {
 		});
 		miniMonth.setListener(new MiniMonthPanel.Listener() {
 			public void onDayChosen(final Date day) {
-				refreshDayTaskList();
+				if (mode == MODE_WEEK) {
+					miniMonth.setSelectedDay(day);
+					final Date weekStart = DayViewPanel.startOfWeekMonday(day);
+					if (!weekStart.equals(DayViewPanel.startOfDay(dayView.getStartDate()))) {
+						dayView.setStartDate(weekStart);
+						reloadTasksAsync();
+					}
+					refreshDayTaskList();
+					refreshChrome();
+					scrollToSelectedDayTasks();
+					return;
+				}
 				jumpToDay(day, mode == MODE_MONTH ? MODE_MONTH : MODE_DAY);
 			}
 		});
@@ -319,8 +343,19 @@ final class CalendarViewportPanel extends JPanel {
 			public void onTimeSelected(final Date start, final Date end) {
 				pendingCreateStart = start;
 				pendingCreateEnd = end;
+				miniMonth.setSelectedDay(start);
+				refreshDayTaskList();
 				statusLabel.setText("选中 " + timeFmt.format(start) + " – " + timeFmt.format(end)
-				        + " · 点左侧「新建」或双击空白处创建任务");
+				        + " · 右键新建 / 点「新建」/ 双击空白");
+			}
+		});
+		dayView.setEmptyPopupListener(new DayViewPanel.EmptyPopupListener() {
+			public void onEmptyPopup(final Date start, final Date end, final int x, final int y) {
+				pendingCreateStart = start;
+				pendingCreateEnd = end;
+				miniMonth.setSelectedDay(start);
+				refreshDayTaskList();
+				showCreateMenu(dayView, x, y, start, end);
 			}
 		});
 		dayView.addMouseListener(new java.awt.event.MouseAdapter() {
@@ -350,6 +385,7 @@ final class CalendarViewportPanel extends JPanel {
 		dayView.setAppointments(appointments);
 		miniMonth.setDayCounts(dayCounts);
 		refreshDayTaskList();
+		scrollToSelectedDayTasks();
 	}
 
 	void reloadTasksAsync() {
@@ -376,12 +412,12 @@ final class CalendarViewportPanel extends JPanel {
 						}
 						setAppointments(result.appointments, result.dayCounts);
 						if (result.appointments.isEmpty()) {
-							statusLabel.setText("当前视图暂无安排 · 拖选时间后点「新建」· 点「刷新」重扫（"
+							statusLabel.setText("当前视图暂无安排 · 拖选/右键空白新建 · 点「刷新」重扫（"
 							        + result.elapsedMs + "ms）");
 						}
 						else {
 							statusLabel.setText("已加载 " + result.appointments.size()
-							        + " 条 · 单击打开 · 拖拽改期 · 双击打卡 · 拖选空白新建（" + result.elapsedMs + "ms）");
+							        + " 条 · 单击打开 · 拖拽改期 · 双击打卡 · 右键空白新建（" + result.elapsedMs + "ms）");
 						}
 						refreshChrome();
 					}
@@ -392,22 +428,24 @@ final class CalendarViewportPanel extends JPanel {
 		thread.start();
 	}
 
+	private Date selectedListDay() {
+		if (mode == MODE_MONTH) {
+			return monthView.getSelectedDay();
+		}
+		if (mode == MODE_DAY) {
+			return DayViewPanel.startOfDay(dayView.getStartDate());
+		}
+		return miniMonth.getSelectedDay();
+	}
+
 	private void refreshDayTaskList() {
 		dayTaskModel.clear();
-		Date day;
-		if (mode == MODE_MONTH) {
-			day = monthView.getSelectedDay();
-		}
-		else if (mode == MODE_DAY) {
-			day = DayViewPanel.startOfDay(dayView.getStartDate());
-		}
-		else {
-			day = miniMonth.getSelectedDay();
-		}
+		final Date day = selectedListDay();
+		dayView.setSelectedDayHighlight(mode == MODE_WEEK ? day : null);
 		final List dayTasks = CalendarTaskService.dayTaskLines(appointments, day);
 		dayTaskHeader.setText("当日安排 · " + dayTasks.size());
 		if (dayTasks.isEmpty()) {
-			dayTaskModel.addElement("（无）");
+			dayTaskModel.addElement("（无）· 右侧拖选或右键新建");
 		}
 		else {
 			for (int i = 0; i < dayTasks.size(); i++) {
@@ -425,10 +463,56 @@ final class CalendarViewportPanel extends JPanel {
 					setText(timeFmt.format(appt.start) + "  " + appt.title);
 					setForeground(appt.color != null ? appt.color.darker() : CalendarTheme.TEXT);
 				}
+				else {
+					setForeground(CalendarTheme.TEXT_FAINT);
+				}
 				setFont(CalendarTheme.font(11f));
 				return this;
 			}
 		});
+	}
+
+	private void scrollToSelectedDayTasks() {
+		if (mode == MODE_MONTH) {
+			return;
+		}
+		final Date day = selectedListDay();
+		final List dayTasks = CalendarTaskService.dayTaskLines(appointments, day);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				Date focus = null;
+				if (!dayTasks.isEmpty()) {
+					focus = ((CalendarAppointment) dayTasks.get(0)).start;
+				}
+				else if (pendingCreateStart != null) {
+					focus = pendingCreateStart;
+				}
+				if (focus == null) {
+					return;
+				}
+				final int y = dayView.getYForTime(focus);
+				if (y < 0) {
+					return;
+				}
+				final int viewH = timedScroll.getViewport().getHeight();
+				timedScroll.getVerticalScrollBar().setValue(Math.max(0, y - Math.max(48, viewH / 3)));
+				dayView.repaint();
+			}
+		});
+	}
+
+	private void showCreateMenu(final java.awt.Component invoker, final int x, final int y, final Date start,
+	        final Date end) {
+		final JPopupMenu menu = new JPopupMenu();
+		final JMenuItem create = new JMenuItem(
+		        "新建任务  " + timeFmt.format(start) + " – " + timeFmt.format(end));
+		create.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				promptCreateTask();
+			}
+		});
+		menu.add(create);
+		menu.show(invoker, x, y);
 	}
 
 	private void promptCreateTask() {
@@ -453,14 +537,15 @@ final class CalendarViewportPanel extends JPanel {
 		}
 		final boolean ok = CalendarTaskService.createTask(title, start.getTime(), end.getTime());
 		if (ok) {
-			statusLabel.setText("已新建：" + title + "（记得保存导图）");
+			statusLabel.setText("已新建：" + title + "（未保存也会显示；记得保存导图）");
+			miniMonth.setSelectedDay(start);
 			dayView.clearSelection();
-			pendingCreateStart = null;
-			pendingCreateEnd = null;
+			pendingCreateStart = start;
+			pendingCreateEnd = end;
 			reloadTasksAsync(true);
 		}
 		else {
-			statusLabel.setText("新建失败：请先选中一个导图节点作为父节点");
+			statusLabel.setText("新建失败：请先打开一张导图");
 		}
 	}
 
