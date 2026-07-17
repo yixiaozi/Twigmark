@@ -51,32 +51,69 @@ public final class ReminderCalendarBridge {
 	}
 
 	/**
-	 * Scan workspace maps and expand occurrences that fall in {@code [rangeStart, rangeEnd)}.
+	 * One-pass load for calendar: expand occurrences once for the union range,
+	 * then split into view appointments + mini-month day counts.
 	 */
-	public static List loadOccurrences(final long rangeStart, final long rangeEnd) {
+	public static final class LoadBundle {
+		public final List occurrences;
+		public final Map dayCounts;
+		public final long elapsedMs;
+
+		LoadBundle(final List occurrences, final Map dayCounts, final long elapsedMs) {
+			this.occurrences = occurrences;
+			this.dayCounts = dayCounts;
+			this.elapsedMs = elapsedMs;
+		}
+	}
+
+	public static void warmEntriesAsync() {
+		ReminderWorkspaceEntryCache.warmAsync();
+	}
+
+	/**
+	 * Expand once for {@code [expandStart, expandEnd)}; return refs for
+	 * {@code [viewStart, viewEnd)} plus day counts for the expand range.
+	 */
+	public static LoadBundle loadBundle(final long viewStart, final long viewEnd, final long expandStart,
+	        final long expandEnd) {
+		final long t0 = System.currentTimeMillis();
 		final List out = new ArrayList();
+		Map counts = new java.util.HashMap();
 		try {
-			final List entries = ReminderWorkspaceEntryCache.getAllEntries();
-			final List occurrences = ReminderWorkspaceScanHelper.buildTimelineOccurrences(entries, rangeStart, rangeEnd);
+			final long from = Math.min(viewStart, expandStart);
+			final long to = Math.max(viewEnd, expandEnd);
+			final Object[] pack = ReminderWorkspaceEntryCache.expandWithDayCounts(from, to);
+			final List occurrences = (List) pack[0];
+			counts = (Map) pack[1];
 			for (int i = 0; i < occurrences.size(); i++) {
 				final ReminderWorkspaceScanHelper.TimelineOccurrence occ = (ReminderWorkspaceScanHelper.TimelineOccurrence) occurrences
 				        .get(i);
+				if (occ.occurrenceAt < viewStart || occ.occurrenceAt >= viewEnd) {
+					continue;
+				}
 				final ReminderCalendarEntry entry = occ.entry;
 				out.add(new OccurrenceRef(entry.file, entry.nodeId, entry.nodeText, entry.remindAt, occ.occurrenceAt,
 				        entry.recurring, entry.taskTime, entry.jinji));
 			}
 		}
 		catch (Exception e) {
-			LogUtils.warn("ReminderCalendarBridge.loadOccurrences failed", e);
+			LogUtils.warn("ReminderCalendarBridge.loadBundle failed", e);
 		}
-		return out;
+		return new LoadBundle(out, counts, System.currentTimeMillis() - t0);
+	}
+
+	/**
+	 * Scan workspace maps and expand occurrences that fall in {@code [rangeStart, rangeEnd)}.
+	 */
+	public static List loadOccurrences(final long rangeStart, final long rangeEnd) {
+		return loadBundle(rangeStart, rangeEnd, rangeStart, rangeEnd).occurrences;
 	}
 
 	/** Day-start millis → occurrence count in range (uses same entry cache). */
 	public static Map loadDayCounts(final long rangeStart, final long rangeEnd) {
 		try {
-			return ReminderWorkspaceEntryCache.buildDayCounts(ReminderWorkspaceEntryCache.getAllEntries(), rangeStart,
-			        rangeEnd);
+			final Object[] pack = ReminderWorkspaceEntryCache.expandWithDayCounts(rangeStart, rangeEnd);
+			return (Map) pack[1];
 		}
 		catch (Exception e) {
 			LogUtils.warn("ReminderCalendarBridge.loadDayCounts failed", e);
@@ -90,6 +127,46 @@ public final class ReminderCalendarBridge {
 
 	public static void invalidateReminderCache(final File file) {
 		ReminderWorkspaceEntryCache.invalidateFile(file);
+	}
+
+	/**
+	 * Create a child node under {@code parent} (or selected node) with a one-time reminder
+	 * at {@code startMs}; optional duration stored as task time minutes.
+	 */
+	public static boolean createReminderTask(final NodeModel parent, final String title, final long startMs,
+	        final int durationMinutes) {
+		if (parent == null || startMs <= 0L) {
+			return false;
+		}
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			final org.freeplane.features.map.mindmapmode.MMapController mapController = (org.freeplane.features.map.mindmapmode.MMapController) modeController
+			        .getMapController();
+			final NodeModel child = mapController.addNewNode(parent, parent.getChildCount(), parent.isNewChildLeft());
+			if (child == null) {
+				return false;
+			}
+			final String text = title == null || title.trim().length() == 0 ? "新安排" : title.trim();
+			((org.freeplane.features.text.mindmapmode.MTextController) org.freeplane.features.text.TextController
+			        .getController()).setNodeText(child, text);
+			final ReminderHook reminderHook = (ReminderHook) modeController.getExtension(ReminderHook.class);
+			if (reminderHook == null) {
+				return false;
+			}
+			final ReminderExtension reminderExtension = new ReminderExtension(child);
+			reminderExtension.setRemindUserAt(startMs);
+			reminderHook.undoableActivateHook(child, reminderExtension);
+			if (durationMinutes > 0) {
+				ReminderTaskAttributes.writeFull(child, durationMinutes, 0, 0);
+			}
+			mapController.setSaved(child.getMap(), false);
+			invalidateReminderCache(child.getMap().getFile());
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("ReminderCalendarBridge.createReminderTask failed", e);
+			return false;
+		}
 	}
 
 	public static void openNode(final File file, final String nodeId) {

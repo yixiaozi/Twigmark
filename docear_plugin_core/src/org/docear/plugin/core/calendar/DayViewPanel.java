@@ -99,7 +99,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					selectedAppointment = hit;
 					draggingAppointment = hit;
 					draggingDurationMs = Math.max(60L * 1000L, hit.endMillis() - hit.startMillis());
-					dragAnchorTime = getTimeAt(e.getX(), e.getY());
+					dragAnchorTime = snapTime(getTimeAt(e.getX(), e.getY()));
 					selectionStart = null;
 					selectionEnd = null;
 					if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
@@ -111,7 +111,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					return;
 				}
 				selectedAppointment = null;
-				emptyDragStart = getTimeAt(e.getX(), e.getY());
+				emptyDragStart = snapTime(getTimeAt(e.getX(), e.getY()));
 				selectionStart = emptyDragStart;
 				selectionEnd = emptyDragStart == null ? null
 				        : new Date(emptyDragStart.getTime() + timeScaleMinutes * 60L * 1000L);
@@ -123,7 +123,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					dragMoved = true;
 				}
 				if (draggingAppointment != null) {
-					final Date at = getTimeAt(e.getX(), e.getY());
+					final Date at = snapTime(getTimeAt(e.getX(), e.getY()));
 					if (at == null || dragAnchorTime == null) {
 						return;
 					}
@@ -138,20 +138,20 @@ final class DayViewPanel extends JPanel implements Scrollable {
 				if (emptyDragStart == null) {
 					return;
 				}
-				final Date at = getTimeAt(e.getX(), e.getY());
+				final Date at = snapTime(getTimeAt(e.getX(), e.getY()));
 				if (at == null) {
 					return;
 				}
 				if (at.before(emptyDragStart)) {
 					selectionStart = at;
-					selectionEnd = emptyDragStart;
+					selectionEnd = new Date(emptyDragStart.getTime() + timeScaleMinutes * 60L * 1000L);
 				}
 				else {
 					selectionStart = emptyDragStart;
-					selectionEnd = at;
+					selectionEnd = new Date(at.getTime() + timeScaleMinutes * 60L * 1000L);
 				}
-				if (selectionEnd.getTime() - selectionStart.getTime() < 60L * 1000L) {
-					selectionEnd = new Date(selectionStart.getTime() + 60L * 1000L);
+				if (selectionEnd.getTime() - selectionStart.getTime() < timeScaleMinutes * 60L * 1000L) {
+					selectionEnd = new Date(selectionStart.getTime() + timeScaleMinutes * 60L * 1000L);
 				}
 				repaint();
 			}
@@ -180,7 +180,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 					repaint();
 					return;
 				}
-				if (!dragMoved && selectionListener != null && selectionStart != null && selectionEnd != null) {
+				if (selectionListener != null && selectionStart != null && selectionEnd != null) {
 					selectionListener.onTimeSelected(selectionStart, selectionEnd);
 				}
 			}
@@ -300,10 +300,6 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		final int dayIndex = Math.min(daysToShow - 1, (x - HOUR_LABEL_WIDTH) / dayWidth);
 		final int slotsFromTop = Math.max(0, (y - DAY_HEADER_HEIGHT) / slotHeight);
 		final int totalMinutes = START_HOUR * 60 + slotsFromTop * timeScaleMinutes;
-		// Sub-slot minute precision within the visible slot.
-		final int within = (y - DAY_HEADER_HEIGHT) % slotHeight;
-		final int extra = timeScaleMinutes <= 1 ? 0
-		        : Math.min(timeScaleMinutes - 1, within * timeScaleMinutes / Math.max(1, slotHeight));
 		final Calendar cal = Calendar.getInstance();
 		cal.setTime(startDate);
 		cal.add(Calendar.DAY_OF_MONTH, dayIndex);
@@ -311,8 +307,39 @@ final class DayViewPanel extends JPanel implements Scrollable {
 		cal.set(Calendar.MINUTE, 0);
 		cal.set(Calendar.SECOND, 0);
 		cal.set(Calendar.MILLISECOND, 0);
-		cal.add(Calendar.MINUTE, Math.min(END_HOUR * 60 - 1, totalMinutes + extra));
+		cal.add(Calendar.MINUTE, Math.min(END_HOUR * 60 - timeScaleMinutes, totalMinutes));
 		return cal.getTime();
+	}
+
+	/** Snap to current slot grid (selection / drag). */
+	Date snapTime(final Date time) {
+		if (time == null) {
+			return null;
+		}
+		final Calendar cal = Calendar.getInstance();
+		cal.setTime(time);
+		cal.set(Calendar.SECOND, 0);
+		cal.set(Calendar.MILLISECOND, 0);
+		final int minutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE);
+		final int snapped = (minutes / timeScaleMinutes) * timeScaleMinutes;
+		cal.set(Calendar.HOUR_OF_DAY, 0);
+		cal.set(Calendar.MINUTE, 0);
+		cal.add(Calendar.MINUTE, snapped);
+		return cal.getTime();
+	}
+
+	Date getSelectionStart() {
+		return selectionStart;
+	}
+
+	Date getSelectionEnd() {
+		return selectionEnd;
+	}
+
+	void clearSelection() {
+		selectionStart = null;
+		selectionEnd = null;
+		repaint();
 	}
 
 	private Date dayAtX(final int x) {

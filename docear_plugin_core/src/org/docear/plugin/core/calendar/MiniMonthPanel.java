@@ -20,13 +20,13 @@ import java.util.Map;
 
 import javax.swing.JPanel;
 
-/** Compact month navigator with per-day task counts. */
+/** Compact month navigator; dots under dates mark task density. */
 final class MiniMonthPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String[] HEADERS = { "一", "二", "三", "四", "五", "六", "日" };
-	private static final int CELL_H = 22;
-	private static final int GRID_TOP = 32;
-	private static final int PANEL_H = GRID_TOP + 6 * CELL_H + 8;
+	private static final int CELL_H = 24;
+	private static final int GRID_TOP = 30;
+	private static final int PANEL_H = GRID_TOP + 6 * CELL_H + 6;
 
 	interface Listener {
 		void onDayChosen(Date day);
@@ -43,6 +43,7 @@ final class MiniMonthPanel extends JPanel {
 		setBackground(CalendarTheme.SURFACE);
 		setPreferredSize(new Dimension(214, PANEL_H));
 		setMaximumSize(new Dimension(Integer.MAX_VALUE, PANEL_H));
+		setAlignmentX(LEFT_ALIGNMENT);
 		setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
@@ -61,6 +62,10 @@ final class MiniMonthPanel extends JPanel {
 
 	void setListener(final Listener listener) {
 		this.listener = listener;
+	}
+
+	Date getSelectedDay() {
+		return selectedDay;
 	}
 
 	Date getMonthStart() {
@@ -96,22 +101,23 @@ final class MiniMonthPanel extends JPanel {
 		final Graphics2D g2 = (Graphics2D) g.create();
 		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		final int w = getWidth();
-		final int h = getHeight();
+		final int h = Math.min(getHeight(), PANEL_H);
 		g2.setColor(CalendarTheme.SURFACE);
-		g2.fillRoundRect(0, 0, w - 1, Math.min(h, PANEL_H) - 1, 12, 12);
+		g2.fillRoundRect(0, 0, w - 1, h - 1, 10, 10);
 		g2.setColor(CalendarTheme.HAIRLINE);
-		g2.drawRoundRect(0, 0, w - 1, Math.min(h, PANEL_H) - 1, 12, 12);
+		g2.drawRoundRect(0, 0, w - 1, h - 1, 10, 10);
 
-		g2.setFont(CalendarTheme.font(13f, Font.BOLD));
+		g2.setFont(CalendarTheme.font(12f, Font.BOLD));
 		g2.setColor(CalendarTheme.TEXT);
-		final String title = titleFormat.format(monthStart);
-		g2.drawString(title, 12, 20);
+		g2.drawString(titleFormat.format(monthStart), 10, 18);
 
-		final int cellW = Math.max(24, (w - 16) / 7);
+		final int cellW = Math.max(24, (w - 12) / 7);
 		g2.setFont(CalendarTheme.font(10f));
 		for (int i = 0; i < 7; i++) {
 			g2.setColor(CalendarTheme.TEXT_FAINT);
-			g2.drawString(HEADERS[i], 8 + i * cellW + 4, GRID_TOP - 6);
+			final FontMetrics hfm = g2.getFontMetrics();
+			final String label = HEADERS[i];
+			g2.drawString(label, 6 + i * cellW + (cellW - hfm.stringWidth(label)) / 2, GRID_TOP - 8);
 		}
 
 		final Calendar cursor = Calendar.getInstance();
@@ -129,52 +135,51 @@ final class MiniMonthPanel extends JPanel {
 		final Calendar month = Calendar.getInstance();
 		month.setTime(monthStart);
 
-		g2.setFont(CalendarTheme.font(11f, Font.BOLD));
+		g2.setFont(CalendarTheme.font(11f));
 		final FontMetrics fm = g2.getFontMetrics();
 		for (int row = 0; row < 6; row++) {
 			for (int col = 0; col < 7; col++) {
-				final int x = 8 + col * cellW;
+				final int x = 6 + col * cellW;
 				final int y = GRID_TOP + row * CELL_H;
 				final boolean inMonth = cursor.get(Calendar.MONTH) == month.get(Calendar.MONTH);
 				final boolean isToday = sameDay(cursor, today);
 				final boolean isSel = sameDay(cursor, sel);
 				final String num = String.valueOf(cursor.get(Calendar.DAY_OF_MONTH));
 				final int count = countForDay(cursor.getTime());
-				final int mark = Math.min(cellW - 6, CELL_H - 4);
-				final int ox = x + (cellW - mark) / 2;
-				final int oy = y + 1;
+				final int cx = x + cellW / 2;
+				final int cy = y + 10;
 				if (isSel) {
 					g2.setColor(CalendarTheme.ACCENT);
-					g2.fillRoundRect(ox, oy, mark, mark, 8, 8);
+					g2.fillOval(cx - 9, cy - 9, 18, 18);
 					g2.setColor(Color.WHITE);
 				}
 				else if (isToday) {
-					g2.setColor(CalendarTheme.CHIP_BG);
-					g2.fillRoundRect(ox, oy, mark, mark, 8, 8);
+					g2.setColor(CalendarTheme.ACCENT);
+					g2.drawOval(cx - 9, cy - 9, 18, 18);
 					g2.setColor(CalendarTheme.ACCENT_DEEP);
 				}
 				else {
 					g2.setColor(inMonth ? CalendarTheme.TEXT : CalendarTheme.TEXT_FAINT);
 				}
-				g2.drawString(num, x + (cellW - fm.stringWidth(num)) / 2, y + fm.getAscent() + 1);
-				if (count > 0) {
-					g2.setFont(CalendarTheme.font(9f, Font.BOLD));
-					final FontMetrics countFm = g2.getFontMetrics();
-					final String badge = count > 9 ? "9+" : String.valueOf(count);
-					final int bw = Math.max(12, countFm.stringWidth(badge) + 6);
-					final int bx = x + cellW - bw - 1;
-					final int by = y + CELL_H - 10;
-					g2.setColor(count >= 3 ? CalendarTheme.EVENT_C : CalendarTheme.ACCENT);
-					g2.fillRoundRect(bx, by, bw, 11, 6, 6);
-					g2.setColor(Color.WHITE);
-					g2.setFont(CalendarTheme.font(9f, Font.BOLD));
-					g2.drawString(badge, bx + (bw - countFm.stringWidth(badge)) / 2, by + 9);
-					g2.setFont(CalendarTheme.font(11f, Font.BOLD));
+				g2.drawString(num, cx - fm.stringWidth(num) / 2, cy + fm.getAscent() / 2 - 1);
+				if (count > 0 && inMonth) {
+					paintDots(g2, cx, y + CELL_H - 5, count, isSel);
 				}
 				cursor.add(Calendar.DAY_OF_MONTH, 1);
 			}
 		}
 		g2.dispose();
+	}
+
+	private void paintDots(final Graphics2D g2, final int cx, final int y, final int count, final boolean onSel) {
+		final int n = Math.min(3, count);
+		final int gap = 5;
+		final int start = cx - (n - 1) * gap / 2;
+		g2.setColor(onSel ? new Color(255, 255, 255, 220) : CalendarTheme.ACCENT);
+		for (int i = 0; i < n; i++) {
+			final int d = count >= 3 && i == 1 ? 4 : 3;
+			g2.fillOval(start + i * gap - d / 2, y - d / 2, d, d);
+		}
 	}
 
 	private int countForDay(final Date day) {
@@ -186,11 +191,11 @@ final class MiniMonthPanel extends JPanel {
 	}
 
 	private Date dayAt(final int px, final int py) {
-		final int cellW = Math.max(24, (getWidth() - 16) / 7);
-		if (px < 8 || py < GRID_TOP) {
+		final int cellW = Math.max(24, (getWidth() - 12) / 7);
+		if (px < 6 || py < GRID_TOP) {
 			return null;
 		}
-		final int col = (px - 8) / cellW;
+		final int col = (px - 6) / cellW;
 		final int row = (py - GRID_TOP) / CELL_H;
 		if (col < 0 || col > 6 || row < 0 || row > 5) {
 			return null;

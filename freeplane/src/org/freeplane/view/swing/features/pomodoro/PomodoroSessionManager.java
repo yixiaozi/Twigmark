@@ -330,6 +330,60 @@ public final class PomodoroSessionManager {
 		return collectCurrentMapPomodoroNodes();
 	}
 
+	/**
+	 * Completed + live focus segments that overlap {@code [rangeStart, rangeEnd)}.
+	 * Each element is a {@link CalendarSession}.
+	 */
+	public List collectSessionsInRange(final long rangeStart, final long rangeEnd) {
+		final List out = new ArrayList();
+		final long now = System.currentTimeMillis();
+		final List nodes = collectOpenPomodoroNodes();
+		for (int i = 0; i < nodes.size(); i++) {
+			final NodeModel node = (NodeModel) nodes.get(i);
+			final PomodoroExtension ext = PomodoroAttributes.read(node);
+			if (ext == null || !ext.isEnabled()) {
+				continue;
+			}
+			final List records = PomodoroLog.decode(ext.getLog());
+			for (int r = 0; r < records.size(); r++) {
+				final PomodoroSessionRecord rec = (PomodoroSessionRecord) records.get(r);
+				if (rec.endMs <= rangeStart || rec.startMs >= rangeEnd) {
+					continue;
+				}
+				out.add(new CalendarSession(node, Math.max(rec.startMs, rangeStart), Math.min(rec.endMs, rangeEnd),
+				        rec.focusMs, false));
+			}
+			final long liveMs = ext.liveSegmentMs(now);
+			if (liveMs > 0) {
+				final long anchor = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
+				final long end = now;
+				if (end > rangeStart && anchor < rangeEnd) {
+					out.add(new CalendarSession(node, Math.max(anchor, rangeStart), Math.min(end, rangeEnd), liveMs,
+					        true));
+				}
+			}
+		}
+		return out;
+	}
+
+	/** Public DTO for calendar overlay. */
+	public static final class CalendarSession {
+		public final NodeModel node;
+		public final long startMs;
+		public final long endMs;
+		public final long focusMs;
+		public final boolean live;
+
+		CalendarSession(final NodeModel node, final long startMs, final long endMs, final long focusMs,
+		        final boolean live) {
+			this.node = node;
+			this.startMs = startMs;
+			this.endMs = endMs;
+			this.focusMs = focusMs;
+			this.live = live;
+		}
+	}
+
 	List collectCurrentMapPomodoroNodes() {
 		final List result = new ArrayList();
 		try {

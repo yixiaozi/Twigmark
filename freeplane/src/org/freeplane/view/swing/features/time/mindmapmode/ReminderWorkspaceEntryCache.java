@@ -17,7 +17,8 @@ import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewManager;
 
 /**
- * Per-file reminder entry cache (mtime/length keyed). Avoids re-parsing every .mm on each calendar refresh.
+ * Shared in-memory reminder entry cache used by calendar + right-side timeline.
+ * Keyed by file path + mtime/length so unchanged maps are not re-parsed.
  */
 final class ReminderWorkspaceEntryCache {
 	private static final class CachedFileResult {
@@ -34,8 +35,34 @@ final class ReminderWorkspaceEntryCache {
 
 	private static final Map CACHE_BY_PATH = new HashMap();
 	private static List allEntriesSnapshot = Collections.EMPTY_LIST;
+	private static String filesSignature = "";
+	private static volatile boolean warming;
 
 	private ReminderWorkspaceEntryCache() {
+	}
+
+	/** Warm file list + parse entries once in background (no occurrence expansion). */
+	static void warmAsync() {
+		if (warming) {
+			return;
+		}
+		warming = true;
+		WorkspaceSideTabScanCache.schedulePreload();
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					getAllEntries();
+				}
+				catch (Exception e) {
+					LogUtils.warn(e);
+				}
+				finally {
+					warming = false;
+				}
+			}
+		}, "ReminderWorkspaceEntryCache-Warm");
+		thread.setDaemon(true);
+		thread.start();
 	}
 
 	static List getEntriesForFilePublic(final File file) {
@@ -44,52 +71,82 @@ final class ReminderWorkspaceEntryCache {
 
 	static synchronized List getAllEntries() {
 		final List files = collectMindmapFilesIncludingOpenMaps();
+		final String signature = signatureOf(files);
+		if (signature.equals(filesSignature) && allEntriesSnapshot != null && !allEntriesSnapshot.isEmpty()) {
+			boolean allFresh = true;
+			for (int i = 0; i < files.size(); i++) {
+				final File file = (File) files.get(i);
+				final String path = canonicalPath(file);
+				final CachedFileResult cached = (CachedFileResult) CACHE_BY_PATH.get(path);
+				if (cached == null || cached.modified != file.lastModified() || cached.length != file.length()) {
+					allFresh = false;
+					break;
+				}
+			}
+			if (allFresh) {
+				return allEntriesSnapshot;
+			}
+		}
 		cleanupCache(files);
 		final List all = new ArrayList();
 		for (int i = 0; i < files.size(); i++) {
 			all.addAll(getEntriesForFile((File) files.get(i)));
 		}
 		allEntriesSnapshot = all;
+		filesSignature = signature;
 		return all;
 	}
 
 	static synchronized List getAllEntriesSnapshot() {
-		return allEntriesSnapshot;
+		return allEntriesSnapshot == null ? Collections.EMPTY_LIST : allEntriesSnapshot;
 	}
 
 	static synchronized void invalidateAll() {
 		CACHE_BY_PATH.clear();
 		allEntriesSnapshot = Collections.EMPTY_LIST;
+		filesSignature = "";
 	}
 
 	static synchronized void invalidateFile(final File file) {
 		if (file == null) {
 			return;
 		}
-		try {
-			CACHE_BY_PATH.remove(file.getCanonicalPath());
-		}
-		catch (Exception e) {
-			CACHE_BY_PATH.remove(file.getAbsolutePath());
-		}
+		CACHE_BY_PATH.remove(canonicalPath(file));
 		allEntriesSnapshot = Collections.EMPTY_LIST;
+		filesSignature = "";
 	}
 
-	static Map buildDayCounts(final List entries, final long rangeStart, final long rangeEnd) {
-		final Map counts = new HashMap();
-		if (entries == null || entries.isEmpty()) {
-			return counts;
-		}
+	/**
+	 * Expand occurrences once for a range; also returns day counts for the same set.
+	 * Result: Object[] { List&lt;TimelineOccurrence&gt;, Map&lt;Long,Integer&gt; dayCounts }
+	 */
+	static Object[] expandWithDayCounts(final long rangeStart, final long rangeEnd) {
+		final List entries = getAllEntries();
 		final List occurrences = ReminderWorkspaceScanHelper.buildTimelineOccurrences(entries, rangeStart, rangeEnd);
+		final Map counts = new HashMap();
 		for (int i = 0; i < occurrences.size(); i++) {
 			final ReminderWorkspaceScanHelper.TimelineOccurrence occ = (ReminderWorkspaceScanHelper.TimelineOccurrence) occurrences
 			        .get(i);
-			final long day = startOfDay(occ.occurrenceAt);
-			final Long key = Long.valueOf(day);
+			final Long key = Long.valueOf(ReminderCycleScheduler.startOfDay(occ.occurrenceAt));
 			final Integer prev = (Integer) counts.get(key);
 			counts.put(key, Integer.valueOf(prev == null ? 1 : prev.intValue() + 1));
 		}
-		return counts;
+		return new Object[] { occurrences, counts };
+	}
+
+	static Map buildDayCounts(final List entries, final long rangeStart, final long rangeEnd) {
+		final Object[] pack = expandWithDayCounts(rangeStart, rangeEnd);
+		return (Map) pack[1];
+	}
+
+	private static String signatureOf(final List files) {
+		final StringBuilder sb = new StringBuilder(files.size() * 24);
+		for (int i = 0; i < files.size(); i++) {
+			final File f = (File) files.get(i);
+			sb.append(canonicalPath(f)).append('|').append(f.lastModified()).append('|').append(f.length())
+			        .append(';');
+		}
+		return sb.toString();
 	}
 
 	private static List getEntriesForFile(final File file) {
@@ -170,9 +227,5 @@ final class ReminderWorkspaceEntryCache {
 		catch (Exception e) {
 			return file.getAbsolutePath();
 		}
-	}
-
-	private static long startOfDay(final long millis) {
-		return ReminderCycleScheduler.startOfDay(millis);
 	}
 }
