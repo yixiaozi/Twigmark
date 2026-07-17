@@ -147,3 +147,18 @@ final class CyclePomodoroSkinAction extends AFreeplaneAction {
 		}
 	}
 }
+
+final class BackfillPomodoroAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	BackfillPomodoroAction() {
+		super("BackfillPomodoroAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
+		if (node != null) {
+			PomodoroBackfillDialog.showForNode(node);
+		}
+	}
+}

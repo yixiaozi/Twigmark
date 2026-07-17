@@ -26,6 +26,7 @@ public final class PomodoroController implements IExtension {
 		modeController.addAction(new ExportPomodoroStatsAction());
 		modeController.addAction(new SyncPomodoroNoteAction());
 		modeController.addAction(new CyclePomodoroSkinAction());
+		modeController.addAction(new BackfillPomodoroAction());
 		modeController.addExtension(PomodoroController.class, new PomodoroController());
 		modeController.getMapController().addMapLifeCycleListener(new IMapLifeCycleListener() {
 			public void onCreate(final MapModel map) {

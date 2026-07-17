@@ -378,6 +378,7 @@
 				<menu_action action="StopPomodoroAction" accelerator="control shift E" />
 				<menu_action action="TogglePomodoroAction" accelerator="control shift U" />
 				<menu_action action="ShowPomodoroHistoryAction" accelerator="control shift H" />
+				<menu_action action="BackfillPomodoroAction" />
 				<menu_action action="ShowPomodoroWindowAction" accelerator="control shift M" />
 				<menu_action action="ExportPomodoroStatsAction" />
 				<menu_action action="SyncPomodoroNoteAction" />
@@ -536,6 +537,7 @@
 			<menu_action action="StopPomodoroAction" accelerator="control shift E" />
 			<menu_action action="TogglePomodoroAction" accelerator="control shift U" />
 			<menu_action action="ShowPomodoroHistoryAction" accelerator="control shift H" />
+			<menu_action action="BackfillPomodoroAction" />
 			<menu_action action="ShowPomodoroWindowAction" accelerator="control shift M" />
 			<menu_action action="ExportPomodoroStatsAction" />
 			<menu_action action="SyncPomodoroNoteAction" />

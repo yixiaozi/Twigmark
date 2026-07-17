@@ -168,6 +168,23 @@ public final class PomodoroSessionManager {
 		hideWindow();
 	}
 
+	/** Append a completed session for a wall-clock range (timer was not running). */
+	public void backfillSession(final NodeModel node, final long startMs, final long endMs) {
+		if (node == null || startMs <= 0 || endMs <= startMs) {
+			return;
+		}
+		final long focusMs = endMs - startMs;
+		final PomodoroExtension next = extensionCopy(node);
+		next.setEnabled(true);
+		final PomodoroSessionRecord record = new PomodoroSessionRecord(startMs, endMs, focusMs);
+		next.setLog(PomodoroLog.append(next.getLog(), record));
+		next.setTotalMs(next.getTotalMs() + focusMs);
+		PomodoroAttributes.write(node, next);
+		PomodoroNoteSync.sync(node, next);
+		fireChanged();
+		refreshWindow();
+	}
+
 	/** Hide floating timer without stopping sessions (e.g. after explicit Stop). */
 	void hideWindow() {
 		javax.swing.SwingUtilities.invokeLater(new Runnable() {
