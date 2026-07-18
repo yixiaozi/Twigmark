@@ -58,6 +58,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private final JLabel monthLabel = DocearUiTheme.mutedLabel("—");
 	private final JLabel statusLabel = DocearUiTheme.mutedLabel(" ");
+	private final JLabel dailySpendLabel = DocearUiTheme.mutedLabel(" ");
 	private final JLabel incomeValue = kpiValue();
 	private final JLabel expenseValue = kpiValue();
 	private final JLabel netValue = kpiValue();
@@ -197,7 +198,13 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 		header.add(titleCol, BorderLayout.CENTER);
 		header.add(actions, BorderLayout.EAST);
-		header.add(buildKpiRow(), BorderLayout.SOUTH);
+		final JPanel south = new JPanel(new BorderLayout(0, 4));
+		south.setOpaque(false);
+		south.add(buildKpiRow(), BorderLayout.CENTER);
+		dailySpendLabel.setFont(DocearUiTheme.font(12f));
+		dailySpendLabel.setBorder(new EmptyBorder(0, 2, 2, 2));
+		south.add(dailySpendLabel, BorderLayout.SOUTH);
+		header.add(south, BorderLayout.SOUTH);
 		return header;
 	}
 
@@ -383,7 +390,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		p.add(Box.createVerticalStrut(6));
 		p.add(reportButton("预算执行", FinanceReportEngine.ID_BUDGET_STATUS));
 		p.add(Box.createVerticalStrut(6));
-		p.add(reportButton("订阅清单", FinanceReportEngine.ID_SUBSCRIPTIONS));
+		p.add(reportButton("订阅日均", FinanceReportEngine.ID_SUBSCRIPTIONS));
 		p.add(Box.createVerticalStrut(6));
 		p.add(reportButton("优惠券", FinanceReportEngine.ID_COUPONS));
 		p.add(Box.createVerticalStrut(10));
@@ -468,6 +475,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			reloadBudgetList(period, summary);
 			reloadSubList();
 			reloadCouponList();
+			refreshDailySpendStrip();
 			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FINANCE, txnCountForPeriod(period));
 			setStatus(todayPeriod().equals(period) ? "账本 · 个人财务.mm" : "浏览 " + period + " · 个人财务.mm", false);
 		}
@@ -617,17 +625,37 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	private void reloadSubList() {
 		final List subs = FinanceLedgerService.listSubscriptions();
 		if (subs.isEmpty()) {
-			subList.setListData(new ListRow[] { ListRow.empty("暂无订阅 · 「更多 → 加订阅」") });
+			subList.setListData(new ListRow[] {
+					ListRow.empty("暂无订阅 · 「更多 → 加订阅」可记房租/会员等固定支出") });
 			return;
 		}
 		final ListRow[] rows = new ListRow[subs.size()];
 		for (int i = 0; i < subs.size(); i++) {
 			final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) subs.get(i);
 			final String nodeId = s.node == null ? "" : s.node.createID();
+			final long daily = FinanceRules.dailyAverageCents(s.amountCents, s.cycle);
+			final boolean active = FinanceRules.isActiveSubscription(s.status);
+			final String cycleZh = FinanceRules.cycleLabelZh(s.cycle);
 			rows[i] = new ListRow(nodeId, s.name + "  ¥" + FinanceAttributes.formatYuan(s.amountCents)
-					+ " / " + s.cycle + (s.nextYmd.length() == 0 ? "" : "  下次 " + s.nextYmd));
+					+ " / " + cycleZh + "  日均 ¥" + FinanceAttributes.formatYuan(daily)
+					+ (s.nextYmd.length() == 0 ? "" : "  下次 " + s.nextYmd)
+					+ (active ? "" : "  [" + s.status + "]"));
 		}
 		subList.setListData(rows);
+	}
+
+	private void refreshDailySpendStrip() {
+		final List subs = FinanceLedgerService.listSubscriptions();
+		final int active = FinanceRules.countActiveSubscriptions(subs);
+		final long daily = FinanceRules.totalDailySpendCents(subs);
+		if (active == 0) {
+			dailySpendLabel.setText("固定支出日均 — · 把房租、会员等记入「订阅」后自动汇总");
+			dailySpendLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+			return;
+		}
+		dailySpendLabel.setText("固定支出日均 ¥" + FinanceAttributes.formatYuan(daily) + " · " + active
+				+ " 项有效订阅（房租/会员等按周期折算）");
+		dailySpendLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
 	}
 
 	private void reloadCouponList() {
@@ -808,14 +836,53 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private void promptAddSubscription() {
-		final JTextField nameField = new JTextField("会员订阅", 18);
-		final JTextField amountFieldLocal = new JTextField("15", 10);
-		final JComboBox cycleBox = new JComboBox(new String[] { "monthly", "yearly", "weekly" });
+		final JTextField nameField = new JTextField("房租", 18);
+		final JTextField amountFieldLocal = new JTextField("3000", 10);
+		final JComboBox cycleBox = new JComboBox(new String[] { "每月", "每年", "每周", "每天" });
+		final JLabel preview = DocearUiTheme.mutedLabel("日均约 —");
+		preview.setFont(DocearUiTheme.font(12f));
+		final Runnable updatePreview = new Runnable() {
+			public void run() {
+				try {
+					final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
+					final String cycle = FinanceRules.normalizeCycle(selectedComboText(cycleBox));
+					final long daily = FinanceRules.dailyAverageCents(cents, cycle);
+					preview.setText("日均约 ¥" + FinanceAttributes.formatYuan(daily) + "（按 "
+							+ FinanceRules.cycleLabelZh(cycle) + " ÷ "
+							+ FinanceRules.cycleDays(cycle) + " 天）");
+				}
+				catch (Exception e) {
+					preview.setText("日均约 —");
+				}
+			}
+		};
+		amountFieldLocal.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+			public void insertUpdate(final javax.swing.event.DocumentEvent e) {
+				updatePreview.run();
+			}
+
+			public void removeUpdate(final javax.swing.event.DocumentEvent e) {
+				updatePreview.run();
+			}
+
+			public void changedUpdate(final javax.swing.event.DocumentEvent e) {
+				updatePreview.run();
+			}
+		});
+		cycleBox.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				updatePreview.run();
+			}
+		});
+		updatePreview.run();
 		final JPanel form = formPanel(
-				labeled("名称", nameField),
+				labeled("名称（房租/会员等）", nameField),
 				labeled("每期金额（元）", amountFieldLocal),
 				labeled("周期", cycleBox));
-		final int option = JOptionPane.showConfirmDialog(this, form, "加订阅", JOptionPane.OK_CANCEL_OPTION,
+		preview.setAlignmentX(LEFT_ALIGNMENT);
+		form.add(Box.createVerticalStrut(8));
+		form.add(preview);
+		final int option = JOptionPane.showConfirmDialog(this, form, "加订阅 / 固定支出", JOptionPane.OK_CANCEL_OPTION,
 				JOptionPane.PLAIN_MESSAGE);
 		if (option != JOptionPane.OK_OPTION) {
 			return;
@@ -826,18 +893,18 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		}
 		try {
 			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
-			final String cycleValue = selectedComboText(cycleBox);
+			final String cycleValue = FinanceRules.normalizeCycle(selectedComboText(cycleBox));
 			FinanceLedgerService.upsertSubscription(
 					name,
 					cents,
-					cycleValue.length() == 0 ? "monthly" : cycleValue,
-					FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(),
-							cycleValue.length() == 0 ? "monthly" : cycleValue),
+					cycleValue,
+					FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(), cycleValue),
 					"active",
 					selectedComboText(accountCombo),
 					"");
 			refreshAll();
-			setStatus("已添加订阅 · " + name, false);
+			setStatus("已添加 · " + name + " · 日均 ¥"
+					+ FinanceAttributes.formatYuan(FinanceRules.dailyAverageCents(cents, cycleValue)), false);
 		}
 		catch (Exception ex) {
 			JOptionPane.showMessageDialog(this, "添加订阅失败: " + ex.getMessage(), "订阅", JOptionPane.ERROR_MESSAGE);

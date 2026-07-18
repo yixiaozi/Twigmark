@@ -38,6 +38,44 @@ public final class FinanceRulesStandaloneTest {
 		final String yearly = FinanceRules.nextDateForCycle("2026-07-01", "yearly");
 		failed += assertEq("yearly next", "2027-07-01", yearly);
 
+		failed += assertEq("cycle days monthly", Integer.valueOf(30), Integer.valueOf(FinanceRules.cycleDays("monthly")));
+		failed += assertEq("cycle days weekly", Integer.valueOf(7), Integer.valueOf(FinanceRules.cycleDays("weekly")));
+		failed += assertEq("cycle days yearly", Integer.valueOf(365), Integer.valueOf(FinanceRules.cycleDays("yearly")));
+		failed += assertEq("cycle days 每月", Integer.valueOf(30), Integer.valueOf(FinanceRules.cycleDays("每月")));
+		failed += assertEq("daily avg rent", Long.valueOf(10000L),
+				Long.valueOf(FinanceRules.dailyAverageCents(300000L, "monthly")));
+		failed += assertEq("daily avg weekly", Long.valueOf(200L),
+				Long.valueOf(FinanceRules.dailyAverageCents(1400L, "weekly")));
+		failed += assertEq("daily avg yearly", Long.valueOf(27L),
+				Long.valueOf(FinanceRules.dailyAverageCents(9800L, "yearly")));
+		failed += assertTrue("active default", FinanceRules.isActiveSubscription(""));
+		failed += assertTrue("active", FinanceRules.isActiveSubscription("active"));
+		failed += assertTrue("paused", !FinanceRules.isActiveSubscription("paused"));
+
+		final java.util.ArrayList subs = new java.util.ArrayList();
+		final FinanceLedgerService.FinanceSubscription rent = new FinanceLedgerService.FinanceSubscription();
+		rent.name = "房租";
+		rent.amountCents = 300000L;
+		rent.cycle = "monthly";
+		rent.status = "active";
+		final FinanceLedgerService.FinanceSubscription vip = new FinanceLedgerService.FinanceSubscription();
+		vip.name = "视频会员";
+		vip.amountCents = 1500L;
+		vip.cycle = "monthly";
+		vip.status = "active";
+		final FinanceLedgerService.FinanceSubscription paused = new FinanceLedgerService.FinanceSubscription();
+		paused.name = "暂停会员";
+		paused.amountCents = 9800L;
+		paused.cycle = "yearly";
+		paused.status = "paused";
+		subs.add(rent);
+		subs.add(vip);
+		subs.add(paused);
+		failed += assertEq("active count", Integer.valueOf(2),
+				Integer.valueOf(FinanceRules.countActiveSubscriptions(subs)));
+		failed += assertEq("total daily", Long.valueOf(10050L),
+				Long.valueOf(FinanceRules.totalDailySpendCents(subs)));
+
 		if (failed == 0) {
 			System.out.println("FinanceRulesStandaloneTest OK");
 		}

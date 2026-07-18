@@ -193,32 +193,46 @@ public final class FinanceReportEngine {
 	}
 
 	private static ReportViewModel viewSubscriptions() {
-		final ReportViewModel view = new ReportViewModel("财务 · 订阅", "即将扣费与金额构成");
-		view.decision = "清理不必要的订阅";
-		view.dataSource = "个人财务导图 · 订阅";
+		final ReportViewModel view = new ReportViewModel("财务 · 订阅日均", "房租/会员等固定支出 · 折算到每天");
+		view.decision = "看日均占比，优先砍掉不划算的固定支出";
+		view.dataSource = "个人财务导图 · 订阅（月/年/周按约 30/365/7 天折算）";
 		final List subs = FinanceLedgerService.listSubscriptions();
-		long total = 0L;
-		view.addKpi("订阅数", String.valueOf(subs.size()), "");
-		final ReportChartSeries pie = new ReportChartSeries("订阅金额（元）", ReportChartSeries.TYPE_PIE);
+		final int activeCount = FinanceRules.countActiveSubscriptions(subs);
+		final long totalDaily = FinanceRules.totalDailySpendCents(subs);
+		view.addKpi("有效订阅", String.valueOf(activeCount), "");
+		view.addKpi("日均合计", "¥" + FinanceAttributes.formatYuan(totalDaily), "每天");
+		view.addKpi("折合月付", "¥" + FinanceAttributes.formatYuan(totalDaily * 30L), "约");
+		final ReportChartSeries pie = new ReportChartSeries("日均花费占比（元）", ReportChartSeries.TYPE_PIE);
 		Collections.sort(subs, new Comparator() {
 			public int compare(final Object a, final Object b) {
-				final String na = ((FinanceLedgerService.FinanceSubscription) a).nextYmd;
-				final String nb = ((FinanceLedgerService.FinanceSubscription) b).nextYmd;
+				final FinanceLedgerService.FinanceSubscription sa = (FinanceLedgerService.FinanceSubscription) a;
+				final FinanceLedgerService.FinanceSubscription sb = (FinanceLedgerService.FinanceSubscription) b;
+				final long da = FinanceRules.dailyAverageCents(sa.amountCents, sa.cycle);
+				final long db = FinanceRules.dailyAverageCents(sb.amountCents, sb.cycle);
+				if (da != db) {
+					return da > db ? -1 : 1;
+				}
+				final String na = sa.nextYmd;
+				final String nb = sb.nextYmd;
 				return (na == null ? "" : na).compareTo(nb == null ? "" : nb);
 			}
 		});
-		view.addDetail("—— 即将扣费 ——");
+		view.addDetail("—— 按日均从高到低 ——");
 		for (int i = 0; i < subs.size(); i++) {
 			final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) subs.get(i);
-			total += Math.abs(s.amountCents);
-			pie.add(trim(s.name, 14), Math.abs(s.amountCents) / 100.0);
-			view.addDetail(s.name + " · ¥" + FinanceAttributes.formatYuan(s.amountCents) + " · 下次 "
-					+ (s.nextYmd.length() == 0 ? "—" : s.nextYmd) + " · " + s.cycle);
+			final boolean active = FinanceRules.isActiveSubscription(s.status);
+			final long daily = FinanceRules.dailyAverageCents(s.amountCents, s.cycle);
+			if (active && daily > 0L) {
+				pie.add(trim(s.name, 14), daily / 100.0);
+			}
+			view.addDetail(s.name + " · ¥" + FinanceAttributes.formatYuan(s.amountCents) + "/"
+					+ FinanceRules.cycleLabelZh(s.cycle) + " · 日均 ¥" + FinanceAttributes.formatYuan(daily)
+					+ " · 下次 " + (s.nextYmd.length() == 0 ? "—" : s.nextYmd)
+					+ (active ? "" : " · " + s.status));
 		}
-		view.addKpi("金额合计", "¥" + FinanceAttributes.formatYuan(total), "周期内");
 		view.addChart(pie);
 		if (subs.isEmpty()) {
-			view.emptyHint = "暂无订阅。在「财务」Tab 的「更多 → 加订阅」里可添加。";
+			view.emptyHint = "暂无订阅。在「财务」Tab 的「更多 → 加订阅」可记房租、会员等。";
 		}
 		return view;
 	}
