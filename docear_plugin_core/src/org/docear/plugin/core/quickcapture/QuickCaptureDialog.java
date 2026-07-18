@@ -15,16 +15,15 @@ import javax.swing.AbstractAction;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
+import javax.swing.border.EmptyBorder;
 
-import org.freeplane.core.util.TextUtils;
-import org.freeplane.features.mode.Controller;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 
 class QuickCaptureDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
@@ -48,18 +47,30 @@ class QuickCaptureDialog extends JDialog {
 	}
 
 	private void buildUi() {
+		getContentPane().setBackground(DocearUiTheme.CANVAS);
 		final JPanel content = new JPanel(new BorderLayout(8, 8));
-		content.setBorder(new javax.swing.border.EmptyBorder(10, 10, 10, 10));
+		DocearUiTheme.styleCanvas(content);
+		content.setBorder(DocearUiTheme.pageBorder());
 
 		final JPanel top = new JPanel(new BorderLayout(4, 4));
+		DocearUiTheme.styleCanvas(top);
 		textArea.setLineWrap(true);
 		textArea.setWrapStyleWord(true);
-		top.add(new JScrollPane(textArea), BorderLayout.CENTER);
+		textArea.setFont(DocearUiTheme.font(14f));
+		textArea.setForeground(DocearUiTheme.TEXT);
+		textArea.setBackground(DocearUiTheme.SURFACE);
+		textArea.setCaretColor(DocearUiTheme.ACCENT_DEEP);
+		textArea.setSelectionColor(DocearUiTheme.SELECTION);
+		textArea.setBorder(new EmptyBorder(8, 10, 8, 10));
+		final JScrollPane scroll = new JScrollPane(textArea);
+		DocearUiTheme.styleScrollPane(scroll);
+		top.add(scroll, BorderLayout.CENTER);
 		content.add(top, BorderLayout.CENTER);
 
-		final JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 6, 0));
-		final JButton cancelButton = new JButton("\u53d6\u6d88");
-		final JButton okButton = new JButton("\u6dfb\u52a0");
+		final JPanel buttons = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 8, 0));
+		DocearUiTheme.styleCanvas(buttons);
+		final JButton cancelButton = DocearUiTheme.softButton("\u53d6\u6d88");
+		final JButton okButton = DocearUiTheme.primaryButton("\u6dfb\u52a0");
 		okButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				submit();

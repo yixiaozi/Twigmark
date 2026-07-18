@@ -89,7 +89,9 @@ final class ReminderCalendarPanel extends JPanel {
 
 	ReminderCalendarPanel(final String borderTitle) {
 		super(new BorderLayout(4, 4));
-		setBorder(BorderFactory.createTitledBorder(borderTitle));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
+		setToolTipText(borderTitle);
 
 		final JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
 		final JButton prevButton = new JButton("\u25C0");

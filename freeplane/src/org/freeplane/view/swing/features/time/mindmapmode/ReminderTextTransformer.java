@@ -34,7 +34,7 @@ final class ReminderTextTransformer extends AbstractContentTransformer {
 		return prependPrefix((String) content, prefix);
 	}
 
-	private static final String REMINDER_INLINE_COLOR = "#0066CC";
+	private static final String REMINDER_INLINE_COLOR = "#0F766E";
 
 	private static String prependPrefix(final String text, final String prefix) {
 		final String prefixHtml = "<span style=\"color:" + REMINDER_INLINE_COLOR + "\">"

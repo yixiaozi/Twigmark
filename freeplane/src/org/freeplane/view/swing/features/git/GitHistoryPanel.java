@@ -1,5 +1,7 @@
 package org.freeplane.view.swing.features.git;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.event.MouseAdapter;
@@ -58,7 +60,7 @@ class GitHistoryPanel extends JPanel {
 		detailScroll.setPreferredSize(new Dimension(100, DETAIL_HEIGHT));
 		detailScroll.setMinimumSize(new Dimension(50, DETAIL_HEIGHT));
 		detailScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, DETAIL_HEIGHT + 12));
-		detailScroll.setBorder(BorderFactory.createTitledBorder("提交详情"));
+		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "提交详情"));
 
 		if (SHOW_COMMIT_DETAIL) {
 			final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT);

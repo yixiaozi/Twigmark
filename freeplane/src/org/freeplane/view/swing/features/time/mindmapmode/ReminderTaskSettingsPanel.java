@@ -8,6 +8,7 @@ import javax.swing.JPanel;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.TextUtils;
 
 /**
@@ -23,7 +24,9 @@ class ReminderTaskSettingsPanel extends JPanel {
 	ReminderTaskSettingsPanel() {
 		super(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		setAlignmentX(LEFT_ALIGNMENT);
-		setBorder(BorderFactory.createTitledBorder(TextUtils.getText("plugins/TimeManagement.xml_taskSettingsTitle")));
+		setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+				TextUtils.getText("plugins/TimeManagement.xml_taskSettingsTitle")));
+		setOpaque(false);
 
 		durationSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 100000, 5));
 		levelSpinner = new JSpinner(new SpinnerNumberModel(0, -100000, 10000, 1));

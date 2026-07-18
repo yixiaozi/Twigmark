@@ -138,8 +138,8 @@ public class ReportsTabPanel extends JPanel {
 				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
 				if (value instanceof ReportDefinition) {
 					final ReportDefinition def = (ReportDefinition) value;
-					setText("<html><b>" + escape(def.title) + "</b><br><font color='#2F6FED' size='2'>"
-					        + escape(def.decision) + "</font><br><font color='#666666' size='2'>"
+					setText("<html><b>" + escape(def.title) + "</b><br><font color='#0F766E' size='2'>"
+					        + escape(def.decision) + "</font><br><font color='#64748B' size='2'>"
 					        + escape(def.description) + "</font></html>");
 					setIcon(loadIcon(def.iconName));
 					setVerticalTextPosition(SwingConstants.CENTER);

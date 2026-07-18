@@ -18,6 +18,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
 import javax.swing.border.EmptyBorder;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 
@@ -51,9 +52,18 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 				false);
 		this.importMode = importMode;
 		setLayout(new BorderLayout(8, 8));
-		((JPanel) getContentPane()).setBorder(new EmptyBorder(10, 10, 10, 10));
+		getContentPane().setBackground(DocearUiTheme.CANVAS);
+		((JPanel) getContentPane()).setBorder(DocearUiTheme.pageBorder());
+
+		summaryLabel.setFont(DocearUiTheme.font(13f, java.awt.Font.BOLD));
+		summaryLabel.setForeground(DocearUiTheme.TEXT);
+		statusLabel.setFont(DocearUiTheme.font(12f));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		progressLabel.setFont(DocearUiTheme.font(12f));
+		progressLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
 
 		JPanel north = new JPanel(new BorderLayout(4, 4));
+		DocearUiTheme.styleCanvas(north);
 		north.add(summaryLabel, BorderLayout.NORTH);
 		north.add(statusLabel, BorderLayout.CENTER);
 		north.add(progressLabel, BorderLayout.SOUTH);
@@ -66,21 +76,31 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 		configureArea(failedArea);
 		configureArea(closedArea);
 
-		tabs.addTab(TextUtils.getText("todoist.sync.tab.live"), new JScrollPane(logArea));
-		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.created"), 0), new JScrollPane(createdArea));
-		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.skipped"), 0), new JScrollPane(skippedArea));
-		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.updated"), 0), new JScrollPane(updatedArea));
-		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.failed"), 0), new JScrollPane(failedArea));
-		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.closed"), 0), new JScrollPane(closedArea));
+		tabs.setFont(DocearUiTheme.font(12f, java.awt.Font.BOLD));
+		tabs.addTab(TextUtils.getText("todoist.sync.tab.live"), styledScroll(logArea));
+		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.created"), 0), styledScroll(createdArea));
+		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.skipped"), 0), styledScroll(skippedArea));
+		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.updated"), 0), styledScroll(updatedArea));
+		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.failed"), 0), styledScroll(failedArea));
+		tabs.addTab(tabTitle(TextUtils.getText("todoist.sync.tab.closed"), 0), styledScroll(closedArea));
 		add(tabs, BorderLayout.CENTER);
 
 		closeButton.setEnabled(false);
+		closeButton.setFocusPainted(false);
+		closeButton.setFont(DocearUiTheme.font(12f, java.awt.Font.BOLD));
+		closeButton.setBackground(DocearUiTheme.ACCENT);
+		closeButton.setForeground(java.awt.Color.WHITE);
+		closeButton.setOpaque(true);
+		closeButton.setBorderPainted(false);
+		closeButton.setCursor(java.awt.Cursor.getPredefinedCursor(java.awt.Cursor.HAND_CURSOR));
 		closeButton.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
 				dispose();
 			}
 		});
 		JPanel south = new JPanel(new BorderLayout());
+		DocearUiTheme.styleCanvas(south);
+		south.setBorder(new EmptyBorder(4, 0, 0, 0));
 		south.add(closeButton, BorderLayout.EAST);
 		add(south, BorderLayout.SOUTH);
 
@@ -280,6 +300,16 @@ final class TodoistSyncProgressDialog extends JDialog implements TodoistSyncProg
 		area.setEditable(false);
 		area.setLineWrap(true);
 		area.setWrapStyleWord(true);
+		area.setFont(DocearUiTheme.font(12f));
+		area.setForeground(DocearUiTheme.TEXT);
+		area.setBackground(DocearUiTheme.SURFACE);
+		area.setBorder(new EmptyBorder(8, 10, 8, 10));
+	}
+
+	private static JScrollPane styledScroll(JTextArea area) {
+		final JScrollPane scroll = new JScrollPane(area);
+		DocearUiTheme.styleScrollPane(scroll);
+		return scroll;
 	}
 
 	private static void runOnEdt(Runnable runnable) {

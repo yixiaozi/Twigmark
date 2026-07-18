@@ -56,14 +56,14 @@ public class TagGroupCascadeBar extends JPanel {
 	/** Synthetic root scope: every tag (used by relationship graph). */
 	public static final String ALL_SCOPE_ID = "all";
 
-	private static final Color GROUP_SELECTED_BG = new Color(0xE3F2F1);
-	private static final Color GROUP_SELECTED_BORDER = new Color(0x4DB6AC);
+	private static final Color GROUP_SELECTED_BG = DocearUiTheme.ACCENT_WASH;
+	private static final Color GROUP_SELECTED_BORDER = DocearUiTheme.ACCENT;
 	private static final Color GROUP_PATH_BG = new Color(0xF1F8F7);
 	private static final Color GROUP_PATH_BORDER = new Color(0x80CBC4);
 	private static final Color GROUP_HOVER_BG = new Color(0xEEF3F6);
 	private static final Color GROUP_IDLE_BORDER = new Color(0xD0D7DE);
 	private static final Color GROUP_ACCENT = DocearUiTheme.ACCENT;
-	private static final Color GROUP_MUTED_FG = new Color(0x546E7A);
+	private static final Color GROUP_MUTED_FG = DocearUiTheme.TEXT_MUTED;
 	private static final Color GROUP_FG = new Color(0x263238);
 	private static final Color ADD_BUTTON_BG = new Color(0xECEFF1);
 

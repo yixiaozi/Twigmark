@@ -25,6 +25,7 @@ import javax.swing.event.PopupMenuEvent;
 import javax.swing.event.PopupMenuListener;
 
 import org.freeplane.core.ui.components.calendar.JCalendar;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.ui.FrameController;
 
@@ -46,7 +47,9 @@ class ReminderDateTimeEditorPanel extends JPanel {
 
 	ReminderDateTimeEditorPanel() {
 		super(new BorderLayout(0, 8));
-		setBorder(BorderFactory.createTitledBorder(TextUtils.getText("plugins/TimeManagement.xml_reminderDateTimeLabel")));
+		setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+				TextUtils.getText("plugins/TimeManagement.xml_reminderDateTimeLabel")));
+		setOpaque(false);
 
 		dateTimeField = new JTextField(28);
 		dateTimeField.setToolTipText(TextUtils.getText("plugins/TimeManagement.xml_reminderDateTimeHint"));

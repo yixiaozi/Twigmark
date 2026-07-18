@@ -13,8 +13,10 @@ import javax.swing.JPasswordField;
 import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
+import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.ui.AFreeplaneAction;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 
@@ -35,17 +37,29 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		final JTextField projectIdField = new JTextField(TodoistConfig.getProjectId(), 32);
 		final JTextField importTargetField = new JTextField(TodoistConfig.getImportTargetFile().getAbsolutePath(), 32);
 		final JPasswordField tokenField = new JPasswordField(TodoistConfig.getApiToken(), 32);
+		styleField(projectField);
+		styleField(projectIdField);
+		styleField(importTargetField);
+		styleField(tokenField);
+
 		final JCheckBox autoSyncCheck = new JCheckBox(TextUtils.getText("todoist.settings.auto_sync"),
 				TodoistConfig.isAutoSyncEnabled());
+		autoSyncCheck.setFont(DocearUiTheme.font(12f));
+		autoSyncCheck.setForeground(DocearUiTheme.TEXT);
+		autoSyncCheck.setOpaque(false);
+
 		final JSpinner intervalSpinner = new JSpinner(new SpinnerNumberModel(
 				TodoistConfig.getAutoSyncIntervalMinutes(), 1, 120, 1));
+
 		final JPanel panel = new JPanel(new GridBagLayout());
+		DocearUiTheme.styleSurface(panel);
+		panel.setBorder(new EmptyBorder(8, 8, 4, 8));
 		GridBagConstraints c = new GridBagConstraints();
 		c.gridx = 0;
 		c.gridy = 0;
 		c.anchor = GridBagConstraints.WEST;
 		c.insets = new Insets(4, 4, 4, 4);
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.token")), c);
+		panel.add(fieldLabel(TextUtils.getText("todoist.settings.token")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
@@ -54,7 +68,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridy = 1;
 		c.fill = GridBagConstraints.NONE;
 		c.weightx = 0;
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.project")), c);
+		panel.add(fieldLabel(TextUtils.getText("todoist.settings.project")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
@@ -63,7 +77,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridy = 2;
 		c.fill = GridBagConstraints.NONE;
 		c.weightx = 0;
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.project_id")), c);
+		panel.add(fieldLabel(TextUtils.getText("todoist.settings.project_id")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
@@ -72,7 +86,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridy = 3;
 		c.fill = GridBagConstraints.NONE;
 		c.weightx = 0;
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.import_target")), c);
+		panel.add(fieldLabel(TextUtils.getText("todoist.settings.import_target")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
@@ -87,7 +101,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridwidth = 1;
 		c.fill = GridBagConstraints.NONE;
 		c.weightx = 0;
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.auto_sync_interval")), c);
+		panel.add(fieldLabel(TextUtils.getText("todoist.settings.auto_sync_interval")), c);
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
@@ -95,7 +109,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridx = 0;
 		c.gridy = 6;
 		c.gridwidth = 2;
-		panel.add(new JLabel(TextUtils.getText("todoist.settings.hint")), c);
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("todoist.settings.hint")), c);
 
 		int option = JOptionPane.showConfirmDialog(Controller.getCurrentController().getViewController().getFrame(),
 				panel, TextUtils.getText("todoist.settings.title"), JOptionPane.OK_CANCEL_OPTION,
@@ -116,5 +130,20 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		if (TodoistConfig.isAutoSyncEnabled()) {
 			TodoistAutoSyncService.getInstance().requestImmediateFullSync();
 		}
+	}
+
+	private static JLabel fieldLabel(final String text) {
+		final JLabel label = new JLabel(text);
+		label.setFont(DocearUiTheme.font(12f));
+		label.setForeground(DocearUiTheme.TEXT);
+		return label;
+	}
+
+	private static void styleField(final JTextField field) {
+		field.setFont(DocearUiTheme.font(13f));
+		field.setForeground(DocearUiTheme.TEXT);
+		field.setBackground(DocearUiTheme.SURFACE);
+		field.setCaretColor(DocearUiTheme.ACCENT_DEEP);
+		field.setSelectionColor(DocearUiTheme.SELECTION);
 	}
 }

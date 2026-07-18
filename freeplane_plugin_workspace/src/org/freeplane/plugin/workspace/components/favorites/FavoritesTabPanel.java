@@ -1,5 +1,7 @@
 package org.freeplane.plugin.workspace.components.favorites;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -66,15 +68,15 @@ public class FavoritesTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
 	private static final DataFlavor REORDER_FLAVOR = DataFlavor.stringFlavor;
-	private static final String FAVORITE_NAME_COLOR = "#0066CC";
+	private static final String FAVORITE_NAME_COLOR = "#0F766E";
 	private static final int DEFAULT_TAG_PANEL_HEIGHT = 168;
 	private static final int MIN_TAG_PANEL_HEIGHT = 96;
 	private static final String PROP_FILTER_DIVIDER = "workspace.favorites.filter.divider";
 	private static final String PROP_ACTIVE_GROUP = "workspace.favorites.filter.active.group";
 	private static final String PROP_DIRECT_ONLY = "workspace.favorites.filter.direct.only";
 
-	private static final Color FILTER_SHELL_BG = new Color(0xF7F9FB);
-	private static final Color FILTER_SHELL_BORDER = new Color(0xCFD8DC);
+	private static final Color FILTER_SHELL_BG = DocearUiTheme.CANVAS;
+	private static final Color FILTER_SHELL_BORDER = DocearUiTheme.HAIRLINE;
 
 	private final FavoritesAndTagsStore store = FavoritesAndTagsStore.getInstance();
 	private final DefaultListModel listModel = new DefaultListModel();

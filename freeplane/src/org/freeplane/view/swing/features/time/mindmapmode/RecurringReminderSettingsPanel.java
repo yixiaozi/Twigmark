@@ -17,6 +17,7 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.TextUtils;
 
 /**
@@ -41,7 +42,9 @@ class RecurringReminderSettingsPanel extends JPanel {
 	RecurringReminderSettingsPanel() {
 		super();
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-		setBorder(BorderFactory.createTitledBorder(TextUtils.getText("plugins/TimeManagement.xml_cycleSettingsTitle")));
+		setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+				TextUtils.getText("plugins/TimeManagement.xml_cycleSettingsTitle")));
+		setOpaque(false);
 		setAlignmentX(LEFT_ALIGNMENT);
 
 		final JPanel typeIntervalRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
