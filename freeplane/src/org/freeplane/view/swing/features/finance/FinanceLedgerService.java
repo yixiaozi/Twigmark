@@ -60,13 +60,13 @@ public final class FinanceLedgerService {
 		}
 		File dir = null;
 		try {
-			dir = MindMapDataRootResolver.getProjectDataDirectory();
+			dir = MindMapDataRootResolver.getWorkingDirectory();
 		}
 		catch (Exception e) {
 		}
 		if (dir == null || !dir.isDirectory()) {
 			try {
-				dir = new File(ResourceController.getResourceController().getFreeplaneUserDirectory());
+				dir = new File(Compat.getApplicationUserDirectory());
 			}
 			catch (Exception e) {
 				dir = new File(System.getProperty("user.home", "."));

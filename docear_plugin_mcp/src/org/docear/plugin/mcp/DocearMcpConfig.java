@@ -84,6 +84,36 @@ public final class DocearMcpConfig {
 		return getInt("cursorPlugin.sync.delayMs", 12000);
 	}
 
+	public static void setEnabled(final boolean enabled) {
+		setProperty("enabled", enabled ? "true" : "false");
+	}
+
+	public static void setHost(final String host) {
+		setProperty("host", host == null || host.trim().length() == 0 ? DEFAULT_HOST : host.trim());
+	}
+
+	public static void setPort(final int port) {
+		final int safe = port < 1 || port > 65535 ? DEFAULT_PORT : port;
+		setProperty("port", String.valueOf(safe));
+	}
+
+	public static void setReadOnly(final boolean readOnly) {
+		setProperty("readonly", readOnly ? "true" : "false");
+	}
+
+	public static void setCursorPluginSyncEnabled(final boolean enabled) {
+		setProperty("cursorPlugin.sync.enabled", enabled ? "true" : "false");
+	}
+
+	private static void setProperty(final String key, final String value) {
+		try {
+			ResourceController.getResourceController().setProperty(PREFIX + key, value == null ? "" : value);
+		}
+		catch (Exception e) {
+			// ignore when controller unavailable
+		}
+	}
+
 	private static String getString(final String key, final String defaultValue) {
 		final String value = ResourceController.getResourceController().getProperty(PREFIX + key, null);
 		if (value != null && value.trim().length() > 0) {

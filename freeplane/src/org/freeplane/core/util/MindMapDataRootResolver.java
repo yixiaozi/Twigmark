@@ -170,6 +170,53 @@ public final class MindMapDataRootResolver {
 		}
 		System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
 		System.setProperty("org.freeplane.userfpdir", getApplicationConfigDirectory().getAbsolutePath());
+		try {
+			final ResourceController rc = ResourceController.getResourceController();
+			if (rc != null) {
+				rc.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
+			}
+		}
+		catch (final Exception e) {
+			// ResourceController may not be ready during very early startup
+		}
+	}
+
+	/** Marker file under {@code data/} written after first-run setup. */
+	public static final String SETUP_COMPLETED_MARKER = "setup.completed";
+
+	public static File getWorkingDirectoryMarkerFile() {
+		return new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+	}
+
+	public static boolean needsFirstRunSetup() {
+		final File marker = new File(getApplicationConfigDirectory(), SETUP_COMPLETED_MARKER);
+		if (marker.isFile()) {
+			return false;
+		}
+		// Existing profiles already have preferences — treat as set up once.
+		final File autoProperties = new File(getApplicationConfigDirectory(), "auto.properties");
+		if (autoProperties.isFile()) {
+			markSetupCompleted();
+			return false;
+		}
+		return true;
+	}
+
+	public static void markSetupCompleted() {
+		final File marker = new File(getApplicationConfigDirectory(), SETUP_COMPLETED_MARKER);
+		BufferedWriter writer = null;
+		try {
+			ensureDirectory(marker.getParentFile());
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(marker), "UTF-8"));
+			writer.write(String.valueOf(System.currentTimeMillis()));
+			writer.newLine();
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not write setup marker: " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(writer);
+		}
 	}
 
 	/**

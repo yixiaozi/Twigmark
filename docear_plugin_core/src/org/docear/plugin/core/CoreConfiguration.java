@@ -552,6 +552,7 @@ public class CoreConfiguration extends ALanguageController {
 		QuickCaptureService.install(modeController);
 		QuickCommandService.install(modeController);
 		MapSwitcherService.install(modeController);
+		org.docear.plugin.core.settings.ProductSettingsService.install(modeController);
 		CalendarViewportIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
 		TodoistIntegrationService.install(modeController);
 		RelationshipGraphIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
