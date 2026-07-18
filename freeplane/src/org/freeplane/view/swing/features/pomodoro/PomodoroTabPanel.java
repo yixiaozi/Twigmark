@@ -29,6 +29,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -70,12 +71,15 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private boolean reloadQueued;
 
 	public PomodoroTabPanel(final ModeController modeController) {
-		super(new BorderLayout(4, 4));
+		super(new BorderLayout(8, 8));
 		this.modeController = modeController;
-		setBorder(new EmptyBorder(4, 4, 4, 4));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
 
 		final JPanel top = new JPanel(new BorderLayout(2, 2));
+		top.setOpaque(false);
 		final JPanel modeBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
+		modeBar.setOpaque(false);
 		currentMapButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				showAllMaps = false;

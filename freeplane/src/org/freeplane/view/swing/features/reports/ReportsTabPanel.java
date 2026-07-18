@@ -34,6 +34,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -58,15 +59,16 @@ public class ReportsTabPanel extends JPanel {
 	private final JPanel customRangePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList reportList = new JList(listModel);
-	private final JButton showButton = new JButton("显示图表");
-	private final JButton writeButton = new JButton("写入节点");
-	private final JButton refreshButton = new JButton("刷新");
+	private final JButton showButton = DocearUiTheme.primaryButton("显示图表");
+	private final JButton writeButton = DocearUiTheme.softButton("写入节点");
+	private final JButton refreshButton = DocearUiTheme.softButton("刷新");
 	private volatile boolean generating;
 	private boolean suppressSelectionEvent;
 
 	public ReportsTabPanel() {
-		super(new BorderLayout(4, 4));
-		setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		super(new BorderLayout(8, 8));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
 		buildUi();
 		wireEvents();
 		reloadCatalog();
@@ -75,9 +77,10 @@ public class ReportsTabPanel extends JPanel {
 
 	private void buildUi() {
 		final JPanel north = new JPanel();
+		north.setOpaque(false);
 		north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
-		statusLabel.setFont(statusLabel.getFont().deriveFont(Font.PLAIN, 11f));
-		statusLabel.setForeground(new Color(0x55, 0x55, 0x55));
+		statusLabel.setFont(DocearUiTheme.font(11f));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		statusLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 		north.add(statusLabel);
 
@@ -151,7 +154,8 @@ public class ReportsTabPanel extends JPanel {
 		scroll.setBorder(BorderFactory.createTitledBorder("报表（点选 → 中间出图）"));
 		add(scroll, BorderLayout.CENTER);
 
-		final JPanel south = new JPanel(new GridLayout(1, 3, 4, 0));
+		final JPanel south = new JPanel(new GridLayout(1, 3, 6, 0));
+		south.setOpaque(false);
 		showButton.setToolTipText("在中间导图位置显示折线/饼图/柱状图");
 		writeButton.setToolTipText("可选：把报表树写入当前选中导图节点");
 		refreshButton.setToolTipText("重新加载报表目录");

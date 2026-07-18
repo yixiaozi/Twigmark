@@ -37,6 +37,7 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -45,10 +46,10 @@ public class GitTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
 	private final JLabel statusLabel = new JLabel("就绪");
-	private final JButton refreshButton = new JButton("刷新");
-	private final JButton pullButton = new JButton("拉取");
-	private final JButton pushButton = new JButton("推送");
-	private final JButton commitButton = new JButton("提交");
+	private final JButton refreshButton = DocearUiTheme.softButton("刷新");
+	private final JButton pullButton = DocearUiTheme.softButton("拉取");
+	private final JButton pushButton = DocearUiTheme.softButton("推送");
+	private final JButton commitButton = DocearUiTheme.primaryButton("提交");
 	private final JCheckBox selectAllCheckBox = new JCheckBox("全选", true);
 	private final JTextField summaryField = new JTextField();
 	private final JTextArea descriptionArea = new JTextArea(2, 20);
@@ -72,7 +73,9 @@ public class GitTabPanel extends JPanel {
 	private static final String LABEL_REFRESH = "刷新";
 
 	public GitTabPanel() {
-		super(new BorderLayout(4, 4));
+		super(new BorderLayout(8, 8));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
 		buildUi();
 		wireEvents();
 		startSyncTimer();
@@ -82,10 +85,18 @@ public class GitTabPanel extends JPanel {
 
 	private void buildUi() {
 		final JPanel toolbar = new JPanel(new BorderLayout(4, 0));
+		toolbar.setOpaque(true);
+		toolbar.setBackground(DocearUiTheme.SURFACE);
+		toolbar.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
+				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+		statusLabel.setFont(DocearUiTheme.font(12f));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		toolbar.add(statusLabel, BorderLayout.CENTER);
 
 		final JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		actionPanel.setOpaque(false);
 		actionPanel.add(pullButton);
 		actionPanel.add(pushButton);
 		actionPanel.add(refreshButton);

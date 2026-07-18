@@ -20,6 +20,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 /**
  * Center viewport: KPI strip + charts + details. Product copy explains decision + data.
  */
@@ -34,8 +36,8 @@ public final class ReportViewportPanel extends JPanel {
 	private final JPanel chartsHost = new JPanel();
 	private final DefaultListModel detailModel = new DefaultListModel();
 	private final JList detailList = new JList(detailModel);
-	private final JButton closeButton = new JButton("返回导图");
-	private final JButton writeButton = new JButton("写入选中节点");
+	private final JButton closeButton = DocearUiTheme.softButton("返回导图");
+	private final JButton writeButton = DocearUiTheme.primaryButton("写入选中节点");
 	private ReportViewModel current;
 	private ReportNodeSpec currentTree;
 	private Runnable onClose;
@@ -43,9 +45,18 @@ public final class ReportViewportPanel extends JPanel {
 
 	public ReportViewportPanel() {
 		super(new BorderLayout(8, 8));
-		setOpaque(true);
-		setBackground(new Color(0xF7, 0xF8, 0xFA));
+		DocearUiTheme.styleCanvas(this);
 		setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+		titleLabel.setFont(DocearUiTheme.font(18f, Font.BOLD));
+		titleLabel.setForeground(DocearUiTheme.TEXT);
+		subtitleLabel.setFont(DocearUiTheme.font(12f));
+		subtitleLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		decisionLabel.setFont(DocearUiTheme.font(12f, Font.BOLD));
+		decisionLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
+		dataLabel.setFont(DocearUiTheme.font(11f));
+		dataLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+		kpiHost.setOpaque(false);
+		chartsHost.setOpaque(false);
 		buildUi();
 	}
 
