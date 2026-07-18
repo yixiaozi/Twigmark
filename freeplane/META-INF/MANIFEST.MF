@@ -21,7 +21,8 @@ Bundle-ClassPath: lib/freeplaneviewer.jar,
  lib/substance-flamingo-6.3.jar,
  lib/substance-swingx-6.3.jar,
  lib/trident.jar,
- lib/flatlaf-3.5.4.jar
+ lib/flatlaf-3.5.4.jar,
+ lib/sqlite-jdbc-3.21.0.jar
 Bundle-Activator: org.freeplane.main.osgi.Activator
 Import-Package: org.osgi.framework,
  org.osgi.service.url;version="1.0.0"
@@ -121,6 +122,7 @@ Export-Package: com.inet.jortho,
  org.freeplane.view.swing.features.git,
  org.freeplane.view.swing.features.reports,
  org.freeplane.view.swing.features.finance,
+ org.freeplane.view.swing.features.clipboardhistory,
  org.freeplane.view.swing.features.filepreview,
  org.freeplane.view.swing.features.nodehistory,
  org.freeplane.view.swing.features.progress.mindmapmode,

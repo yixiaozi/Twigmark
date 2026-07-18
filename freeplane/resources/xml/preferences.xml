@@ -247,6 +247,11 @@
         <separator name="finance">
             <path name="finance.map.path"/>
         </separator>
+        <separator name="clipboard_history">
+            <boolean name="clipboard.history.enabled"/>
+            <number name="clipboard.history.maxRows" min="50" max="20000"/>
+            <number name="clipboard.history.maxTextLength" min="200" max="100000"/>
+        </separator>
         <separator name="quickcapture">
             <path name="quickcapture.inbox_directory" dir="true"/>
             <string name="quickcapture.inbox_filename"/>

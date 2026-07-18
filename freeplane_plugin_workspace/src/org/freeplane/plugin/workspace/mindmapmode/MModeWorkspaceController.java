@@ -134,6 +134,7 @@ import org.freeplane.plugin.workspace.nodes.DefaultFileNode;
 import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
+import org.freeplane.view.swing.features.clipboardhistory.ClipboardHistoryTabPanel;
 import org.freeplane.view.swing.features.git.GitTabPanel;
 import org.freeplane.view.swing.features.finance.FinanceTabPanel;
 import org.freeplane.view.swing.features.reports.ReportsTabPanel;
@@ -156,6 +157,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_GIT = "git";
 	private static final String TAB_REPORTS = "reports";
 	private static final String TAB_FINANCE = "finance";
+	private static final String TAB_CLIPBOARD = "clipboard";
 	private static final String TAB_GRAPH = "relationship_graph";
 	private static final String TAB_NEXT_ACTIONS = "next_actions";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
@@ -165,7 +167,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH,
-			TAB_GIT, TAB_REPORTS, TAB_FINANCE, TAB_NEXT_ACTIONS
+			TAB_GIT, TAB_REPORTS, TAB_FINANCE, TAB_CLIPBOARD, TAB_NEXT_ACTIONS
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -704,6 +706,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		normalizeSideTabOrder();
 		normalizeReportsTabOrder();
 		normalizeFinanceTabOrder();
+		normalizeClipboardTabOrder();
 		normalizeNextActionsTabOrder();
 	}
 
@@ -799,15 +802,50 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		saveSideTabOrder();
 	}
 
-	/** Keep「红旗」immediately to the right of 财务 (else 报表 / Git). */
-	private void normalizeNextActionsTabOrder() {
-		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+	/** Keep「剪贴板」immediately to the right of 财务 (else 报表 / Git). */
+	private void normalizeClipboardTabOrder() {
+		if (!sideTabOrder.contains(TAB_CLIPBOARD)) {
 			return;
 		}
 		final int financeIndex = sideTabOrder.indexOf(TAB_FINANCE);
 		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
 		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
 		final int anchorIndex = financeIndex >= 0 ? financeIndex : (reportsIndex >= 0 ? reportsIndex : gitIndex);
+		final int currentIndex = sideTabOrder.indexOf(TAB_CLIPBOARD);
+		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
+			return;
+		}
+		if (anchorIndex < 0 && currentIndex >= 0) {
+			return;
+		}
+		sideTabOrder.remove(TAB_CLIPBOARD);
+		if (anchorIndex >= 0) {
+			int refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS);
+			}
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_GIT);
+			}
+			sideTabOrder.add(refreshedAnchor + 1, TAB_CLIPBOARD);
+		}
+		else {
+			sideTabOrder.add(TAB_CLIPBOARD);
+		}
+		saveSideTabOrder();
+	}
+
+	/** Keep「红旗」immediately to the right of 剪贴板 (else 财务 / 报表 / Git). */
+	private void normalizeNextActionsTabOrder() {
+		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+			return;
+		}
+		final int clipboardIndex = sideTabOrder.indexOf(TAB_CLIPBOARD);
+		final int financeIndex = sideTabOrder.indexOf(TAB_FINANCE);
+		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		final int anchorIndex = clipboardIndex >= 0 ? clipboardIndex
+		        : (financeIndex >= 0 ? financeIndex : (reportsIndex >= 0 ? reportsIndex : gitIndex));
 		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
 			return;
@@ -817,7 +855,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		sideTabOrder.remove(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0) {
-			int refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
+			int refreshedAnchor = sideTabOrder.indexOf(TAB_CLIPBOARD);
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
+			}
 			if (refreshedAnchor < 0) {
 				refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS);
 			}
@@ -894,6 +935,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_FINANCE.equals(tabId)) {
 			return "\u8d22\u52a1";
 		}
+		if (TAB_CLIPBOARD.equals(tabId)) {
+			return "\u526a\u8d34\u677f";
+		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return "\u7ea2\u65d7";
 		}
@@ -930,6 +974,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (TAB_FINANCE.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_FINANCE;
+		}
+		if (TAB_CLIPBOARD.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_CLIPBOARD;
 		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_NEXT_ACTIONS;
@@ -1119,6 +1166,22 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				fallback.setBorder(DocearUiTheme.pageBorder());
 				final JLabel err = DocearUiTheme.mutedLabel(
 				        "<html>财务面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>");
+				err.setForeground(DocearUiTheme.DANGER);
+				fallback.add(err, BorderLayout.CENTER);
+				panel = fallback;
+			}
+		}
+		else if (TAB_CLIPBOARD.equals(tabId)) {
+			try {
+				panel = new ClipboardHistoryTabPanel();
+			}
+			catch (final Throwable t) {
+				LogUtils.warn("ClipboardHistoryTabPanel failed to load", t);
+				final JPanel fallback = new JPanel(new BorderLayout());
+				DocearUiTheme.styleCanvas(fallback);
+				fallback.setBorder(DocearUiTheme.pageBorder());
+				final JLabel err = DocearUiTheme.mutedLabel(
+				        "<html>剪贴板面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>");
 				err.setForeground(DocearUiTheme.DANGER);
 				fallback.add(err, BorderLayout.CENTER);
 				panel = fallback;
