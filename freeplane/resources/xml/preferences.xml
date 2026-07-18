@@ -232,5 +232,25 @@
         </separator>
     </tab>
 
+    <tab name="Docear">
+        <separator name="working_directory">
+            <path name="org.docear.working.directory" dir="true"/>
+        </separator>
+        <separator name="mcp">
+            <boolean name="mcp.enabled"/>
+            <string name="mcp.host"/>
+            <number name="mcp.port" min="1" max="65535"/>
+            <boolean name="mcp.readonly"/>
+            <boolean name="mcp.cursorPlugin.sync.enabled"/>
+        </separator>
+        <separator name="finance">
+            <path name="finance.map.path"/>
+        </separator>
+        <separator name="quickcapture">
+            <path name="quickcapture.inbox_directory" dir="true"/>
+            <string name="quickcapture.inbox_filename"/>
+        </separator>
+    </tab>
+
 </tabbed_pane>
 </preferences_structure>
