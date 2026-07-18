@@ -70,6 +70,7 @@ public class ActivityAnalysisPanel extends JPanel {
         topPanel.add(refreshButton, BorderLayout.EAST);
         add(topPanel, BorderLayout.NORTH);
 
+        org.freeplane.core.ui.theme.DocearUiTheme.styleTabbedPane(analysisTabs);
         add(analysisTabs, BorderLayout.CENTER);
 
         refreshButton.addActionListener(new ActionListener() {

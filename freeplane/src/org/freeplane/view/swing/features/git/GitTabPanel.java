@@ -104,6 +104,7 @@ public class GitTabPanel extends JPanel {
 		add(toolbar, BorderLayout.NORTH);
 
 		final JTabbedPane tabs = new JTabbedPane();
+		DocearUiTheme.styleTabbedPane(tabs);
 		tabs.addTab("更改", buildChangesTab());
 		tabs.addTab("历史", historyPanel);
 		tabs.addChangeListener(new ChangeListener() {

@@ -49,6 +49,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.plaf.TabbedPaneUI;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewChangeListener;
@@ -200,6 +201,7 @@ class MapViewTabs implements IMapViewChangeListener {
 
 		mTabbedPane.setFocusable(false);
 		mTabbedPane.setTabPlacement(JTabbedPane.BOTTOM);
+		DocearUiTheme.styleTabbedPane(mTabbedPane);
 		mTabbedPaneMapViews = new Vector<Component>();
 		visibleTabKeys = new Vector<Component>();
 		mTabbedPane.addChangeListener(new ChangeListener() {

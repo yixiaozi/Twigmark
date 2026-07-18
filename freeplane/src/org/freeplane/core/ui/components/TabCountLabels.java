@@ -17,8 +17,8 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 
 public final class TabCountLabels {
 
-	private static final int HORIZONTAL_PADDING = 10;
-	private static final int VERTICAL_PADDING = 2;
+	private static final int HORIZONTAL_PADDING = 14;
+	private static final int VERTICAL_PADDING = 4;
 	private static final int ICON_GAP = 2;
 
 	private TabCountLabels() {
@@ -35,7 +35,7 @@ public final class TabCountLabels {
 	public static Dimension computeTabComponentSize(final Font font, final String title, final int count,
 	        final Icon icon) {
 		final Font titleFont = font != null ? font : new JLabel().getFont();
-		final Font countFont = titleFont.deriveFont(Font.PLAIN, Math.max(9f, titleFont.getSize2D() - 2f));
+		final Font countFont = titleFont.deriveFont(Font.PLAIN, Math.max(9f, titleFont.getSize2D() - 1.5f));
 		final JLabel scratch = new JLabel();
 		scratch.setFont(titleFont);
 		final FontMetrics titleFm = scratch.getFontMetrics(titleFont);
@@ -56,7 +56,7 @@ public final class TabCountLabels {
 		if (icon != null) {
 			height += iconH + ICON_GAP;
 		}
-		return new Dimension(width, height);
+		return new Dimension(width, Math.max(height, 26));
 	}
 
 	public static int computeMinTabWidth(final Font font, final String title, final int count) {
@@ -64,10 +64,15 @@ public final class TabCountLabels {
 	}
 
 	public static Component createTabComponent(final String title, final int count) {
-		return createTabComponent(title, count, null);
+		return createTabComponent(title, count, null, false);
 	}
 
 	public static Component createTabComponent(final String title, final int count, final Icon icon) {
+		return createTabComponent(title, count, icon, false);
+	}
+
+	public static Component createTabComponent(final String title, final int count, final Icon icon,
+	        final boolean selected) {
 		if (title == null) {
 			return new JLabel("");
 		}
@@ -91,15 +96,15 @@ public final class TabCountLabels {
 		gbc.insets = new Insets(icon != null ? ICON_GAP : 0, 0, 0, 0);
 		final JLabel titleLabel = new JLabel(title);
 		titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
-		titleLabel.setForeground(DocearUiTheme.TEXT);
-		titleLabel.setFont(DocearUiTheme.font(11.5f, Font.BOLD));
+		titleLabel.setForeground(selected ? DocearUiTheme.TEXT : DocearUiTheme.TEXT_MUTED);
+		titleLabel.setFont(DocearUiTheme.font(11.5f, selected ? Font.BOLD : Font.PLAIN));
 		panel.add(titleLabel, gbc);
 		if (count >= 0) {
 			gbc.gridy = row;
 			gbc.insets = new Insets(1, 0, 0, 0);
 			final JLabel countLabel = new JLabel(String.valueOf(count));
 			countLabel.setFont(DocearUiTheme.font(10f, Font.PLAIN));
-			countLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+			countLabel.setForeground(selected ? DocearUiTheme.ACCENT_DEEP : DocearUiTheme.TEXT_FAINT);
 			countLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			panel.add(countLabel, gbc);
 		}
