@@ -1,5 +1,7 @@
 package org.docear.plugin.ai.ui;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
@@ -24,7 +26,7 @@ public class AiChatStatusBar extends JPanel {
     public AiChatStatusBar() {
         super(new BorderLayout());
         setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(220, 220, 220)),
+                BorderFactory.createMatteBorder(0, 0, 1, 0, DocearUiTheme.HAIRLINE),
                 BorderFactory.createEmptyBorder(4, 6, 4, 6)));
         statusLabel = new JLabel("\u52a0\u8f7d\u4e2d...");
         statusLabel.setFont(statusLabel.getFont().deriveFont(11f));
@@ -41,16 +43,16 @@ public class AiChatStatusBar extends JPanel {
         this.contextInfo = info;
         if (info == null) {
             statusLabel.setText("\u672a\u52a0\u8f7d\u5bfc\u56fe");
-            statusLabel.setForeground(Color.DARK_GRAY);
+            statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
             return;
         }
         statusLabel.setText(info.formatStatusLine());
         if (info.isQuotaExceeded()) {
-            statusLabel.setForeground(new Color(180, 30, 30));
+            statusLabel.setForeground(DocearUiTheme.DANGER);
         } else if (info.isQuotaNear()) {
-            statusLabel.setForeground(new Color(180, 120, 0));
+            statusLabel.setForeground(DocearUiTheme.WARNING);
         } else {
-            statusLabel.setForeground(info.isBackendReady() ? new Color(30, 100, 30) : new Color(160, 60, 0));
+            statusLabel.setForeground(info.isBackendReady() ? DocearUiTheme.SUCCESS : DocearUiTheme.WARNING);
         }
     }
 

@@ -151,7 +151,7 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder("报表（点选 → 中间出图）"));
+		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 中间出图）"));
 		add(scroll, BorderLayout.CENTER);
 
 		final JPanel south = new JPanel(new GridLayout(1, 3, 6, 0));

@@ -1,5 +1,7 @@
 package org.docear.plugin.ai.ui;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -66,7 +68,7 @@ public class AiChatSidebar extends JPanel {
         keywordBar = new AiKeywordButtonBar();
         messagesPanel = new JPanel();
         messagesPanel.setLayout(new javax.swing.BoxLayout(messagesPanel, javax.swing.BoxLayout.Y_AXIS));
-        messagesPanel.setBackground(Color.WHITE);
+        messagesPanel.setBackground(DocearUiTheme.SURFACE);
         messagesScroll = new JScrollPane(messagesPanel);
         messagesScroll.setBorder(BorderFactory.createEmptyBorder());
         messagesScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
@@ -83,7 +85,7 @@ public class AiChatSidebar extends JPanel {
         inputArea.setLineWrap(true);
         inputArea.setWrapStyleWord(true);
         inputArea.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(200, 200, 200)),
+                BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
                 BorderFactory.createEmptyBorder(4, 4, 4, 4)));
         JScrollPane inputScroll = new JScrollPane(inputArea);
         inputScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -650,7 +652,7 @@ public class AiChatSidebar extends JPanel {
 
     private void appendHintMessage(String text) {
         JLabel label = new JLabel(text);
-        label.setForeground(new Color(70, 70, 150));
+        label.setForeground(DocearUiTheme.ACCENT_DEEP);
         label.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
         label.setAlignmentX(LEFT_ALIGNMENT);
         messagesPanel.add(label);

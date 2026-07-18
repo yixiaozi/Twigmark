@@ -4,6 +4,8 @@
  */
 package org.freeplane.core.ui.components;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Container;
@@ -331,13 +333,13 @@ public class OneTouchCollapseResizer extends JResizer {
 	private void arrowLeft(Graphics g, int half_length, int center_y) {
 		int[] x = new int[]{inset, getSize().width - inset, getSize().width - inset};
 		int[] y = new int[]{center_y, center_y-half_length, center_y + half_length};
-		g.setColor(Color.DARK_GRAY);
+		g.setColor(DocearUiTheme.TEXT_MUTED);
 		g.fillPolygon(x, y, 3);
-		g.setColor(Color.DARK_GRAY);
+		g.setColor(DocearUiTheme.TEXT_MUTED);
 		g.drawLine(inset, center_y, getSize().width - inset, center_y - half_length);
-		g.setColor(Color.GRAY);
+		g.setColor(DocearUiTheme.HAIRLINE);
 		g.drawLine( getSize().width - inset, center_y + half_length, inset, center_y);
-		g.setColor(Color.GRAY);
+		g.setColor(DocearUiTheme.HAIRLINE);
 		g.drawLine( getSize().width - inset, center_y - half_length, getSize().width - inset, center_y + half_length);
 	}
 
@@ -350,13 +352,13 @@ public class OneTouchCollapseResizer extends JResizer {
 		int[] x = new int[]{inset, inset, getSize().width - inset};
 		int[] y = new int[]{center_y+half_length, center_y-half_length, center_y};
 		
-		g.setColor( Color.DARK_GRAY);
+		g.setColor( DocearUiTheme.TEXT_MUTED);
 		g.fillPolygon(x,y,3);
-		g.setColor( Color.DARK_GRAY);
+		g.setColor( DocearUiTheme.TEXT_MUTED);
 		g.drawLine( inset, center_y + half_length, inset, center_y - half_length);
-		g.setColor(Color.GRAY);
+		g.setColor(DocearUiTheme.HAIRLINE);
 		g.drawLine( inset, center_y - half_length, getSize().width - inset, center_y);
-		g.setColor( Color.LIGHT_GRAY);
+		g.setColor( DocearUiTheme.SURFACE_SOFT);
 		g.drawLine( getSize().width - inset, center_y, inset, center_y + half_length);
 	}
 	
@@ -364,14 +366,14 @@ public class OneTouchCollapseResizer extends JResizer {
 		int[] y = new int[]{inset, getSize().height - inset, getSize().height - inset};
 		int[] x = new int[]{center_x, center_x-half_length, center_x + half_length};
 		
-		g.setColor(Color.DARK_GRAY);
+		g.setColor(DocearUiTheme.TEXT_MUTED);
 		g.fillPolygon(x, y, 3);
 		
-		g.setColor(Color.GRAY);
+		g.setColor(DocearUiTheme.HAIRLINE);
 		g.drawLine(center_x + half_length, getSize().height - inset, center_x, inset);		
-		g.setColor(Color.DARK_GRAY);
+		g.setColor(DocearUiTheme.TEXT_MUTED);
 		g.drawLine(center_x, inset, center_x - half_length, getSize().height - inset);
-		g.setColor(Color.LIGHT_GRAY);
+		g.setColor(DocearUiTheme.SURFACE_SOFT);
 		g.drawLine(center_x - half_length, getSize().height - inset, center_x + half_length, getSize().height - inset);
 		
 	}
@@ -380,14 +382,14 @@ public class OneTouchCollapseResizer extends JResizer {
 		int[] y = new int[]{inset, inset, getSize().height - inset};
 		int[] x = new int[]{center_x+half_length, center_x-half_length, center_x};
 		
-		g.setColor( Color.DARK_GRAY);
+		g.setColor( DocearUiTheme.TEXT_MUTED);
 		g.fillPolygon(x,y,3);
 		
-		g.setColor(Color.GRAY);
+		g.setColor(DocearUiTheme.HAIRLINE);
 		g.drawLine( center_x - half_length, inset, center_x, getSize().height- inset);
-		g.setColor( Color.DARK_GRAY);
+		g.setColor( DocearUiTheme.TEXT_MUTED);
 		g.drawLine( center_x + half_length, inset, center_x - half_length, inset);
-		g.setColor( Color.LIGHT_GRAY);
+		g.setColor( DocearUiTheme.SURFACE_SOFT);
 		g.drawLine(center_x,  getSize().height - inset, center_x + half_length, inset);
 	}
 	

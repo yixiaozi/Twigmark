@@ -1,5 +1,7 @@
 package org.freeplane.view.swing.features.time.mindmapmode;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Color;
@@ -377,7 +379,7 @@ final class ReminderCalendarPanel extends JPanel {
 
 	private JPanel createDayColumn(final long dayStart, final List dayEntries) {
 		final JPanel column = new JPanel(new BorderLayout(2, 2));
-		column.setBorder(BorderFactory.createEtchedBorder());
+		column.setBorder(DocearUiTheme.hairlineBorder());
 		final Calendar cal = Calendar.getInstance(Locale.CHINA);
 		cal.setTimeInMillis(dayStart);
 		final JLabel header = new JLabel(WEEK_HEADERS[(cal.get(Calendar.DAY_OF_WEEK) + 5) % 7] + " "
@@ -415,10 +417,10 @@ final class ReminderCalendarPanel extends JPanel {
 			});
 		}
 		if (dayStart == selectedDayStart && viewMode != MODE_DAY) {
-			column.setBackground(new Color(220, 235, 255));
+			column.setBackground(DocearUiTheme.ACCENT_WASH);
 		}
 		if (dayStart == ReminderCycleScheduler.startOfDay(System.currentTimeMillis())) {
-			column.setBorder(BorderFactory.createLineBorder(new Color(0, 120, 215), 2));
+			column.setBorder(BorderFactory.createLineBorder(DocearUiTheme.ACCENT, 2));
 		}
 		return column;
 	}
@@ -429,13 +431,13 @@ final class ReminderCalendarPanel extends JPanel {
 		final JButton button = new JButton(text);
 		button.setMargin(new java.awt.Insets(2, 2, 2, 2));
 		if (dayStart == selectedDayStart) {
-			button.setBackground(new Color(180, 210, 255));
+			button.setBackground(DocearUiTheme.SELECTION);
 		}
 		else if (count > 0) {
-			button.setForeground(new Color(0, 102, 153));
+			button.setForeground(DocearUiTheme.ACCENT_DEEP);
 		}
 		if (dayStart == ReminderCycleScheduler.startOfDay(System.currentTimeMillis())) {
-			button.setBorder(BorderFactory.createLineBorder(new Color(0, 120, 215), 2));
+			button.setBorder(BorderFactory.createLineBorder(DocearUiTheme.ACCENT, 2));
 		}
 		button.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {

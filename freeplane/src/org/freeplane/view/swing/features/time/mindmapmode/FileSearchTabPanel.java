@@ -22,6 +22,8 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
+
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
@@ -50,14 +52,13 @@ public class FileSearchTabPanel extends JPanel {
 	public FileSearchTabPanel() {
 		super(new BorderLayout(4, 4));
 		
+		
+		DocearUiTheme.styleCanvas(this);
 		JPanel searchPanel = new JPanel(new BorderLayout(4, 0));
 		searchPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 2, 4));
 		
-		searchField.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(Color.GRAY),
-			BorderFactory.createEmptyBorder(4, 8, 4, 8)
-		));
-		searchField.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+		DocearUiTheme.styleSearchField(searchField);
+		
 		searchField.setToolTipText("输入文件名关键字（空格分隔多个）");
 		searchField.getDocument().addDocumentListener(new DocumentListener() {
 			public void changedUpdate(DocumentEvent e) { performSearch(); }
@@ -77,7 +78,8 @@ public class FileSearchTabPanel extends JPanel {
 		searchPanel.add(searchField, BorderLayout.CENTER);
 		
 		statusLabel.setFont(new Font("微软雅黑", Font.PLAIN, 11));
-		statusLabel.setForeground(Color.GRAY);
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		statusLabel.setFont(DocearUiTheme.font(12f));
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
 		statusLabel.setText("就绪");
 		

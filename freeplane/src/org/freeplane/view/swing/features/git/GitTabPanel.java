@@ -205,8 +205,8 @@ public class GitTabPanel extends JPanel {
 		pushButton.setText(status.needsPush() ? LABEL_PUSH + " \u2191" + status.ahead : LABEL_PUSH);
 		pullButton.setToolTipText(status.needsPull() ? "远端有 " + status.behind + " 个新提交待拉取" : LABEL_PULL);
 		pushButton.setToolTipText(status.needsPush() ? "本地有 " + status.ahead + " 个提交待推送" : LABEL_PUSH);
-		pullButton.setForeground(status.needsPull() ? new Color(0, 102, 204) : null);
-		pushButton.setForeground(status.needsPush() ? new Color(0, 128, 0) : null);
+		pullButton.setForeground(status.needsPull() ? DocearUiTheme.ACCENT_DEEP : DocearUiTheme.TEXT_MUTED);
+		pushButton.setForeground(status.needsPush() ? DocearUiTheme.SUCCESS : DocearUiTheme.TEXT_MUTED);
 	}
 
 	private void updateStatusWithSync(final GitSyncStatus status) {
@@ -290,8 +290,13 @@ public class GitTabPanel extends JPanel {
 		descriptionPanel.add(new JLabel("Description"), BorderLayout.NORTH);
 		descriptionArea.setLineWrap(true);
 		descriptionArea.setWrapStyleWord(true);
-		descriptionArea.setBorder(BorderFactory.createEtchedBorder());
+		descriptionArea.setBorder(BorderFactory.createCompoundBorder(
+				DocearUiTheme.hairlineBorder(),
+				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+		descriptionArea.setFont(DocearUiTheme.font(12f));
+		descriptionArea.setBackground(DocearUiTheme.SURFACE);
 		final JScrollPane descScroll = new JScrollPane(descriptionArea);
+		DocearUiTheme.styleScrollPane(descScroll);
 		descScroll.setPreferredSize(new Dimension(100, 52));
 		descScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
 		descriptionPanel.add(descScroll, BorderLayout.CENTER);
@@ -875,13 +880,13 @@ public class GitTabPanel extends JPanel {
 			if (column == 1 && row < changes.size()) {
 				switch (changes.get(row).getStatus()) {
 				case ADDED:
-					setForeground(new Color(0, 128, 0));
+					setForeground(DocearUiTheme.SUCCESS);
 					break;
 				case DELETED:
-					setForeground(Color.RED);
+					setForeground(DocearUiTheme.DANGER);
 					break;
 				default:
-					setForeground(new Color(192, 128, 0));
+					setForeground(DocearUiTheme.WARNING);
 					break;
 				}
 			} else if (!isSelected) {

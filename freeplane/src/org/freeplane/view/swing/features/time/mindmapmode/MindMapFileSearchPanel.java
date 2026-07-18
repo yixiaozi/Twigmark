@@ -34,6 +34,7 @@ import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.border.Border;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.SideTabMetricKeys;
@@ -68,11 +69,10 @@ public class MindMapFileSearchPanel extends JPanel {
 	public MindMapFileSearchPanel() {
 		super(new BorderLayout(4, 4));
 		
-		searchField.setBorder(BorderFactory.createCompoundBorder(
-			BorderFactory.createLineBorder(Color.GRAY),
-			BorderFactory.createEmptyBorder(4, 8, 4, 8)
-		));
-		searchField.setFont(new Font("微软雅黑", Font.PLAIN, 14));
+		
+		DocearUiTheme.styleCanvas(this);
+		DocearUiTheme.styleSearchField(searchField);
+		
 		searchField.setToolTipText("输入关键词搜索文件名，清空后显示最近修改的文件");
 		
 		searchField.addKeyListener(new KeyAdapter() {
@@ -100,13 +100,14 @@ public class MindMapFileSearchPanel extends JPanel {
 			}
 		});
 		
-		statusLabel.setFont(new Font("微软雅黑", Font.PLAIN, 12));
-		statusLabel.setForeground(Color.GRAY);
+		statusLabel.setFont(DocearUiTheme.font(12f));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		statusLabel.setFont(DocearUiTheme.font(12f));
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(4, 8, 4, 8));
 		
 		resultList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
-			private final Border lineBorder = BorderFactory.createMatteBorder(0, 0, 1, 0, new Color(230, 230, 230));
+			private final Border lineBorder = BorderFactory.createMatteBorder(0, 0, 1, 0, DocearUiTheme.HAIRLINE);
 			private final Border padding = BorderFactory.createEmptyBorder(2, 4, 2, 4);
 			private final SimpleDateFormat thisYearFormat = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
 			private final SimpleDateFormat otherYearFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
@@ -134,30 +135,31 @@ public class MindMapFileSearchPanel extends JPanel {
 					
 					String html = "<html><table width='100%' style='table-layout:fixed'><tr>" +
 						"<td align='left' style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>" +
-						"<span style='color:#3366cc;font-weight:bold'>" + escapeHtml(fileName) + "</span>" +
+						"<span style='color:#0F766E;font-weight:bold'>" + escapeHtml(fileName) + "</span>" +
 						"</td>" +
-						"<td align='right' style='white-space:nowrap;font-size:10px;color:#999999;padding-left:8px'>" + modifiedTime + "</td>" +
+						"<td align='right' style='white-space:nowrap;font-size:10px;color:#94A3B8;padding-left:8px'>" + modifiedTime + "</td>" +
 						"</tr></table></html>";
 					
 					setText(html);
 					setBorder(BorderFactory.createCompoundBorder(lineBorder, padding));
 					
 					if (isSelected) {
-						setBackground(new Color(100, 149, 237));
-						setForeground(Color.WHITE);
+						setBackground(DocearUiTheme.ACCENT_WASH);
+						setForeground(DocearUiTheme.TEXT);
 					} else {
-						setBackground(Color.WHITE);
+						setBackground(DocearUiTheme.SURFACE);
 						setForeground(Color.BLACK);
 					}
 				}
 				return this;
 			}
 		});
-		resultList.setSelectionBackground(new Color(100, 149, 237));
-		resultList.setSelectionForeground(Color.WHITE);
-		resultList.setBackground(Color.WHITE);
+		resultList.setSelectionBackground(DocearUiTheme.ACCENT_WASH);
+		resultList.setSelectionForeground(DocearUiTheme.TEXT);
+		resultList.setBackground(DocearUiTheme.SURFACE);
+		resultList.setFont(DocearUiTheme.font(13f));
 		resultList.setBorder(null);
-		resultList.setFont(new Font("微软雅黑", Font.PLAIN, 12));
+		resultList.setFont(DocearUiTheme.font(12f));
 		resultList.setFixedCellHeight(28);
 		
 		resultList.addKeyListener(new KeyAdapter() {

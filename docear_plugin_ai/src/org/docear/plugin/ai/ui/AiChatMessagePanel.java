@@ -1,5 +1,7 @@
 package org.docear.plugin.ai.ui;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -56,7 +58,7 @@ public class AiChatMessagePanel extends JPanel {
         setBorder(BorderFactory.createEmptyBorder(4, 4, 8, 4));
 
         String title = role == AiChatMessage.Role.USER ? "\u4f60" : "AI";
-        Color bg = role == AiChatMessage.Role.USER ? new Color(232, 244, 255) : new Color(245, 255, 240);
+        Color bg = role == AiChatMessage.Role.USER ? new Color(0xE0, 0xF2, 0xFE) : DocearUiTheme.ACCENT_WASH;
         setBackground(bg);
         setOpaque(true);
 
@@ -96,14 +98,14 @@ public class AiChatMessagePanel extends JPanel {
         thinkingToggle.setContentAreaFilled(false);
         thinkingToggle.setFocusPainted(false);
         thinkingToggle.setFont(thinkingToggle.getFont().deriveFont(10f));
-        thinkingToggle.setForeground(new Color(100, 100, 100));
+        thinkingToggle.setForeground(DocearUiTheme.TEXT_MUTED);
         thinkingToggle.setVisible(false);
         thinkingArea = new JTextArea();
         thinkingArea.setEditable(false);
         thinkingArea.setLineWrap(true);
         thinkingArea.setWrapStyleWord(true);
-        thinkingArea.setBackground(new Color(236, 236, 236));
-        thinkingArea.setForeground(new Color(80, 80, 80));
+        thinkingArea.setBackground(DocearUiTheme.SURFACE_SOFT);
+        thinkingArea.setForeground(DocearUiTheme.TEXT_MUTED);
         thinkingArea.setFont(thinkingArea.getFont().deriveFont(10f));
         thinkingArea.setBorder(BorderFactory.createEmptyBorder(2, 8, 4, 6));
         thinkingArea.setVisible(false);
