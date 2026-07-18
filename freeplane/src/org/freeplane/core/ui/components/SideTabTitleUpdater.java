@@ -37,6 +37,7 @@ public final class SideTabTitleUpdater {
 			refreshTitles();
 		}
 	};
+	private boolean refreshingTitles;
 	private Timer pollTimer;
 	private static Runnable leftMetricsRefreshHook;
 
@@ -100,35 +101,44 @@ public final class SideTabTitleUpdater {
 			SwingUtilities.invokeLater(refreshRunnable);
 			return;
 		}
-		if (leftMetricsRefreshHook != null) {
-			try {
-				leftMetricsRefreshHook.run();
-			}
-			catch (final Exception e) {
-				LogUtils.warn("Left tab metrics hook failed: " + e.getMessage());
-			}
+		if (refreshingTitles) {
+			return;
 		}
-		final int count = Math.min(tabs.getTabCount(), Math.min(baseTitles.size(), metricKeys.size()));
-		for (int i = 0; i < count; i++) {
-			final String baseTitle = (String) baseTitles.get(i);
-			final String metricKey = (String) metricKeys.get(i);
-			final int value = metricKey != null && metricKey.length() > 0
-			    ? SideTabMetricRegistry.get(metricKey, 0)
-			    : -1;
-			tabs.setTitleAt(i, TabCountLabels.format(baseTitle, value));
-			final boolean selected = i == tabs.getSelectedIndex();
-			if (value >= 0) {
-				tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value, null, selected));
+		refreshingTitles = true;
+		try {
+			if (leftMetricsRefreshHook != null) {
+				try {
+					leftMetricsRefreshHook.run();
+				}
+				catch (final Exception e) {
+					LogUtils.warn("Left tab metrics hook failed: " + e.getMessage());
+				}
 			}
-			else {
-				tabs.setTabComponentAt(i, null);
+			final int count = Math.min(tabs.getTabCount(), Math.min(baseTitles.size(), metricKeys.size()));
+			for (int i = 0; i < count; i++) {
+				final String baseTitle = (String) baseTitles.get(i);
+				final String metricKey = (String) metricKeys.get(i);
+				final int value = metricKey != null && metricKey.length() > 0
+				    ? SideTabMetricRegistry.get(metricKey, 0)
+				    : -1;
+				tabs.setTitleAt(i, TabCountLabels.format(baseTitle, value));
+				final boolean selected = i == tabs.getSelectedIndex();
+				if (value >= 0) {
+					tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value, null, selected));
+				}
+				else {
+					tabs.setTabComponentAt(i, null);
+				}
 			}
+			if (widthApplier != null) {
+				widthApplier.run();
+			}
+			tabs.revalidate();
+			tabs.repaint();
 		}
-		if (widthApplier != null) {
-			widthApplier.run();
+		finally {
+			refreshingTitles = false;
 		}
-		tabs.revalidate();
-		tabs.repaint();
 	}
 
 	private void startPolling() {

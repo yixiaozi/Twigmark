@@ -114,50 +114,54 @@ public final class DocearUiTheme {
 			UIManager.put("ToolBar.background", SURFACE);
 			UIManager.put("ToolBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
 
-			// FlatLaf tabs (bottom map strip + panes that keep FlatLaf UI): card / pill.
+			// Shared tab chrome (safe for any L&F). FlatLaf-only keys applied below.
 			UIManager.put("TabbedPane.background", TAB_WELL);
 			UIManager.put("TabbedPane.contentAreaColor", SURFACE);
 			UIManager.put("TabbedPane.selected", TAB_SELECTED);
-			UIManager.put("TabbedPane.underlineColor", ACCENT);
 			UIManager.put("TabbedPane.selectedBackground", TAB_SELECTED);
-			UIManager.put("TabbedPane.focusColor", ACCENT);
-			UIManager.put("TabbedPane.hoverColor", SURFACE_SOFT);
 			UIManager.put("TabbedPane.foreground", TEXT_MUTED);
-			UIManager.put("TabbedPane.selectedForeground", TEXT);
 			UIManager.put("TabbedPane.tabInsets", new Insets(7, 12, 7, 12));
 			UIManager.put("TabbedPane.selectedTabPadInsets", new Insets(0, 0, 0, 0));
 			UIManager.put("TabbedPane.tabAreaInsets", new Insets(6, 6, 4, 6));
 			UIManager.put("TabbedPane.contentBorderInsets", new Insets(0, 0, 0, 0));
-			UIManager.put("TabbedPane.showTabSeparators", Boolean.FALSE);
-			UIManager.put("TabbedPane.showContentSeparator", Boolean.FALSE);
-			UIManager.put("TabbedPane.tabType", "card");
-			UIManager.put("TabbedPane.tabHeight", Integer.valueOf(30));
-			UIManager.put("TabbedPane.tabArc", Integer.valueOf(12));
-			UIManager.put("TabbedPane.cardTabArc", Integer.valueOf(12));
-			UIManager.put("TabbedPane.tabSelectionHeight", Integer.valueOf(0));
-			UIManager.put("TabbedPane.cardTabSelectionHeight", Integer.valueOf(0));
 			UIManager.put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
 
 			UIManager.put("Button.arc", Integer.valueOf(10));
 			UIManager.put("Component.arc", Integer.valueOf(10));
 			UIManager.put("TextComponent.arc", Integer.valueOf(10));
-			UIManager.put("ScrollBar.thumbArc", Integer.valueOf(999));
-			UIManager.put("ScrollBar.trackArc", Integer.valueOf(999));
-			UIManager.put("ScrollBar.width", Integer.valueOf(9));
-			UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
-			UIManager.put("ScrollBar.trackInsets", new Insets(2, 2, 2, 2));
-			UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
-			UIManager.put("ScrollBar.track", new Color(0, 0, 0, 0));
-			UIManager.put("ScrollBar.thumb", SCROLL_THUMB);
-			UIManager.put("ScrollBar.hoverThumbColor", new Color(0x8E, 0x99, 0xA8));
-			UIManager.put("ScrollBar.pressedThumbColor", new Color(0x78, 0x84, 0x94));
-			UIManager.put("ScrollBar.minimumThumbSize", new java.awt.Dimension(18, 18));
-			// Force thin pill scrollbar globally (overrides chunky platform bars).
-			UIManager.put("ScrollBarUI", DocearScrollBarUI.class.getName());
 			UIManager.put("Component.focusWidth", Integer.valueOf(1));
 			UIManager.put("Component.innerFocusWidth", Integer.valueOf(0));
 			UIManager.put("Component.accentColor", ACCENT);
 			UIManager.put("@accentColor", ACCENT);
+
+			// IMPORTANT: never put ScrollBarUI class name into UIManager — OSGi / system L&F
+			// classloaders often cannot load org.freeplane.* and the first JScrollBar then aborts startup.
+			if (isFlatLafActive()) {
+				UIManager.put("TabbedPane.underlineColor", ACCENT);
+				UIManager.put("TabbedPane.focusColor", ACCENT);
+				UIManager.put("TabbedPane.hoverColor", SURFACE_SOFT);
+				UIManager.put("TabbedPane.selectedForeground", TEXT);
+				UIManager.put("TabbedPane.showTabSeparators", Boolean.FALSE);
+				UIManager.put("TabbedPane.showContentSeparator", Boolean.FALSE);
+				UIManager.put("TabbedPane.tabType", "card");
+				UIManager.put("TabbedPane.tabHeight", Integer.valueOf(30));
+				UIManager.put("TabbedPane.tabArc", Integer.valueOf(12));
+				UIManager.put("TabbedPane.cardTabArc", Integer.valueOf(12));
+				UIManager.put("TabbedPane.tabSelectionHeight", Integer.valueOf(0));
+				UIManager.put("TabbedPane.cardTabSelectionHeight", Integer.valueOf(0));
+
+				UIManager.put("ScrollBar.thumbArc", Integer.valueOf(999));
+				UIManager.put("ScrollBar.trackArc", Integer.valueOf(999));
+				UIManager.put("ScrollBar.width", Integer.valueOf(9));
+				UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
+				UIManager.put("ScrollBar.trackInsets", new Insets(2, 2, 2, 2));
+				UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+				UIManager.put("ScrollBar.track", CANVAS);
+				UIManager.put("ScrollBar.thumb", SCROLL_THUMB);
+				UIManager.put("ScrollBar.hoverThumbColor", new Color(0x8E, 0x99, 0xA8));
+				UIManager.put("ScrollBar.pressedThumbColor", new Color(0x78, 0x84, 0x94));
+				UIManager.put("ScrollBar.minimumThumbSize", new java.awt.Dimension(18, 18));
+			}
 
 			UIManager.put("Button.background", SURFACE);
 			UIManager.put("Button.foreground", TEXT);

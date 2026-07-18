@@ -33,9 +33,14 @@ public final class TabbedPaneStableOrder {
 		if (tabs == null) {
 			return;
 		}
-		UIManager.getDefaults().put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
-		DocearUiTheme.styleTabbedPane(tabs);
-		apply(tabs);
+		try {
+			UIManager.getDefaults().put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
+			DocearUiTheme.styleTabbedPane(tabs);
+			apply(tabs);
+		}
+		catch (Throwable t) {
+			// Style must never prevent startup.
+		}
 	}
 
 	private static void apply(final JTabbedPane tabs) {
@@ -52,7 +57,7 @@ public final class TabbedPaneStableOrder {
 			tabs.setUI(new StableOrderTabbedPaneUI());
 			tabs.putClientProperty(MARKER, Boolean.TRUE);
 		}
-		catch (Exception e) {
+		catch (Throwable t) {
 			// leave default UI if customization fails
 		}
 		finally {
