@@ -23,8 +23,7 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_LOG_PROMPT = "ai.log_prompt";
     private static final String AI_LOGS_DIR_NAME = "ai_logs";
     private static final String LOG_DIR_NAME = "logs";
-    private static final String DEFAULT_FULL_HISTORY_DIR =
-            "E:\\yixiaozi\\_data\\17DAB3A24CC7NGK3HWY5ERX3AURZZAJ2PT99";
+    private static final String INTERACTION_HISTORY_DIR_NAME = "interaction_history";
     private static final String PROPERTY_AI_MAX_CONTEXT_TURNS = "ai.max_context_turns";
     private static final String PROPERTY_AI_MAX_CONTEXT_CHARS = "ai.max_context_chars";
     private static final String PROPERTY_AI_MAX_MM_CHAT_ROUNDS = "ai.max_mm_chat_rounds";
@@ -49,8 +48,7 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_MCP_ENABLED = "ai.mcp.enabled";
     private static final String PROPERTY_AI_MCP_URL = "ai.mcp.url";
     private static final String DEFAULT_MCP_URL = "http://127.0.0.1:7720/mcp";
-    private static final String DEFAULT_WORKSPACE_SNAPSHOT_DIR =
-            "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\.AI\u8bf7\u67e5\u770b\u8fd9\u91cc";
+    private static final String WORKSPACE_SNAPSHOT_DIR_NAME = "workspace_snapshots";
 
     public DocearAiConfig() {
     }
@@ -80,15 +78,19 @@ public class DocearAiConfig {
     }
 
     public String getDefaultPromptTemplateFile() {
-        return "E:\\yixiaozi\\00\u7edf\u9886\u5168\u5c40\\AI\u63d0\u793a\u8bcd.mm";
+        return getAiHomeDirectory() + File.separator + PROMPT_FILE_NAME;
     }
 
     public String getDefaultInteractionLogDirectory() {
-        return DEFAULT_FULL_HISTORY_DIR;
+        return getAiHomeDirectory() + File.separator + INTERACTION_HISTORY_DIR_NAME;
     }
 
     public String getDefaultLocalLogDirectory() {
         return getAiHomeDirectory() + File.separator + LOG_DIR_NAME;
+    }
+
+    public String getDefaultWorkspaceSnapshotDirectory() {
+        return getAiHomeDirectory() + File.separator + WORKSPACE_SNAPSHOT_DIR_NAME;
     }
 
     public String getPromptTemplateFile() {
@@ -290,7 +292,7 @@ public class DocearAiConfig {
 
     public String getWorkspaceSnapshotDirectory() {
         return ResourceController.getResourceController().getProperty(
-                PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR, DEFAULT_WORKSPACE_SNAPSHOT_DIR);
+                PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR, getDefaultWorkspaceSnapshotDirectory());
     }
 
     public int getWorkspaceSnapshotDebounceMs() {

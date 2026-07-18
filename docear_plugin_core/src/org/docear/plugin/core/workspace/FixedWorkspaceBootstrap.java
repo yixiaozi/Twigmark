@@ -13,8 +13,9 @@ import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 /**
- * Ensures the single fixed workspace project at {@link MindMapDataRootResolver#FIXED_DATA_ROOT_PATH}
- * is loaded and maps are attached to it without any project wizard.
+ * When a library root is configured ({@link MindMapDataRootResolver#getLibraryDataRoot()}),
+ * ensures that workspace project is loaded and maps can attach to it without a project wizard.
+ * With no library configured, this is a no-op (portable product default).
  */
 public final class FixedWorkspaceBootstrap {
 
@@ -29,8 +30,8 @@ public final class FixedWorkspaceBootstrap {
 		if (project != null) {
 			WorkspaceController.getMapModelExtension(map).setProject(project);
 			try {
-				LogUtils.info("attached map \"" + map.getTitle() + "\" to fixed project at "
-				        + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
+				LogUtils.info("attached map \"" + map.getTitle() + "\" to library project at "
+				        + project.getProjectHome());
 			}
 			catch (final Exception e) {
 				// ignore
@@ -40,13 +41,17 @@ public final class FixedWorkspaceBootstrap {
 	}
 
 	public static AWorkspaceProject getOrLoadFixedProject() {
-		File dataRoot = MindMapDataRootResolver.getFixedDataRoot();
+		final File dataRoot = MindMapDataRootResolver.getLibraryDataRoot();
 		if (dataRoot == null) {
-			dataRoot = new File(MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
-			if (!dataRoot.exists() && !dataRoot.mkdirs()) {
-				LogUtils.severe("Could not create fixed data root: " + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
-				return null;
-			}
+			return null;
+		}
+		if (!dataRoot.exists() && !dataRoot.mkdirs()) {
+			LogUtils.severe("Could not create library data root: " + dataRoot.getAbsolutePath());
+			return null;
+		}
+		if (!dataRoot.isDirectory()) {
+			LogUtils.severe("Library data root is not a directory: " + dataRoot.getAbsolutePath());
+			return null;
 		}
 		try {
 			final AWorkspaceProject existing = findProjectByHome(dataRoot);

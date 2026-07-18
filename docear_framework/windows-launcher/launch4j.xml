@@ -2,7 +2,7 @@
   <dontWrapJar>true</dontWrapJar>
   <headerType>gui</headerType>
   <jar>framework.jar</jar>
-  <outfile>C:\Users\Anwender\Documents\DocearWorkspace\trunk\docear_framework\build\docear.exe</outfile>
+  <outfile>../build/docear.exe</outfile>
   <errTitle></errTitle>
   <cmdLine>-xargs &quot;props.xargs&quot; -xargs &quot;init.xargs&quot;</cmdLine>
   <chdir></chdir>
@@ -12,7 +12,7 @@
   <customProcName>false</customProcName>
   <stayAlive>false</stayAlive>
   <manifest></manifest>
-  <icon>C:\Users\Anwender\Documents\DocearWorkspace\trunk\docear_resources\images\icons\icon-windows_all_sizes_combined.ico</icon>
+  <icon>docear.ico</icon>
   <jre>
     <path></path>
     <minVersion>1.6.0</minVersion>
@@ -26,6 +26,6 @@
     <opt>-Dorg.freeplane.param1=%~2%</opt>
     <opt>-Dorg.freeplane.param3=%~3%</opt>
     <opt>-Dorg.freeplane.param4=%~4%</opt>
-    <opt>-Dorg.freeplane.userfpdir=E:/yixiaozi/_data</opt>
+    <opt>-Dorg.freeplane.userfpdir=&quot;%APPDATA%\\Docear&quot;</opt>
   </jre>
 </launch4jConfig>

@@ -40,7 +40,14 @@ public final class GitRemoteTest {
 		if (args.length > 0 && !args[0].startsWith("--")) {
 			return new File(args[0]);
 		}
-		return new File("E:\\yixiaozi");
+		final String envRepo = System.getenv("DOCEAR_GIT_TEST_REPO");
+		if (envRepo != null && envRepo.trim().length() > 0) {
+			return new File(envRepo.trim());
+		}
+		System.err.println("Usage: GitRemoteTest <repo-path> [--pause]");
+		System.err.println("Or set DOCEAR_GIT_TEST_REPO to a git repository path.");
+		System.exit(1);
+		return null;
 	}
 
 	private static void testFileSizes(final File repo) {

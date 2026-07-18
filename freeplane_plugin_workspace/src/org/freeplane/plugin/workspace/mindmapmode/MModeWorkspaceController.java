@@ -1331,10 +1331,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private void loadFixedDataRootProject() {
-		final File dataRoot = MindMapDataRootResolver.getFixedDataRoot();
+		final File dataRoot = MindMapDataRootResolver.getLibraryDataRoot();
 		if (dataRoot == null) {
-			LogUtils.severe("Fixed data root is missing or not a directory: "
-			        + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
+			LogUtils.info("No library data root configured; using workspace projects only.");
+			return;
+		}
+		if (!dataRoot.isDirectory() && !dataRoot.mkdirs()) {
+			LogUtils.severe("Library data root is missing or not a directory: " + dataRoot.getAbsolutePath());
 			return;
 		}
 		try {

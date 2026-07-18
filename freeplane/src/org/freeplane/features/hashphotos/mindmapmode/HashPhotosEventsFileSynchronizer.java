@@ -29,8 +29,11 @@ public final class HashPhotosEventsFileSynchronizer {
 	}
 
 	public static void main(final String[] args) throws Exception {
-		final File mapFile = args.length > 0 ? new File(args[0]) : new File("E:\\yixiaozi\\07"
-		        + "\u6761\u4e0d\u7eb9\u6709\u6761" + "\\02\u65f6\u95f4\u7ba1\u7406\\Hash Photos.mm");
+		if (args.length == 0) {
+			System.err.println("Usage: HashPhotosEventsFileSynchronizer <path-to-Hash Photos.mm>");
+			System.exit(1);
+		}
+		final File mapFile = new File(args[0]);
 		final SyncReport report = syncFile(mapFile, true);
 		System.out.println("Hash Photos file sync: +" + report.added);
 		System.out.println("File: " + mapFile.getAbsolutePath());

@@ -590,7 +590,7 @@ public class GitTabPanel extends JPanel {
 							if (repository != null) {
 								statusLabel.setText("仓库: " + repository.getAbsolutePath() + " - 发现 " + loaded.size() + " 个修改");
 							} else {
-								statusLabel.setText("未找到 Git 仓库，请在 %APPDATA%\\Docear\\git.local.properties 中设置 git.repo.path=E:\\yixiaozi");
+								statusLabel.setText("未找到 Git 仓库，请在用户配置目录的 git.local.properties 中设置 git.repo.path=<仓库路径>");
 							}
 							if (unchanged) {
 								selectAllCheckBox.setSelected(!loaded.isEmpty());

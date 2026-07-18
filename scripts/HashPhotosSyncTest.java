@@ -23,8 +23,11 @@ public class HashPhotosSyncTest {
     }
 
     public static void main(String[] args) throws Exception {
-        File mapFile = args.length > 0 ? new File(args[0]) : new File(
-                "E:\\yixiaozi\\07有条不紊\\02时间管理\\Hash Photos.mm");
+        if (args.length == 0) {
+            System.err.println("Usage: HashPhotosSyncTest <path-to-Hash Photos.mm>");
+            System.exit(1);
+        }
+        File mapFile = new File(args[0]);
         File exportDir = new File(mapFile.getParentFile(), ".files" + File.separator + "Hash Photos");
         File csvFile = findLatestCsv(exportDir);
         if (csvFile == null) {

@@ -15,8 +15,6 @@ import org.freeplane.core.util.LogUtils;
 public final class GitPostCommitScriptRunner {
 
 	public static final String POST_COMMIT_SCRIPT_PROPERTY = "git.post_commit_script";
-	private static final String DEFAULT_SCRIPT_PATH =
-	    "E:\\Develop\\BlogSystemFromMindMap\\scripts\\publish-blog.ps1";
 
 	private GitPostCommitScriptRunner() {
 	}
@@ -33,7 +31,7 @@ public final class GitPostCommitScriptRunner {
 
 	private static void runIfScriptExists() {
 		final String configured = ResourceController.getResourceController().getProperty(
-		    POST_COMMIT_SCRIPT_PROPERTY, DEFAULT_SCRIPT_PATH);
+		    POST_COMMIT_SCRIPT_PROPERTY, "");
 		if (configured == null || configured.trim().length() == 0) {
 			return;
 		}

@@ -20,7 +20,9 @@ public final class TodoistConfig {
 	public static final String PROP_AUTO_SYNC_INTERVAL_MINUTES = "todoist.auto_sync.interval_minutes";
 	public static final String DEFAULT_PROJECT_NAME = "Docear";
 	public static final String DEFAULT_LABEL = "Docear";
-	public static final String DEFAULT_IMPORT_TARGET = "E:\\yixiaozi\\00统领全局\\todolist.mm";
+	/** Empty until the user configures a path (or a library root provides a default). */
+	public static final String DEFAULT_IMPORT_TARGET = "";
+	public static final String DEFAULT_IMPORT_FILENAME = "todolist.mm";
 	public static final String DEFAULT_AUTO_SYNC = "true";
 	public static final String DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = "5";
 	/** Node attribute linking an imported (or pushed) mind-map node to a Todoist task id. */
@@ -95,22 +97,33 @@ public final class TodoistConfig {
 
 	public static File getImportTargetFile() {
 		String path = ResourceController.getResourceController().getProperty(PROP_IMPORT_TARGET, DEFAULT_IMPORT_TARGET);
-		if (path == null || path.trim().length() == 0) {
-			path = DEFAULT_IMPORT_TARGET;
+		if (path != null) {
+			path = path.trim();
 		}
-		path = path.trim();
 		String fromLocal = loadLocalProperty(PROP_IMPORT_TARGET, "").trim();
 		if (fromLocal.length() > 0) {
 			path = fromLocal;
 		}
+		if (path == null || path.length() == 0) {
+			return resolveDefaultImportTargetFile();
+		}
 		return new File(path);
 	}
 
-	public static void setImportTargetFile(String path) {
-		String trimmed = path == null ? DEFAULT_IMPORT_TARGET : path.trim();
-		if (trimmed.length() == 0) {
-			trimmed = DEFAULT_IMPORT_TARGET;
+	/**
+	 * Prefer {@code {library}/todolist.mm} when a library root is configured; otherwise
+	 * {@code {userProfile}/todolist.mm}.
+	 */
+	public static File resolveDefaultImportTargetFile() {
+		final File libraryRoot = org.freeplane.core.util.MindMapDataRootResolver.getLibraryDataRoot();
+		if (libraryRoot != null) {
+			return new File(libraryRoot, DEFAULT_IMPORT_FILENAME);
 		}
+		return new File(Compat.getApplicationUserDirectory(), DEFAULT_IMPORT_FILENAME);
+	}
+
+	public static void setImportTargetFile(String path) {
+		String trimmed = path == null ? "" : path.trim();
 		ResourceController.getResourceController().setProperty(PROP_IMPORT_TARGET, trimmed);
 		saveLocalProperty(PROP_IMPORT_TARGET, trimmed);
 	}
