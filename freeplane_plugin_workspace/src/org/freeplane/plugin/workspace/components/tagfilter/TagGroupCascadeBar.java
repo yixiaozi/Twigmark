@@ -1,5 +1,7 @@
 package org.freeplane.plugin.workspace.components.tagfilter;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -60,7 +62,7 @@ public class TagGroupCascadeBar extends JPanel {
 	private static final Color GROUP_PATH_BORDER = new Color(0x80CBC4);
 	private static final Color GROUP_HOVER_BG = new Color(0xEEF3F6);
 	private static final Color GROUP_IDLE_BORDER = new Color(0xD0D7DE);
-	private static final Color GROUP_ACCENT = new Color(0x00897B);
+	private static final Color GROUP_ACCENT = DocearUiTheme.ACCENT;
 	private static final Color GROUP_MUTED_FG = new Color(0x546E7A);
 	private static final Color GROUP_FG = new Color(0x263238);
 	private static final Color ADD_BUTTON_BG = new Color(0xECEFF1);

@@ -37,6 +37,7 @@ import javax.swing.DefaultCellEditor;
 import javax.swing.table.AbstractTableModel;
 import javax.swing.table.DefaultTableCellRenderer;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -45,10 +46,10 @@ public class GitTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
 	private final JLabel statusLabel = new JLabel("就绪");
-	private final JButton refreshButton = new JButton("刷新");
-	private final JButton pullButton = new JButton("拉取");
-	private final JButton pushButton = new JButton("推送");
-	private final JButton commitButton = new JButton("提交");
+	private final JButton refreshButton = DocearUiTheme.softButton("刷新");
+	private final JButton pullButton = DocearUiTheme.softButton("拉取");
+	private final JButton pushButton = DocearUiTheme.softButton("推送");
+	private final JButton commitButton = DocearUiTheme.primaryButton("提交");
 	private final JCheckBox selectAllCheckBox = new JCheckBox("全选", true);
 	private final JTextField summaryField = new JTextField();
 	private final JTextArea descriptionArea = new JTextArea(2, 20);
@@ -72,7 +73,9 @@ public class GitTabPanel extends JPanel {
 	private static final String LABEL_REFRESH = "刷新";
 
 	public GitTabPanel() {
-		super(new BorderLayout(4, 4));
+		super(new BorderLayout(8, 8));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
 		buildUi();
 		wireEvents();
 		startSyncTimer();
@@ -82,10 +85,18 @@ public class GitTabPanel extends JPanel {
 
 	private void buildUi() {
 		final JPanel toolbar = new JPanel(new BorderLayout(4, 0));
+		toolbar.setOpaque(true);
+		toolbar.setBackground(DocearUiTheme.SURFACE);
+		toolbar.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
+				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
 		statusLabel.setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+		statusLabel.setFont(DocearUiTheme.font(12f));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		toolbar.add(statusLabel, BorderLayout.CENTER);
 
 		final JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		actionPanel.setOpaque(false);
 		actionPanel.add(pullButton);
 		actionPanel.add(pushButton);
 		actionPanel.add(refreshButton);
@@ -194,8 +205,8 @@ public class GitTabPanel extends JPanel {
 		pushButton.setText(status.needsPush() ? LABEL_PUSH + " \u2191" + status.ahead : LABEL_PUSH);
 		pullButton.setToolTipText(status.needsPull() ? "远端有 " + status.behind + " 个新提交待拉取" : LABEL_PULL);
 		pushButton.setToolTipText(status.needsPush() ? "本地有 " + status.ahead + " 个提交待推送" : LABEL_PUSH);
-		pullButton.setForeground(status.needsPull() ? new Color(0, 102, 204) : null);
-		pushButton.setForeground(status.needsPush() ? new Color(0, 128, 0) : null);
+		pullButton.setForeground(status.needsPull() ? DocearUiTheme.ACCENT_DEEP : DocearUiTheme.TEXT_MUTED);
+		pushButton.setForeground(status.needsPush() ? DocearUiTheme.SUCCESS : DocearUiTheme.TEXT_MUTED);
 	}
 
 	private void updateStatusWithSync(final GitSyncStatus status) {
@@ -279,8 +290,13 @@ public class GitTabPanel extends JPanel {
 		descriptionPanel.add(new JLabel("Description"), BorderLayout.NORTH);
 		descriptionArea.setLineWrap(true);
 		descriptionArea.setWrapStyleWord(true);
-		descriptionArea.setBorder(BorderFactory.createEtchedBorder());
+		descriptionArea.setBorder(BorderFactory.createCompoundBorder(
+				DocearUiTheme.hairlineBorder(),
+				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+		descriptionArea.setFont(DocearUiTheme.font(12f));
+		descriptionArea.setBackground(DocearUiTheme.SURFACE);
 		final JScrollPane descScroll = new JScrollPane(descriptionArea);
+		DocearUiTheme.styleScrollPane(descScroll);
 		descScroll.setPreferredSize(new Dimension(100, 52));
 		descScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
 		descriptionPanel.add(descScroll, BorderLayout.CENTER);
@@ -864,13 +880,13 @@ public class GitTabPanel extends JPanel {
 			if (column == 1 && row < changes.size()) {
 				switch (changes.get(row).getStatus()) {
 				case ADDED:
-					setForeground(new Color(0, 128, 0));
+					setForeground(DocearUiTheme.SUCCESS);
 					break;
 				case DELETED:
-					setForeground(Color.RED);
+					setForeground(DocearUiTheme.DANGER);
 					break;
 				default:
-					setForeground(new Color(192, 128, 0));
+					setForeground(DocearUiTheme.WARNING);
 					break;
 				}
 			} else if (!isSelected) {

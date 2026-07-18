@@ -1,16 +1,16 @@
 package org.docear.plugin.core.ui;
 
-import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import com.jgoodies.forms.layout.ColumnSpec;
 import com.jgoodies.forms.layout.FormLayout;
 import com.jgoodies.forms.layout.RowSpec;
-import javax.swing.UIManager;
 
 public class HeaderPanel extends JPanel {
 
@@ -25,7 +25,7 @@ public class HeaderPanel extends JPanel {
 	 * Create the panel.
 	 */
 	public HeaderPanel() {
-		setBackground(new Color(-1643275));
+		setBackground(DocearUiTheme.SURFACE_SOFT);
 		
 		setLayout(new FormLayout(new ColumnSpec[] {
 				ColumnSpec.decode("5dlu"),
@@ -39,11 +39,12 @@ public class HeaderPanel extends JPanel {
 				RowSpec.decode("fill:20dlu"),}));
 		
 		lblHeadline = new JLabel("Headline");
-		lblHeadline.setFont(new Font("Dialog", Font.BOLD, 14));
+		lblHeadline.setFont(DocearUiTheme.font(16f, Font.BOLD));
+		lblHeadline.setForeground(DocearUiTheme.TEXT);
 		add(lblHeadline, "2, 2");
 		
 		JPanel subTitlePanel = new JPanel();
-		subTitlePanel.setBackground(new Color(-1643275));
+		subTitlePanel.setBackground(DocearUiTheme.SURFACE_SOFT);
 		add(subTitlePanel, "2, 4, fill, fill");
 		subTitlePanel.setLayout(new FormLayout(new ColumnSpec[] {
 				ColumnSpec.decode("15dlu"),
@@ -55,7 +56,8 @@ public class HeaderPanel extends JPanel {
 		lblSubHeadline.setOpaque(false);
 		lblSubHeadline.setMinimumSize(new Dimension(380, 14));
 		lblSubHeadline.setMaximumSize(new Dimension(380, 14));
-		lblSubHeadline.setFont(UIManager.getFont("Label.font"));
+		lblSubHeadline.setFont(DocearUiTheme.font(12f));
+		lblSubHeadline.setForeground(DocearUiTheme.TEXT_MUTED);
 		subTitlePanel.add(lblSubHeadline, "2, 1");		
 
 	}

@@ -1,5 +1,7 @@
 package org.docear.plugin.core.quickcommand;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
@@ -48,13 +50,13 @@ final class QuickCommandDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
 	private static QuickCommandDialog current;
 
-	private static final Color PANEL = new Color(0xFA, 0xFB, 0xFC);
-	private static final Color TEXT = new Color(0x11, 0x18, 0x27);
-	private static final Color MUTED = new Color(0x6B, 0x72, 0x80);
-	private static final Color ACCENT = new Color(0x0F, 0x76, 0x6E);
-	private static final Color ACCENT_SOFT = new Color(0xCC, 0xF2, 0xE9);
-	private static final Color ROW_ALT = new Color(0xF3, 0xF4, 0xF6);
-	private static final Color HAIRLINE = new Color(0xE5, 0xE7, 0xEB);
+	private static final Color PANEL = DocearUiTheme.CANVAS;
+	private static final Color TEXT = DocearUiTheme.TEXT;
+	private static final Color MUTED = DocearUiTheme.TEXT_MUTED;
+	private static final Color ACCENT = DocearUiTheme.ACCENT_DEEP;
+	private static final Color ACCENT_SOFT = DocearUiTheme.ACCENT_WASH;
+	private static final Color ROW_ALT = DocearUiTheme.SURFACE_SOFT;
+	private static final Color HAIRLINE = DocearUiTheme.HAIRLINE;
 	private static final String MATCH_RED = "#DC2626";
 	private static final String HIGHLIGHT_QUERY_KEY = "quickcommand.highlightQuery";
 
@@ -73,7 +75,7 @@ final class QuickCommandDialog extends JDialog {
 		// Content-only footprint roughly matching the old inner card width.
 		setSize(new Dimension(720, 480));
 		setMinimumSize(new Dimension(560, 320));
-		getRootPane().setBorder(BorderFactory.createLineBorder(new Color(0xD1, 0xD5, 0xDB), 1));
+		getRootPane().setBorder(BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE, 1));
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowOpened(final WindowEvent e) {
@@ -209,15 +211,7 @@ final class QuickCommandDialog extends JDialog {
 	}
 
 	private static Font preferUiFont(final float size) {
-		final String[] prefer = new String[] { "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC",
-		        "SansSerif" };
-		for (int i = 0; i < prefer.length; i++) {
-			final Font font = new Font(prefer[i], Font.PLAIN, Math.round(size));
-			if (font.canDisplay('快')) {
-				return font.deriveFont(size);
-			}
-		}
-		return new JLabel().getFont().deriveFont(size);
+		return DocearUiTheme.font(size);
 	}
 
 	private void moveList(final int delta) {

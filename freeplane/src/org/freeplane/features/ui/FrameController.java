@@ -551,9 +551,16 @@ abstract public class FrameController implements ViewController {
 		return propertyKeyPrefix;
 	}
 
-	public static void setLookAndFeel(final String lookAndFeel) {
+	public static void setLookAndFeel(String lookAndFeel) {
 		try {
-			if (Compat.isMacOsX() || lookAndFeel.equals("default")) {
+			org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
+			// Migrate legacy Docear default (Nimbus) to FlatLaf Light on first run after upgrade.
+			if (lookAndFeel != null && "nimbus".equalsIgnoreCase(lookAndFeel.trim())
+					&& !"freeplane".equalsIgnoreCase(Controller.getCurrentController().getResourceController()
+							.getProperty("ApplicationName", "freeplane"))) {
+				lookAndFeel = org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT;
+			}
+			if (Compat.isMacOsX() || "default".equals(lookAndFeel)) {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", "default");
 			}
@@ -563,7 +570,10 @@ abstract public class FrameController implements ViewController {
 				setLnF = setLookAndFeel(lookAndFeel, lafInfos);
 				if(!setLnF){
 					if (!"freeplane".equals(Controller.getCurrentController().getResourceController().getProperty("ApplicationName", "freeplane").toLowerCase())) {
-						setLookAndFeel("nimbus", lafInfos);
+						// Prefer FlatLaf, then Nimbus, for Docear
+						if (!setLookAndFeel(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT, lafInfos)) {
+							setLookAndFeel("nimbus", lafInfos);
+						}
 					}
 					else {
 						UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
@@ -574,9 +584,31 @@ abstract public class FrameController implements ViewController {
 		}
 		catch (final Exception ex) {
 			LogUtils.warn("Error while setting Look&Feel" + lookAndFeel);
+			// Fallback chain: FlatLaf → Nimbus → system
+			try {
+				org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
+				UIManager.setLookAndFeel(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT);
+			}
+			catch (final Exception flatFail) {
+				try {
+					UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+				}
+				catch (final Exception nimbusFail) {
+					try {
+						UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+					}
+					catch (final Exception ignore) {
+					}
+				}
+			}
 		}
 		
 		UIManager.put("Button.defaultButtonFollowsFocus", Boolean.TRUE);
+		try {
+			org.freeplane.core.ui.theme.DocearUiTheme.applyAfterLookAndFeel();
+		}
+		catch (Throwable t) {
+		}
 		
 		// Workaround for http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=7077418
 		// NullPointerException in WindowsFileChooserUI when system icons missing/invalid

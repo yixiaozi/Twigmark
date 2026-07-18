@@ -39,6 +39,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -54,9 +55,9 @@ import org.freeplane.plugin.workspace.components.TagGroupFilterBarFactory;
 public class RelationshipGraphSideTabPanel extends JPanel {
 
 	private static final long serialVersionUID = 1L;
-	private static final Color MUTED = new Color(110, 110, 115);
-	private static final Color BORDER = new Color(198, 200, 205);
-	private static final Color TIP_BG = new Color(0xF7F9FB);
+	private static final Color MUTED = DocearUiTheme.TEXT_MUTED;
+	private static final Color BORDER = DocearUiTheme.HAIRLINE;
+	private static final Color TIP_BG = DocearUiTheme.CANVAS;
 	private static final int RESULT_LIST_CAP = 200;
 	private static final int ASYNC_DISPLAY_INDEX_THRESHOLD = 80;
 	private static final int MODE_COUNT = 4;

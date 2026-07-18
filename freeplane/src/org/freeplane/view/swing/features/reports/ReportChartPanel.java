@@ -1,5 +1,7 @@
 package org.freeplane.view.swing.features.reports;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Dimension;
@@ -21,10 +23,10 @@ public final class ReportChartPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
 	private static final Color[] PALETTE = new Color[] {
-	        new Color(0x4C, 0x8B, 0xF5), new Color(0xF5, 0x8B, 0x4C), new Color(0x4C, 0xB8, 0x7A),
-	        new Color(0xC0, 0x56, 0xC0), new Color(0xE0, 0xC0, 0x40), new Color(0x5B, 0x9B, 0xD5),
-	        new Color(0xE0, 0x70, 0x70), new Color(0x70, 0xC0, 0xC0), new Color(0x90, 0x70, 0xE0),
-	        new Color(0xA0, 0xA0, 0x60)
+	        DocearUiTheme.ACCENT, new Color(0x0E, 0xA5, 0xE9), new Color(0x10, 0xB9, 0x81),
+	        new Color(0xF5, 0x9E, 0x0B), new Color(0x8B, 0x5C, 0xF6), DocearUiTheme.ACCENT_DEEP,
+	        new Color(0xE0, 0x70, 0x70), new Color(0x14, 0xB8, 0xA6), new Color(0x90, 0x70, 0xE0),
+	        new Color(0x64, 0x74, 0x8B)
 	};
 
 	private ReportChartSeries series;
@@ -32,7 +34,7 @@ public final class ReportChartPanel extends JPanel {
 	public ReportChartPanel(final ReportChartSeries series) {
 		this.series = series;
 		setOpaque(true);
-		setBackground(Color.WHITE);
+		setBackground(DocearUiTheme.SURFACE);
 		setPreferredSize(new Dimension(520, 280));
 		setMinimumSize(new Dimension(280, 200));
 	}
@@ -53,12 +55,12 @@ public final class ReportChartPanel extends JPanel {
 			g2.setColor(getBackground());
 			g2.fillRect(0, 0, w, h);
 			if (series == null || series.isEmpty()) {
-				g2.setColor(new Color(0x88, 0x88, 0x88));
+				g2.setColor(DocearUiTheme.TEXT_FAINT);
 				g2.drawString("暂无图表数据", 16, 28);
 				return;
 			}
 			g2.setFont(getFont().deriveFont(Font.BOLD, 13f));
-			g2.setColor(new Color(0x33, 0x33, 0x33));
+			g2.setColor(DocearUiTheme.TEXT);
 			g2.drawString(series.title, 12, 20);
 			if (series.type == ReportChartSeries.TYPE_PIE) {
 				paintPie(g2, w, h);
@@ -90,7 +92,7 @@ public final class ReportChartPanel extends JPanel {
 			g2.fill(new Arc2D.Double(cx - r, cy - r, r * 2, r * 2, start, extent, Arc2D.PIE));
 			start += extent;
 		}
-		g2.setColor(new Color(0xDD, 0xDD, 0xDD));
+		g2.setColor(DocearUiTheme.HAIRLINE);
 		g2.drawOval(cx - r, cy - r, r * 2, r * 2);
 
 		final int lx = w - legendW + 8;
@@ -100,7 +102,7 @@ public final class ReportChartPanel extends JPanel {
 		for (int i = 0; i < series.size() && ly < h - 8; i++) {
 			g2.setColor(PALETTE[i % PALETTE.length]);
 			g2.fillRect(lx, ly - 8, 10, 10);
-			g2.setColor(new Color(0x33, 0x33, 0x33));
+			g2.setColor(DocearUiTheme.TEXT);
 			final int pct = (int) Math.round(series.valueAt(i) * 100.0 / total);
 			final String text = trim(series.labelAt(i), 18) + "  " + formatValue(series.valueAt(i)) + " (" + pct + "%)";
 			g2.drawString(text, lx + 16, ly);
@@ -116,7 +118,7 @@ public final class ReportChartPanel extends JPanel {
 		final int plotW = Math.max(10, w - left - right);
 		final int plotH = Math.max(10, h - top - bottom);
 		final double max = Math.max(1.0, series.maxValue() * 1.1);
-		g2.setColor(new Color(0xEE, 0xEE, 0xEE));
+		g2.setColor(DocearUiTheme.GRID);
 		g2.drawLine(left, top, left, top + plotH);
 		g2.drawLine(left, top + plotH, left + plotW, top + plotH);
 
@@ -131,12 +133,12 @@ public final class ReportChartPanel extends JPanel {
 			final int y = top + plotH - barH;
 			g2.setColor(PALETTE[i % PALETTE.length]);
 			g2.fillRoundRect(x, y, barW, Math.max(1, barH), 4, 4);
-			g2.setColor(new Color(0x55, 0x55, 0x55));
+			g2.setColor(DocearUiTheme.TEXT_MUTED);
 			final String label = trim(series.labelAt(i), slot < 36 ? 4 : 8);
 			final int tw = g2.getFontMetrics().stringWidth(label);
 			g2.drawString(label, x + (barW - tw) / 2, top + plotH + 14);
 		}
-		g2.setColor(new Color(0x88, 0x88, 0x88));
+		g2.setColor(DocearUiTheme.TEXT_FAINT);
 		g2.drawString(formatValue(max), 4, top + 10);
 		g2.drawString("0", 8, top + plotH);
 	}
@@ -150,7 +152,7 @@ public final class ReportChartPanel extends JPanel {
 		final int plotH = Math.max(10, h - top - bottom);
 		final double max = Math.max(1.0, series.maxValue() * 1.1);
 		final int n = series.size();
-		g2.setColor(new Color(0xEE, 0xEE, 0xEE));
+		g2.setColor(DocearUiTheme.GRID);
 		g2.drawLine(left, top, left, top + plotH);
 		g2.drawLine(left, top + plotH, left + plotW, top + plotH);
 
@@ -176,7 +178,7 @@ public final class ReportChartPanel extends JPanel {
 		}
 		g2.setStroke(new BasicStroke(1f));
 		g2.setFont(getFont().deriveFont(10f));
-		g2.setColor(new Color(0x55, 0x55, 0x55));
+		g2.setColor(DocearUiTheme.TEXT_MUTED);
 		final int step = Math.max(1, n / 8);
 		for (int i = 0; i < n; i += step) {
 			final String label = trim(series.labelAt(i), 8);
@@ -184,7 +186,7 @@ public final class ReportChartPanel extends JPanel {
 			final int tw = g2.getFontMetrics().stringWidth(label);
 			g2.drawString(label, x - tw / 2, top + plotH + 14);
 		}
-		g2.setColor(new Color(0x88, 0x88, 0x88));
+		g2.setColor(DocearUiTheme.TEXT_FAINT);
 		g2.drawString(formatValue(max), 4, top + 10);
 	}
 

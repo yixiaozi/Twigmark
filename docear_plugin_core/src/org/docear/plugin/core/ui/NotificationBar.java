@@ -11,6 +11,7 @@ import java.awt.event.ComponentEvent;
 import java.awt.event.ComponentListener;
 import java.util.Stack;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
@@ -18,8 +19,8 @@ import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 import javax.swing.border.CompoundBorder;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.EtchedBorder;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.ViewController;
 
@@ -41,25 +42,28 @@ public class NotificationBar extends JPanel {
 	 */
 	public NotificationBar() {		
 		setPreferredSize(new Dimension(1024, 35));		
-		setBorder(new CompoundBorder(new EtchedBorder(EtchedBorder.LOWERED, null, null), new EmptyBorder(4, 5, 4, 5)));
-		setBackground(new Color(255, 255, 0));
+		setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0, 0, 1, 0, DocearUiTheme.HAIRLINE),
+				new EmptyBorder(6, 12, 6, 12)));
+		setBackground(DocearUiTheme.ACCENT_WASH);
 		setLayout(new BorderLayout(0, 0));
 		putClientProperty(ViewController.VISIBLE_PROPERTY_KEY, "notificationBar_visible");
 		pnlMain = new JPanel();		
 		pnlMain.setLayout(new BorderLayout(0, 0));
-		pnlMain.setBackground(new Color(255, 255, 0));
+		pnlMain.setOpaque(false);
 		add(pnlMain, BorderLayout.CENTER);
 		
 		lblMessage = new JLabel("Das ist eine Testnachricht");		
 		lblMessage.setHorizontalAlignment(SwingConstants.CENTER);
-		lblMessage.setFont(new Font("Tahoma", Font.BOLD, 13));
+		lblMessage.setFont(DocearUiTheme.font(13f, Font.BOLD));
+		lblMessage.setForeground(DocearUiTheme.ACCENT_DEEP);
 		pnlMain.add(lblMessage, BorderLayout.CENTER);
 		
 		JPanel pnlButtons = new JPanel();
 		FlowLayout flowLayout = (FlowLayout) pnlButtons.getLayout();
 		flowLayout.setHgap(10);
 		flowLayout.setVgap(0);
-		pnlButtons.setBackground(new Color(255, 255, 0));
+		pnlButtons.setOpaque(false);
 		pnlMain.add(pnlButtons, BorderLayout.EAST);
 		
 		btnOkAction = new JButton("btnOkAction");
@@ -72,7 +76,8 @@ public class NotificationBar extends JPanel {
 				onClose();
 			}
 		});
-		btnClose.setBackground(new Color(255, 255, 0));
+		btnClose.setFocusPainted(false);
+		btnClose.setFont(DocearUiTheme.font(12f));
 		
 		Controller.getCurrentController().getViewController().getJFrame().getContentPane().addComponentListener(new ComponentListener() {			
 			public void componentShown(ComponentEvent e) {				

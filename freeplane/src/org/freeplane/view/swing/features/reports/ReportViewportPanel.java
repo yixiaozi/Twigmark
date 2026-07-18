@@ -20,6 +20,8 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 /**
  * Center viewport: KPI strip + charts + details. Product copy explains decision + data.
  */
@@ -34,8 +36,8 @@ public final class ReportViewportPanel extends JPanel {
 	private final JPanel chartsHost = new JPanel();
 	private final DefaultListModel detailModel = new DefaultListModel();
 	private final JList detailList = new JList(detailModel);
-	private final JButton closeButton = new JButton("返回导图");
-	private final JButton writeButton = new JButton("写入选中节点");
+	private final JButton closeButton = DocearUiTheme.softButton("返回导图");
+	private final JButton writeButton = DocearUiTheme.primaryButton("写入选中节点");
 	private ReportViewModel current;
 	private ReportNodeSpec currentTree;
 	private Runnable onClose;
@@ -43,9 +45,18 @@ public final class ReportViewportPanel extends JPanel {
 
 	public ReportViewportPanel() {
 		super(new BorderLayout(8, 8));
-		setOpaque(true);
-		setBackground(new Color(0xF7, 0xF8, 0xFA));
+		DocearUiTheme.styleCanvas(this);
 		setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+		titleLabel.setFont(DocearUiTheme.font(18f, Font.BOLD));
+		titleLabel.setForeground(DocearUiTheme.TEXT);
+		subtitleLabel.setFont(DocearUiTheme.font(12f));
+		subtitleLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		decisionLabel.setFont(DocearUiTheme.font(12f, Font.BOLD));
+		decisionLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
+		dataLabel.setFont(DocearUiTheme.font(11f));
+		dataLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+		kpiHost.setOpaque(false);
+		chartsHost.setOpaque(false);
 		buildUi();
 	}
 
@@ -119,17 +130,17 @@ public final class ReportViewportPanel extends JPanel {
 		final JPanel card = new JPanel();
 		card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
 		card.setOpaque(true);
-		card.setBackground(Color.WHITE);
+		card.setBackground(DocearUiTheme.SURFACE);
 		card.setBorder(BorderFactory.createCompoundBorder(
-		        BorderFactory.createLineBorder(new Color(0xE2, 0xE5, 0xEA)),
+		        BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
 		        BorderFactory.createEmptyBorder(8, 12, 8, 12)));
 		final JLabel value = new JLabel(kpi.value);
 		value.setFont(value.getFont().deriveFont(Font.BOLD, 18f));
 		final JLabel label = new JLabel(kpi.label);
-		label.setForeground(new Color(0x55, 0x55, 0x55));
+		label.setForeground(DocearUiTheme.TEXT_MUTED);
 		label.setFont(label.getFont().deriveFont(11f));
 		final JLabel hint = new JLabel(kpi.hint);
-		hint.setForeground(new Color(0x88, 0x88, 0x88));
+		hint.setForeground(DocearUiTheme.TEXT_FAINT);
 		hint.setFont(hint.getFont().deriveFont(10f));
 		card.add(value);
 		card.add(Box.createVerticalStrut(2));
@@ -142,16 +153,16 @@ public final class ReportViewportPanel extends JPanel {
 
 	private JLabel hintLabel(final String text) {
 		final JLabel empty = new JLabel("<html><div style='padding:16px;color:#666'>" + escape(text) + "</div></html>");
-		empty.setForeground(new Color(0x66, 0x66, 0x66));
+		empty.setForeground(DocearUiTheme.TEXT_MUTED);
 		return empty;
 	}
 
 	private JPanel wrapChart(final ReportChartSeries series) {
 		final JPanel wrap = new JPanel(new BorderLayout());
 		wrap.setOpaque(true);
-		wrap.setBackground(Color.WHITE);
+		wrap.setBackground(DocearUiTheme.SURFACE);
 		wrap.setBorder(BorderFactory.createCompoundBorder(
-		        BorderFactory.createLineBorder(new Color(0xE2, 0xE5, 0xEA)),
+		        BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
 		        BorderFactory.createEmptyBorder(4, 4, 4, 4)));
 		final ReportChartPanel chart = new ReportChartPanel(series);
 		chart.setPreferredSize(new Dimension(480, 250));
@@ -163,11 +174,11 @@ public final class ReportViewportPanel extends JPanel {
 		final JPanel north = new JPanel(new BorderLayout(8, 0));
 		north.setOpaque(false);
 		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 18f));
-		subtitleLabel.setForeground(new Color(0x66, 0x66, 0x66));
+		subtitleLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		subtitleLabel.setFont(subtitleLabel.getFont().deriveFont(12f));
-		decisionLabel.setForeground(new Color(0x2F, 0x6F, 0xED));
+		decisionLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
 		decisionLabel.setFont(decisionLabel.getFont().deriveFont(Font.PLAIN, 12f));
-		dataLabel.setForeground(new Color(0x77, 0x77, 0x77));
+		dataLabel.setForeground(DocearUiTheme.TEXT_FAINT);
 		dataLabel.setFont(dataLabel.getFont().deriveFont(11f));
 
 		final JPanel titles = new JPanel();
@@ -199,13 +210,13 @@ public final class ReportViewportPanel extends JPanel {
 		chartsHost.setOpaque(false);
 		chartsHost.setPreferredSize(new Dimension(640, 280));
 		final JScrollPane chartScroll = new JScrollPane(chartsHost);
-		chartScroll.setBorder(BorderFactory.createTitledBorder("图表"));
+		chartScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "图表"));
 		chartScroll.getVerticalScrollBar().setUnitIncrement(16);
 
 		detailList.setFont(detailList.getFont().deriveFont(12f));
 		detailList.setVisibleRowCount(12);
 		final JScrollPane detailScroll = new JScrollPane(detailList);
-		detailScroll.setBorder(BorderFactory.createTitledBorder("明细（可执行清单）"));
+		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "明细（可执行清单）"));
 
 		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartScroll, detailScroll);
 		split.setResizeWeight(0.58);
