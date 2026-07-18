@@ -47,6 +47,7 @@ import javax.swing.event.TreeSelectionEvent;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.IMenuContributor;
 import org.freeplane.core.ui.MenuBuilder;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.ui.components.JResizer.Direction;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.CollapseDirection;
@@ -1114,8 +1115,12 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			catch (final Throwable t) {
 				LogUtils.warn("FinanceTabPanel failed to load", t);
 				final JPanel fallback = new JPanel(new BorderLayout());
-				fallback.add(new JLabel("<html>财务面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>"),
-				        BorderLayout.CENTER);
+				DocearUiTheme.styleCanvas(fallback);
+				fallback.setBorder(DocearUiTheme.pageBorder());
+				final JLabel err = DocearUiTheme.mutedLabel(
+				        "<html>财务面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>");
+				err.setForeground(DocearUiTheme.DANGER);
+				fallback.add(err, BorderLayout.CENTER);
 				panel = fallback;
 			}
 		}
