@@ -1,5 +1,5 @@
-# Build Docear -> publish to E:\Temp\DocearDist -> extract -> launch docear.exe
-# Mind-map data under E:\yixiaozi is NOT touched.
+# Build Docear -> publish to a local dist folder -> extract -> launch docear.exe
+# Does not modify user mind-map libraries.
 #
 # Usage:
 #   Double-click: build-docear.bat
@@ -7,14 +7,23 @@
 #
 # Options:
 #   -SkipBuild          reuse existing docear_windows.zip
-#   -TargetDir <path>   install dir (default E:\Temp\DocearDist)
+#   -TargetDir <path>   install dir (default: %TEMP%\DocearDist or $env:DOCEAR_DIST_DIR)
 #   -NoLaunch           do not start Docear after deploy
 
 param(
     [switch] $SkipBuild,
-    [string] $TargetDir = "E:\Temp\DocearDist",
+    [string] $TargetDir = "",
     [switch] $NoLaunch
 )
+
+if ([string]::IsNullOrWhiteSpace($TargetDir)) {
+    if (-not [string]::IsNullOrWhiteSpace($env:DOCEAR_DIST_DIR)) {
+        $TargetDir = $env:DOCEAR_DIST_DIR
+    }
+    else {
+        $TargetDir = Join-Path $env:TEMP "DocearDist"
+    }
+}
 
 $ErrorActionPreference = "Stop"
 

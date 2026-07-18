@@ -16,7 +16,7 @@ import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 
 /**
- * Builds the fixed-library workspace tree directly from {@link MindMapDataRootResolver#FIXED_DATA_ROOT_PATH}.
+ * Builds the workspace tree from {@link MindMapDataRootResolver#getWorkingDirectory()}.
  * Ignores saved settings.xml structure so the tree always mirrors disk (with standard filters).
  */
 public final class FixedLibraryWorkspaceTree {
@@ -30,12 +30,17 @@ public final class FixedLibraryWorkspaceTree {
 		if (project == null) {
 			return false;
 		}
-		final File fixedRoot = MindMapDataRootResolver.getFixedDataRoot();
-		if (fixedRoot == null) {
+		final File workingDirectory = MindMapDataRootResolver.getWorkingDirectory();
+		final File projectHome = URIUtils.getAbsoluteFile(project.getProjectHome());
+		if (projectHome == null) {
 			return false;
 		}
-		final File projectHome = URIUtils.getAbsoluteFile(project.getProjectHome());
-		return projectHome != null && projectHome.equals(fixedRoot);
+		try {
+			return projectHome.getCanonicalFile().equals(workingDirectory.getCanonicalFile());
+		}
+		catch (final Exception e) {
+			return projectHome.equals(workingDirectory);
+		}
 	}
 
 	/** Same rules as {@link FolderTypeMyFilesNode#refresh()} and {@link MyFilesTreeDisplayHelper}. */
@@ -45,7 +50,7 @@ public final class FixedLibraryWorkspaceTree {
 				if (pathname == null) {
 					return false;
 				}
-				if ("_data".equals(pathname.getName())) {
+				if (MindMapDataRootResolver.isConfigDirectoryName(pathname.getName())) {
 					return false;
 				}
 				if (pathname.isDirectory() && pathname.getName().startsWith("_")) {
@@ -65,8 +70,8 @@ public final class FixedLibraryWorkspaceTree {
 		}
 		final File dataRoot = URIUtils.getAbsoluteFile(project.getProjectHome());
 		if (dataRoot == null || !dataRoot.isDirectory()) {
-			LogUtils.severe("Fixed library path is missing or not a directory: "
-			        + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
+			LogUtils.severe("Library path is missing or not a directory: "
+			        + (dataRoot == null ? "(null)" : dataRoot.getAbsolutePath()));
 			return;
 		}
 
@@ -95,7 +100,7 @@ public final class FixedLibraryWorkspaceTree {
 		myFiles.getModel().reload(myFiles);
 
 		final int count = myFiles.getModelChildCount();
-		LogUtils.info("Fixed library workspace synced from " + dataRoot.getAbsolutePath() + " (" + count
+		LogUtils.info("Library workspace synced from " + dataRoot.getAbsolutePath() + " (" + count
 		        + " top-level entries)");
 
 		final WorkspaceModel workspaceModel = WorkspaceController.getCurrentModel();

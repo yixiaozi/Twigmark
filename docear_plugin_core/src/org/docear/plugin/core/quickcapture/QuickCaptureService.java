@@ -24,7 +24,8 @@ public final class QuickCaptureService {
 
 	public static void install(final ModeController modeController) {
 		final ResourceController resources = ResourceController.getResourceController();
-		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "E:\\yixiaozi\\00统领全局");
+		// Empty directory = resolve from library / scan root at capture time (portable).
+		resources.setDefaultProperty(PROP_INBOX_DIRECTORY, "");
 		resources.setDefaultProperty(PROP_INBOX_FILENAME, "\u6536\u4ef6\u7bb1.mm");
 
 		modeController.addAction(new QuickCaptureAction());

@@ -184,6 +184,7 @@
 			<fileset file="${framework.jar}" />
 			<!--<fileset file="windows-launcher/${ApplicationNameToLowerCase}.exe" casesensitive="no" /-->
 		</copy>
+		<copy file="${basedir}/working-directory.txt" todir="${build}" failonerror="false" />
 		<chmod file="${build}/${ApplicationNameToLowerCase}.sh" perm="ugo+rx" />
 		
 		<antcall target="makePlugin" inheritall="false">

@@ -102,7 +102,7 @@ public class FolderTypeMyFilesNode extends AFolderNode implements IWorkspaceNode
 				WorkspaceController.getFileSystemMgr().scanFileSystem(this, file, false, new FileFilter() {
 					
 					public boolean accept(File pathname) {
-						if("_data".equals(pathname.getName())) {
+						if(org.freeplane.core.util.MindMapDataRootResolver.isConfigDirectoryName(pathname.getName())) {
 							return false;
 						}
 						return true;

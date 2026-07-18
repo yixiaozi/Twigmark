@@ -183,9 +183,9 @@ public class ImportProjectDialogPanel extends JPanel {
 		}
 		getComboBoxModel().clear();
 		
-		File _data = new File(homeForListing, "_data");
-		if(_data.exists()) {
-			readVersions(_data, logicalHome);		
+		File configBase = org.freeplane.core.util.MindMapDataRootResolver.getProjectSettingsBaseDirectory(homeForListing);
+		if (configBase != null && configBase.exists()) {
+			readVersions(configBase, logicalHome);
 		}
 		enableControlls(getComboBoxModel().getSize() > 0);
 	}

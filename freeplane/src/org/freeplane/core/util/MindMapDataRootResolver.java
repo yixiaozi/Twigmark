@@ -1,10 +1,13 @@
 package org.freeplane.core.util;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
 import java.net.URI;
 import java.util.ArrayList;
@@ -25,70 +28,408 @@ import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.UrlManager;
 
 /**
- * Resolves directories used for cross-map scan/search (reminders, todos, global search, etc.).
- * Fixed to {@link #FIXED_DATA_ROOT_PATH} for this Docear fork.
+ * Portable layout:
+ * <pre>
+ * {appRoot}/                      software install directory
+ *   working-directory.txt         the only primary product setting
+ * {workingDirectory}/             mind maps and user content
+ *   data/                         all application configuration (R/W)
+ * </pre>
+ * Working directory may be overridden by {@code -Dorg.docear.working.directory}
+ * or {@code DOCEAR_WORKING_DIRECTORY}. Legacy aliases
+ * {@code org.docear.data.root} / {@code DOCEAR_DATA_ROOT} are still accepted.
  */
 public final class MindMapDataRootResolver {
 
+	/** Filename under the software root that stores the working directory path. */
+	public static final String WORKING_DIRECTORY_FILE_NAME = "working-directory.txt";
+	/** Config folder name under the working directory. */
+	public static final String CONFIG_DIR_NAME = "data";
+	/** Legacy config folder name (accepted when {@link #CONFIG_DIR_NAME} is absent). */
+	public static final String LEGACY_CONFIG_DIR_NAME = "_data";
+	/** Default working directory name relative to the software root. */
+	public static final String DEFAULT_WORKING_DIR_NAME = "workspace";
+
+	/** JVM system property for the working directory. */
+	public static final String WORKING_DIRECTORY_SYSTEM_PROPERTY = "org.docear.working.directory";
+	/** Environment variable for the working directory. */
+	public static final String WORKING_DIRECTORY_ENV = "DOCEAR_WORKING_DIRECTORY";
+
+	/**
+	 * @deprecated Use {@link #WORKING_DIRECTORY_SYSTEM_PROPERTY}.
+	 */
+	public static final String DATA_ROOT_SYSTEM_PROPERTY = "org.docear.data.root";
+	/**
+	 * @deprecated Use {@link #WORKING_DIRECTORY_ENV}.
+	 */
+	public static final String DATA_ROOT_ENV = "DOCEAR_DATA_ROOT";
+	/**
+	 * @deprecated Persisted under {@code data/auto.properties}; prefer {@link #WORKING_DIRECTORY_FILE_NAME}.
+	 */
 	public static final String SCAN_ROOT_PROPERTY = "mindmap_data_scan_root";
-	/** Unified data directory for workspace, search, reminders, and side tabs. */
-	public static final String FIXED_DATA_ROOT_PATH = "E:\\yixiaozi";
-	public static final String FIXED_PROJECT_ID = "yixiaozi";
+
+	public static final String DEFAULT_PROJECT_ID = "default";
+	/**
+	 * @deprecated Empty sentinel; use {@link #getWorkingDirectory()}.
+	 */
+	public static final String FIXED_DATA_ROOT_PATH = "";
+	/**
+	 * @deprecated Use {@link #DEFAULT_PROJECT_ID}.
+	 */
+	public static final String FIXED_PROJECT_ID = DEFAULT_PROJECT_ID;
+
 	private static final String WORKSPACE_CONTROLLER = "org.freeplane.plugin.workspace.WorkspaceController";
 	private static final String WORKSPACE_SETTINGS_PROJECTS_KEY =
 	    "org.freeplane.plugin.workspace.mindmapmode.model.projects";
 	private static final String WORKSPACE_SETTINGS_PROJECTS_SEPARATOR = ",";
+	private static final String GLOBAL_RESOURCE_DIR_PROPERTY = "org.freeplane.globalresourcedir";
+
+	private static volatile File cachedWorkingDirectory;
+	private static volatile File cachedConfigDirectory;
 
 	private MindMapDataRootResolver() {
 	}
 
-	public static File getFixedDataRoot() {
-		final File root = new File(FIXED_DATA_ROOT_PATH);
-		return root.isDirectory() ? root : null;
+	/** Software install / root directory (parent of {@code resources/}). */
+	public static File getApplicationRoot() {
+		final String resourceDir = System.getProperty(GLOBAL_RESOURCE_DIR_PROPERTY);
+		if (resourceDir != null && resourceDir.trim().length() > 0) {
+			final File resources = new File(resourceDir.trim());
+			final File parent = resources.getAbsoluteFile().getParentFile();
+			if (parent != null) {
+				return parent;
+			}
+		}
+		try {
+			final ResourceController rc = ResourceController.getResourceController();
+			if (rc != null) {
+				final String base = rc.getInstallationBaseDir();
+				if (base != null && base.trim().length() > 0) {
+					return new File(base.trim());
+				}
+			}
+		}
+		catch (final Exception e) {
+			// early startup
+		}
+		return new File(System.getProperty("user.dir"));
 	}
 
 	/**
-	 * Writable application profile (preferences, logs, workspace UI state).
-	 * Same tree as project metadata parent: {@code {dataRoot}/_data}.
+	 * The single primary product setting: where mind maps and {@code data/} live.
+	 * Always non-null; created on demand.
+	 */
+	public static File getWorkingDirectory() {
+		File cached = cachedWorkingDirectory;
+		if (cached != null) {
+			return cached;
+		}
+		synchronized (MindMapDataRootResolver.class) {
+			if (cachedWorkingDirectory != null) {
+				return cachedWorkingDirectory;
+			}
+			final File resolved = resolveWorkingDirectory();
+			ensureDirectory(resolved);
+			cachedWorkingDirectory = resolved;
+			return resolved;
+		}
+	}
+
+	/**
+	 * Application configuration directory: {@code {workingDirectory}/data}.
+	 * Accepts legacy {@code _data} when {@code data} does not exist yet.
+	 * Always non-null; created on demand.
 	 */
 	public static File getApplicationConfigDirectory() {
-		final File dataRoot = getFixedDataRoot();
-		if (dataRoot == null) {
-			return null;
+		File cached = cachedConfigDirectory;
+		if (cached != null) {
+			return cached;
 		}
-		return new File(dataRoot, "_data");
+		synchronized (MindMapDataRootResolver.class) {
+			if (cachedConfigDirectory != null) {
+				return cachedConfigDirectory;
+			}
+			final File config = resolveConfigDirectory(getWorkingDirectory());
+			ensureDirectory(config);
+			cachedConfigDirectory = config;
+			return config;
+		}
 	}
 
-	/** Log files: {@code {dataRoot}/_data/logs}. */
+	/** Persist the working directory under the software root and refresh caches. */
+	public static void setWorkingDirectory(final File workingDirectory) {
+		if (workingDirectory == null) {
+			return;
+		}
+		final File absolute = workingDirectory.getAbsoluteFile();
+		ensureDirectory(absolute);
+		writeWorkingDirectoryFile(absolute);
+		synchronized (MindMapDataRootResolver.class) {
+			cachedWorkingDirectory = absolute;
+			cachedConfigDirectory = null;
+		}
+		System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
+		System.setProperty("org.freeplane.userfpdir", getApplicationConfigDirectory().getAbsolutePath());
+	}
+
+	/**
+	 * @deprecated Alias of {@link #getWorkingDirectory()}.
+	 */
+	public static File getLibraryDataRoot() {
+		return getWorkingDirectory();
+	}
+
+	/**
+	 * @deprecated Alias of {@link #getWorkingDirectory()}.
+	 */
+	public static File getFixedDataRoot() {
+		return getWorkingDirectory();
+	}
+
 	public static File getLogDirectory() {
-		final File configDir = getApplicationConfigDirectory();
-		if (configDir == null) {
-			return null;
-		}
-		return new File(configDir, "logs");
+		return new File(getApplicationConfigDirectory(), "logs");
 	}
 
-	/** Project settings directory: {@code {dataRoot}/_data/{projectId}}. */
 	public static File getProjectDataDirectory() {
-		final File dataRoot = getFixedDataRoot();
-		if (dataRoot == null) {
-			return null;
-		}
-		return new File(new File(dataRoot, "_data"), resolveProjectIdForDataRoot(dataRoot));
+		final File configDir = getApplicationConfigDirectory();
+		return new File(configDir, resolveProjectIdForConfigDir(configDir));
 	}
 
-	/** Finds project id from dataRoot/_data/settings.xml; falls back to FIXED_PROJECT_ID. */
-	public static String resolveProjectIdForDataRoot(final File dataRoot) {
-		if (dataRoot == null || !dataRoot.isDirectory()) {
-			return FIXED_PROJECT_ID;
+	/**
+	 * Project settings base under the working directory: prefer {@code data/},
+	 * fall back to legacy {@code _data/}.
+	 */
+	public static File getProjectSettingsBaseDirectory(final File workingDirectory) {
+		if (workingDirectory == null) {
+			return getApplicationConfigDirectory();
 		}
-		final File dataParent = new File(dataRoot, "_data");
-		if (!dataParent.isDirectory()) {
-			return FIXED_PROJECT_ID;
+		return resolveConfigDirectory(workingDirectory);
+	}
+
+	public static boolean isConfigDirectoryName(final String name) {
+		return CONFIG_DIR_NAME.equalsIgnoreCase(name) || LEGACY_CONFIG_DIR_NAME.equalsIgnoreCase(name);
+	}
+
+	/** Finds project id from {@code data/} (or legacy {@code _data/}) children. */
+	public static String resolveProjectIdForDataRoot(final File workingDirectory) {
+		if (workingDirectory == null) {
+			return DEFAULT_PROJECT_ID;
 		}
-		final File[] children = dataParent.listFiles();
+		return resolveProjectIdForConfigDir(resolveConfigDirectory(workingDirectory));
+	}
+
+	public static File getPrimaryScanRoot() {
+		final File[] roots = getScanRoots();
+		return roots.length > 0 ? roots[0] : getWorkingDirectory();
+	}
+
+	/**
+	 * Directories to scan for .mm files: working directory, workspace projects, open maps.
+	 */
+	public static File[] getScanRoots() {
+		final Set roots = new LinkedHashSet();
+		addCanonicalRoot(roots, getWorkingDirectory());
+		collectProjectRootsFromWorkspace(roots);
+		collectProjectRootsFromSettings(roots);
+		addOpenMapDirectories(roots);
+		addCanonicalRoot(roots, getSelectedProjectRoot());
+		addCanonicalRoot(roots, getCurrentMapProjectRoot());
+		return normalizeScanRoots(roots);
+	}
+
+	public static String getRelativePathWithinScanRoots(final File directory) {
+		if (directory == null) {
+			return null;
+		}
+		try {
+			final String dirPath = directory.getCanonicalPath();
+			final File[] scanRoots = getScanRoots();
+			for (int i = 0; i < scanRoots.length; i++) {
+				final File root = scanRoots[i];
+				if (root == null) {
+					continue;
+				}
+				final String rootPath = root.getCanonicalPath();
+				if (dirPath.equals(rootPath)) {
+					return "";
+				}
+				final String prefix = rootPath + File.separator;
+				if (dirPath.startsWith(prefix)) {
+					return dirPath.substring(prefix.length()).replace('\\', '/');
+				}
+			}
+		}
+		catch (final Exception e) {
+			LogUtils.warn(e);
+		}
+		return directory.getName();
+	}
+
+	public static void collectMindmapFiles(final List files) {
+		if (files == null) {
+			return;
+		}
+		final Set seenPaths = new LinkedHashSet();
+		final File[] roots = getScanRoots();
+		for (int i = 0; i < roots.length; i++) {
+			collectMindmapFilesRecursive(roots[i], files, seenPaths);
+		}
+	}
+
+	public static void collectMindmapFilesRecursive(final File directory, final List files) {
+		collectMindmapFilesRecursive(directory, files, new LinkedHashSet());
+	}
+
+	private static void collectMindmapFilesRecursive(final File directory, final List files, final Set seenPaths) {
+		if (directory == null || !directory.exists() || !directory.isDirectory()) {
+			return;
+		}
+		final File[] children = directory.listFiles();
 		if (children == null) {
-			return FIXED_PROJECT_ID;
+			return;
+		}
+		for (int i = 0; i < children.length; i++) {
+			final File child = children[i];
+			if (child.getName().startsWith(".")) {
+				continue;
+			}
+			if (child.isDirectory()) {
+				if ("bin".equalsIgnoreCase(child.getName()) || isConfigDirectoryName(child.getName())) {
+					continue;
+				}
+				collectMindmapFilesRecursive(child, files, seenPaths);
+			}
+			else if (child.getName().toLowerCase().endsWith(".mm")) {
+				try {
+					final String key = child.getCanonicalPath();
+					if (seenPaths.add(key)) {
+						files.add(child);
+					}
+				}
+				catch (final Exception e) {
+					if (seenPaths.add(child.getAbsolutePath())) {
+						files.add(child);
+					}
+				}
+			}
+		}
+	}
+
+	private static File resolveWorkingDirectory() {
+		final File fromSystem = directoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY));
+		if (fromSystem != null) {
+			return fromSystem.getAbsoluteFile();
+		}
+		final File fromLegacySystem = directoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY));
+		if (fromLegacySystem != null) {
+			return fromLegacySystem.getAbsoluteFile();
+		}
+		final File fromEnv = directoryFromPath(System.getenv(WORKING_DIRECTORY_ENV));
+		if (fromEnv != null) {
+			return fromEnv.getAbsoluteFile();
+		}
+		final File fromLegacyEnv = directoryFromPath(System.getenv(DATA_ROOT_ENV));
+		if (fromLegacyEnv != null) {
+			return fromLegacyEnv.getAbsoluteFile();
+		}
+		final File fromFile = readWorkingDirectoryFile();
+		if (fromFile != null) {
+			return fromFile;
+		}
+		final File defaultDir = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME);
+		writeWorkingDirectoryFile(defaultDir);
+		return defaultDir.getAbsoluteFile();
+	}
+
+	private static File resolveConfigDirectory(final File workingDirectory) {
+		final File preferred = new File(workingDirectory, CONFIG_DIR_NAME);
+		if (preferred.isDirectory()) {
+			return preferred;
+		}
+		final File legacy = new File(workingDirectory, LEGACY_CONFIG_DIR_NAME);
+		if (legacy.isDirectory()) {
+			return legacy;
+		}
+		return preferred;
+	}
+
+	private static File readWorkingDirectoryFile() {
+		final File marker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		if (!marker.isFile()) {
+			return null;
+		}
+		BufferedReader reader = null;
+		try {
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(marker), "UTF-8"));
+			String line;
+			while ((line = reader.readLine()) != null) {
+				line = line.trim();
+				if (line.length() == 0 || line.startsWith("#")) {
+					continue;
+				}
+				File dir = new File(line);
+				if (!dir.isAbsolute()) {
+					dir = new File(getApplicationRoot(), line);
+				}
+				return dir.getAbsoluteFile();
+			}
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not read " + marker.getAbsolutePath() + ": " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(reader);
+		}
+		return null;
+	}
+
+	private static void writeWorkingDirectoryFile(final File workingDirectory) {
+		final File marker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		BufferedWriter writer = null;
+		try {
+			final File appRoot = getApplicationRoot();
+			String value = workingDirectory.getAbsolutePath();
+			try {
+				final String appPath = appRoot.getCanonicalPath();
+				final String workPath = workingDirectory.getCanonicalPath();
+				if (workPath.equals(appPath + File.separator + DEFAULT_WORKING_DIR_NAME)
+				        || workPath.equals(new File(appRoot, DEFAULT_WORKING_DIR_NAME).getCanonicalPath())) {
+					value = DEFAULT_WORKING_DIR_NAME;
+				}
+			}
+			catch (final Exception e) {
+				// keep absolute
+			}
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(marker), "UTF-8"));
+			writer.write("# Docear working directory (mind maps). Config lives in <this>/data/");
+			writer.newLine();
+			writer.write(value);
+			writer.newLine();
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not write " + marker.getAbsolutePath() + ": " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(writer);
+		}
+	}
+
+	private static void ensureDirectory(final File directory) {
+		if (directory == null) {
+			return;
+		}
+		if (!directory.isDirectory() && !directory.mkdirs()) {
+			LogUtils.warn("Unable to create directory: " + directory.getAbsolutePath());
+		}
+	}
+
+	private static String resolveProjectIdForConfigDir(final File configDir) {
+		if (configDir == null || !configDir.isDirectory()) {
+			return DEFAULT_PROJECT_ID;
+		}
+		final File[] children = configDir.listFiles();
+		if (children == null) {
+			return DEFAULT_PROJECT_ID;
 		}
 		File bestDataDir = null;
 		long bestModified = 0L;
@@ -108,7 +449,7 @@ public final class MindMapDataRootResolver {
 			}
 		}
 		if (bestDataDir == null) {
-			return FIXED_PROJECT_ID;
+			return DEFAULT_PROJECT_ID;
 		}
 		final String projectId = readProjectIdFromSettings(new File(bestDataDir, "settings.xml"));
 		if (projectId != null && projectId.length() > 0) {
@@ -142,95 +483,11 @@ public final class MindMapDataRootResolver {
 		return null;
 	}
 
-	public static File getPrimaryScanRoot() {
-		return getFixedDataRoot();
-	}
-
-	public static File[] getScanRoots() {
-		final File fixed = getFixedDataRoot();
-		if (fixed != null) {
-			return new File[] { fixed };
-		}
-		return new File[0];
-	}
-
-	public static String getRelativePathWithinScanRoots(final File directory) {
-		if (directory == null) {
+	private static File directoryFromPath(final String path) {
+		if (path == null || path.trim().length() == 0) {
 			return null;
 		}
-		try {
-			final String dirPath = directory.getCanonicalPath();
-			final File[] scanRoots = getScanRoots();
-			for (int i = 0; i < scanRoots.length; i++) {
-				final File root = scanRoots[i];
-				if (root == null) {
-					continue;
-				}
-				final String rootPath = root.getCanonicalPath();
-				if (dirPath.equals(rootPath)) {
-					return "";
-				}
-				final String prefix = rootPath + File.separator;
-				if (dirPath.startsWith(prefix)) {
-					return dirPath.substring(prefix.length()).replace('\\', '/');
-				}
-			}
-		}
-		catch (final Exception e) {
-			LogUtils.warn(e);
-		}
-		final File parent = directory.getParentFile();
-		return parent == null ? directory.getName() : directory.getName();
-	}
-
-	public static void collectMindmapFiles(final List files) {
-		if (files == null) {
-			return;
-		}
-		final Set seenPaths = new LinkedHashSet();
-		final File[] roots = getScanRoots();
-		for (int i = 0; i < roots.length; i++) {
-			collectMindmapFilesRecursive(roots[i], files, seenPaths);
-		}
-	}
-
-	public static void collectMindmapFilesRecursive(final File directory, final List files) {
-		collectMindmapFilesRecursive(directory, files, new LinkedHashSet());
-	}
-
-	private static void collectMindmapFilesRecursive(final File directory, final List files, final Set seenPaths) {
-		if (directory == null || !directory.exists() || !directory.isDirectory()) {
-			return;
-		}
-		final File[] children = directory.listFiles();
-		if (children == null) {
-			return;
-		}
-		for (int i = 0; i < children.length; i++) {
-			final File child = children[i];
-			if (child.getName().startsWith(".")) {
-				continue;
-			}
-			if (child.isDirectory()) {
-				if ("bin".equalsIgnoreCase(child.getName())) {
-					continue;
-				}
-				collectMindmapFilesRecursive(child, files, seenPaths);
-			}
-			else if (child.getName().toLowerCase().endsWith(".mm")) {
-				try {
-					final String key = child.getCanonicalPath();
-					if (seenPaths.add(key)) {
-						files.add(child);
-					}
-				}
-				catch (final Exception e) {
-					if (seenPaths.add(child.getAbsolutePath())) {
-						files.add(child);
-					}
-				}
-			}
-		}
+		return new File(path.trim());
 	}
 
 	private static void addCanonicalRoot(final Set roots, final File root) {
@@ -291,15 +548,6 @@ public final class MindMapDataRootResolver {
 		return (File[]) normalized.toArray(new File[normalized.size()]);
 	}
 
-	private static File getConfiguredRoot() {
-		final String configured = ResourceController.getResourceController().getProperty(SCAN_ROOT_PROPERTY, "");
-		if (configured == null || configured.trim().length() == 0) {
-			return null;
-		}
-		final File file = new File(configured.trim());
-		return file.exists() ? file : null;
-	}
-
 	private static File getSelectedProjectRoot() {
 		final Object project = invokeWorkspaceStatic("getSelectedProject");
 		return projectRoot(project);
@@ -318,55 +566,6 @@ public final class MindMapDataRootResolver {
 		catch (final Exception e) {
 			return null;
 		}
-	}
-
-	private static File getCurrentMapFileDirectory() {
-		try {
-			final Controller controller = Controller.getCurrentController();
-			if (controller == null || controller.getMap() == null) {
-				return null;
-			}
-			final File mapFile = controller.getMap().getFile();
-			if (mapFile == null) {
-				return null;
-			}
-			final File parent = mapFile.getParentFile();
-			return parent != null && parent.exists() ? parent : null;
-		}
-		catch (final Exception e) {
-			return null;
-		}
-	}
-
-	private static File getFirstOpenMapDirectory() {
-		try {
-			final Controller controller = Controller.getCurrentController();
-			if (controller == null) {
-				return null;
-			}
-			final IMapViewManager mapViewManager = controller.getMapViewManager();
-			if (mapViewManager == null) {
-				return null;
-			}
-			final Map maps = mapViewManager.getMaps();
-			if (maps == null) {
-				return null;
-			}
-			for (final Iterator it = maps.values().iterator(); it.hasNext();) {
-				final MapModel map = (MapModel) it.next();
-				if (map == null || map.getFile() == null) {
-					continue;
-				}
-				final File parent = map.getFile().getParentFile();
-				if (parent != null && parent.exists()) {
-					return parent;
-				}
-			}
-		}
-		catch (final Exception e) {
-			LogUtils.warn(e);
-		}
-		return null;
 	}
 
 	private static void addOpenMapDirectories(final Set roots) {
@@ -397,13 +596,6 @@ public final class MindMapDataRootResolver {
 		}
 	}
 
-	private static File[] getAllProjectRoots() {
-		final Set roots = new LinkedHashSet();
-		collectProjectRootsFromWorkspace(roots);
-		collectProjectRootsFromSettings(roots);
-		return (File[]) roots.toArray(new File[roots.size()]);
-	}
-
 	private static void collectProjectRootsFromWorkspace(final Set roots) {
 		try {
 			final Object model = invokeWorkspaceStatic("getCurrentModel");
@@ -420,7 +612,7 @@ public final class MindMapDataRootResolver {
 			}
 		}
 		catch (final Exception e) {
-			LogUtils.warn(e);
+			// workspace may not be loaded yet
 		}
 	}
 
@@ -460,11 +652,8 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static File findWorkspaceUserSettingsFile() {
-		final String appUserDir = Compat.getApplicationUserDirectory();
-		if (appUserDir == null || appUserDir.length() == 0) {
-			return null;
-		}
-		final File usersDir = new File(appUserDir, "users");
+		final File configDir = getApplicationConfigDirectory();
+		final File usersDir = new File(configDir, "users");
 		if (!usersDir.isDirectory()) {
 			return null;
 		}
@@ -584,34 +773,6 @@ public final class MindMapDataRootResolver {
 			// workspace plugin may not be loaded yet
 		}
 		return null;
-	}
-
-	private static File getDefaultApplicationRoot() {
-		final String userDir = Compat.getApplicationUserDirectory();
-		if (userDir != null && userDir.length() > 0) {
-			final File appDir = new File(userDir);
-			if (appDir.exists()) {
-				return appDir;
-			}
-		}
-		final Object defaultHome = invokeWorkspaceStatic("getDefaultProjectHome");
-		if (defaultHome instanceof URI) {
-			final File file = uriToExistingDirectory((URI) defaultHome);
-			if (file != null) {
-				return file;
-			}
-			try {
-				final File projectsParent = new File((URI) defaultHome);
-				final File parent = projectsParent.getParentFile();
-				if (parent != null && parent.exists()) {
-					return parent;
-				}
-			}
-			catch (final Exception e) {
-				// ignore
-			}
-		}
-		return new File(System.getProperty("user.home"));
 	}
 
 	private static Object invokeWorkspaceStatic(final String methodName) {

@@ -93,7 +93,8 @@ public final class AiWorkspaceFileIndexCollector {
             File child = children[i];
             if (child.isDirectory()) {
                 String name = child.getName();
-                if (!name.startsWith(".") && !"_data".equalsIgnoreCase(name)) {
+                if (!name.startsWith(".")
+                        && !org.freeplane.core.util.MindMapDataRootResolver.isConfigDirectoryName(name)) {
                     collectAllFilesRecursive(child, result, seen);
                 }
             }

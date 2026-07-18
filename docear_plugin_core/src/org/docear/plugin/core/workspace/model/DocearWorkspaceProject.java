@@ -212,10 +212,9 @@ public class DocearWorkspaceProject extends AWorkspaceProject {
 
 	@Override
 	public URI getProjectDataPath() {
-		File home = URIUtils.getAbsoluteFile(getProjectHome());
-		home = new File(home, "_data");
-		home = new File(home, getProjectID());
-		return home.toURI();		
+		final File home = URIUtils.getAbsoluteFile(getProjectHome());
+		final File base = org.freeplane.core.util.MindMapDataRootResolver.getProjectSettingsBaseDirectory(home);
+		return new File(base, getProjectID()).toURI();
 	}
 
 	@Override

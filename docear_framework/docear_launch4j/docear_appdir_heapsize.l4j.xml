@@ -19,7 +19,7 @@
     <maxVersion></maxVersion>
     <jdkPreference>preferJre</jdkPreference>
     <maxHeapSize>512</maxHeapSize>
-    <opt>-Dorg.freeplane.userfpdir=&quot;E:\\yixiaozi\\_data&quot;</opt>
+    <!-- Profile is {workingDirectory}/data; see working-directory.txt next to the exe. -->
     <opt>-Xms40m</opt>
   </jre>
 </launch4jConfig>

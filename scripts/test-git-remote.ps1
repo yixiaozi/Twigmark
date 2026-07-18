@@ -1,11 +1,18 @@
 # Test Git pull/push using the same GitCommand code as Docear Git panel.
 # Usage:
-#   powershell -ExecutionPolicy Bypass -File .\scripts\test-git-remote.ps1
-#   powershell -ExecutionPolicy Bypass -File .\scripts\test-git-remote.ps1 E:\yixiaozi
+#   powershell -ExecutionPolicy Bypass -File .\scripts\test-git-remote.ps1 <repo-path>
+#   $env:DOCEAR_GIT_TEST_REPO = "<repo-path>"; powershell -ExecutionPolicy Bypass -File .\scripts\test-git-remote.ps1
 
 param(
-    [string] $RepoPath = "E:\yixiaozi"
+    [string] $RepoPath = ""
 )
+
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    $RepoPath = $env:DOCEAR_GIT_TEST_REPO
+}
+if ([string]::IsNullOrWhiteSpace($RepoPath)) {
+    throw "Repo path required. Pass -RepoPath or set DOCEAR_GIT_TEST_REPO."
+}
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path

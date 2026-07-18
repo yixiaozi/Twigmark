@@ -4,7 +4,6 @@ import java.awt.Window;
 import java.awt.event.InputEvent;
 import java.awt.event.MouseEvent;
 import java.io.File;
-import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -12,12 +11,10 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.Arrays;
 import java.util.HashSet;
-import java.util.Properties;
 import java.util.Set;
 
 import javax.swing.JFrame;
 
-import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.features.mode.Controller;
 
@@ -162,46 +159,22 @@ public class Compat {
 			}
 		}
 	}
-	final private static String CURRENT_VERSION_DIR= File.separatorChar + "1.3.x";
-	
-	/** the directory *including* the version directory. */
+	/**
+	 * Application configuration directory: {@code {workingDirectory}/data}.
+	 * Optional override via {@code -Dorg.freeplane.userfpdir}.
+	 */
 	public static String getApplicationUserDirectory() {
 		String userFpDir = System.getProperty(PROPERTY_FREEPLANE_USERDIR);
 		if (userFpDir == null || userFpDir.trim().length() == 0) {
-			final File fixedConfigDir = MindMapDataRootResolver.getApplicationConfigDirectory();
-			if (fixedConfigDir != null) {
-				userFpDir = fixedConfigDir.getAbsolutePath();
-			}
-			else {
-				userFpDir = getLegacyDefaultApplicationUserDirectory();
-				if (userFpDir.endsWith("freeplane")) {
-					userFpDir += CURRENT_VERSION_DIR;
-				}
-			}
+			userFpDir = MindMapDataRootResolver.getApplicationConfigDirectory().getAbsolutePath();
 			System.setProperty(PROPERTY_FREEPLANE_USERDIR, userFpDir);
 		}
 		return userFpDir;
 	}
 
-	/** Default profile directory (excludes Freeplane version suffix). Uses fixed {@code _data} when configured. */
+	/** Same as {@link #getApplicationUserDirectory()} for Docear's working-directory layout. */
 	public static String getDefaultApplicationUserDirectory() {
-		final File fixedConfigDir = MindMapDataRootResolver.getApplicationConfigDirectory();
-		if (fixedConfigDir != null) {
-			return fixedConfigDir.getAbsolutePath();
-		}
-		return getLegacyDefaultApplicationUserDirectory();
-	}
-
-	/** Legacy Freeplane/Docear profile under {@code user.home/.docear} — not used when fixed library is configured. */
-    private static String getLegacyDefaultApplicationUserDirectory() {
-    	Properties freeplaneProperties = new Properties();
-		try {
-			freeplaneProperties.load(Compat.class.getClassLoader().getResourceAsStream(ResourceController.FREEPLANE_PROPERTIES));
-		} catch (IOException e) {
-			LogUtils.warn(e);
-		}
-		String applicationName = freeplaneProperties.getProperty("ApplicationName", "Freeplane");
-        return System.getProperty("user.home")+ File.separator + "."+ applicationName.toLowerCase();
+		return MindMapDataRootResolver.getApplicationConfigDirectory().getAbsolutePath();
 	}
 
 	static public String smbUri2unc(final URI uri) {

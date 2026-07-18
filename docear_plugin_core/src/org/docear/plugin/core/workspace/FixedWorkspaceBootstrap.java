@@ -13,8 +13,8 @@ import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 /**
- * Ensures the single fixed workspace project at {@link MindMapDataRootResolver#FIXED_DATA_ROOT_PATH}
- * is loaded and maps are attached to it without any project wizard.
+ * Ensures the workspace project for {@link MindMapDataRootResolver#getWorkingDirectory()}
+ * is loaded and maps can attach to it without a project wizard.
  */
 public final class FixedWorkspaceBootstrap {
 
@@ -29,8 +29,8 @@ public final class FixedWorkspaceBootstrap {
 		if (project != null) {
 			WorkspaceController.getMapModelExtension(map).setProject(project);
 			try {
-				LogUtils.info("attached map \"" + map.getTitle() + "\" to fixed project at "
-				        + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
+				LogUtils.info("attached map \"" + map.getTitle() + "\" to library project at "
+				        + project.getProjectHome());
 			}
 			catch (final Exception e) {
 				// ignore
@@ -40,13 +40,10 @@ public final class FixedWorkspaceBootstrap {
 	}
 
 	public static AWorkspaceProject getOrLoadFixedProject() {
-		File dataRoot = MindMapDataRootResolver.getFixedDataRoot();
-		if (dataRoot == null) {
-			dataRoot = new File(MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
-			if (!dataRoot.exists() && !dataRoot.mkdirs()) {
-				LogUtils.severe("Could not create fixed data root: " + MindMapDataRootResolver.FIXED_DATA_ROOT_PATH);
-				return null;
-			}
+		final File dataRoot = MindMapDataRootResolver.getWorkingDirectory();
+		if (!dataRoot.isDirectory()) {
+			LogUtils.severe("Working directory is missing or not a directory: " + dataRoot.getAbsolutePath());
+			return null;
 		}
 		try {
 			final AWorkspaceProject existing = findProjectByHome(dataRoot);
