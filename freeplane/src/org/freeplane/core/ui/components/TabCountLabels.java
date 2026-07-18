@@ -1,6 +1,5 @@
 package org.freeplane.core.ui.components;
 
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
@@ -14,10 +13,12 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
+
 public final class TabCountLabels {
 
-	private static final int HORIZONTAL_PADDING = 8;
-	private static final int VERTICAL_PADDING = 1;
+	private static final int HORIZONTAL_PADDING = 10;
+	private static final int VERTICAL_PADDING = 2;
 	private static final int ICON_GAP = 2;
 
 	private TabCountLabels() {
@@ -90,14 +91,15 @@ public final class TabCountLabels {
 		gbc.insets = new Insets(icon != null ? ICON_GAP : 0, 0, 0, 0);
 		final JLabel titleLabel = new JLabel(title);
 		titleLabel.setHorizontalAlignment(SwingConstants.CENTER);
+		titleLabel.setForeground(DocearUiTheme.TEXT);
+		titleLabel.setFont(DocearUiTheme.font(11.5f, Font.BOLD));
 		panel.add(titleLabel, gbc);
 		if (count >= 0) {
 			gbc.gridy = row;
-			gbc.insets = new Insets(0, 0, 0, 0);
+			gbc.insets = new Insets(1, 0, 0, 0);
 			final JLabel countLabel = new JLabel(String.valueOf(count));
-			final Font font = countLabel.getFont();
-			countLabel.setFont(font.deriveFont(Font.PLAIN, Math.max(9f, font.getSize2D() - 2f)));
-			countLabel.setForeground(new Color(102, 102, 102));
+			countLabel.setFont(DocearUiTheme.font(10f, Font.PLAIN));
+			countLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 			countLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			panel.add(countLabel, gbc);
 		}

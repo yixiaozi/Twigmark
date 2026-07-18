@@ -138,10 +138,12 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 			applicationResourceController.init();
 			LogUtils.createLogger();
 			FreeplaneGUIStarter.showSysInfo();
+			org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
 			registerSubstanceLookAndFeels();
 			final String lookandfeel = System.getProperty("lookandfeel", applicationResourceController
 			    .getProperty("lookandfeel"));
 			FrameController.setLookAndFeel(lookandfeel);
+			org.freeplane.core.ui.theme.DocearUiTheme.applyAfterLookAndFeel();
 			UIManager.put("RibbonUI", "org.freeplane.core.ui.ribbon.ZeroTaskbarRibbonUI");
 			final JRibbonFrame frame = new JRibbonFrame("Freeplane");
 			frame.setName(UITools.MAIN_FREEPLANE_FRAME);

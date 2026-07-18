@@ -118,6 +118,7 @@ public class MModeController extends ModeController {
 	}
 
 	public static PropertyAction createPropertyAction(OptionPanelBuilder optionPanelBuilder) {
+		org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
 		registerSubstanceLookAndFeels();
 	    final LookAndFeelInfo[] lafInfo = UIManager.getInstalledLookAndFeels();
 		final Vector<String> lafNames = new Vector<String>(lafInfo.length + 1);

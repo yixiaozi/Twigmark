@@ -7,6 +7,7 @@ import javax.swing.Icon;
 import javax.swing.JTabbedPane;
 
 import org.freeplane.core.ui.components.TabbedPaneStableOrder;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 
 /**
  * JTabbedPane that supports reordering tabs by dragging tab headers.
@@ -23,6 +24,9 @@ public class DraggableTabbedPane extends JTabbedPane {
 	private TabReorderListener reorderListener;
 
 	public DraggableTabbedPane() {
+		setOpaque(true);
+		setBackground(DocearUiTheme.CANVAS);
+		setFont(DocearUiTheme.font(12f, java.awt.Font.BOLD));
 		TabbedPaneStableOrder.install(this);
 		addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {
