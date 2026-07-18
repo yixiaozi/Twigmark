@@ -247,6 +247,105 @@ final class McpAuditDatabase {
 		}
 	}
 
+	List<Map<String, Object>> listEventRows(final int limit) throws SQLException {
+		final String sql = "SELECT id, ts, tenant, actor, action, kind, intent, trace_id, session_id, client_name, os_user,"
+		    + " remote_address, question_summary, operation_goal, request_json, response_json, response_bytes,"
+		    + " response_truncated, success, duration_ms, error_message FROM audit_event ORDER BY ts DESC LIMIT ?";
+		Connection connection = null;
+		PreparedStatement statement = null;
+		ResultSet rs = null;
+		try {
+			connection = openConnection();
+			statement = connection.prepareStatement(sql);
+			statement.setInt(1, limit > 0 ? limit : 50);
+			rs = statement.executeQuery();
+			final List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
+			while (rs.next()) {
+				items.add(toPlainMap(readEventRow(rs)));
+			}
+			return items;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(statement);
+			closeQuietly(connection);
+		}
+	}
+
+	List<Map<String, Object>> listTraceRows(final int limit) throws SQLException {
+		final String sql = "SELECT trace_id, tenant, question_summary, actor, first_ts, last_ts, call_count, actions"
+		    + " FROM audit_trace WHERE trace_id <> '' ORDER BY last_ts DESC LIMIT ?";
+		Connection connection = null;
+		PreparedStatement statement = null;
+		ResultSet rs = null;
+		try {
+			connection = openConnection();
+			statement = connection.prepareStatement(sql);
+			statement.setInt(1, limit > 0 ? limit : 50);
+			rs = statement.executeQuery();
+			final List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
+			while (rs.next()) {
+				final Map<String, Object> row = new LinkedHashMap<String, Object>();
+				row.put("traceId", nullToEmpty(rs.getString("trace_id")));
+				row.put("tenant", nullToEmpty(rs.getString("tenant")));
+				row.put("questionSummary", nullToEmpty(rs.getString("question_summary")));
+				row.put("actor", nullToEmpty(rs.getString("actor")));
+				row.put("firstTs", Long.valueOf(rs.getLong("first_ts")));
+				row.put("lastTs", Long.valueOf(rs.getLong("last_ts")));
+				row.put("callCount", Integer.valueOf(rs.getInt("call_count")));
+				row.put("actions", nullToEmpty(rs.getString("actions")));
+				items.add(row);
+			}
+			return items;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(statement);
+			closeQuietly(connection);
+		}
+	}
+
+	private static Map<String, Object> toPlainMap(final Map<String, JsonValue> source) {
+		final Map<String, Object> row = new LinkedHashMap<String, Object>();
+		if (source == null) {
+			return row;
+		}
+		row.put("id", Long.valueOf(num(source, "id")));
+		row.put("ts", Long.valueOf(num(source, "ts")));
+		row.put("tenant", str(source, "tenant"));
+		row.put("actor", str(source, "actor"));
+		row.put("action", str(source, "action"));
+		row.put("kind", str(source, "kind"));
+		row.put("intent", str(source, "intent"));
+		row.put("traceId", str(source, "traceId"));
+		row.put("sessionId", str(source, "sessionId"));
+		row.put("clientName", str(source, "clientName"));
+		row.put("osUser", str(source, "osUser"));
+		row.put("remoteAddress", str(source, "remoteAddress"));
+		row.put("questionSummary", str(source, "questionSummary"));
+		row.put("operationGoal", str(source, "operationGoal"));
+		row.put("requestJson", str(source, "requestJson"));
+		row.put("responseJson", str(source, "responseJson"));
+		row.put("responseBytes", Integer.valueOf(source.containsKey("responseBytes") ? source.get("responseBytes").asInt(0) : 0));
+		row.put("responseTruncated", Boolean.valueOf(bool(source, "responseTruncated")));
+		row.put("success", Boolean.valueOf(bool(source, "success")));
+		row.put("durationMs", Long.valueOf(num(source, "durationMs")));
+		row.put("error", str(source, "error"));
+		return row;
+	}
+
+	private static String str(final Map<String, JsonValue> source, final String key) {
+		return source.containsKey(key) ? nullToEmpty(source.get(key).asString()) : "";
+	}
+
+	private static long num(final Map<String, JsonValue> source, final String key) {
+		return source.containsKey(key) ? source.get(key).asLong(0L) : 0L;
+	}
+
+	private static boolean bool(final Map<String, JsonValue> source, final String key) {
+		return source.containsKey(key) && source.get(key).asBoolean();
+	}
+
 	private void ensureSchema() {
 		Connection connection = null;
 		Statement statement = null;

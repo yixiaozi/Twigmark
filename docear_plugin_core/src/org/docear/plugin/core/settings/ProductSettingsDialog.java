@@ -48,7 +48,10 @@ public final class ProductSettingsDialog extends JDialog {
 	private final JSpinner mcpPortSpinner = new JSpinner(new SpinnerNumberModel(7720, 1, 65535, 1));
 	private final JCheckBox mcpReadOnly = new JCheckBox();
 	private final JCheckBox mcpCursorSync = new JCheckBox();
+	private final JCheckBox mcpAuditEnabled = new JCheckBox();
+	private final JLabel mcpStatusBadge = DocearUiTheme.titleLabel(" ");
 	private final JLabel mcpStatusLabel = DocearUiTheme.mutedLabel(" ");
+	private final JLabel mcpAuditLabel = DocearUiTheme.mutedLabel(" ");
 	private final JTextField gitRepoField = new JTextField(36);
 	private final JTextField financeMapField = new JTextField(36);
 	private final JTextField inboxDirField = new JTextField(36);
@@ -161,6 +164,7 @@ public final class ProductSettingsDialog extends JDialog {
 		mcpEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.enabled"));
 		mcpReadOnly.setText(TextUtils.getText("ProductSettingsAction.mcp.readonly"));
 		mcpCursorSync.setText(TextUtils.getText("ProductSettingsAction.mcp.cursor_sync"));
+		mcpAuditEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.audit_enabled"));
 		addCheck(panel, c, 0, mcpEnabled);
 		addLabel(panel, c, 1, TextUtils.getText("ProductSettingsAction.mcp.host"));
 		c.gridx = 1;
@@ -172,10 +176,69 @@ public final class ProductSettingsDialog extends JDialog {
 		panel.add(mcpPortSpinner, c);
 		addCheck(panel, c, 3, mcpReadOnly);
 		addCheck(panel, c, 4, mcpCursorSync);
+		addCheck(panel, c, 5, mcpAuditEnabled);
+
 		c.gridx = 0;
-		c.gridy = 5;
+		c.gridy = 6;
 		c.gridwidth = 2;
-		panel.add(mcpStatusLabel, c);
+		c.fill = GridBagConstraints.HORIZONTAL;
+		final JPanel statusCard = new JPanel(new BorderLayout(6, 4));
+		DocearUiTheme.styleSurface(statusCard);
+		statusCard.setBorder(BorderFactory.createCompoundBorder(DocearUiTheme.hairlineBorder(),
+		        new EmptyBorder(8, 10, 8, 10)));
+		mcpStatusBadge.setFont(DocearUiTheme.font(14f, java.awt.Font.BOLD));
+		final JPanel statusText = new JPanel(new GridBagLayout());
+		statusText.setOpaque(false);
+		final GridBagConstraints sc = new GridBagConstraints();
+		sc.gridx = 0;
+		sc.gridy = 0;
+		sc.anchor = GridBagConstraints.WEST;
+		sc.insets = new Insets(0, 0, 2, 0);
+		statusText.add(mcpStatusBadge, sc);
+		sc.gridy = 1;
+		statusText.add(mcpStatusLabel, sc);
+		sc.gridy = 2;
+		statusText.add(mcpAuditLabel, sc);
+		statusCard.add(statusText, BorderLayout.CENTER);
+
+		final JPanel statusActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+		statusActions.setOpaque(false);
+		final JButton refreshStatus = DocearUiTheme.softButton(TextUtils.getText("ProductSettingsAction.mcp.refresh"));
+		final JButton restart = DocearUiTheme.softButton(TextUtils.getText("ProductSettingsAction.mcp.restart"));
+		final JButton openAudit = DocearUiTheme.primaryButton(TextUtils.getText("ProductSettingsAction.mcp.open_audit"));
+		refreshStatus.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				refreshMcpStatus();
+			}
+		});
+		restart.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				applyMcpRuntimeProperties();
+				final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
+				if (backend != null) {
+					backend.restartServer();
+				}
+				refreshMcpStatus();
+			}
+		});
+		openAudit.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
+				if (backend != null) {
+					backend.openStatusAuditDialog(Controller.getCurrentController().getViewController().getFrame());
+				}
+				else {
+					JOptionPane.showMessageDialog(ProductSettingsDialog.this,
+					        TextUtils.getText("ProductSettingsAction.mcp.unavailable"), getTitle(),
+					        JOptionPane.INFORMATION_MESSAGE);
+				}
+			}
+		});
+		statusActions.add(refreshStatus);
+		statusActions.add(restart);
+		statusActions.add(openAudit);
+		statusCard.add(statusActions, BorderLayout.SOUTH);
+		panel.add(statusCard, c);
 		return panel;
 	}
 
@@ -255,8 +318,8 @@ public final class ProductSettingsDialog extends JDialog {
 		}
 		mcpReadOnly.setSelected(isTrue(rc.getProperty("mcp.readonly", "false")));
 		mcpCursorSync.setSelected(isTrue(rc.getProperty("mcp.cursorPlugin.sync.enabled", "true")));
-		mcpStatusLabel.setText(TextUtils.format("ProductSettingsAction.mcp.status",
-		        rc.getProperty("mcp.host", "127.0.0.1"), rc.getProperty("mcp.port", "7720")));
+		mcpAuditEnabled.setSelected(isTrue(rc.getProperty("mcp.audit.enabled", "true")));
+		refreshMcpStatus();
 		gitRepoField.setText(GitConfig.getConfiguredRepositoryPathRaw());
 		financeMapField.setText(rc.getProperty(FinanceLedgerService.PROP_MAP_PATH, FinanceLedgerService.DEFAULT_FILENAME));
 		inboxDirField.setText(rc.getProperty(PROP_INBOX_DIRECTORY, ""));
@@ -299,6 +362,11 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty("mcp.port", String.valueOf(((Number) mcpPortSpinner.getValue()).intValue()));
 		rc.setProperty("mcp.readonly", mcpReadOnly.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
+		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
+		final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
+		if (backend != null) {
+			backend.restartServer();
+		}
 
 		GitConfig.setRepositoryPath(gitRepoField.getText());
 
@@ -395,6 +463,61 @@ public final class ProductSettingsDialog extends JDialog {
 		box.setFont(DocearUiTheme.font(12f));
 		box.setForeground(DocearUiTheme.TEXT);
 		panel.add(box, c);
+	}
+
+	private void applyMcpRuntimeProperties() {
+		final ResourceController rc = ResourceController.getResourceController();
+		rc.setProperty("mcp.enabled", mcpEnabled.isSelected() ? "true" : "false");
+		final String host = mcpHostField.getText() == null || mcpHostField.getText().trim().length() == 0
+		        ? "127.0.0.1" : mcpHostField.getText().trim();
+		rc.setProperty("mcp.host", host);
+		rc.setProperty("mcp.port", String.valueOf(((Number) mcpPortSpinner.getValue()).intValue()));
+		rc.setProperty("mcp.readonly", mcpReadOnly.isSelected() ? "true" : "false");
+		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
+		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
+	}
+
+	private void refreshMcpStatus() {
+		final ResourceController rc = ResourceController.getResourceController();
+		final String host = mcpHostField.getText() == null || mcpHostField.getText().trim().length() == 0
+		        ? rc.getProperty("mcp.host", "127.0.0.1") : mcpHostField.getText().trim();
+		final String port = String.valueOf(((Number) mcpPortSpinner.getValue()).intValue());
+		mcpStatusLabel.setText(TextUtils.format("ProductSettingsAction.mcp.status", host, port));
+
+		final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
+		if (backend == null) {
+			mcpStatusBadge.setText(TextUtils.getText("ProductSettingsAction.mcp.state.unavailable"));
+			mcpStatusBadge.setForeground(DocearUiTheme.TEXT_MUTED);
+			mcpAuditLabel.setText(TextUtils.getText("ProductSettingsAction.mcp.unavailable"));
+			return;
+		}
+		final boolean running = backend.isServerRunning();
+		final boolean healthy = backend.probeHealth();
+		if (!mcpEnabled.isSelected()) {
+			mcpStatusBadge.setText(TextUtils.getText("ProductSettingsAction.mcp.state.disabled"));
+			mcpStatusBadge.setForeground(DocearUiTheme.TEXT_MUTED);
+		}
+		else if (running && healthy) {
+			mcpStatusBadge.setText(TextUtils.getText("ProductSettingsAction.mcp.state.running"));
+			mcpStatusBadge.setForeground(DocearUiTheme.SUCCESS);
+		}
+		else if (running) {
+			mcpStatusBadge.setText(TextUtils.getText("ProductSettingsAction.mcp.state.listening"));
+			mcpStatusBadge.setForeground(DocearUiTheme.WARNING);
+		}
+		else {
+			mcpStatusBadge.setText(TextUtils.getText("ProductSettingsAction.mcp.state.stopped"));
+			mcpStatusBadge.setForeground(DocearUiTheme.DANGER);
+		}
+		final String err = backend.getLastError();
+		if (err != null && err.length() > 0) {
+			mcpStatusLabel.setText(mcpStatusLabel.getText() + "  ·  " + err);
+		}
+		mcpAuditLabel.setText(TextUtils.format("ProductSettingsAction.mcp.audit_status",
+		        backend.isAuditEnabled() ? TextUtils.getText("ProductSettingsAction.mcp.audit_on")
+		                : TextUtils.getText("ProductSettingsAction.mcp.audit_off"),
+		        Integer.valueOf(backend.getAuditEventCount()), Integer.valueOf(backend.getAuditPendingCount()),
+		        backend.getAuditDbPath()));
 	}
 
 	private static boolean isTrue(final String value) {

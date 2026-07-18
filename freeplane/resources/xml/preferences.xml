@@ -242,6 +242,7 @@
             <number name="mcp.port" min="1" max="65535"/>
             <boolean name="mcp.readonly"/>
             <boolean name="mcp.cursorPlugin.sync.enabled"/>
+            <boolean name="mcp.audit.enabled"/>
         </separator>
         <separator name="finance">
             <path name="finance.map.path"/>

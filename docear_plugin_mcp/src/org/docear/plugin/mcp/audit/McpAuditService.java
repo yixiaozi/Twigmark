@@ -1,7 +1,9 @@
 package org.docear.plugin.mcp.audit;
 
 import java.io.File;
+import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -240,6 +242,49 @@ public final class McpAuditService {
 		catch (Exception e) {
 			return errorJson("get_audit_stats failed", e);
 		}
+	}
+
+	/** UI helper: recent audit events as plain maps (string/number/boolean values). */
+	public static List<Map<String, Object>> listAuditEventsForUi(final int limit) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().listEventRows(limit);
+		}
+		catch (Exception e) {
+			LogUtils.warn("listAuditEventsForUi failed: " + e.getMessage(), e);
+			return Collections.emptyList();
+		}
+	}
+
+	/** UI helper: recent traces as plain maps. */
+	public static List<Map<String, Object>> listAuditTracesForUi(final int limit) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().listTraceRows(limit);
+		}
+		catch (Exception e) {
+			LogUtils.warn("listAuditTracesForUi failed: " + e.getMessage(), e);
+			return Collections.emptyList();
+		}
+	}
+
+	public static int countAuditEvents() {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().countEvents();
+		}
+		catch (Exception e) {
+			return 0;
+		}
+	}
+
+	public static int pendingAuditCount() {
+		final McpAuditWriter writer = WRITER;
+		return writer != null ? writer.pendingCount() : 0;
+	}
+
+	public static boolean isAuditWriterStarted() {
+		return STARTED;
 	}
 
 	static Map<String, JsonValue> eventToMap(final McpAuditEvent event) {
