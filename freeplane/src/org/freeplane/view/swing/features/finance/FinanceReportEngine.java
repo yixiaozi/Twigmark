@@ -102,7 +102,7 @@ public final class FinanceReportEngine {
 		view.addChart(byDay);
 
 		if (income == 0L && expense == 0L) {
-			view.emptyHint = "本月暂无损益交易。在左侧「财务」记一笔或用 add_finance_transaction 后再看。";
+			view.emptyHint = "本月暂无损益交易。在左侧「财务」记一笔后再看。";
 		}
 		return view;
 	}
@@ -187,7 +187,7 @@ public final class FinanceReportEngine {
 		}
 		view.addChart(bar);
 		if (budgets.isEmpty()) {
-			view.emptyHint = "本月未设预算。在「财务」Tab 点「加预算」或用 set_finance_budget。";
+			view.emptyHint = "本月未设预算。在「财务」Tab 的「更多」里可添加。";
 		}
 		return view;
 	}
@@ -218,7 +218,7 @@ public final class FinanceReportEngine {
 		view.addKpi("金额合计", "¥" + FinanceAttributes.formatYuan(total), "周期内");
 		view.addChart(pie);
 		if (subs.isEmpty()) {
-			view.emptyHint = "暂无订阅。在「财务」Tab 点「加订阅」或用 upsert_finance_subscription。";
+			view.emptyHint = "暂无订阅。在「财务」Tab 的「更多 → 加订阅」里可添加。";
 		}
 		return view;
 	}
@@ -257,7 +257,7 @@ public final class FinanceReportEngine {
 		}
 		view.addChart(pie);
 		if (coupons.isEmpty()) {
-			view.emptyHint = "暂无优惠券。在「财务」Tab 点「加优惠券」或用 upsert_finance_coupon。";
+			view.emptyHint = "暂无优惠券。在「财务」Tab 的「更多 → 加优惠券」里可添加。";
 		}
 		return view;
 	}
