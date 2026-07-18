@@ -82,8 +82,14 @@ public final class McpFinanceService {
 						JsonValue.ofList(stringList(FinanceLedgerService.listCategories(FinanceAttributes.FLOW_EXPENSE))));
 				data.put("incomeCategories",
 						JsonValue.ofList(stringList(FinanceLedgerService.listCategories(FinanceAttributes.FLOW_INCOME))));
-				data.put("subscriptionCount",
-						JsonValue.ofNumber(Integer.valueOf(FinanceLedgerService.listSubscriptions().size())));
+				final List subs = FinanceLedgerService.listSubscriptions();
+				final long dailySpend = FinanceRules.totalDailySpendCents(subs);
+				data.put("subscriptionCount", JsonValue.ofNumber(Integer.valueOf(subs.size())));
+				data.put("activeSubscriptionCount",
+						JsonValue.ofNumber(Integer.valueOf(FinanceRules.countActiveSubscriptions(subs))));
+				data.put("subscriptionDailySpendCents", JsonValue.ofNumber(Long.valueOf(dailySpend)));
+				data.put("subscriptionDailySpendYuan",
+						JsonValue.ofString(FinanceAttributes.formatYuan(dailySpend)));
 				data.put("couponCount", JsonValue.ofNumber(Integer.valueOf(FinanceLedgerService.listCoupons().size())));
 				data.put("budgetCount",
 						JsonValue.ofNumber(Integer.valueOf(FinanceLedgerService.listBudgets(period).size())));
@@ -251,7 +257,7 @@ public final class McpFinanceService {
 					data.put("message", JsonValue.ofString("amount must be a positive yuan value"));
 					return JsonValue.ofMap(data).toJson();
 				}
-				final String cycleValue = cycle == null || cycle.trim().length() == 0 ? "monthly" : cycle.trim();
+				final String cycleValue = FinanceRules.normalizeCycle(cycle);
 				final String next = nextYmd == null || nextYmd.trim().length() == 0
 						? FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(), cycleValue)
 						: nextYmd.trim();
@@ -271,21 +277,32 @@ public final class McpFinanceService {
 				for (int i = 0; i < subs.size(); i++) {
 					final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) subs
 							.get(i);
+					final long daily = FinanceRules.dailyAverageCents(s.amountCents, s.cycle);
 					final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
 					row.put("nodeId", JsonValue.ofString(s.node == null ? "" : s.node.createID()));
 					row.put("name", JsonValue.ofString(s.name));
 					row.put("amountCents", JsonValue.ofNumber(Long.valueOf(s.amountCents)));
 					row.put("amountYuan", JsonValue.ofString(FinanceAttributes.formatYuan(s.amountCents)));
-					row.put("cycle", JsonValue.ofString(s.cycle));
+					row.put("cycle", JsonValue.ofString(FinanceRules.normalizeCycle(s.cycle)));
+					row.put("cycleLabel", JsonValue.ofString(FinanceRules.cycleLabelZh(s.cycle)));
+					row.put("cycleDays", JsonValue.ofNumber(Integer.valueOf(FinanceRules.cycleDays(s.cycle))));
+					row.put("dailyAverageCents", JsonValue.ofNumber(Long.valueOf(daily)));
+					row.put("dailyAverageYuan", JsonValue.ofString(FinanceAttributes.formatYuan(daily)));
+					row.put("active", JsonValue.ofBoolean(FinanceRules.isActiveSubscription(s.status)));
 					row.put("next", JsonValue.ofString(s.nextYmd));
 					row.put("status", JsonValue.ofString(s.status));
 					row.put("account", JsonValue.ofString(s.accountName));
 					row.put("note", JsonValue.ofString(s.note));
 					out.add(JsonValue.ofMap(row));
 				}
+				final long totalDaily = FinanceRules.totalDailySpendCents(subs);
 				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
 				data.put("mapFile", JsonValue.ofString(absMapPath()));
 				data.put("count", JsonValue.ofNumber(Integer.valueOf(out.size())));
+				data.put("activeCount",
+						JsonValue.ofNumber(Integer.valueOf(FinanceRules.countActiveSubscriptions(subs))));
+				data.put("totalDailySpendCents", JsonValue.ofNumber(Long.valueOf(totalDaily)));
+				data.put("totalDailySpendYuan", JsonValue.ofString(FinanceAttributes.formatYuan(totalDaily)));
 				data.put("subscriptions", JsonValue.ofList(out));
 				return JsonValue.ofMap(data).toJson();
 			}

@@ -90,17 +90,20 @@ public final class FinanceRules {
 		final String base = fromYmd == null || fromYmd.trim().length() == 0
 				? FinanceAttributes.todayYmd()
 				: fromYmd.trim();
-		final String c = cycle == null ? "monthly" : cycle.trim().toLowerCase(Locale.ENGLISH);
+		final String c = normalizeCycle(cycle);
 		try {
 			final SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 			fmt.setLenient(false);
 			final Calendar cal = Calendar.getInstance();
 			cal.setTime(fmt.parse(base));
-			if ("weekly".equals(c) || "week".equals(c)) {
+			if ("weekly".equals(c)) {
 				cal.add(Calendar.DAY_OF_MONTH, 7);
 			}
-			else if ("yearly".equals(c) || "year".equals(c) || "annual".equals(c)) {
+			else if ("yearly".equals(c)) {
 				cal.add(Calendar.YEAR, 1);
+			}
+			else if ("daily".equals(c)) {
+				cal.add(Calendar.DAY_OF_MONTH, 1);
 			}
 			else {
 				cal.add(Calendar.MONTH, 1);
@@ -110,6 +113,127 @@ public final class FinanceRules {
 		catch (Exception e) {
 			return base;
 		}
+	}
+
+	/**
+	 * Approximate days in one billing cycle for daily-average math.
+	 * monthly≈30, yearly=365, weekly=7, daily=1.
+	 */
+	public static int cycleDays(final String cycle) {
+		final String c = normalizeCycle(cycle);
+		if ("weekly".equals(c)) {
+			return 7;
+		}
+		if ("yearly".equals(c)) {
+			return 365;
+		}
+		if ("daily".equals(c)) {
+			return 1;
+		}
+		return 30;
+	}
+
+	public static String normalizeCycle(final String cycle) {
+		if (cycle == null || cycle.trim().length() == 0) {
+			return "monthly";
+		}
+		final String c = cycle.trim().toLowerCase(Locale.ENGLISH);
+		if ("weekly".equals(c) || "week".equals(c) || "周".equals(c) || "每周".equals(cycle.trim())) {
+			return "weekly";
+		}
+		if ("yearly".equals(c) || "year".equals(c) || "annual".equals(c) || "年".equals(c)
+				|| "每年".equals(cycle.trim())) {
+			return "yearly";
+		}
+		if ("daily".equals(c) || "day".equals(c) || "日".equals(c) || "每天".equals(cycle.trim())) {
+			return "daily";
+		}
+		if ("monthly".equals(c) || "month".equals(c) || "月".equals(c) || "每月".equals(cycle.trim())) {
+			return "monthly";
+		}
+		return "monthly";
+	}
+
+	public static String cycleLabelZh(final String cycle) {
+		final String c = normalizeCycle(cycle);
+		if ("weekly".equals(c)) {
+			return "每周";
+		}
+		if ("yearly".equals(c)) {
+			return "每年";
+		}
+		if ("daily".equals(c)) {
+			return "每天";
+		}
+		return "每月";
+	}
+
+	/** Active subscriptions count toward fixed daily spend (paused/cancelled excluded). */
+	public static boolean isActiveSubscription(final String status) {
+		if (status == null || status.trim().length() == 0) {
+			return true;
+		}
+		final String s = status.trim().toLowerCase(Locale.ENGLISH);
+		if ("paused".equals(s) || "pause".equals(s) || "cancelled".equals(s) || "canceled".equals(s)
+				|| "inactive".equals(s) || "stopped".equals(s) || "停用".equals(status.trim())
+				|| "暂停".equals(status.trim())) {
+			return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Average cost per day for one subscription amount/cycle (rounded half-up, cents).
+	 * Example: ¥3000/month → 10000 cents/day; ¥98/year → 27 cents/day.
+	 */
+	public static long dailyAverageCents(final long amountCents, final String cycle) {
+		final long amount = Math.abs(amountCents);
+		if (amount <= 0L) {
+			return 0L;
+		}
+		final int days = cycleDays(cycle);
+		return (amount + days / 2) / days;
+	}
+
+	/**
+	 * Sum of daily averages for active items in a list of
+	 * {@link FinanceLedgerService.FinanceSubscription}.
+	 */
+	public static long totalDailySpendCents(final java.util.List subscriptions) {
+		if (subscriptions == null || subscriptions.isEmpty()) {
+			return 0L;
+		}
+		long total = 0L;
+		for (int i = 0; i < subscriptions.size(); i++) {
+			final Object item = subscriptions.get(i);
+			if (!(item instanceof FinanceLedgerService.FinanceSubscription)) {
+				continue;
+			}
+			final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) item;
+			if (!isActiveSubscription(s.status)) {
+				continue;
+			}
+			total += dailyAverageCents(s.amountCents, s.cycle);
+		}
+		return total;
+	}
+
+	public static int countActiveSubscriptions(final java.util.List subscriptions) {
+		if (subscriptions == null || subscriptions.isEmpty()) {
+			return 0;
+		}
+		int count = 0;
+		for (int i = 0; i < subscriptions.size(); i++) {
+			final Object item = subscriptions.get(i);
+			if (!(item instanceof FinanceLedgerService.FinanceSubscription)) {
+				continue;
+			}
+			final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) item;
+			if (isActiveSubscription(s.status)) {
+				count++;
+			}
+		}
+		return count;
 	}
 
 	public static String flowSign(final String flow) {
