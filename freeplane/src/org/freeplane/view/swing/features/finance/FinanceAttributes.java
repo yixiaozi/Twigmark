@@ -22,6 +22,8 @@ public final class FinanceAttributes {
 	public static final String FINANCE_PERIOD = "FINANCE_PERIOD";
 	public static final String FINANCE_CAT_ID = "FINANCE_CAT_ID";
 	public static final String FINANCE_ACCOUNT_ID = "FINANCE_ACCOUNT_ID";
+	/** Counterparty / destination account for transfers. */
+	public static final String FINANCE_ACCOUNT_TO = "FINANCE_ACCOUNT_TO";
 	public static final String FINANCE_CYCLE = "FINANCE_CYCLE";
 	public static final String FINANCE_STATUS = "FINANCE_STATUS";
 	public static final String FINANCE_MERCHANT = "FINANCE_MERCHANT";

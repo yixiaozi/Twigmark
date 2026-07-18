@@ -119,14 +119,15 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 |------|----------------|
 | 确保账本存在 / 取路径 | `ensure_finance_map` |
 | 本月收支总览 | `get_finance_summary` 或资源 `docear://finance/summary`（`period=yyyy-MM`） |
-| 记一笔 | `add_finance_transaction`（`amount` 必填；`flow`: `expense`\|`income`\|`transfer`\|`borrow`\|`lend`\|`credit`） |
+| 记一笔 | `add_finance_transaction`（`amount` 必填；`flow`: `expense`\|`income`\|`transfer`\|`borrow`\|`lend`\|`credit`；转账必须 `account`+`accountTo`） |
 | 查流水 | `list_finance_transactions`（`from`/`to`/`limit`） |
-| 分类 / 账户 | 读：`list_finance_categories`、`list_finance_accounts`；写：`add_finance_category`、`add_finance_account` |
-| 预算 | `set_finance_budget` / `list_finance_budgets` |
-| 订阅 / 优惠券 | `upsert_finance_subscription`、`list_finance_subscriptions`、`upsert_finance_coupon`、`list_finance_coupons` |
-| 报表（视口图表） | `get_finance_report`（`reportId` + 可选 `showInViewport=true`） |
+| 分类 / 账户 | 读：`list_finance_categories`（`flow=all\|expense\|income`）、`list_finance_accounts`；写：`add_finance_category`、`add_finance_account` |
+| 预算 | `set_finance_budget` / `list_finance_budgets`（`总预算`对照整月损益支出） |
+| 订阅 / 优惠券 | `upsert_finance_subscription`、`list_finance_subscriptions`、`upsert_finance_coupon`、`list_finance_coupons`、`mark_finance_coupon_used` |
+| 删除 | `delete_finance_node`（`nodeId`） |
+| 报表（视口图表） | `get_finance_report`（`reportId` + 可选 `showInViewport=true`；返回 kpis） |
 
-**原则**：财务读写走上述工具，不要为记账去扫全库或 `open_mindmap`；需要展示图表时用 `get_finance_report` 的视口开关。Prompt：`finance-review`。
+**原则**：收入/支出是损益；借入/借出/信用卡/转账单独计量，不混入损益结余。财务读写走上述工具，不要为记账扫全库或 `open_mindmap`。Prompt：`finance-review`。
 
 ## 标签 / 分组 / 收藏（侧栏）
 

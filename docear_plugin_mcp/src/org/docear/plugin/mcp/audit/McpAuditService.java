@@ -139,6 +139,7 @@ public final class McpAuditService {
 		    || "set_finance_budget".equals(toolName) || "list_finance_budgets".equals(toolName)
 		    || "upsert_finance_subscription".equals(toolName) || "list_finance_subscriptions".equals(toolName)
 		    || "upsert_finance_coupon".equals(toolName) || "list_finance_coupons".equals(toolName)
+		    || "mark_finance_coupon_used".equals(toolName) || "delete_finance_node".equals(toolName)
 		    || "get_finance_report".equals(toolName)) {
 			return McpOperationIntent.FINANCE;
 		}

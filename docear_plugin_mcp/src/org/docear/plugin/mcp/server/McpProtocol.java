@@ -160,15 +160,18 @@ public final class McpProtocol {
 				schema("period", "string", false)));
 		tools.add(tool("add_finance_transaction",
 				"Add a ledger transaction into 个人财务.mm. amount as yuan string (e.g. 28.5). "
-						+ "flow: expense|income|transfer|borrow|lend|credit. Optional date (yyyy-MM-dd), category, account, merchant, note.",
+						+ "flow: expense|income|transfer|borrow|lend|credit. "
+						+ "transfer REQUIRES account + accountTo. Optional date (yyyy-MM-dd), category, merchant, note. "
+						+ "P&L income/expense are separate from borrow/lend/credit/transfer.",
 				schema("amount", "string", true), schema("flow", "string", false), schema("date", "string", false),
 				schema("category", "string", false), schema("account", "string", false),
-				schema("merchant", "string", false), schema("note", "string", false)));
+				schema("accountTo", "string", false), schema("merchant", "string", false),
+				schema("note", "string", false)));
 		tools.add(tool("list_finance_transactions",
 				"List finance transactions in date range (yyyy-MM-dd). limit defaults 200 (latest).",
 				schema("from", "string", false), schema("to", "string", false), schema("limit", "number", false)));
 		tools.add(tool("list_finance_categories",
-				"List finance categories. flow: expense|income (optional; omit for both folders' children via expense default).",
+				"List finance categories. flow: expense|income|all (default all = both folders).",
 				schema("flow", "string", false)));
 		tools.add(tool("add_finance_category",
 				"Add a finance category under expense or income. flow defaults expense.",
@@ -191,10 +194,16 @@ public final class McpProtocol {
 				schema("name", "string", true), schema("amount", "string", true), schema("expires", "string", false),
 				schema("status", "string", false), schema("merchant", "string", false), schema("note", "string", false)));
 		tools.add(tool("list_finance_coupons", "List coupons / vouchers (digital assets)."));
+		tools.add(tool("mark_finance_coupon_used",
+				"Mark a coupon node used/unused. used defaults true.",
+				schema("nodeId", "string", true), schema("used", "boolean", false)));
+		tools.add(tool("delete_finance_node",
+				"Delete a finance node (txn/budget/subscription/coupon/category/account) by nodeId from 个人财务.mm.",
+				schema("nodeId", "string", true)));
 		tools.add(tool("get_finance_report",
 				"Build a finance report. reportId: month_overview|expense_by_category|income_by_category|trend|"
 						+ "budget_status|subscriptions|coupons. Optional from/to (yyyy-MM-dd). "
-						+ "showInViewport=true displays charts in the map viewport.",
+						+ "showInViewport=true displays charts in the map viewport. Returns kpis+details.",
 				schema("reportId", "string", false), schema("from", "string", false), schema("to", "string", false),
 				schema("showInViewport", "boolean", false)));
 		tools.add(tool("search_nodes",
@@ -449,14 +458,15 @@ public final class McpProtocol {
 			textResult = McpFinanceService.addFinanceTransaction(required(args, "amount"),
 					argString(args, "flow", "expense"), argString(args, "date", ""),
 					argString(args, "category", ""), argString(args, "account", ""),
-					argString(args, "merchant", ""), argString(args, "note", ""));
+					argString(args, "accountTo", ""), argString(args, "merchant", ""),
+					argString(args, "note", ""));
 		}
 		else if ("list_finance_transactions".equals(name)) {
 			textResult = McpFinanceService.listFinanceTransactions(argString(args, "from", ""),
 					argString(args, "to", ""), argInt(args, "limit", 200));
 		}
 		else if ("list_finance_categories".equals(name)) {
-			textResult = McpFinanceService.listFinanceCategories(argString(args, "flow", "expense"));
+			textResult = McpFinanceService.listFinanceCategories(argString(args, "flow", "all"));
 		}
 		else if ("add_finance_category".equals(name)) {
 			textResult = McpFinanceService.addFinanceCategory(required(args, "name"),
@@ -491,6 +501,13 @@ public final class McpProtocol {
 		}
 		else if ("list_finance_coupons".equals(name)) {
 			textResult = McpFinanceService.listFinanceCoupons();
+		}
+		else if ("mark_finance_coupon_used".equals(name)) {
+			textResult = McpFinanceService.markFinanceCouponUsed(required(args, "nodeId"),
+					argBool(args, "used", true));
+		}
+		else if ("delete_finance_node".equals(name)) {
+			textResult = McpFinanceService.deleteFinanceNode(required(args, "nodeId"));
 		}
 		else if ("get_finance_report".equals(name)) {
 			textResult = McpFinanceService.getFinanceReport(argString(args, "reportId", "month_overview"),

@@ -59,6 +59,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	private final JTextField noteField = new JTextField();
 	private final JComboBox categoryCombo = new JComboBox();
 	private final JComboBox accountCombo = new JComboBox();
+	private final JComboBox accountToCombo = new JComboBox();
 	private final JTextField dateField = new JTextField(FinanceAttributes.todayYmd());
 
 	private final JList txnList = new JList();
@@ -236,6 +237,13 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		box.add(row2);
 		box.add(Box.createVerticalStrut(6));
 
+		final JPanel row2b = fieldRow();
+		row2b.add(labeled("转入账户", accountToCombo));
+		row2b.add(Box.createHorizontalStrut(8));
+		row2b.add(Box.createHorizontalGlue());
+		box.add(row2b);
+		box.add(Box.createVerticalStrut(6));
+
 		final JPanel row3 = fieldRow();
 		row3.add(labeled("日期", dateField));
 		row3.add(Box.createHorizontalStrut(8));
@@ -256,6 +264,11 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				promptAddCategory();
 			}
 		}));
+		actions.add(softButton("加账户", new Runnable() {
+			public void run() {
+				promptAddAccount();
+			}
+		}));
 		actions.add(softButton("加预算", new Runnable() {
 			public void run() {
 				promptAddBudget();
@@ -271,13 +284,25 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				promptAddCoupon();
 			}
 		}));
+		actions.add(softButton("删选中", new Runnable() {
+			public void run() {
+				deleteSelected();
+			}
+		}));
+		actions.add(softButton("券已用", new Runnable() {
+			public void run() {
+				markSelectedCouponUsed();
+			}
+		}));
 		box.add(actions);
 
 		flowCombo.addActionListener(new java.awt.event.ActionListener() {
 			public void actionPerformed(final java.awt.event.ActionEvent e) {
 				reloadCategoryCombo();
+				updateTransferUi();
 			}
 		});
+		updateTransferUi();
 		return box;
 	}
 
@@ -363,11 +388,11 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
 			incomeValue.setText("¥" + FinanceAttributes.formatYuan(summary.incomeCents));
 			expenseValue.setText("¥" + FinanceAttributes.formatYuan(summary.expenseCents));
-			final long net = summary.incomeCents - summary.expenseCents;
-			netValue.setText("¥" + FinanceAttributes.formatYuan(net));
+			netValue.setText("¥" + FinanceAttributes.formatYuan(summary.pnlNetCents()));
 			budgetValue.setText("¥" + FinanceAttributes.formatYuan(budgetRemaining(period, summary)));
 			reloadAccountCombo();
 			reloadCategoryCombo();
+			updateTransferUi();
 			reloadTxnList(period);
 			reloadBudgetList(period, summary);
 			reloadSubList();
@@ -387,17 +412,13 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		if (budgets.isEmpty()) {
 			return 0L;
 		}
-		long limit = 0L;
-		long spent = 0L;
+		long remaining = 0L;
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			limit += Math.abs(b.amountCents);
-			final Object spentObj = summary.byCategory.get(b.categoryName);
-			if (spentObj instanceof Long) {
-				spent += ((Long) spentObj).longValue();
-			}
+			remaining += FinanceRules.budgetRemainingCents(b.categoryName, b.amountCents, summary.expenseCents,
+					summary.byCategory);
 		}
-		return limit - spent;
+		return remaining;
 	}
 
 	private static int txnCountForPeriod(final String period) {
@@ -408,14 +429,29 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private void reloadAccountCombo() {
 		final Object selected = accountCombo.getSelectedItem();
+		final Object selectedTo = accountToCombo.getSelectedItem();
 		accountCombo.removeAllItems();
+		accountToCombo.removeAllItems();
 		final List accounts = FinanceLedgerService.listAccounts();
 		for (int i = 0; i < accounts.size(); i++) {
-			accountCombo.addItem(String.valueOf(accounts.get(i)));
+			final String name = String.valueOf(accounts.get(i));
+			accountCombo.addItem(name);
+			accountToCombo.addItem(name);
 		}
 		if (selected != null) {
 			accountCombo.setSelectedItem(selected);
 		}
+		if (selectedTo != null) {
+			accountToCombo.setSelectedItem(selectedTo);
+		}
+		else if (accountToCombo.getItemCount() > 1) {
+			accountToCombo.setSelectedIndex(Math.min(1, accountToCombo.getItemCount() - 1));
+		}
+	}
+
+	private void updateTransferUi() {
+		final boolean transfer = FinanceAttributes.FLOW_TRANSFER.equals(flowFromCombo());
+		accountToCombo.setEnabled(transfer);
 	}
 
 	private void reloadCategoryCombo() {
@@ -440,15 +476,18 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final ListRow[] rows = new ListRow[txns.size()];
 		for (int i = 0; i < txns.size(); i++) {
 			final FinanceLedgerService.FinanceTxn t = (FinanceLedgerService.FinanceTxn) txns.get(i);
-			final String sign = FinanceAttributes.FLOW_INCOME.equals(t.flow) ? "+"
-					: FinanceAttributes.FLOW_TRANSFER.equals(t.flow) ? "↔" : "-";
+			final String sign = FinanceRules.flowSign(t.flow);
+			final String flowZh = FinanceRules.flowLabelZh(t.flow);
 			final String cat = t.categoryName == null || t.categoryName.length() == 0 ? "未分类" : t.categoryName;
-			final String note = t.note == null || t.note.length() == 0
+			String extra = t.note == null || t.note.length() == 0
 					? (t.merchant == null ? "" : t.merchant)
 					: t.note;
+			if (FinanceRules.isTransfer(t.flow)) {
+				extra = t.accountName + "→" + t.accountTo + (extra.length() == 0 ? "" : " · " + extra);
+			}
 			final String nodeId = t.node == null ? "" : t.node.createID();
 			rows[i] = new ListRow(nodeId, t.dateYmd + "  " + sign + "¥" + FinanceAttributes.formatYuan(t.amountCents)
-					+ "  " + cat + (note.length() == 0 ? "" : " · " + note));
+					+ "  [" + flowZh + "] " + cat + (extra.length() == 0 ? "" : " · " + extra));
 		}
 		txnList.setListData(rows);
 	}
@@ -458,9 +497,10 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final ListRow[] rows = new ListRow[budgets.size()];
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			final Object spentObj = summary.byCategory.get(b.categoryName);
-			final long spent = spentObj instanceof Long ? ((Long) spentObj).longValue() : 0L;
-			final String name = b.categoryName == null || b.categoryName.length() == 0 ? "总预算" : b.categoryName;
+			final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents, summary.byCategory);
+			final String name = FinanceRules.isTotalBudgetCategory(b.categoryName)
+					? FinanceRules.TOTAL_BUDGET_CATEGORY
+					: b.categoryName;
 			final String nodeId = b.node == null ? "" : b.node.createID();
 			rows[i] = new ListRow(nodeId, name + "  ¥" + FinanceAttributes.formatYuan(spent)
 					+ " / ¥" + FinanceAttributes.formatYuan(b.amountCents)
@@ -498,13 +538,25 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	private void saveTransaction() {
 		try {
 			final long cents = FinanceAttributes.parseYuanToCents(amountField.getText());
-			if (cents <= 0) {
+			if (!FinanceRules.isValidAmountCents(cents)) {
 				JOptionPane.showMessageDialog(this, "请输入有效金额", "记账", JOptionPane.WARNING_MESSAGE);
 				return;
 			}
 			final String flow = flowFromCombo();
 			final String cat = selectedComboText(categoryCombo);
 			final String acc = selectedComboText(accountCombo);
+			final String accTo = selectedComboText(accountToCombo);
+			if (FinanceAttributes.FLOW_TRANSFER.equals(flow)) {
+				if (acc.length() == 0 || accTo.length() == 0) {
+					JOptionPane.showMessageDialog(this, "转账需要选择转出账户和转入账户", "记账",
+							JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+				if (acc.equals(accTo)) {
+					JOptionPane.showMessageDialog(this, "转出与转入账户不能相同", "记账", JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+			}
 			final String date = normalizeDate(dateField.getText());
 			final String note = noteField.getText() == null ? "" : noteField.getText().trim();
 			final NodeModel node = FinanceLedgerService.addTransaction(
@@ -513,10 +565,12 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 					date,
 					"（未分类）".equals(cat) ? "" : cat,
 					acc,
+					FinanceAttributes.FLOW_TRANSFER.equals(flow) ? accTo : "",
 					"",
 					note);
 			if (node == null) {
-				JOptionPane.showMessageDialog(this, "记账失败：无法写入财务导图", "记账", JOptionPane.ERROR_MESSAGE);
+				JOptionPane.showMessageDialog(this, "记账失败：无法写入财务导图（转账需双方账户，金额须>0）", "记账",
+						JOptionPane.ERROR_MESSAGE);
 				return;
 			}
 			amountField.setText("");
@@ -526,6 +580,67 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		catch (Exception ex) {
 			JOptionPane.showMessageDialog(this, "记账失败: " + ex.getMessage(), "记账", JOptionPane.ERROR_MESSAGE);
 		}
+	}
+
+	private void promptAddAccount() {
+		final String name = JOptionPane.showInputDialog(this, "账户名称（如 微信/支付宝/信用卡）", "");
+		if (name == null || name.trim().length() == 0) {
+			return;
+		}
+		try {
+			FinanceLedgerService.addAccount(name.trim());
+			refreshAll();
+		}
+		catch (Exception ex) {
+			JOptionPane.showMessageDialog(this, "添加账户失败: " + ex.getMessage(), "账户", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void deleteSelected() {
+		final String nodeId = selectedListNodeId();
+		if (nodeId == null || nodeId.length() == 0) {
+			JOptionPane.showMessageDialog(this, "请先在流水/预算/订阅/券列表中选中一项", "删除",
+					JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final int ok = JOptionPane.showConfirmDialog(this, "确认删除选中财务节点？", "删除",
+				JOptionPane.OK_CANCEL_OPTION);
+		if (ok != JOptionPane.OK_OPTION) {
+			return;
+		}
+		if (!FinanceLedgerService.deleteFinanceNode(nodeId)) {
+			JOptionPane.showMessageDialog(this, "删除失败", "删除", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		refreshAll();
+	}
+
+	private void markSelectedCouponUsed() {
+		final Object value = couponList.getSelectedValue();
+		if (!(value instanceof ListRow)) {
+			JOptionPane.showMessageDialog(this, "请先在「券」列表选中一项", "优惠券", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final String nodeId = ((ListRow) value).nodeId;
+		if (FinanceLedgerService.markCouponUsed(nodeId, true) == null) {
+			JOptionPane.showMessageDialog(this, "标记失败", "优惠券", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		refreshAll();
+	}
+
+	private String selectedListNodeId() {
+		Object value = txnList.getSelectedValue();
+		if (!(value instanceof ListRow)) {
+			value = budgetList.getSelectedValue();
+		}
+		if (!(value instanceof ListRow)) {
+			value = subList.getSelectedValue();
+		}
+		if (!(value instanceof ListRow)) {
+			value = couponList.getSelectedValue();
+		}
+		return value instanceof ListRow ? ((ListRow) value).nodeId : "";
 	}
 
 	private void promptAddCategory() {
@@ -548,7 +663,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private void promptAddBudget() {
 		final String cat = selectedComboText(categoryCombo);
-		final String category = "（未分类）".equals(cat) || cat.length() == 0 ? "总预算" : cat;
+		final String category = "（未分类）".equals(cat) || cat.length() == 0
+				? FinanceRules.TOTAL_BUDGET_CATEGORY
+				: cat;
 		final String amount = JOptionPane.showInputDialog(this, "本月预算金额（元）· " + category, "1000");
 		if (amount == null || amount.trim().length() == 0) {
 			return;
@@ -577,11 +694,12 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			final Object[] cycles = { "monthly", "yearly", "weekly" };
 			final Object cycle = JOptionPane.showInputDialog(this, "周期", "订阅",
 					JOptionPane.QUESTION_MESSAGE, null, cycles, cycles[0]);
+			final String cycleValue = cycle == null ? "monthly" : cycle.toString();
 			FinanceLedgerService.upsertSubscription(
 					name.trim(),
 					cents,
-					cycle == null ? "monthly" : cycle.toString(),
-					plusMonths(FinanceAttributes.todayYmd(), 1),
+					cycleValue,
+					FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(), cycleValue),
 					"active",
 					selectedComboText(accountCombo),
 					"");

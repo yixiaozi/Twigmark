@@ -14,7 +14,9 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.view.swing.features.finance.FinanceAttributes;
 import org.freeplane.view.swing.features.finance.FinanceLedgerService;
 import org.freeplane.view.swing.features.finance.FinanceReportEngine;
+import org.freeplane.view.swing.features.finance.FinanceRules;
 import org.freeplane.view.swing.features.finance.FinanceViewportService;
+import org.freeplane.view.swing.features.reports.ReportKpi;
 import org.freeplane.view.swing.features.reports.ReportViewModel;
 
 /**
@@ -55,11 +57,14 @@ public final class McpFinanceService {
 				data.put("mapFile", JsonValue.ofString(absMapPath()));
 				data.put("incomeCents", JsonValue.ofNumber(Long.valueOf(summary.incomeCents)));
 				data.put("expenseCents", JsonValue.ofNumber(Long.valueOf(summary.expenseCents)));
-				data.put("netCents", JsonValue.ofNumber(Long.valueOf(summary.incomeCents - summary.expenseCents)));
+				data.put("netCents", JsonValue.ofNumber(Long.valueOf(summary.pnlNetCents())));
+				data.put("borrowCents", JsonValue.ofNumber(Long.valueOf(summary.borrowCents)));
+				data.put("lendCents", JsonValue.ofNumber(Long.valueOf(summary.lendCents)));
+				data.put("creditCents", JsonValue.ofNumber(Long.valueOf(summary.creditCents)));
+				data.put("transferCents", JsonValue.ofNumber(Long.valueOf(summary.transferCents)));
 				data.put("incomeYuan", JsonValue.ofString(FinanceAttributes.formatYuan(summary.incomeCents)));
 				data.put("expenseYuan", JsonValue.ofString(FinanceAttributes.formatYuan(summary.expenseCents)));
-				data.put("netYuan",
-						JsonValue.ofString(FinanceAttributes.formatYuan(summary.incomeCents - summary.expenseCents)));
+				data.put("netYuan", JsonValue.ofString(FinanceAttributes.formatYuan(summary.pnlNetCents())));
 				final List<JsonValue> byCat = new ArrayList<JsonValue>();
 				final Object[] keys = summary.byCategory.keySet().toArray();
 				for (int i = 0; i < keys.length; i++) {
@@ -88,15 +93,23 @@ public final class McpFinanceService {
 	}
 
 	public static String addFinanceTransaction(final String amount, final String flow, final String dateYmd,
-			final String category, final String account, final String merchant, final String note) throws Exception {
+			final String category, final String account, final String accountTo, final String merchant,
+			final String note) throws Exception {
 		return (String) EdtRunner.run(new Task() {
 			public Object run() throws Exception {
-				final NodeModel node = FinanceLedgerService.addTransaction(amount, flow, dateYmd, category, account,
-						merchant, note);
+				final long cents = FinanceAttributes.parseYuanToCents(amount);
 				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
+				if (!FinanceRules.isValidAmountCents(cents)) {
+					data.put("ok", JsonValue.ofBoolean(false));
+					data.put("message", JsonValue.ofString("amount must be a positive yuan value"));
+					return JsonValue.ofMap(data).toJson();
+				}
+				final NodeModel node = FinanceLedgerService.addTransaction(amount, flow, dateYmd, category, account,
+						accountTo, merchant, note);
 				if (node == null) {
 					data.put("ok", JsonValue.ofBoolean(false));
-					data.put("message", JsonValue.ofString("add_transaction failed"));
+					data.put("message", JsonValue.ofString(
+							"add_transaction failed (transfer needs account+accountTo; map must open)"));
 					return JsonValue.ofMap(data).toJson();
 				}
 				data.put("ok", JsonValue.ofBoolean(true));
@@ -139,7 +152,7 @@ public final class McpFinanceService {
 				FinanceLedgerService.ensureFinanceMap();
 				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
 				data.put("mapFile", JsonValue.ofString(absMapPath()));
-				data.put("flow", JsonValue.ofString(flow == null ? "" : flow));
+				data.put("flow", JsonValue.ofString(flow == null ? "all" : flow));
 				data.put("categories", JsonValue.ofList(stringList(FinanceLedgerService.listCategories(flow))));
 				return JsonValue.ofMap(data).toJson();
 			}
@@ -181,6 +194,12 @@ public final class McpFinanceService {
 		return (String) EdtRunner.run(new Task() {
 			public Object run() throws Exception {
 				final long cents = FinanceAttributes.parseYuanToCents(amountYuan);
+				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
+				if (!FinanceRules.isValidAmountCents(cents)) {
+					data.put("ok", JsonValue.ofBoolean(false));
+					data.put("message", JsonValue.ofString("amount must be a positive yuan value"));
+					return JsonValue.ofMap(data).toJson();
+				}
 				final String p = resolvePeriod(period);
 				final NodeModel node = FinanceLedgerService.setBudget(p, category, cents);
 				return nodeResult(node, "budget");
@@ -193,16 +212,22 @@ public final class McpFinanceService {
 			public Object run() throws Exception {
 				FinanceLedgerService.ensureFinanceMap();
 				final String p = resolvePeriod(period);
+				final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(p);
 				final List budgets = FinanceLedgerService.listBudgets(p);
 				final List<JsonValue> out = new ArrayList<JsonValue>();
 				for (int i = 0; i < budgets.size(); i++) {
 					final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
+					final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents,
+							summary.byCategory);
 					final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
 					row.put("nodeId", JsonValue.ofString(b.node == null ? "" : b.node.createID()));
 					row.put("period", JsonValue.ofString(b.period));
 					row.put("category", JsonValue.ofString(b.categoryName));
 					row.put("amountCents", JsonValue.ofNumber(Long.valueOf(b.amountCents)));
 					row.put("amountYuan", JsonValue.ofString(FinanceAttributes.formatYuan(b.amountCents)));
+					row.put("spentCents", JsonValue.ofNumber(Long.valueOf(spent)));
+					row.put("spentYuan", JsonValue.ofString(FinanceAttributes.formatYuan(spent)));
+					row.put("remainingCents", JsonValue.ofNumber(Long.valueOf(b.amountCents - spent)));
 					out.add(JsonValue.ofMap(row));
 				}
 				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
@@ -220,7 +245,17 @@ public final class McpFinanceService {
 		return (String) EdtRunner.run(new Task() {
 			public Object run() throws Exception {
 				final long cents = FinanceAttributes.parseYuanToCents(amountYuan);
-				final NodeModel node = FinanceLedgerService.upsertSubscription(name, cents, cycle, nextYmd, status,
+				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
+				if (!FinanceRules.isValidAmountCents(cents)) {
+					data.put("ok", JsonValue.ofBoolean(false));
+					data.put("message", JsonValue.ofString("amount must be a positive yuan value"));
+					return JsonValue.ofMap(data).toJson();
+				}
+				final String cycleValue = cycle == null || cycle.trim().length() == 0 ? "monthly" : cycle.trim();
+				final String next = nextYmd == null || nextYmd.trim().length() == 0
+						? FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(), cycleValue)
+						: nextYmd.trim();
+				final NodeModel node = FinanceLedgerService.upsertSubscription(name, cents, cycleValue, next, status,
 						account, note);
 				return nodeResult(node, "subscription");
 			}
@@ -262,6 +297,12 @@ public final class McpFinanceService {
 		return (String) EdtRunner.run(new Task() {
 			public Object run() throws Exception {
 				final long cents = FinanceAttributes.parseYuanToCents(amountYuan);
+				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
+				if (!FinanceRules.isValidAmountCents(cents)) {
+					data.put("ok", JsonValue.ofBoolean(false));
+					data.put("message", JsonValue.ofString("amount must be a positive yuan value"));
+					return JsonValue.ofMap(data).toJson();
+				}
 				final NodeModel node = FinanceLedgerService.upsertCoupon(name, cents, expiresYmd, status, merchant,
 						note);
 				return nodeResult(node, "coupon");
@@ -297,6 +338,31 @@ public final class McpFinanceService {
 		});
 	}
 
+	public static String markFinanceCouponUsed(final String nodeId, final boolean used) throws Exception {
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final NodeModel node = FinanceLedgerService.markCouponUsed(nodeId, used);
+				return nodeResult(node, "coupon");
+			}
+		});
+	}
+
+	public static String deleteFinanceNode(final String nodeId) throws Exception {
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final boolean ok = FinanceLedgerService.deleteFinanceNode(nodeId);
+				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
+				data.put("ok", JsonValue.ofBoolean(ok));
+				data.put("nodeId", JsonValue.ofString(nodeId == null ? "" : nodeId));
+				data.put("mapFile", JsonValue.ofString(absMapPath()));
+				if (!ok) {
+					data.put("message", JsonValue.ofString("delete failed (missing node or not a finance node)"));
+				}
+				return JsonValue.ofMap(data).toJson();
+			}
+		});
+	}
+
 	public static String getFinanceReport(final String reportId, final String fromYmd, final String toYmd,
 			final boolean showInViewport) throws Exception {
 		return (String) EdtRunner.run(new Task() {
@@ -310,10 +376,12 @@ public final class McpFinanceService {
 						? FinanceReportEngine.ID_MONTH_OVERVIEW
 						: reportId.trim();
 				final ReportViewModel model = FinanceReportEngine.generateView(id, from, to);
+				boolean shown = false;
 				if (showInViewport) {
 					final FinanceViewportService viewport = FinanceViewportService.get();
 					if (viewport != null) {
 						viewport.show(model);
+						shown = true;
 					}
 				}
 				final Map<String, JsonValue> data = new LinkedHashMap<String, JsonValue>();
@@ -323,7 +391,22 @@ public final class McpFinanceService {
 				data.put("title", JsonValue.ofString(model.title == null ? "" : model.title));
 				data.put("subtitle", JsonValue.ofString(model.subtitle == null ? "" : model.subtitle));
 				data.put("decision", JsonValue.ofString(model.decision == null ? "" : model.decision));
-				data.put("shownInViewport", JsonValue.ofBoolean(showInViewport));
+				data.put("shownInViewport", JsonValue.ofBoolean(shown));
+				final List<JsonValue> kpis = new ArrayList<JsonValue>();
+				if (model.kpis != null) {
+					for (int i = 0; i < model.kpis.size(); i++) {
+						final Object o = model.kpis.get(i);
+						if (o instanceof ReportKpi) {
+							final ReportKpi k = (ReportKpi) o;
+							final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
+							row.put("label", JsonValue.ofString(k.label == null ? "" : k.label));
+							row.put("value", JsonValue.ofString(k.value == null ? "" : k.value));
+							row.put("hint", JsonValue.ofString(k.hint == null ? "" : k.hint));
+							kpis.add(JsonValue.ofMap(row));
+						}
+					}
+				}
+				data.put("kpis", JsonValue.ofList(kpis));
 				final List<JsonValue> details = new ArrayList<JsonValue>();
 				if (model.details != null) {
 					for (int i = 0; i < model.details.size(); i++) {
@@ -345,6 +428,7 @@ public final class McpFinanceService {
 		row.put("amountYuan", JsonValue.ofString(FinanceAttributes.formatYuan(t.amountCents)));
 		row.put("category", JsonValue.ofString(t.categoryName));
 		row.put("account", JsonValue.ofString(t.accountName));
+		row.put("accountTo", JsonValue.ofString(t.accountTo));
 		row.put("merchant", JsonValue.ofString(t.merchant));
 		row.put("note", JsonValue.ofString(t.note));
 		row.put("text", JsonValue.ofString(t.nodeText));

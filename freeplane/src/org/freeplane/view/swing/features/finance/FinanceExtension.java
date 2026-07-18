@@ -15,6 +15,7 @@ public final class FinanceExtension implements IExtension {
 	private String period = "";
 	private String catId = "";
 	private String accountId = "";
+	private String accountTo = "";
 	private String cycle = "";
 	private String status = "";
 	private String merchant = "";
@@ -54,14 +55,15 @@ public final class FinanceExtension implements IExtension {
 			flow = "";
 			period = "";
 			catId = "";
-			accountId = "";
-			cycle = "";
-			status = "";
-			merchant = "";
-			note = "";
-			next = "";
-			expires = "";
-			return;
+		accountId = "";
+		accountTo = "";
+		cycle = "";
+		status = "";
+		merchant = "";
+		note = "";
+		next = "";
+		expires = "";
+		return;
 		}
 		kind = nullToEmpty(source.kind);
 		amountCents = source.amountCents;
@@ -71,6 +73,7 @@ public final class FinanceExtension implements IExtension {
 		period = nullToEmpty(source.period);
 		catId = nullToEmpty(source.catId);
 		accountId = nullToEmpty(source.accountId);
+		accountTo = nullToEmpty(source.accountTo);
 		cycle = nullToEmpty(source.cycle);
 		status = nullToEmpty(source.status);
 		merchant = nullToEmpty(source.merchant);
@@ -154,6 +157,14 @@ public final class FinanceExtension implements IExtension {
 
 	public void setAccountId(final String accountId) {
 		this.accountId = accountId == null ? "" : accountId;
+	}
+
+	public String getAccountTo() {
+		return accountTo == null ? "" : accountTo;
+	}
+
+	public void setAccountTo(final String accountTo) {
+		this.accountTo = accountTo == null ? "" : accountTo;
 	}
 
 	public String getCycle() {

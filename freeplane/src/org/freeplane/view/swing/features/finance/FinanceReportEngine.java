@@ -72,10 +72,16 @@ public final class FinanceReportEngine {
 		final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
 		final long income = summary.incomeCents;
 		final long expense = summary.expenseCents;
-		final long net = income - expense;
-		view.addKpi("收入", "¥" + FinanceAttributes.formatYuan(income), period);
-		view.addKpi("支出", "¥" + FinanceAttributes.formatYuan(expense), period);
+		final long net = summary.pnlNetCents();
+		view.addKpi("收入", "¥" + FinanceAttributes.formatYuan(income), "损益");
+		view.addKpi("支出", "¥" + FinanceAttributes.formatYuan(expense), "损益");
 		view.addKpi("结余", "¥" + FinanceAttributes.formatYuan(net), net >= 0 ? "盈余" : "透支");
+		if (summary.borrowCents + summary.lendCents + summary.creditCents + summary.transferCents > 0L) {
+			view.addKpi("借入", "¥" + FinanceAttributes.formatYuan(summary.borrowCents), "负债流入");
+			view.addKpi("借出", "¥" + FinanceAttributes.formatYuan(summary.lendCents), "债权流出");
+			view.addKpi("信用卡", "¥" + FinanceAttributes.formatYuan(summary.creditCents), "额度占用");
+			view.addKpi("转账", "¥" + FinanceAttributes.formatYuan(summary.transferCents), "不计入损益");
+		}
 
 		final ReportChartSeries pie = new ReportChartSeries("支出按分类", ReportChartSeries.TYPE_PIE);
 		final Iterator it = summary.byCategory.entrySet().iterator();
@@ -96,7 +102,7 @@ public final class FinanceReportEngine {
 		view.addChart(byDay);
 
 		if (income == 0L && expense == 0L) {
-			view.emptyHint = "本月暂无交易。用 addTransaction 记一笔后再看。";
+			view.emptyHint = "本月暂无损益交易。在左侧「财务」记一笔或用 add_finance_transaction 后再看。";
 		}
 		return view;
 	}
@@ -168,20 +174,20 @@ public final class FinanceReportEngine {
 		final List budgets = FinanceLedgerService.listBudgets(period);
 		final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
 		view.addKpi("预算条目", String.valueOf(budgets.size()), period);
-		view.addKpi("实际支出", "¥" + FinanceAttributes.formatYuan(summary.expenseCents), "");
+		view.addKpi("实际支出", "¥" + FinanceAttributes.formatYuan(summary.expenseCents), "损益支出");
 		final ReportChartSeries bar = new ReportChartSeries("预算 vs 已花（元）", ReportChartSeries.TYPE_BAR);
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			final Long spentObj = (Long) summary.byCategory.get(b.categoryName);
-			final long spent = spentObj == null ? 0L : spentObj.longValue();
+			final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents, summary.byCategory);
 			bar.add(b.categoryName + "预算", b.amountCents / 100.0);
 			bar.add(b.categoryName + "已花", spent / 100.0);
 			view.addDetail(b.categoryName + " · 预算 ¥" + FinanceAttributes.formatYuan(b.amountCents) + " · 已花 ¥"
-					+ FinanceAttributes.formatYuan(spent));
+					+ FinanceAttributes.formatYuan(spent) + " · 余 ¥"
+					+ FinanceAttributes.formatYuan(b.amountCents - spent));
 		}
 		view.addChart(bar);
 		if (budgets.isEmpty()) {
-			view.emptyHint = "本月未设预算。用 setBudget 添加后再看。";
+			view.emptyHint = "本月未设预算。在「财务」Tab 点「加预算」或用 set_finance_budget。";
 		}
 		return view;
 	}
@@ -212,7 +218,7 @@ public final class FinanceReportEngine {
 		view.addKpi("金额合计", "¥" + FinanceAttributes.formatYuan(total), "周期内");
 		view.addChart(pie);
 		if (subs.isEmpty()) {
-			view.emptyHint = "暂无订阅。用 upsertSubscription 添加。";
+			view.emptyHint = "暂无订阅。在「财务」Tab 点「加订阅」或用 upsert_finance_subscription。";
 		}
 		return view;
 	}
@@ -251,7 +257,7 @@ public final class FinanceReportEngine {
 		}
 		view.addChart(pie);
 		if (coupons.isEmpty()) {
-			view.emptyHint = "暂无优惠券。用 upsertCoupon 添加。";
+			view.emptyHint = "暂无优惠券。在「财务」Tab 点「加优惠券」或用 upsert_finance_coupon。";
 		}
 		return view;
 	}

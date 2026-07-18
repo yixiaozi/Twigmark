@@ -54,6 +54,11 @@ final class FinanceIO {
 				e.setAccountId(v);
 			}
 		});
+		add(mapController, FinanceAttributes.FINANCE_ACCOUNT_TO, new Setter() {
+			public void set(final FinanceExtension e, final String v) {
+				e.setAccountTo(v);
+			}
+		});
 		add(mapController, FinanceAttributes.FINANCE_CYCLE, new Setter() {
 			public void set(final FinanceExtension e, final String v) {
 				e.setCycle(v);
@@ -95,7 +100,12 @@ final class FinanceIO {
 					return;
 				}
 				writer.addAttribute(FinanceAttributes.FINANCE_KIND, extension.getKind());
-				if (extension.getAmountCents() != 0L) {
+				// Always persist amount for money-bearing kinds (0 is meaningful for cleared lines).
+				if (FinanceAttributes.KIND_TXN.equals(extension.getKind())
+						|| FinanceAttributes.KIND_BUDGET.equals(extension.getKind())
+						|| FinanceAttributes.KIND_SUBSCRIPTION.equals(extension.getKind())
+						|| FinanceAttributes.KIND_COUPON.equals(extension.getKind())
+						|| extension.getAmountCents() != 0L) {
 					writer.addAttribute(FinanceAttributes.FINANCE_AMOUNT, extension.getAmountCentsString());
 				}
 				writeIfPresent(writer, FinanceAttributes.FINANCE_CURRENCY, extension.getCurrency());
@@ -104,6 +114,7 @@ final class FinanceIO {
 				writeIfPresent(writer, FinanceAttributes.FINANCE_PERIOD, extension.getPeriod());
 				writeIfPresent(writer, FinanceAttributes.FINANCE_CAT_ID, extension.getCatId());
 				writeIfPresent(writer, FinanceAttributes.FINANCE_ACCOUNT_ID, extension.getAccountId());
+				writeIfPresent(writer, FinanceAttributes.FINANCE_ACCOUNT_TO, extension.getAccountTo());
 				writeIfPresent(writer, FinanceAttributes.FINANCE_CYCLE, extension.getCycle());
 				writeIfPresent(writer, FinanceAttributes.FINANCE_STATUS, extension.getStatus());
 				writeIfPresent(writer, FinanceAttributes.FINANCE_MERCHANT, extension.getMerchant());

@@ -95,7 +95,9 @@ public final class FinanceLedgerService {
 					ensureSkeleton(loaded);
 					return loaded;
 				}
-				return Controller.getCurrentController().getMap();
+				// Never fall back to an arbitrary current map — that would write ledger data elsewhere.
+				LogUtils.warn("Finance: opened URL but could not resolve finance map: " + file.getAbsolutePath());
+				return null;
 			}
 			final File parent = file.getParentFile();
 			if (parent != null && !parent.exists()) {
@@ -237,6 +239,12 @@ public final class FinanceLedgerService {
 
 	public static NodeModel addTransaction(final String amountYuanOrCents, final String flow, final String dateYmd,
 			final String categoryName, final String accountName, final String merchant, final String note) {
+		return addTransaction(amountYuanOrCents, flow, dateYmd, categoryName, accountName, null, merchant, note);
+	}
+
+	public static NodeModel addTransaction(final String amountYuanOrCents, final String flow, final String dateYmd,
+			final String categoryName, final String accountName, final String accountTo, final String merchant,
+			final String note) {
 		final MapModel map = ensureFinanceMap();
 		if (map == null) {
 			return null;
@@ -253,9 +261,19 @@ public final class FinanceLedgerService {
 			return null;
 		}
 		final long cents = resolveAmountCents(amountYuanOrCents);
+		if (!FinanceRules.isValidAmountCents(cents)) {
+			LogUtils.warn("Finance: reject non-positive amount: " + amountYuanOrCents);
+			return null;
+		}
 		final String flowValue = flow == null || flow.trim().length() == 0 ? FinanceAttributes.FLOW_EXPENSE
 				: flow.trim();
-		final String label = buildTxnLabel(merchant, note, categoryName, cents);
+		if (FinanceRules.isTransfer(flowValue)
+				&& (accountName == null || accountName.trim().length() == 0
+						|| accountTo == null || accountTo.trim().length() == 0)) {
+			LogUtils.warn("Finance: transfer requires account and accountTo");
+			return null;
+		}
+		final String label = buildTxnLabel(merchant, note, categoryName, cents, flowValue, accountName, accountTo);
 		final NodeModel node = addChildNode(monthFolder, label);
 		if (node == null) {
 			return null;
@@ -268,9 +286,11 @@ public final class FinanceLedgerService {
 		ext.setFlow(flowValue);
 		ext.setCatId(categoryName == null ? "" : categoryName.trim());
 		ext.setAccountId(accountName == null ? "" : accountName.trim());
+		ext.setAccountTo(accountTo == null ? "" : accountTo.trim());
 		ext.setMerchant(merchant == null ? "" : merchant.trim());
 		ext.setNote(note == null ? "" : note.trim());
 		FinanceAttributes.writeSilent(node, ext);
+		persistFinanceMap(map);
 		return node;
 	}
 
@@ -299,6 +319,7 @@ public final class FinanceLedgerService {
 			txn.dateYmd = date;
 			txn.categoryName = ext.getCatId();
 			txn.accountName = ext.getAccountId();
+			txn.accountTo = ext.getAccountTo();
 			txn.merchant = ext.getMerchant();
 			txn.note = ext.getNote();
 			txn.currency = ext.getCurrency();
@@ -326,15 +347,28 @@ public final class FinanceLedgerService {
 		if (categories == null) {
 			return out;
 		}
+		final String flowValue = flow == null ? "" : flow.trim();
+		final boolean all = flowValue.length() == 0 || "all".equalsIgnoreCase(flowValue)
+				|| "both".equalsIgnoreCase(flowValue);
+		if (all) {
+			appendCategoryNames(findChildByText(categories, SUB_EXPENSE), out);
+			appendCategoryNames(findChildByText(categories, SUB_INCOME), out);
+			return out;
+		}
 		NodeModel parent = categories;
-		if (FinanceAttributes.FLOW_EXPENSE.equals(flow)) {
+		if (FinanceAttributes.FLOW_EXPENSE.equals(flowValue)) {
 			parent = findChildByText(categories, SUB_EXPENSE);
 		}
-		else if (FinanceAttributes.FLOW_INCOME.equals(flow)) {
+		else if (FinanceAttributes.FLOW_INCOME.equals(flowValue)) {
 			parent = findChildByText(categories, SUB_INCOME);
 		}
-		if (parent == null) {
-			return out;
+		appendCategoryNames(parent, out);
+		return out;
+	}
+
+	private static void appendCategoryNames(final NodeModel parent, final List out) {
+		if (parent == null || out == null) {
+			return;
 		}
 		for (int i = 0; i < parent.getChildCount(); i++) {
 			final NodeModel child = (NodeModel) parent.getChildAt(i);
@@ -349,7 +383,6 @@ public final class FinanceLedgerService {
 				}
 			}
 		}
-		return out;
 	}
 
 	public static List listAccounts() {
@@ -394,7 +427,11 @@ public final class FinanceLedgerService {
 		if (existing != null) {
 			return existing;
 		}
-		return addCategoryNode(parent, name.trim(), flowValue);
+		final NodeModel node = addCategoryNode(parent, name.trim(), flowValue);
+		if (node != null) {
+			persistFinanceMap(map);
+		}
+		return node;
 	}
 
 	public static NodeModel addAccount(final String name) {
@@ -410,38 +447,70 @@ public final class FinanceLedgerService {
 		if (existing != null) {
 			return existing;
 		}
-		return addAccountNode(accounts, name.trim());
+		final NodeModel node = addAccountNode(accounts, name.trim());
+		if (node != null) {
+			persistFinanceMap(map);
+		}
+		return node;
 	}
 
 	public static NodeModel setBudget(final String periodYyyyMm, final String categoryName, final long amountCents) {
 		final MapModel map = ensureFinanceMap();
-		if (map == null || periodYyyyMm == null || categoryName == null) {
+		if (map == null || periodYyyyMm == null) {
 			return null;
 		}
 		final NodeModel budgets = findSection(map, SECTION_BUDGETS);
 		if (budgets == null) {
 			return null;
 		}
-		final NodeModel periodFolder = findOrCreateChild(budgets, periodYyyyMm.trim());
-		NodeModel node = findChildByText(periodFolder, categoryName.trim());
+		final String period = periodYyyyMm.trim();
+		final String cat = categoryName == null || categoryName.trim().length() == 0
+				? FinanceRules.TOTAL_BUDGET_CATEGORY
+				: categoryName.trim();
+		final NodeModel periodFolder = findOrCreateChild(budgets, period);
+		NodeModel node = findBudgetNode(periodFolder, period, cat);
+		final String label = cat + " · ¥" + FinanceAttributes.formatYuan(amountCents);
 		if (node == null) {
-			node = addChildNode(periodFolder, categoryName.trim() + " · ¥" + FinanceAttributes.formatYuan(amountCents));
+			node = addChildNode(periodFolder, label);
 		}
 		else {
-			setNodeText(node, categoryName.trim() + " · ¥" + FinanceAttributes.formatYuan(amountCents));
+			setNodeText(node, label);
 		}
 		if (node == null) {
 			return null;
 		}
 		final FinanceExtension ext = new FinanceExtension();
 		ext.setKind(FinanceAttributes.KIND_BUDGET);
-		ext.setPeriod(periodYyyyMm.trim());
-		ext.setCatId(categoryName.trim());
+		ext.setPeriod(period);
+		ext.setCatId(cat);
 		ext.setAmountCents(amountCents);
 		ext.setCurrency(FinanceAttributes.DEFAULT_CURRENCY);
 		ext.setFlow(FinanceAttributes.FLOW_EXPENSE);
 		FinanceAttributes.writeSilent(node, ext);
+		persistFinanceMap(map);
 		return node;
+	}
+
+	private static NodeModel findBudgetNode(final NodeModel periodFolder, final String period, final String category) {
+		if (periodFolder == null) {
+			return null;
+		}
+		for (int i = 0; i < periodFolder.getChildCount(); i++) {
+			final NodeModel child = (NodeModel) periodFolder.getChildAt(i);
+			final FinanceExtension ext = FinanceExtension.getExtension(child);
+			if (ext != null && FinanceAttributes.KIND_BUDGET.equals(ext.getKind())) {
+				final boolean periodMatch = period.equals(ext.getPeriod()) || ext.getPeriod().length() == 0;
+				final boolean catMatch = category.equals(ext.getCatId());
+				if (periodMatch && catMatch) {
+					return child;
+				}
+			}
+			final String text = plainText(child);
+			if (text.equals(category) || text.startsWith(category + " ·")) {
+				return child;
+			}
+		}
+		return null;
 	}
 
 	public static List listBudgets(final String period) {
@@ -503,6 +572,7 @@ public final class FinanceLedgerService {
 		ext.setNote(note == null ? "" : note.trim());
 		ext.setMerchant(name.trim());
 		FinanceAttributes.writeSilent(node, ext);
+		persistFinanceMap(map);
 		return node;
 	}
 
@@ -522,7 +592,7 @@ public final class FinanceLedgerService {
 			}
 			final FinanceSubscription sub = new FinanceSubscription();
 			sub.node = node;
-			sub.name = ext.getMerchant().length() > 0 ? ext.getMerchant() : plainText(node);
+			sub.name = FinanceRules.bareNameFromLabel(plainText(node), ext.getMerchant());
 			sub.amountCents = ext.getAmountCents();
 			sub.cycle = ext.getCycle();
 			sub.nextYmd = ext.getNext();
@@ -544,8 +614,9 @@ public final class FinanceLedgerService {
 		if (section == null) {
 			return null;
 		}
-		NodeModel node = findCouponByName(section, name.trim());
-		final String label = name.trim() + " · ¥" + FinanceAttributes.formatYuan(amountCents);
+		final String bare = FinanceRules.bareNameFromLabel(name.trim(), null);
+		NodeModel node = findCouponByName(section, bare);
+		final String label = bare + " · ¥" + FinanceAttributes.formatYuan(amountCents);
 		if (node == null) {
 			node = addChildNode(section, label);
 		}
@@ -561,9 +632,14 @@ public final class FinanceLedgerService {
 		ext.setCurrency(FinanceAttributes.DEFAULT_CURRENCY);
 		ext.setExpires(expiresYmd == null ? "" : expiresYmd.trim());
 		ext.setStatus(status == null ? "active" : status.trim());
-		ext.setMerchant(merchant == null ? name.trim() : merchant.trim());
+		// merchant field stores the bare coupon name for stable upsert matching
+		ext.setMerchant(bare);
 		ext.setNote(note == null ? "" : note.trim());
+		if (merchant != null && merchant.trim().length() > 0 && !merchant.trim().equals(bare)) {
+			ext.setNote((ext.getNote().length() == 0 ? "" : ext.getNote() + " · ") + "商家:" + merchant.trim());
+		}
 		FinanceAttributes.writeSilent(node, ext);
+		persistFinanceMap(map);
 		return node;
 	}
 
@@ -583,7 +659,7 @@ public final class FinanceLedgerService {
 			}
 			final FinanceCoupon coupon = new FinanceCoupon();
 			coupon.node = node;
-			coupon.name = plainText(node);
+			coupon.name = FinanceRules.bareNameFromLabel(plainText(node), ext.getMerchant());
 			coupon.amountCents = ext.getAmountCents();
 			coupon.expiresYmd = ext.getExpires();
 			coupon.status = ext.getStatus();
@@ -592,6 +668,52 @@ public final class FinanceLedgerService {
 			out.add(coupon);
 		}
 		return out;
+	}
+
+	public static NodeModel markCouponUsed(final String nodeId, final boolean used) {
+		final MapModel map = preferOpenFinanceMap();
+		if (map == null || nodeId == null || nodeId.trim().length() == 0) {
+			return null;
+		}
+		final NodeModel node = map.getNodeForID(nodeId.trim());
+		if (node == null) {
+			return null;
+		}
+		final FinanceExtension existing = FinanceExtension.getExtension(node);
+		if (existing == null || !FinanceAttributes.KIND_COUPON.equals(existing.getKind())) {
+			return null;
+		}
+		final FinanceExtension ext = existing.copy();
+		ext.setStatus(used ? "used" : "active");
+		FinanceAttributes.writeSilent(node, ext);
+		persistFinanceMap(map);
+		return node;
+	}
+
+	public static boolean deleteFinanceNode(final String nodeId) {
+		final MapModel map = preferOpenFinanceMap();
+		if (map == null || nodeId == null || nodeId.trim().length() == 0) {
+			return false;
+		}
+		final NodeModel node = map.getNodeForID(nodeId.trim());
+		if (node == null || node.isRoot()) {
+			return false;
+		}
+		final FinanceExtension ext = FinanceExtension.getExtension(node);
+		if (ext == null || ext.isEmpty()) {
+			return false;
+		}
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			final MMapController mapController = (MMapController) modeController.getMapController();
+			mapController.deleteNode(node);
+			persistFinanceMap(map);
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("Finance: deleteFinanceNode failed", e);
+			return false;
+		}
 	}
 
 	public static MonthSummary monthSummary(final String yyyyMm) {
@@ -609,20 +731,28 @@ public final class FinanceLedgerService {
 			if (txn.dateYmd == null || !txn.dateYmd.startsWith(summary.period)) {
 				continue;
 			}
-			if (FinanceAttributes.FLOW_INCOME.equals(txn.flow)
-					|| FinanceAttributes.FLOW_BORROW.equals(txn.flow)) {
-				// Borrow increases available cash (liability), counted with income for net cash view.
-				summary.incomeCents += Math.abs(txn.amountCents);
+			final long cents = Math.abs(txn.amountCents);
+			if (FinanceRules.isPnlIncome(txn.flow)) {
+				summary.incomeCents += cents;
 			}
-			else if (FinanceAttributes.FLOW_EXPENSE.equals(txn.flow)
-					|| FinanceAttributes.FLOW_CREDIT.equals(txn.flow)
-					|| FinanceAttributes.FLOW_LEND.equals(txn.flow)) {
-				summary.expenseCents += Math.abs(txn.amountCents);
+			else if (FinanceRules.isPnlExpense(txn.flow)) {
+				summary.expenseCents += cents;
 				final String cat = txn.categoryName == null || txn.categoryName.length() == 0 ? "其他"
 						: txn.categoryName;
 				final Long prev = (Long) summary.byCategory.get(cat);
-				summary.byCategory.put(cat,
-						Long.valueOf((prev == null ? 0L : prev.longValue()) + Math.abs(txn.amountCents)));
+				summary.byCategory.put(cat, Long.valueOf((prev == null ? 0L : prev.longValue()) + cents));
+			}
+			else if (FinanceRules.isBorrow(txn.flow)) {
+				summary.borrowCents += cents;
+			}
+			else if (FinanceRules.isLend(txn.flow)) {
+				summary.lendCents += cents;
+			}
+			else if (FinanceRules.isCredit(txn.flow)) {
+				summary.creditCents += cents;
+			}
+			else if (FinanceRules.isTransfer(txn.flow)) {
+				summary.transferCents += cents;
 			}
 		}
 		return summary;
@@ -641,9 +771,6 @@ public final class FinanceLedgerService {
 				if (ext != null && FinanceAttributes.KIND_ROOT.equals(ext.getKind())) {
 					return current;
 				}
-				if (hasAnyFinanceNode(current.getRootNode())) {
-					return current;
-				}
 			}
 		}
 		catch (Exception e) {
@@ -651,19 +778,23 @@ public final class FinanceLedgerService {
 		return ensureFinanceMap();
 	}
 
-	private static boolean hasAnyFinanceNode(final NodeModel node) {
-		if (node == null) {
+	public static boolean persistFinanceMap(final MapModel map) {
+		if (map == null) {
 			return false;
 		}
-		if (FinanceExtension.getExtension(node) != null) {
-			return true;
-		}
-		for (int i = 0; i < node.getChildCount(); i++) {
-			if (hasAnyFinanceNode((NodeModel) node.getChildAt(i))) {
-				return true;
+		try {
+			final File file = map.getFile() != null ? map.getFile() : resolveFinanceMapFile();
+			if (file == null) {
+				return false;
 			}
+			final ModeController modeController = Controller.getCurrentModeController();
+			final MFileManager fileManager = MFileManager.getController(modeController);
+			return fileManager.save(map, file);
 		}
-		return false;
+		catch (Exception e) {
+			LogUtils.warn("Finance: persistFinanceMap failed", e);
+			return false;
+		}
 	}
 
 	private static void collectByKind(final NodeModel node, final String kind, final List out) {
@@ -705,7 +836,7 @@ public final class FinanceLedgerService {
 	}
 
 	private static String buildTxnLabel(final String merchant, final String note, final String categoryName,
-			final long cents) {
+			final long cents, final String flow, final String accountFrom, final String accountTo) {
 		String title = merchant;
 		if (title == null || title.trim().length() == 0) {
 			title = note;
@@ -713,8 +844,12 @@ public final class FinanceLedgerService {
 		if (title == null || title.trim().length() == 0) {
 			title = categoryName;
 		}
+		if ((title == null || title.trim().length() == 0) && FinanceRules.isTransfer(flow)
+				&& accountFrom != null && accountTo != null) {
+			title = accountFrom.trim() + "→" + accountTo.trim();
+		}
 		if (title == null || title.trim().length() == 0) {
-			title = "交易";
+			title = FinanceRules.flowLabelZh(flow);
 		}
 		return title.trim() + " · ¥" + FinanceAttributes.formatYuan(Math.abs(cents));
 	}
@@ -762,8 +897,14 @@ public final class FinanceLedgerService {
 	private static NodeModel findCouponByName(final NodeModel section, final String name) {
 		for (int i = 0; i < section.getChildCount(); i++) {
 			final NodeModel child = (NodeModel) section.getChildAt(i);
+			final FinanceExtension ext = FinanceExtension.getExtension(child);
+			if (ext != null && FinanceAttributes.KIND_COUPON.equals(ext.getKind())
+					&& name.equals(ext.getMerchant())) {
+				return child;
+			}
 			final String text = plainText(child);
-			if (text.equals(name) || text.startsWith(name + " ·")) {
+			final String bare = FinanceRules.bareNameFromLabel(text, null);
+			if (text.equals(name) || text.startsWith(name + " ·") || name.equals(bare)) {
 				return child;
 			}
 		}
@@ -849,6 +990,7 @@ public final class FinanceLedgerService {
 		public String dateYmd = "";
 		public String categoryName = "";
 		public String accountName = "";
+		public String accountTo = "";
 		public String merchant = "";
 		public String note = "";
 		public String currency = "";
@@ -883,10 +1025,22 @@ public final class FinanceLedgerService {
 		public String note = "";
 	}
 
+	/**
+	 * Monthly numbers: {@link #incomeCents}/{@link #expenseCents} are P&amp;L only.
+	 * Liability/credit/transfer are tracked separately so reports stay consistent.
+	 */
 	public static final class MonthSummary {
 		public String period = "";
 		public long incomeCents;
 		public long expenseCents;
+		public long borrowCents;
+		public long lendCents;
+		public long creditCents;
+		public long transferCents;
 		public Map byCategory = new HashMap();
+
+		public long pnlNetCents() {
+			return incomeCents - expenseCents;
+		}
 	}
 }
