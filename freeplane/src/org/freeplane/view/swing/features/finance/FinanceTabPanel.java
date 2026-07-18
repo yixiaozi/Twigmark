@@ -31,6 +31,7 @@ import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -72,9 +73,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	public FinanceTabPanel() {
 		super(new BorderLayout(0, 0));
-		setOpaque(true);
-		setBackground(new Color(0xF7F8FA));
-		setBorder(new EmptyBorder(10, 10, 10, 10));
+		DocearUiTheme.styleCanvas(this);
+		setBorder(DocearUiTheme.pageBorder());
 		add(buildHeader(), BorderLayout.NORTH);
 		add(buildBody(), BorderLayout.CENTER);
 		wireRenderers();
@@ -129,9 +129,11 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final JPanel header = new JPanel(new BorderLayout(8, 8));
 		header.setOpaque(false);
 		final JLabel title = new JLabel("个人财务");
-		title.setFont(title.getFont().deriveFont(Font.BOLD, 16f));
+		title.setFont(DocearUiTheme.font(16f, Font.BOLD));
+		title.setForeground(DocearUiTheme.TEXT);
 		monthLabel.setFont(monthLabel.getFont().deriveFont(Font.PLAIN, 12f));
-		monthLabel.setForeground(new Color(0x5F6368));
+		monthLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		monthLabel.setFont(DocearUiTheme.font(12f));
 		final JPanel titleCol = new JPanel();
 		titleCol.setOpaque(false);
 		titleCol.setLayout(new BoxLayout(titleCol, BoxLayout.Y_AXIS));
@@ -166,22 +168,23 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final JPanel row = new JPanel(new GridLayout(1, 4, 8, 0));
 		row.setOpaque(false);
 		row.setBorder(new EmptyBorder(10, 0, 8, 0));
-		row.add(kpiCard("收入", incomeValue, new Color(0x0B8043)));
-		row.add(kpiCard("支出", expenseValue, new Color(0xD93025)));
-		row.add(kpiCard("结余", netValue, new Color(0x1A73E8)));
-		row.add(kpiCard("预算余", budgetValue, new Color(0xE37400)));
+		row.add(kpiCard("收入", incomeValue, DocearUiTheme.SUCCESS));
+		row.add(kpiCard("支出", expenseValue, DocearUiTheme.DANGER));
+		row.add(kpiCard("结余", netValue, DocearUiTheme.ACCENT));
+		row.add(kpiCard("预算余", budgetValue, DocearUiTheme.WARNING));
 		return row;
 	}
 
 	private static JPanel kpiCard(final String label, final JLabel value, final Color accent) {
 		final JPanel card = new JPanel(new BorderLayout(0, 2));
-		card.setBackground(Color.WHITE);
+		card.setBackground(DocearUiTheme.SURFACE);
 		card.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createLineBorder(new Color(0xE8EAED)),
+				DocearUiTheme.hairlineBorder(),
 				new EmptyBorder(8, 8, 8, 8)));
 		final JLabel l = new JLabel(label);
 		l.setFont(l.getFont().deriveFont(11f));
-		l.setForeground(new Color(0x5F6368));
+		l.setForeground(DocearUiTheme.TEXT_MUTED);
+		l.setFont(DocearUiTheme.font(11f));
 		value.setForeground(accent);
 		card.add(l, BorderLayout.NORTH);
 		card.add(value, BorderLayout.CENTER);
@@ -211,9 +214,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	private JPanel buildQuickEntry() {
 		final JPanel box = new JPanel();
 		box.setOpaque(true);
-		box.setBackground(Color.WHITE);
+		box.setBackground(DocearUiTheme.SURFACE);
 		box.setBorder(BorderFactory.createCompoundBorder(
-				BorderFactory.createLineBorder(new Color(0xE8EAED)),
+				DocearUiTheme.hairlineBorder(),
 				new EmptyBorder(10, 10, 10, 10)));
 		box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
 
@@ -861,7 +864,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		p.setOpaque(false);
 		final JLabel l = new JLabel(label);
 		l.setFont(l.getFont().deriveFont(11f));
-		l.setForeground(new Color(0x5F6368));
+		l.setForeground(DocearUiTheme.TEXT_MUTED);
+		l.setFont(DocearUiTheme.font(11f));
 		if (field instanceof JTextField) {
 			((JTextField) field).setColumns(8);
 		}
@@ -878,9 +882,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private static JButton softButton(final String text) {
-		final JButton b = new JButton(text);
-		b.setFocusPainted(false);
-		return b;
+		return DocearUiTheme.softButton(text);
 	}
 
 	private static JButton softButton(final String text, final Runnable action) {
@@ -894,17 +896,14 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private static JButton primaryButton(final String text, final Runnable action) {
-		final JButton b = new JButton(text);
-		b.setFocusPainted(false);
-		b.setBackground(new Color(0x1A73E8));
-		b.setForeground(Color.WHITE);
-		b.setOpaque(true);
-		b.setBorderPainted(false);
-		b.addActionListener(new java.awt.event.ActionListener() {
-			public void actionPerformed(final java.awt.event.ActionEvent e) {
-				action.run();
-			}
-		});
+		final JButton b = DocearUiTheme.primaryButton(text);
+		if (action != null) {
+			b.addActionListener(new java.awt.event.ActionListener() {
+				public void actionPerformed(java.awt.event.ActionEvent e) {
+					action.run();
+				}
+			});
+		}
 		return b;
 	}
 

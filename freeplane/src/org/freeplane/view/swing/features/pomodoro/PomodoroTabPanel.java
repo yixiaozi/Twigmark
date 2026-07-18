@@ -75,6 +75,8 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		this.modeController = modeController;
 		DocearUiTheme.styleCanvas(this);
 		setBorder(DocearUiTheme.pageBorder());
+		DocearUiTheme.styleScrollPane(treeScroll);
+		DocearUiTheme.styleScrollPane(todayScroll);
 
 		final JPanel top = new JPanel(new BorderLayout(2, 2));
 		top.setOpaque(false);
@@ -120,8 +122,8 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		modeBar.add(todayViewButton);
 		top.add(modeBar, BorderLayout.NORTH);
 
-		statsLabel.setFont(new Font("SansSerif", Font.PLAIN, 11));
-		statsLabel.setForeground(new Color(0x6B5E54));
+		statsLabel.setFont(DocearUiTheme.font(11f));
+		statsLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		statsLabel.setBorder(new EmptyBorder(2, 6, 4, 6));
 		top.add(statsLabel, BorderLayout.CENTER);
 
@@ -197,7 +199,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 						final TreeEntry entry = (TreeEntry) user;
 						setText(entry.label);
 						if (entry.running) {
-							setForeground(sel ? getTextSelectionColor() : new Color(0xC45C26));
+							setForeground(sel ? getTextSelectionColor() : DocearUiTheme.WARNING);
 						}
 					}
 				}
@@ -219,7 +221,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		});
 
 		todayList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-		todayList.setFont(new Font("SansSerif", Font.PLAIN, 12));
+		todayList.setFont(DocearUiTheme.font(12f));
 		todayList.setCellRenderer(new DefaultListCellRenderer() {
 			private static final long serialVersionUID = 1L;
 
@@ -230,7 +232,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 					final PomodoroTodayEntry entry = (PomodoroTodayEntry) value;
 					setText(entry.label);
 					if (entry.live) {
-						setForeground(isSelected ? getForeground() : new Color(0xC45C26));
+						setForeground(isSelected ? getForeground() : DocearUiTheme.WARNING);
 					}
 				}
 				return this;
@@ -271,7 +273,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	}
 
 	private static JButton btn(final String text, final ActionListener listener) {
-		final JButton b = new JButton(text);
+		final JButton b = DocearUiTheme.softButton(text);
 		b.addActionListener(listener);
 		return b;
 	}

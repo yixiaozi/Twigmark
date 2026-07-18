@@ -70,6 +70,7 @@ import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollaps
 import org.freeplane.core.ui.components.ResizeEvent;
 import org.freeplane.core.ui.components.ResizerListener;
 import org.freeplane.core.ui.components.UITools;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.format.FormattedDate;
@@ -173,7 +174,9 @@ abstract public class FrameController implements ViewController {
 		statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));
 		statusPanel.putClientProperty(VISIBLE_PROPERTY_KEY, "status_visible");
 		status = new JLabel();
-		status.setBorder(BorderFactory.createEtchedBorder());
+		status.setBorder(BorderFactory.createCompoundBorder(DocearUiTheme.hairlineBorder(), BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+		status.setFont(DocearUiTheme.font(12f));
+		status.setForeground(DocearUiTheme.TEXT_MUTED);
 		statusPanel.add(status);
 		statusInfos = new HashMap<String, Component>();
 		statusInfos.put(STANDARD_STATUS_INFO_KEY, status);
@@ -350,7 +353,8 @@ abstract public class FrameController implements ViewController {
 		JLabel label = (JLabel) statusInfos.get(key);
 		if (label == null) {
 			label = new JLabel(info);
-			label.setBorder(BorderFactory.createEtchedBorder());
+			label.setBorder(BorderFactory.createCompoundBorder(DocearUiTheme.hairlineBorder(), BorderFactory.createEmptyBorder(2, 6, 2, 6)));
+			label.setFont(DocearUiTheme.font(12f));
 			statusInfos.put(key, label);
 			statusPanel.add(label, statusPanel.getComponentCount() - 1);
 		}

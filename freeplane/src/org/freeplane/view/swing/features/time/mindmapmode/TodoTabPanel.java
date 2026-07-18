@@ -85,7 +85,7 @@ public class TodoTabPanel extends JPanel {
 
 		tree.setCellRenderer(new DefaultTreeCellRenderer() {
 			private static final long serialVersionUID = 1L;
-			private final Color TODO_COLOR = new Color(0, 102, 204);
+			private final Color TODO_COLOR = org.freeplane.core.ui.theme.DocearUiTheme.ACCENT_DEEP;
 			private final IconStore iconStore = IconStoreFactory.create();
 
 			public Component getTreeCellRendererComponent(JTree pTree, Object value, boolean sel, boolean expanded,
