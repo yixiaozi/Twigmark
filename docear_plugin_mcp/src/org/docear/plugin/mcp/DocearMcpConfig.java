@@ -105,6 +105,10 @@ public final class DocearMcpConfig {
 		setProperty("cursorPlugin.sync.enabled", enabled ? "true" : "false");
 	}
 
+	public static void setAuditEnabled(final boolean enabled) {
+		setProperty("audit.enabled", enabled ? "true" : "false");
+	}
+
 	private static void setProperty(final String key, final String value) {
 		try {
 			ResourceController.getResourceController().setProperty(PREFIX + key, value == null ? "" : value);

@@ -68,6 +68,7 @@ public final class ProductSettingsService {
 		resources.setDefaultProperty("mcp.port", "7720");
 		resources.setDefaultProperty("mcp.readonly", "false");
 		resources.setDefaultProperty("mcp.cursorPlugin.sync.enabled", "true");
+		resources.setDefaultProperty("mcp.audit.enabled", "true");
 		resources.setDefaultProperty(FinanceLedgerService.PROP_MAP_PATH, FinanceLedgerService.DEFAULT_FILENAME);
 		resources.setDefaultProperty("quickcapture.inbox_directory", "");
 		resources.setDefaultProperty("quickcapture.inbox_filename", "\u6536\u4ef6\u7bb1.mm");
