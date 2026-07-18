@@ -132,6 +132,17 @@ public final class McpAuditService {
 		    || "stop_pomodoro".equals(toolName)) {
 			return McpOperationIntent.POMODORO;
 		}
+		if ("ensure_finance_map".equals(toolName) || "get_finance_summary".equals(toolName)
+		    || "add_finance_transaction".equals(toolName) || "list_finance_transactions".equals(toolName)
+		    || "list_finance_categories".equals(toolName) || "add_finance_category".equals(toolName)
+		    || "list_finance_accounts".equals(toolName) || "add_finance_account".equals(toolName)
+		    || "set_finance_budget".equals(toolName) || "list_finance_budgets".equals(toolName)
+		    || "upsert_finance_subscription".equals(toolName) || "list_finance_subscriptions".equals(toolName)
+		    || "upsert_finance_coupon".equals(toolName) || "list_finance_coupons".equals(toolName)
+		    || "mark_finance_coupon_used".equals(toolName) || "delete_finance_node".equals(toolName)
+		    || "get_finance_report".equals(toolName)) {
+			return McpOperationIntent.FINANCE;
+		}
 		if ("get_active_map_json".equals(toolName) || "get_mindmap_json".equals(toolName) || "search_nodes".equals(toolName)
 		    || "list_recently_modified".equals(toolName) || "open_mindmap".equals(toolName)
 		    || "navigate_to_node".equals(toolName) || "add_node".equals(toolName) || "add_nodes".equals(toolName)
@@ -171,6 +182,9 @@ public final class McpAuditService {
 		}
 		if ("docear://pomodoro/running".equals(uri) || "docear://pomodoro/stats".equals(uri)) {
 			return McpOperationIntent.POMODORO;
+		}
+		if ("docear://finance/summary".equals(uri)) {
+			return McpOperationIntent.FINANCE;
 		}
 		return McpOperationIntent.RESOURCE;
 	}

@@ -5,8 +5,8 @@ description: >-
   open map and selected node via get_selection_context. When writing to mind maps,
   use clear hierarchical categories (overview → major sections → sub-items), not
   flat long one-liners. Use when the user mentions mind maps, .mm files, Docear,
-  MCP tools, todos, reminders, pomodoro/focus time, relationship graph, or asks
-  to add/organize nodes.
+  MCP tools, todos, reminders, pomodoro/focus time, personal finance ledger,
+  relationship graph, or asks to add/organize nodes.
 ---
 
 # Docear MCP：先读当前上下文
@@ -110,6 +110,24 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 帮我开始/暂停/结束 | `start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`（可选 `filePath`+`nodeId`，省略 nodeId=当前选中） |
 
 **原则**：问「现在/最近在做什么」时先读 running + stats，再按需查 history；不要为查计时去 `open_mindmap`。
+
+## 个人财务（Finance Ledger）
+
+数据写在专用导图 `个人财务.mm`（可用 `finance.map.path` 覆盖），左侧「财务」Tab 与 MCP 共用同一套账本。金额以**分**存 XML（`FINANCE_*`），对外用元字符串（如 `28.50`）。
+
+| 场景 | 推荐 MCP 调用 |
+|------|----------------|
+| 确保账本存在 / 取路径 | `ensure_finance_map` |
+| 本月收支总览 | `get_finance_summary` 或资源 `docear://finance/summary`（`period=yyyy-MM`） |
+| 记一笔 | `add_finance_transaction`（`amount` 必填；`flow`: `expense`\|`income`\|`transfer`\|`borrow`\|`lend`\|`credit`；转账必须 `account`+`accountTo`） |
+| 查流水 | `list_finance_transactions`（`from`/`to`/`limit`） |
+| 分类 / 账户 | 读：`list_finance_categories`（`flow=all\|expense\|income`）、`list_finance_accounts`；写：`add_finance_category`、`add_finance_account` |
+| 预算 | `set_finance_budget` / `list_finance_budgets`（`总预算`对照整月损益支出） |
+| 订阅 / 优惠券 | `upsert_finance_subscription`、`list_finance_subscriptions`、`upsert_finance_coupon`、`list_finance_coupons`、`mark_finance_coupon_used` |
+| 删除 | `delete_finance_node`（`nodeId`） |
+| 报表（视口图表） | `get_finance_report`（`reportId` + 可选 `showInViewport=true`；返回 kpis） |
+
+**原则**：收入/支出是损益；借入/借出/信用卡/转账单独计量，不混入损益结余。财务读写走上述工具，不要为记账扫全库或 `open_mindmap`。Prompt：`finance-review`。
 
 ## 标签 / 分组 / 收藏（侧栏）
 
@@ -276,6 +294,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - **关系图**：`get_relationship_graph`、`get_node_relationships`；资源 `docear://graph/summary`
 - 读详情/钉选：`get_node_details`、`list_pinned`、`list_published`
 - **番茄钟**：`get_running_pomodoro`、`list_pomodoro_sessions`、`get_pomodoro_stats`、`get_pomodoro_history`；写：`start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`；资源 `docear://pomodoro/running`、`docear://pomodoro/stats`
+- **财务**：`ensure_finance_map`、`get_finance_summary`、`add_finance_transaction`、`list_finance_transactions`、分类/账户/预算/订阅/优惠券 CRUD、`get_finance_report`；资源 `docear://finance/summary`
 - **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`

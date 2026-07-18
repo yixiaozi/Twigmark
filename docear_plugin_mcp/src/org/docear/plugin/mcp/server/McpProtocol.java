@@ -10,6 +10,7 @@ import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
+import org.docear.plugin.mcp.service.McpFinanceService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeService;
 import org.docear.plugin.mcp.service.McpPomodoroService;
@@ -152,6 +153,59 @@ public final class McpProtocol {
 		tools.add(tool("stop_pomodoro",
 				"Stop/end the pomodoro session on a node (records history). Omit nodeId for current selection.",
 				schema("filePath", "string", false), schema("nodeId", "string", false)));
+		tools.add(tool("ensure_finance_map",
+				"Ensure the personal finance ledger mind map (个人财务.mm) exists and is open; creates skeleton sections if missing."));
+		tools.add(tool("get_finance_summary",
+				"Month finance summary: income/expense/net, by-category expense, account/category catalogs. period=yyyy-MM (default this month).",
+				schema("period", "string", false)));
+		tools.add(tool("add_finance_transaction",
+				"Add a ledger transaction into 个人财务.mm. amount as yuan string (e.g. 28.5). "
+						+ "flow: expense|income|transfer|borrow|lend|credit. "
+						+ "transfer REQUIRES account + accountTo. Optional date (yyyy-MM-dd), category, merchant, note. "
+						+ "P&L income/expense are separate from borrow/lend/credit/transfer.",
+				schema("amount", "string", true), schema("flow", "string", false), schema("date", "string", false),
+				schema("category", "string", false), schema("account", "string", false),
+				schema("accountTo", "string", false), schema("merchant", "string", false),
+				schema("note", "string", false)));
+		tools.add(tool("list_finance_transactions",
+				"List finance transactions in date range (yyyy-MM-dd). limit defaults 200 (latest).",
+				schema("from", "string", false), schema("to", "string", false), schema("limit", "number", false)));
+		tools.add(tool("list_finance_categories",
+				"List finance categories. flow: expense|income|all (default all = both folders).",
+				schema("flow", "string", false)));
+		tools.add(tool("add_finance_category",
+				"Add a finance category under expense or income. flow defaults expense.",
+				schema("name", "string", true), schema("flow", "string", false)));
+		tools.add(tool("list_finance_accounts", "List finance accounts (cash/bank/credit card, etc.)."));
+		tools.add(tool("add_finance_account", "Add a finance account node.", schema("name", "string", true)));
+		tools.add(tool("set_finance_budget",
+				"Set/update a monthly category budget. period=yyyy-MM; amount in yuan.",
+				schema("category", "string", true), schema("amount", "string", true), schema("period", "string", false)));
+		tools.add(tool("list_finance_budgets", "List budgets for a month (period=yyyy-MM, default this month).",
+				schema("period", "string", false)));
+		tools.add(tool("upsert_finance_subscription",
+				"Create/update a recurring subscription. cycle: monthly|yearly|weekly. amount in yuan.",
+				schema("name", "string", true), schema("amount", "string", true), schema("cycle", "string", false),
+				schema("next", "string", false), schema("status", "string", false), schema("account", "string", false),
+				schema("note", "string", false)));
+		tools.add(tool("list_finance_subscriptions", "List recurring subscriptions / digital recurring charges."));
+		tools.add(tool("upsert_finance_coupon",
+				"Create/update an unused coupon / voucher digital asset. amount in yuan; expires=yyyy-MM-dd.",
+				schema("name", "string", true), schema("amount", "string", true), schema("expires", "string", false),
+				schema("status", "string", false), schema("merchant", "string", false), schema("note", "string", false)));
+		tools.add(tool("list_finance_coupons", "List coupons / vouchers (digital assets)."));
+		tools.add(tool("mark_finance_coupon_used",
+				"Mark a coupon node used/unused. used defaults true.",
+				schema("nodeId", "string", true), schema("used", "boolean", false)));
+		tools.add(tool("delete_finance_node",
+				"Delete a finance node (txn/budget/subscription/coupon/category/account) by nodeId from 个人财务.mm.",
+				schema("nodeId", "string", true)));
+		tools.add(tool("get_finance_report",
+				"Build a finance report. reportId: month_overview|expense_by_category|income_by_category|trend|"
+						+ "budget_status|subscriptions|coupons. Optional from/to (yyyy-MM-dd). "
+						+ "showInViewport=true displays charts in the map viewport. Returns kpis+details.",
+				schema("reportId", "string", false), schema("from", "string", false), schema("to", "string", false),
+				schema("showInViewport", "boolean", false)));
 		tools.add(tool("search_nodes",
 				"Search nodes by keyword via silent SAX. Filters by node MODIFIED (not global Top-N). "
 						+ "Use modifiedWithinDays, filePath, or projectId to narrow large workspaces.",
@@ -394,6 +448,72 @@ public final class McpProtocol {
 			textResult = McpPomodoroService.stopPomodoro(argString(args, "filePath", ""),
 					argString(args, "nodeId", ""));
 		}
+		else if ("ensure_finance_map".equals(name)) {
+			textResult = McpFinanceService.ensureFinanceMap();
+		}
+		else if ("get_finance_summary".equals(name)) {
+			textResult = McpFinanceService.getFinanceSummary(argString(args, "period", ""));
+		}
+		else if ("add_finance_transaction".equals(name)) {
+			textResult = McpFinanceService.addFinanceTransaction(required(args, "amount"),
+					argString(args, "flow", "expense"), argString(args, "date", ""),
+					argString(args, "category", ""), argString(args, "account", ""),
+					argString(args, "accountTo", ""), argString(args, "merchant", ""),
+					argString(args, "note", ""));
+		}
+		else if ("list_finance_transactions".equals(name)) {
+			textResult = McpFinanceService.listFinanceTransactions(argString(args, "from", ""),
+					argString(args, "to", ""), argInt(args, "limit", 200));
+		}
+		else if ("list_finance_categories".equals(name)) {
+			textResult = McpFinanceService.listFinanceCategories(argString(args, "flow", "all"));
+		}
+		else if ("add_finance_category".equals(name)) {
+			textResult = McpFinanceService.addFinanceCategory(required(args, "name"),
+					argString(args, "flow", "expense"));
+		}
+		else if ("list_finance_accounts".equals(name)) {
+			textResult = McpFinanceService.listFinanceAccounts();
+		}
+		else if ("add_finance_account".equals(name)) {
+			textResult = McpFinanceService.addFinanceAccount(required(args, "name"));
+		}
+		else if ("set_finance_budget".equals(name)) {
+			textResult = McpFinanceService.setFinanceBudget(argString(args, "period", ""), required(args, "category"),
+					required(args, "amount"));
+		}
+		else if ("list_finance_budgets".equals(name)) {
+			textResult = McpFinanceService.listFinanceBudgets(argString(args, "period", ""));
+		}
+		else if ("upsert_finance_subscription".equals(name)) {
+			textResult = McpFinanceService.upsertFinanceSubscription(required(args, "name"), required(args, "amount"),
+					argString(args, "cycle", "monthly"), argString(args, "next", ""),
+					argString(args, "status", "active"), argString(args, "account", ""),
+					argString(args, "note", ""));
+		}
+		else if ("list_finance_subscriptions".equals(name)) {
+			textResult = McpFinanceService.listFinanceSubscriptions();
+		}
+		else if ("upsert_finance_coupon".equals(name)) {
+			textResult = McpFinanceService.upsertFinanceCoupon(required(args, "name"), required(args, "amount"),
+					argString(args, "expires", ""), argString(args, "status", "active"),
+					argString(args, "merchant", ""), argString(args, "note", ""));
+		}
+		else if ("list_finance_coupons".equals(name)) {
+			textResult = McpFinanceService.listFinanceCoupons();
+		}
+		else if ("mark_finance_coupon_used".equals(name)) {
+			textResult = McpFinanceService.markFinanceCouponUsed(required(args, "nodeId"),
+					argBool(args, "used", true));
+		}
+		else if ("delete_finance_node".equals(name)) {
+			textResult = McpFinanceService.deleteFinanceNode(required(args, "nodeId"));
+		}
+		else if ("get_finance_report".equals(name)) {
+			textResult = McpFinanceService.getFinanceReport(argString(args, "reportId", "month_overview"),
+					argString(args, "from", ""), argString(args, "to", ""),
+					argBool(args, "showInViewport", false));
+		}
 		else if ("search_nodes".equals(name)) {
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
 					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0),
@@ -538,6 +658,7 @@ public final class McpProtocol {
 		resources.add(resource("docear://tags/catalog", "Tag groups + tags + favorite tags catalog", "application/json"));
 		resources.add(resource("docear://pomodoro/running", "Currently running pomodoro / focus session", "application/json"));
 		resources.add(resource("docear://pomodoro/stats", "Pomodoro today/week/total stats (all open maps)", "application/json"));
+		resources.add(resource("docear://finance/summary", "Current-month personal finance summary", "application/json"));
 		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
 		return resources;
 	}
@@ -637,6 +758,10 @@ public final class McpProtocol {
 			mimeType = "application/json";
 			text = McpPomodoroService.getPomodoroStats(true);
 		}
+		else if ("docear://finance/summary".equals(uri)) {
+			mimeType = "application/json";
+			text = McpFinanceService.getFinanceSummary("");
+		}
 		else if ("docear://inbox".equals(uri)) {
 			mimeType = "application/json";
 			text = McpContextService.getInboxContext();
@@ -656,6 +781,8 @@ public final class McpProtocol {
 		prompts.add(prompt("inbox-triage", "Triage inbox captures into projects and todos."));
 		prompts.add(prompt("weekly-review", "Weekly review of completed and pending work."));
 		prompts.add(prompt("focus-status", "Summarize what the user is focusing on now and recent pomodoro history."));
+		prompts.add(prompt("finance-review",
+				"Review this month's personal finance: income, expense, budgets, subscriptions and coupons."));
 		return prompts;
 	}
 
@@ -705,6 +832,11 @@ public final class McpProtocol {
 		else if ("focus-status".equals(name)) {
 			instructions = "Read docear://pomodoro/running and docear://pomodoro/stats. Optionally call get_pomodoro_history on the active map. "
 					+ "Summarize what the user is focusing on now (node text + live time), today/week totals, and recent completed sessions with timestamps.";
+		}
+		else if ("finance-review".equals(name)) {
+			instructions = "Read docear://finance/summary. Optionally call list_finance_transactions, list_finance_budgets, "
+					+ "list_finance_subscriptions and list_finance_coupons. Summarize income vs expense, top spending categories, "
+					+ "budget pressure, upcoming subscriptions, and coupons nearing expiry. Offer get_finance_report with showInViewport=true if helpful.";
 		}
 		else {
 			throw new IllegalArgumentException("Unknown prompt: " + name);
