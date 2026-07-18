@@ -49,6 +49,7 @@ import org.freeplane.core.ui.components.SideTabTitleUpdater;
 import org.freeplane.core.ui.components.ResizeEvent;
 import org.freeplane.core.ui.components.ResizerListener;
 import org.freeplane.core.ui.components.UITools;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
@@ -371,6 +372,7 @@ public class MModeControllerFactory {
 			}
 		});
 		tabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
+		DocearUiTheme.styleTabbedPane(tabs);
 		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(tabs);
 		otcr.setExpanded(expanded);
 		resisableTabs.putClientProperty(ViewController.VISIBLE_PROPERTY_KEY, "styleScrollPaneVisible");

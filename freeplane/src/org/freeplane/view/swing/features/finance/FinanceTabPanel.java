@@ -243,7 +243,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		body.setOpaque(false);
 		body.add(buildQuickEntry(), BorderLayout.NORTH);
 		final JTabbedPane tabs = new JTabbedPane();
-		tabs.setFont(DocearUiTheme.font(12f, Font.BOLD));
+		DocearUiTheme.styleTabbedPane(tabs);
 		tabs.addTab("流水", wrapList(txnList));
 		tabs.addTab("预算", wrapList(budgetList));
 		tabs.addTab("订阅", wrapList(subList));

@@ -24,9 +24,7 @@ public class DraggableTabbedPane extends JTabbedPane {
 	private TabReorderListener reorderListener;
 
 	public DraggableTabbedPane() {
-		setOpaque(true);
-		setBackground(DocearUiTheme.CANVAS);
-		setFont(DocearUiTheme.font(12f, java.awt.Font.BOLD));
+		DocearUiTheme.styleTabbedPane(this);
 		TabbedPaneStableOrder.install(this);
 		addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {

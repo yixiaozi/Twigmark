@@ -12,7 +12,7 @@ import org.freeplane.core.resources.ResourceController;
 
 public final class TabbedPaneWidthUtils {
 
-	private static final int TAB_HORIZONTAL_INSET = 6;
+	private static final int TAB_HORIZONTAL_INSET = 10;
 
 	private TabbedPaneWidthUtils() {
 	}

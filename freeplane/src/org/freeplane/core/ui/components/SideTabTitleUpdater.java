@@ -6,6 +6,8 @@ import java.util.List;
 import javax.swing.JTabbedPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -49,6 +51,11 @@ public final class SideTabTitleUpdater {
 		WorkspaceSideTabSnapshotRegistry.addChangeListener(new Runnable() {
 			public void run() {
 				refreshSnapshotMetrics();
+				refreshTitles();
+			}
+		});
+		tabs.addChangeListener(new ChangeListener() {
+			public void stateChanged(final ChangeEvent e) {
 				refreshTitles();
 			}
 		});
@@ -109,8 +116,9 @@ public final class SideTabTitleUpdater {
 			    ? SideTabMetricRegistry.get(metricKey, 0)
 			    : -1;
 			tabs.setTitleAt(i, TabCountLabels.format(baseTitle, value));
+			final boolean selected = i == tabs.getSelectedIndex();
 			if (value >= 0) {
-				tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value));
+				tabs.setTabComponentAt(i, TabCountLabels.createTabComponent(baseTitle, value, null, selected));
 			}
 			else {
 				tabs.setTabComponentAt(i, null);

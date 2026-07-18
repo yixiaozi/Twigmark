@@ -14,7 +14,9 @@ import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JScrollBar;
 import javax.swing.JScrollPane;
+import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
@@ -26,12 +28,15 @@ import org.freeplane.core.util.LogUtils;
 
 /**
  * Shared product visual language for Docear (aligned with the calendar hub).
- * Light teal–slate direction — not purple / cream / broadsheet defaults.
+ * Light teal–slate direction with iOS-like tabs / scrollbars — not purple / cream / broadsheet.
  */
 public final class DocearUiTheme {
-	public static final Color CANVAS = new Color(0xF4, 0xF7, 0xF8);
+	public static final Color CANVAS = new Color(0xF2, 0xF4, 0xF7);
 	public static final Color SURFACE = Color.WHITE;
-	public static final Color SURFACE_SOFT = new Color(0xEE, 0xF4, 0xF3);
+	public static final Color SURFACE_SOFT = new Color(0xE8, 0xEE, 0xF2);
+	/** iOS-like grouped control well behind pill tabs. */
+	public static final Color TAB_WELL = new Color(0xE5, 0xE9, 0xEF);
+	public static final Color TAB_SELECTED = Color.WHITE;
 	public static final Color TEXT = new Color(0x0F, 0x17, 0x2A);
 	public static final Color TEXT_MUTED = new Color(0x64, 0x74, 0x8B);
 	public static final Color TEXT_FAINT = new Color(0x94, 0xA3, 0xB8);
@@ -46,6 +51,7 @@ public final class DocearUiTheme {
 	public static final Color HEADER_TOP = new Color(0x0F, 0x76, 0x6E);
 	public static final Color HEADER_BOTTOM = new Color(0x14, 0xB8, 0xA6);
 	public static final Color SELECTION = new Color(0x99, 0xF6, 0xE4);
+	public static final Color SCROLL_THUMB = new Color(0xB8, 0xC0, 0xCC);
 
 	public static final String FLAT_LIGHT = "com.formdev.flatlaf.FlatLightLaf";
 	public static final String FLAT_INTELLIJ = "com.formdev.flatlaf.FlatIntelliJLaf";
@@ -91,7 +97,7 @@ public final class DocearUiTheme {
 			setUiFont("EditorPane.font", ui);
 			setUiFont("TitledBorder.font", uiBold);
 			setUiFont("ToolTip.font", font(12f));
-			setUiFont("TabbedPane.font", font(12f, Font.BOLD));
+			setUiFont("TabbedPane.font", font(12f, Font.PLAIN));
 			setUiFont("Menu.font", ui);
 			setUiFont("MenuItem.font", ui);
 			setUiFont("CheckBoxMenuItem.font", ui);
@@ -108,22 +114,46 @@ public final class DocearUiTheme {
 			UIManager.put("ToolBar.background", SURFACE);
 			UIManager.put("ToolBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
 
-			UIManager.put("TabbedPane.background", CANVAS);
+			// FlatLaf tabs (bottom map strip + panes that keep FlatLaf UI): card / pill.
+			UIManager.put("TabbedPane.background", TAB_WELL);
 			UIManager.put("TabbedPane.contentAreaColor", SURFACE);
-			UIManager.put("TabbedPane.selected", SURFACE);
+			UIManager.put("TabbedPane.selected", TAB_SELECTED);
 			UIManager.put("TabbedPane.underlineColor", ACCENT);
-			UIManager.put("TabbedPane.selectedBackground", SURFACE);
+			UIManager.put("TabbedPane.selectedBackground", TAB_SELECTED);
 			UIManager.put("TabbedPane.focusColor", ACCENT);
-			UIManager.put("TabbedPane.hoverColor", ACCENT_WASH);
-			UIManager.put("TabbedPane.tabInsets", new Insets(6, 10, 6, 10));
-			UIManager.put("TabbedPane.selectedTabPadInsets", new Insets(6, 10, 6, 10));
-			UIManager.put("TabbedPane.showTabSeparators", Boolean.TRUE);
+			UIManager.put("TabbedPane.hoverColor", SURFACE_SOFT);
+			UIManager.put("TabbedPane.foreground", TEXT_MUTED);
+			UIManager.put("TabbedPane.selectedForeground", TEXT);
+			UIManager.put("TabbedPane.tabInsets", new Insets(7, 12, 7, 12));
+			UIManager.put("TabbedPane.selectedTabPadInsets", new Insets(0, 0, 0, 0));
+			UIManager.put("TabbedPane.tabAreaInsets", new Insets(6, 6, 4, 6));
+			UIManager.put("TabbedPane.contentBorderInsets", new Insets(0, 0, 0, 0));
+			UIManager.put("TabbedPane.showTabSeparators", Boolean.FALSE);
+			UIManager.put("TabbedPane.showContentSeparator", Boolean.FALSE);
+			UIManager.put("TabbedPane.tabType", "card");
+			UIManager.put("TabbedPane.tabHeight", Integer.valueOf(30));
+			UIManager.put("TabbedPane.tabArc", Integer.valueOf(12));
+			UIManager.put("TabbedPane.cardTabArc", Integer.valueOf(12));
+			UIManager.put("TabbedPane.tabSelectionHeight", Integer.valueOf(0));
+			UIManager.put("TabbedPane.cardTabSelectionHeight", Integer.valueOf(0));
+			UIManager.put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
 
-			UIManager.put("Button.arc", Integer.valueOf(8));
-			UIManager.put("Component.arc", Integer.valueOf(8));
-			UIManager.put("TextComponent.arc", Integer.valueOf(8));
+			UIManager.put("Button.arc", Integer.valueOf(10));
+			UIManager.put("Component.arc", Integer.valueOf(10));
+			UIManager.put("TextComponent.arc", Integer.valueOf(10));
 			UIManager.put("ScrollBar.thumbArc", Integer.valueOf(999));
-			UIManager.put("ScrollBar.width", Integer.valueOf(12));
+			UIManager.put("ScrollBar.trackArc", Integer.valueOf(999));
+			UIManager.put("ScrollBar.width", Integer.valueOf(9));
+			UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
+			UIManager.put("ScrollBar.trackInsets", new Insets(2, 2, 2, 2));
+			UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+			UIManager.put("ScrollBar.track", new Color(0, 0, 0, 0));
+			UIManager.put("ScrollBar.thumb", SCROLL_THUMB);
+			UIManager.put("ScrollBar.hoverThumbColor", new Color(0x8E, 0x99, 0xA8));
+			UIManager.put("ScrollBar.pressedThumbColor", new Color(0x78, 0x84, 0x94));
+			UIManager.put("ScrollBar.minimumThumbSize", new java.awt.Dimension(18, 18));
+			// Force thin pill scrollbar globally (overrides chunky platform bars).
+			UIManager.put("ScrollBarUI", DocearScrollBarUI.class.getName());
 			UIManager.put("Component.focusWidth", Integer.valueOf(1));
 			UIManager.put("Component.innerFocusWidth", Integer.valueOf(0));
 			UIManager.put("Component.accentColor", ACCENT);
@@ -234,9 +264,47 @@ public final class DocearUiTheme {
 		if (scroll == null) {
 			return;
 		}
-		scroll.setBorder(hairlineBorder());
+		scroll.setBorder(BorderFactory.createEmptyBorder());
 		scroll.getViewport().setBackground(SURFACE);
 		scroll.setBackground(SURFACE);
+		scroll.putClientProperty("JScrollBar.showButtons", Boolean.FALSE);
+		scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
+		styleScrollBar(scroll.getVerticalScrollBar());
+		styleScrollBar(scroll.getHorizontalScrollBar());
+	}
+
+	public static void styleScrollBar(final JScrollBar bar) {
+		if (bar == null) {
+			return;
+		}
+		bar.setOpaque(false);
+		bar.setUnitIncrement(16);
+		bar.putClientProperty("JScrollBar.showButtons", Boolean.FALSE);
+		try {
+			if (!(bar.getUI() instanceof DocearScrollBarUI)) {
+				bar.setUI(new DocearScrollBarUI());
+			}
+		}
+		catch (Throwable t) {
+		}
+	}
+
+	/** Soft well + FlatLaf card client props for panes that keep FlatLaf tab UI. */
+	public static void styleTabbedPane(final JTabbedPane tabs) {
+		if (tabs == null) {
+			return;
+		}
+		tabs.setOpaque(true);
+		tabs.setBackground(TAB_WELL);
+		tabs.setForeground(TEXT_MUTED);
+		tabs.setFont(font(12f, Font.PLAIN));
+		tabs.setBorder(new EmptyBorder(4, 4, 2, 4));
+		tabs.putClientProperty("JTabbedPane.tabType", "card");
+		tabs.putClientProperty("JTabbedPane.showTabSeparators", Boolean.FALSE);
+		tabs.putClientProperty("JTabbedPane.showContentSeparator", Boolean.FALSE);
+		tabs.putClientProperty("JTabbedPane.tabHeight", Integer.valueOf(30));
+		tabs.putClientProperty("JTabbedPane.tabArc", Integer.valueOf(12));
+		tabs.putClientProperty("JTabbedPane.cardTabArc", Integer.valueOf(12));
 	}
 
 	public static void styleSearchField(final JTextField field) {
