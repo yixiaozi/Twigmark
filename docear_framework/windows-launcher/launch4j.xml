@@ -26,6 +26,6 @@
     <opt>-Dorg.freeplane.param1=%~2%</opt>
     <opt>-Dorg.freeplane.param3=%~3%</opt>
     <opt>-Dorg.freeplane.param4=%~4%</opt>
-    <opt>-Dorg.freeplane.userfpdir=&quot;%APPDATA%\\Docear&quot;</opt>
+    <!-- Profile is {workingDirectory}/data; see working-directory.txt next to the exe. -->
   </jre>
 </launch4jConfig>

@@ -111,15 +111,12 @@ public final class TodoistConfig {
 	}
 
 	/**
-	 * Prefer {@code {library}/todolist.mm} when a library root is configured; otherwise
-	 * {@code {userProfile}/todolist.mm}.
+	 * Default under the working directory when no path is stored in {@code data/}.
+	 * Prefer configuring {@link #PROP_IMPORT_TARGET} in the data profile.
 	 */
 	public static File resolveDefaultImportTargetFile() {
-		final File libraryRoot = org.freeplane.core.util.MindMapDataRootResolver.getLibraryDataRoot();
-		if (libraryRoot != null) {
-			return new File(libraryRoot, DEFAULT_IMPORT_FILENAME);
-		}
-		return new File(Compat.getApplicationUserDirectory(), DEFAULT_IMPORT_FILENAME);
+		return new File(org.freeplane.core.util.MindMapDataRootResolver.getWorkingDirectory(),
+		        DEFAULT_IMPORT_FILENAME);
 	}
 
 	public static void setImportTargetFile(String path) {

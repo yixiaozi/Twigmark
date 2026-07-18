@@ -1,0 +1,4 @@
+# Docear working directory (mind maps live here).
+# All application configuration is stored in <this>/data/
+# Path may be absolute, or relative to the software install directory.
+workspace

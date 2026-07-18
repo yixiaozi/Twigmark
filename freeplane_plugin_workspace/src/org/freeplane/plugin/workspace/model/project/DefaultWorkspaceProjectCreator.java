@@ -42,7 +42,10 @@ public class DefaultWorkspaceProjectCreator implements IWorkspaceProjectCreater 
 
 			@Override
 			public URI getProjectDataPath() {
-				return URIUtils.createURI(getProjectHome().toString()+"/_data/"+getProjectID());
+				final java.io.File home = URIUtils.getAbsoluteFile(getProjectHome());
+				final java.io.File base = org.freeplane.core.util.MindMapDataRootResolver
+				        .getProjectSettingsBaseDirectory(home);
+				return new java.io.File(base, getProjectID()).toURI();
 			}
 
 			public URI getRelativeURI(URI uri) {

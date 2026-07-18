@@ -150,8 +150,6 @@ public final class GitConfig {
 			}
 		}
 		addIfDirectory(candidates, getCurrentMapDirectory());
-		addIfDirectory(candidates, new File(System.getProperty("user.home"), "Docear-Desktop"));
-		addIfDirectory(candidates, new File(new File(System.getProperty("user.home"), "Develop"), "Docear-Desktop"));
 		return new ArrayList<File>(candidates);
 	}
 

@@ -16,8 +16,7 @@ import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 
 /**
- * Builds the optional library workspace tree from
- * {@link MindMapDataRootResolver#getLibraryDataRoot()}.
+ * Builds the workspace tree from {@link MindMapDataRootResolver#getWorkingDirectory()}.
  * Ignores saved settings.xml structure so the tree always mirrors disk (with standard filters).
  */
 public final class FixedLibraryWorkspaceTree {
@@ -31,19 +30,16 @@ public final class FixedLibraryWorkspaceTree {
 		if (project == null) {
 			return false;
 		}
-		final File libraryRoot = MindMapDataRootResolver.getLibraryDataRoot();
-		if (libraryRoot == null) {
-			return false;
-		}
+		final File workingDirectory = MindMapDataRootResolver.getWorkingDirectory();
 		final File projectHome = URIUtils.getAbsoluteFile(project.getProjectHome());
 		if (projectHome == null) {
 			return false;
 		}
 		try {
-			return projectHome.getCanonicalFile().equals(libraryRoot.getCanonicalFile());
+			return projectHome.getCanonicalFile().equals(workingDirectory.getCanonicalFile());
 		}
 		catch (final Exception e) {
-			return projectHome.equals(libraryRoot);
+			return projectHome.equals(workingDirectory);
 		}
 	}
 
@@ -54,7 +50,7 @@ public final class FixedLibraryWorkspaceTree {
 				if (pathname == null) {
 					return false;
 				}
-				if ("_data".equals(pathname.getName())) {
+				if (MindMapDataRootResolver.isConfigDirectoryName(pathname.getName())) {
 					return false;
 				}
 				if (pathname.isDirectory() && pathname.getName().startsWith("_")) {

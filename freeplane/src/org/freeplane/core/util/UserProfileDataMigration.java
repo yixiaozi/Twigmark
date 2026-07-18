@@ -13,7 +13,7 @@ import org.freeplane.main.application.LastOpenedList;
 
 /**
  * Restores session and preference data when the active profile was reset
- * (e.g. after moving from {@code %APPDATA%\\Docear} to a library {@code _data} directory).
+ * (e.g. after moving from {@code %APPDATA%\\Docear} to {@code {workingDirectory}/data}).
  */
 public final class UserProfileDataMigration {
 

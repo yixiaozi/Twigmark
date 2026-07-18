@@ -45,7 +45,8 @@ public final class DocearMcpConfig {
 		if (configured.length() > 0) {
 			return new File(configured);
 		}
-		return new File(Compat.getApplicationUserDirectory(), "_data");
+		// Profile is already {workingDirectory}/data — audit.db lives there.
+		return new File(Compat.getApplicationUserDirectory());
 	}
 
 	public static File getAuditDbFile() {

@@ -1275,13 +1275,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	public URI getDefaultProjectHome() {
-		final File fixed = MindMapDataRootResolver.getFixedDataRoot();
-		if (fixed != null) {
-			return fixed.toURI();
-		}
-		File home = URIUtils.getAbsoluteFile(WorkspaceController.getApplicationHome());
-		home = new File(home, "projects");
-		return home.toURI();
+		return MindMapDataRootResolver.getWorkingDirectory().toURI();
 	}
 
 	public void shutdown() {
@@ -1331,13 +1325,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private void loadFixedDataRootProject() {
-		final File dataRoot = MindMapDataRootResolver.getLibraryDataRoot();
-		if (dataRoot == null) {
-			LogUtils.info("No library data root configured; using workspace projects only.");
-			return;
-		}
-		if (!dataRoot.isDirectory() && !dataRoot.mkdirs()) {
-			LogUtils.severe("Library data root is missing or not a directory: " + dataRoot.getAbsolutePath());
+		final File dataRoot = MindMapDataRootResolver.getWorkingDirectory();
+		if (!dataRoot.isDirectory()) {
+			LogUtils.severe("Working directory is missing or not a directory: " + dataRoot.getAbsolutePath());
 			return;
 		}
 		try {

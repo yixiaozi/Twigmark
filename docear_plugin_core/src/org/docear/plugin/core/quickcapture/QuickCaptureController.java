@@ -163,11 +163,7 @@ final class QuickCaptureController {
 		final String filename = ResourceController.getResourceController().getProperty(PROP_INBOX_FILENAME,
 		        DEFAULT_INBOX_FILENAME);
 		if (dirPath == null || dirPath.trim().length() == 0) {
-			final File scanRoot = MindMapDataRootResolver.getPrimaryScanRoot();
-			if (scanRoot == null) {
-				return null;
-			}
-			dirPath = scanRoot.getAbsolutePath();
+			dirPath = MindMapDataRootResolver.getWorkingDirectory().getAbsolutePath();
 		}
 		final File dir = new File(dirPath.trim());
 		if (!dir.isDirectory() && !dir.mkdirs()) {

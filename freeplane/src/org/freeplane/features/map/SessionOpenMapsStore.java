@@ -17,7 +17,7 @@ import org.freeplane.core.util.MindMapDataRootResolver;
 /**
  * Crash-safe session of currently open mind maps.
  * <p>
- * Stored as {@code {dataRoot}/_data/session-open-maps.properties} and rewritten on every
+ * Stored as {@code {workingDirectory}/data/session-open-maps.properties} and rewritten on every
  * open / close / focus change so a crash still restores the full open set next launch.
  * During application quit the store is {@link #freeze() frozen} after the last good
  * snapshot so closing tabs one-by-one cannot wipe the file to {@code open.count=0}.
@@ -188,10 +188,7 @@ public final class SessionOpenMapsStore {
 	}
 
 	private File resolveFile() {
-		File dir = MindMapDataRootResolver.getApplicationConfigDirectory();
-		if (dir == null) {
-			dir = new File(System.getProperty("user.home"), ".docear/_data");
-		}
+		final File dir = MindMapDataRootResolver.getApplicationConfigDirectory();
 		if (!dir.exists() && !dir.mkdirs()) {
 			LogUtils.warn("Could not create session-open-maps dir: " + dir.getAbsolutePath());
 			return null;

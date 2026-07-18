@@ -62,7 +62,8 @@ public final class AiWorkspaceFileTreeBuilder {
         if (name == null || name.length() == 0) {
             return true;
         }
-        return "_data".equalsIgnoreCase(name) || "bin".equalsIgnoreCase(name) || ".git".equalsIgnoreCase(name);
+        return org.freeplane.core.util.MindMapDataRootResolver.isConfigDirectoryName(name)
+                || "bin".equalsIgnoreCase(name) || ".git".equalsIgnoreCase(name);
     }
 
     private static void collectRecursive(final File dir, final List result, final Set seen) {

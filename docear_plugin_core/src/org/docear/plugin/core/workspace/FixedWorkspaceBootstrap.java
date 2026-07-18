@@ -13,9 +13,8 @@ import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 /**
- * When a library root is configured ({@link MindMapDataRootResolver#getLibraryDataRoot()}),
- * ensures that workspace project is loaded and maps can attach to it without a project wizard.
- * With no library configured, this is a no-op (portable product default).
+ * Ensures the workspace project for {@link MindMapDataRootResolver#getWorkingDirectory()}
+ * is loaded and maps can attach to it without a project wizard.
  */
 public final class FixedWorkspaceBootstrap {
 
@@ -41,16 +40,9 @@ public final class FixedWorkspaceBootstrap {
 	}
 
 	public static AWorkspaceProject getOrLoadFixedProject() {
-		final File dataRoot = MindMapDataRootResolver.getLibraryDataRoot();
-		if (dataRoot == null) {
-			return null;
-		}
-		if (!dataRoot.exists() && !dataRoot.mkdirs()) {
-			LogUtils.severe("Could not create library data root: " + dataRoot.getAbsolutePath());
-			return null;
-		}
+		final File dataRoot = MindMapDataRootResolver.getWorkingDirectory();
 		if (!dataRoot.isDirectory()) {
-			LogUtils.severe("Library data root is not a directory: " + dataRoot.getAbsolutePath());
+			LogUtils.severe("Working directory is missing or not a directory: " + dataRoot.getAbsolutePath());
 			return null;
 		}
 		try {

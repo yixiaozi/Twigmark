@@ -257,7 +257,7 @@ public final class McpProtocol {
 		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
 		tools.add(tool("export_workspace_snapshot", "Export workspace snapshot markdown files."));
 		tools.add(tool("list_audit_log",
-				"List MCP audit detail rows from SQLite (_data/audit.db): request/response JSON, question summary, operation goal.",
+				"List MCP audit detail rows from SQLite (data/audit.db): request/response JSON, question summary, operation goal.",
 				schema("limit", "number", false), schema("intent", "string", false), schema("traceId", "string", false),
 				schema("questionQuery", "string", false), schema("action", "string", false),
 				schema("sinceMillis", "number", false)));
