@@ -54,11 +54,13 @@ public class ReportGenerator extends StreamHandler {
 
 	private class SubmitStarter implements Runnable {
 		SubmitStarter() {
-			if (Controller.getCurrentController().getViewController().isDispatchThread()) {
+			final Controller controller = Controller.getCurrentController();
+			final ViewController viewController = controller != null ? controller.getViewController() : null;
+			if (viewController == null || viewController.isDispatchThread()) {
 				return;
 			}
 			final Thread currentThread = Thread.currentThread();
-			Controller.getCurrentController().getViewController().invokeLater(new Runnable() {
+			viewController.invokeLater(new Runnable() {
 				public void run() {
 					try {
 						currentThread.join(1000);
@@ -219,12 +221,18 @@ public class ReportGenerator extends StreamHandler {
 	JButton logButton;
 	@Override
 	public synchronized void publish(final LogRecord record) {
-		final ViewController viewController = Controller.getCurrentController().getViewController();
+		// During early OSGi startup Controller/ViewController may still be null.
+		// Never NPE here — logging must not kill the startlevel thread (macOS).
+		final Controller controller = Controller.getCurrentController();
+		final ViewController viewController = controller != null ? controller.getViewController() : null;
 		if (out == null) {
 			out = new ByteArrayOutputStream();
 			setOutputStream(out);
 		}
 		if (!isLoggable(record)) {
+			return;
+		}
+		if (viewController == null) {
 			return;
 		}
 		if (!(disabled || isRunning  || reportCollected)) {

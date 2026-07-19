@@ -215,9 +215,14 @@ public final class DocearUiTheme {
 		final String[] prefer = new String[] { "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
 				"Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", "SansSerif" };
 		for (int i = 0; i < prefer.length; i++) {
-			final Font font = new Font(prefer[i], style, Math.round(size));
-			if (font.canDisplay('导') && font.canDisplay('图')) {
-				return font.deriveFont(style, size);
+			try {
+				final Font font = new Font(prefer[i], style, Math.round(size));
+				// canDisplay may trigger macOS font manager stderr noise; keep probing quiet.
+				if (font.canDisplay('导') && font.canDisplay('图')) {
+					return font.deriveFont(style, size);
+				}
+			}
+			catch (Throwable ignored) {
 			}
 		}
 		return new Font("SansSerif", style, Math.round(size));
