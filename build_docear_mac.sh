@@ -5,6 +5,7 @@ set -e
 # 配置
 PROJECT_DIR="/Users/wangyang/Develop/Docear-Desktop"
 TEMP_DIR="/Users/wangyang/Temp"
+APPLICATIONS_DIR="/Applications"
 ANT_CMD="${PROJECT_DIR}/tools/apache-ant-1.10.14/bin/ant"
 
 # 颜色输出
@@ -23,16 +24,23 @@ show_help() {
     echo "  -h, --help          Show this help message and exit"
     echo "  --skip-build        Skip building and use existing build artifacts"
     echo "  --check             Check system requirements and exit"
+    echo "  --no-applications   Do not copy Docear.app into /Applications"
     echo ""
     echo "System Requirements:"
-    echo "  - Java Development Kit (JDK) 8"
+    echo "  - Java Development Kit (JDK) 8 (prefer Temurin 8 in /Library/Java/JavaVirtualMachines)"
     echo "  - Ant 1.10.14 (included in project)"
     echo ""
     echo "How to install JDK 8 on macOS:"
     echo "  1. Download Eclipse Temurin 8 from: https://adoptium.net/temurin/releases/?version=8"
     echo "  2. Install the .pkg file"
     echo "  3. Verify installation: /usr/libexec/java_home -V"
-    echo "  4. Set JAVA_HOME: export JAVA_HOME=\$(/usr/libexec/java_home -v 1.8)"
+    echo "  4. Set JAVA_HOME to Temurin (avoid JavaAppletPlugin):"
+    echo "     export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+    echo ""
+    echo "Typical rebuild + install:"
+    echo "  export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+    echo "  ./build_docear_mac.sh"
+    echo "  # Result: docear_framework/build4mac/Docear.app and /Applications/Docear.app"
     echo ""
 }
 
@@ -201,6 +209,7 @@ check_requirements() {
 main() {
     local skip_build=0
     local check_only=0
+    local install_applications=1
     
     # 解析参数
     while [[ $# -gt 0 ]]; do
@@ -217,6 +226,10 @@ main() {
                 check_only=1
                 shift
                 ;;
+            --no-applications)
+                install_applications=0
+                shift
+                ;;
             *)
                 echo -e "${RED}Unknown option: $1${NC}"
                 show_help
@@ -231,9 +244,13 @@ main() {
     echo -e "${GREEN}========================================${NC}"
     echo ""
     
-    # 设置 JAVA_HOME 如果未设置
-    if [ -z "$JAVA_HOME" ]; then
-        export JAVA_HOME=$(/usr/libexec/java_home -v 1.8 2>/dev/null || /usr/libexec/java_home 2>/dev/null || true)
+    # Prefer Temurin/Zulu JDK 8 in JVMs folder; java_home -v 1.8 may pick JavaAppletPlugin
+    if [ -z "$JAVA_HOME" ] || [[ "$JAVA_HOME" == *"JavaAppletPlugin"* ]]; then
+        if [ -x "/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home/bin/java" ]; then
+            export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+        else
+            export JAVA_HOME=$(/usr/libexec/java_home -v 1.8 2>/dev/null || /usr/libexec/java_home 2>/dev/null || true)
+        fi
     fi
     
     # 检查是否仅检查需求
@@ -256,7 +273,7 @@ main() {
         echo ""
         
         # 先构建 freeplane_ant
-        echo -e "${YELLOW}步骤 1/3: 构建 freeplane_ant...${NC}"
+        echo -e "${YELLOW}步骤 1/4: 构建 freeplane_ant...${NC}"
         cd "$PROJECT_DIR/freeplane_ant"
         mkdir -p bin dist
         
@@ -271,7 +288,7 @@ main() {
         
         # 现在构建完整的 Docear
         echo ""
-        echo -e "${YELLOW}步骤 2/3: 构建 Docear 应用...${NC}"
+        echo -e "${YELLOW}步骤 2/4: 构建 Docear 应用...${NC}"
         cd "$PROJECT_DIR/docear_framework"
         "$ANT_CMD" -f ant/build.xml clean macosxapp || {
             echo -e "${YELLOW}Trying just 'macosxapp' without clean...${NC}"
@@ -286,7 +303,7 @@ main() {
     fi
     
     echo ""
-    echo -e "${YELLOW}步骤 3/3: 修复 Docear.app 启动器...${NC}"
+    echo -e "${YELLOW}步骤 3/4: 修复 Docear.app 启动器...${NC}"
     fix_docear_app "$DOCEAR_APP"
     
     echo ""
@@ -300,19 +317,47 @@ main() {
     rm -rf "$TEMP_DIR/Docear.app"
     cp -R "$DOCEAR_APP" "$TEMP_DIR/"
     
+    # 安装到 /Applications
+    if [ $install_applications -eq 1 ]; then
+        echo ""
+        echo -e "${YELLOW}步骤 4/4: 安装到 $APPLICATIONS_DIR/Docear.app ...${NC}"
+        if [ -d "$APPLICATIONS_DIR/Docear.app" ]; then
+            # Quit running app if possible
+            osascript -e 'tell application "Docear" to quit' 2>/dev/null || true
+            sleep 1
+            rm -rf "$APPLICATIONS_DIR/Docear.app"
+        fi
+        if cp -R "$DOCEAR_APP" "$APPLICATIONS_DIR/Docear.app"; then
+            echo -e "${GREEN}已安装: $APPLICATIONS_DIR/Docear.app${NC}"
+            xattr -dr com.apple.quarantine "$APPLICATIONS_DIR/Docear.app" 2>/dev/null || true
+        else
+            echo -e "${RED}复制到 /Applications 失败（可能需要权限）。可手动执行:${NC}"
+            echo "  rm -rf /Applications/Docear.app && cp -R \"$DOCEAR_APP\" /Applications/"
+            exit 1
+        fi
+    else
+        echo ""
+        echo -e "${YELLOW}已跳过安装到 /Applications（--no-applications）${NC}"
+    fi
+    
     # 验证复制
     if [ -d "$TEMP_DIR/Docear.app" ]; then
         echo -e "${GREEN}========================================${NC}"
         echo -e "${GREEN}完成！${NC}"
-        echo -e "${GREEN}Docear.app 已成功复制到: $TEMP_DIR/Docear.app${NC}"
+        echo -e "${GREEN}构建产物: $DOCEAR_APP${NC}"
+        echo -e "${GREEN}Temp 副本: $TEMP_DIR/Docear.app${NC}"
+        if [ $install_applications -eq 1 ]; then
+            echo -e "${GREEN}Applications: $APPLICATIONS_DIR/Docear.app${NC}"
+        fi
         echo -e "${GREEN}========================================${NC}"
         
-        # 提示如何运行
         echo ""
-        echo -e "${YELLOW}您可以通过以下方式运行 Docear:${NC}"
-        echo "  1. 在 Finder 中打开 $TEMP_DIR，双击 Docear.app"
-        echo "  2. 或者在终端中运行: open $TEMP_DIR/Docear.app"
-        echo "  3. 或者直接运行源应用: open $DOCEAR_APP"
+        echo -e "${YELLOW}运行方式:${NC}"
+        if [ $install_applications -eq 1 ]; then
+            echo "  open -a Docear"
+            echo "  或: open $APPLICATIONS_DIR/Docear.app"
+        fi
+        echo "  open $DOCEAR_APP"
     else
         echo -e "${RED}复制失败！${NC}"
         exit 1
