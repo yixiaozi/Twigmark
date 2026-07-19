@@ -61,9 +61,17 @@ public final class DocumentTabSupport {
 	}
 
 	public static void deactivateDocumentView() {
-		if (activeDocumentView != null) {
-			activeDocumentView.onTabDeactivated();
-			activeDocumentView = null;
+		if (activeDocumentView == null) {
+			return;
 		}
+		activeDocumentView.onTabDeactivated();
+		activeDocumentView = null;
+		// Draw.io (and other document tabs) replace the scroll-pane viewport via
+		// activateDocumentView → refreshViewportView. Switching back to a mind map
+		// that is still the "current" MapView skips changeToMapView, so we must
+		// restore the map (or an active ViewportOverride) here.
+		final Component mapView = Controller.getCurrentController().getMapViewManager()
+		        .getMapViewComponent();
+		Controller.getCurrentController().getMapViewManager().refreshViewportView(mapView);
 	}
 }

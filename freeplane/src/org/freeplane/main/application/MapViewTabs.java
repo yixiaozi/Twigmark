@@ -511,6 +511,13 @@ class MapViewTabs implements IMapViewChangeListener {
 					suppressingViewSync = false;
 				}
 			}
+			else {
+				// Same MapView was still "current" while a document tab owned the
+				// viewport — changeToMapView is a no-op, so restore explicitly.
+				// (deactivateDocumentView already restores; this covers the case
+				// where activeDocumentView was already cleared.)
+				controller.getMapViewManager().refreshViewportView(mapView);
+			}
 			// Do NOT exit overlay views here: rebuilds/filter sync also call this path.
 			// User mouse clicks use SameTabClickListener; Alt+N uses switchToTab.
 		}
