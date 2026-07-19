@@ -12,8 +12,6 @@
 				<ribbon_action action="QuickCommandAction" priority="top" accelerator="shift SPACE" />
 				<ribbon_action action="MapSwitcherAction" priority="top" accelerator="alt SPACE" />
 				<ribbon_action action="CalendarViewportAction" priority="top" accelerator="control shift D" />
-				<ribbon_action action="TodoistSyncAction" priority="top" />
-				<ribbon_action action="TodoistSettingsAction" />
 				<ribbon_action action="EncryptionSettingsAction" />
 			</ribbon_band>
 		</ribbon_task>

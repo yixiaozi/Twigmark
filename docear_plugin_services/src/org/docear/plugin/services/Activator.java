@@ -70,18 +70,29 @@ public class Activator extends DocearService {
 		if (lang == null || lang.equals(ResourceBundles.LANGUAGE_AUTOMATIC)) {
 			lang = DEFAULT_LANGUAGE;
 		}
-		
-		URL res = this.getClass().getResource("/translations/Resources_"+lang+".properties");
-		if (res == null) {
-			lang = DEFAULT_LANGUAGE;
-			res = this.getClass().getResource("/translations/Resources_"+lang+".properties");
-		}
-		
+		URL res = resolveTranslationUrl(lang);
 		if (res == null) {
 			return;
 		}
-					
 		resBundle.addResources(resBundle.getLanguageCode(), res);
+	}
+
+	private URL resolveTranslationUrl(final String lang) {
+		URL res = getClass().getResource("/translations/Resources_" + lang + ".properties");
+		if (res != null) {
+			return res;
+		}
+		final int underscore = lang.indexOf('_');
+		if (underscore > 0) {
+			res = getClass().getResource("/translations/Resources_" + lang.substring(0, underscore) + ".properties");
+			if (res != null) {
+				return res;
+			}
+		}
+		if (!DEFAULT_LANGUAGE.equals(lang)) {
+			return getClass().getResource("/translations/Resources_" + DEFAULT_LANGUAGE + ".properties");
+		}
+		return null;
 	}
 
 }

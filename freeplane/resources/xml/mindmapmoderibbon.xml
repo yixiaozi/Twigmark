@@ -462,7 +462,6 @@
                 <ribbon_action action="OpenUserDirAction" priority="top" mandatory="true"/>
 			    <ribbon_action action="GettingStartedAction" accelerator="F1" mandatory="true"/>
 			    <ribbon_action action="HotKeyInfoAction" mandatory="true"/>
-			    <ribbon_action action="ToggleUsageStatsReportAction" priority="medium"/>
 			    <ribbon_action action="EncryptionSettingsAction" priority="medium"/>
 			</ribbon_band>			
 		</ribbon_task>	

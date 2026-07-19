@@ -34,6 +34,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
@@ -41,6 +42,8 @@ import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.usagestats.ToggleUsageStatsReportAction;
+import org.freeplane.features.usagestats.UsageStatsReportService;
 
 /**
  * Left sidebar tab: pick a report → show charts in the mind-map viewport.
@@ -229,6 +232,10 @@ public class ReportsTabPanel extends JPanel {
 			return;
 		}
 		final ReportDefinition def = (ReportDefinition) value;
+		if (ReportCatalog.ID_ACTIVITY.equals(def.id)) {
+			showActivityReport();
+			return;
+		}
 		final ReportTimeRange range;
 		try {
 			range = resolveRange(def);
@@ -303,6 +310,21 @@ public class ReportsTabPanel extends JPanel {
 		}, "Docear-Report-Generate");
 		thread.setDaemon(true);
 		thread.start();
+	}
+
+	private void showActivityReport() {
+		final UsageStatsReportService service = UsageStatsReportService.get();
+		if (service == null) {
+			statusLabel.setText("活动报表服务不可用");
+			return;
+		}
+		final ReportViewportService charts = ReportViewportService.get();
+		if (charts != null) {
+			charts.hideFromMapViewport();
+		}
+		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, true);
+		service.setReportVisible(true);
+		statusLabel.setText("已显示「活动报表」");
 	}
 
 	private ReportTimeRange resolveRange(final ReportDefinition def) {

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- REFERENCES -->
+<!-- REFERENCES: dedicated ribbon tab removed; keep quick actions on Home. -->
 <menu_structure>
 	<menu_category name="ribbon">
 	    <ribbon_task name="home">
@@ -8,28 +8,6 @@
 					<ribbon_action action="AddExistingReferenceAction"/>
 					<ribbon_action action="SelectInRefManagerAction"/>
 				</ribbon_action>				
-			</ribbon_band>
-		</ribbon_task>
-			
-		<ribbon_task name="references" orderPriority="3000">
-			<ribbon_band name="references_main" resize_policies="Mirror">
-				<ribbon_action action="AddNewReferenceAction" priority="TOP" />
-				<ribbon_action action="AddExistingReferenceAction" priority="TOP" />
-				<ribbon_action action="RemoveReferenceAction" priority="TOP" />
-				<ribbon_action action="SelectInRefManagerAction" priority="Medium" />
-				<ribbon_action action="CopyBibtexKeyToClipboardAction" priority="Medium" />
-				<ribbon_action action="CopyCiteKeyToClipboardAction" priority="Medium" />
-				<ribbon_action action="UpdateReferencesCurrentMapAction" priority="Medium">
-					<ribbon_action action="UpdateReferencesAllOpenMapsAction" />
-					<ribbon_action action="UpdateReferencesAllMapsAction" />
-					<ribbon_action action="UpdateReferencesInLibraryAction" />
-				</ribbon_action>
-			</ribbon_band>
-			<ribbon_band name="reference_settings" resize_policies="Mirror">
-				<ribbon_action action="ChangeBibtexDatabaseAction" priority="TOP" mandatory="true"/>
-				<ribbon_action action="ShowAllAttributesAction" />
-				<ribbon_action action="HideAllAttributesAction" />
-				<ribbon_action action="show_jabref_preferences" mandatory="true"/>
 			</ribbon_band>
 		</ribbon_task>
 	</menu_category>

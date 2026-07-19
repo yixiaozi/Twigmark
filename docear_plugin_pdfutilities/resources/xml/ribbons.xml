@@ -10,38 +10,6 @@
 		    </ribbon_band>
 		</ribbon_task>
 		
-		<ribbon_task name="files_and_monitoring" orderPriority="2000">
-			<ribbon_band name="monitoring" resize_policies="Mirror">
-				<ribbon_action action="UpdateMonitoringFolderAction" priority="TOP" />
-				<ribbon_action action="AddMonitoringFolderAction" />
-				<!--ribbon_action action="EditMonitoringFolderAction" / -->
-				<ribbon_action action="DeleteMonitoringFolderAction" />
-			</ribbon_band>
-			<ribbon_band name="monitoring_settings" resize_policies="Mirror">
-				<ribbon_contributor name="pdf_monitoring" />				
-				<!--ribbon_action name="Flatten directories (default)" > 
-					<ribbon_action name="Flatten directories (on)" /> 
-					<ribbon_action name="Flatten directories (off)" /> 
-				</ribbon_action>
-				<ribbon_action name="Read sub-directories (default)" > 
-					<ribbon_action name="Read sub-directories (on)" /> 
-					<ribbon_action name="Read sub-directories (off)" /> 
-				</ribbon_action> 
-				<ribbon_action name="Auto-refresh on opening mind map (default)" > 
-					<ribbon_action name="Auto-refresh on opening mind map (on)" /> 
-					<ribbon_action name="Auto-refresh on opening mind map (off)" /> 
-				</ribbon_action -->
-			</ribbon_band>
-			<ribbon_band name="pdf" resize_policies="Mirror">				
-				<ribbon_action action="ImportNewAnnotationsAction" priority="TOP" />
-				<ribbon_action action="ImportAllAnnotationsAction" priority="TOP" />
-				<ribbon_action action="LinkDeleteFileFromDiskAction" priority="TOP" />
-				<ribbon_action action="ImportNewChildAnnotationsAction" priority="MEDIUM" />
-				<ribbon_action action="ImportAllChildAnnotationsAction" priority="MEDIUM" />
-				<ribbon_action action="RemoveLinebreaksAction" priority="MEDIUM" />
-			</ribbon_band>
-		</ribbon_task>
-		
 		<ribbon_task name="help" orderPriority="last">
             <ribbon_band name="help_misc" resize_policies="Mirror" orderPriority="0">
                 <ribbon_action action="DocearBackupOpenLocation" priority="medium" />

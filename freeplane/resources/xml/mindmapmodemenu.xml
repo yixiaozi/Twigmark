@@ -447,7 +447,6 @@
 			<menu_action action="DocumentationAction" />	
 			<menu_action action="OnlineReference" />	
 			<menu_action action="HotKeyInfoAction"/>
-			<menu_action action="ToggleUsageStatsReportAction"/>
 			<menu_action action="QuickCaptureAction" accelerator="control shift SPACE" />
 			<menu_action action="QuickCommandAction" accelerator="shift SPACE" />
 			<menu_action action="MapSwitcherAction" accelerator="alt SPACE" />

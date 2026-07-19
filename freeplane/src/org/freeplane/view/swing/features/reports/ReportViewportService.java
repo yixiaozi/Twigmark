@@ -6,12 +6,15 @@ import java.awt.EventQueue;
 import javax.swing.JOptionPane;
 
 import org.freeplane.core.extension.IExtension;
+import org.freeplane.core.resources.ResourceController;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.ui.IMapViewChangeListener;
+import org.freeplane.features.usagestats.ToggleUsageStatsReportAction;
+import org.freeplane.features.usagestats.UsageStatsReportService;
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.MapViewController;
 
@@ -79,6 +82,12 @@ public final class ReportViewportService implements IExtension, IMapSelectionLis
 
 	public void showReport(final ReportViewModel model, final ReportNodeSpec tree) {
 		ensureListeners();
+		final UsageStatsReportService activity = UsageStatsReportService.get();
+		if (activity != null) {
+			activity.setReportVisible(false);
+			ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY,
+			        false);
+		}
 		final ReportViewportPanel panel = getViewportPanel();
 		panel.showModel(model, tree);
 		showInMapViewport();

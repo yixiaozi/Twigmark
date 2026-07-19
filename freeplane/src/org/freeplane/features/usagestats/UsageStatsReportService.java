@@ -30,6 +30,14 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 		return viewportPanel;
 	}
 
+	public static UsageStatsReportService get() {
+		final Controller controller = Controller.getCurrentController();
+		if (controller == null || !(controller.getModeController() instanceof MModeController)) {
+			return null;
+		}
+		return controller.getModeController().getExtension(UsageStatsReportService.class);
+	}
+
 	public static void install(final MModeController modeController) {
 		final UsageStatsReportService service = new UsageStatsReportService();
 		modeController.addExtension(UsageStatsReportService.class, service);
