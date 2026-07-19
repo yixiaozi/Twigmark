@@ -15,9 +15,6 @@ import org.docear.plugin.services.DocearServiceException;
 import org.docear.plugin.services.ServiceController;
 import org.docear.plugin.services.features.io.DocearConnectionProvider;
 import org.docear.plugin.services.features.io.DocearUnauthorizedExceptionEvent;
-import org.docear.plugin.services.features.user.action.DocearUserLoginAction;
-import org.docear.plugin.services.features.user.action.DocearUserRegistrationAction;
-import org.docear.plugin.services.features.user.action.DocearUserServicesAction;
 import org.docear.plugin.services.features.user.view.WorkspaceDocearServiceConnectionBar;
 import org.docear.plugin.services.features.user.view.WorkspaceDocearServiceConnectionBar.CONNECTION_STATE;
 import org.docear.plugin.services.features.user.workspace.DocearWorkspaceSettings;
@@ -25,10 +22,8 @@ import org.freeplane.core.user.IUserAccountChangeListener;
 import org.freeplane.core.user.UserAccountChangeEvent;
 import org.freeplane.core.user.UserAccountController;
 import org.freeplane.core.util.LogUtils;
-import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.plugin.workspace.WorkspaceController;
-import org.freeplane.plugin.workspace.components.TreeView;
 
 import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.ClientResponse.Status;
@@ -169,22 +164,10 @@ public class DocearUserController extends ADocearServiceFeature {
 					user.toggleTransmissionEnabled();
 				}
 				else if(WorkspaceDocearServiceConnectionBar.CONNECTION_BAR_CLICKED.equals(event.getSource()) ) {
-					if(DocearUserController.LOCAL_USER.equals(DocearUserController.getActiveUser())) {
-						WorkspaceController.getAction(DocearUserRegistrationAction.KEY).actionPerformed(null);
-					}
-					else {
-						WorkspaceController.getAction(DocearUserServicesAction.KEY).actionPerformed(null);
-					}
+					// User registration / Manage Docear Services UI removed.
 				}
 				else if(event instanceof DocearUnauthorizedExceptionEvent) {
-					DocearUser user = getActiveUser();
-					if(user!= null && user.getAccessToken() != null && user.getAccessToken().trim().length() > 0) {
-						DocearController.getController().getEventQueue().invoke(new Runnable() {
-							public void run() {
-								DocearUserLoginAction.showLoginWizard(TextUtils.getText("docear.service.unauthorized"));
-							}
-						});
-					}
+					// Cloud login wizard removed; ignore unauthorized callbacks.
 				}
 			}
 		});
@@ -273,13 +256,7 @@ public class DocearUserController extends ADocearServiceFeature {
 	}
 	
 	private void setupView(ModeController modeController) {
-		TreeView view = ((TreeView)WorkspaceController.getModeExtension(modeController).getView());
-		if(view != null) {
-			//TODO SERVICE
-			if(DocearController.getController().isServiceAvailable()){
-				view.addToolBar(connectionBar, TreeView.BOTTOM_TOOLBAR_STACK);
-			}
-		}
+		// Cloud connection bar (Switch user / Docear Services) intentionally not installed.
 	}
 
 	public DocearUser loadUser(String name) {
@@ -302,9 +279,7 @@ public class DocearUserController extends ADocearServiceFeature {
 
 	@Override
 	protected void installDefaults(ModeController modeController) {
-		WorkspaceController.addAction(new DocearUserLoginAction());
-		WorkspaceController.addAction(new DocearUserRegistrationAction());
-		WorkspaceController.addAction(new DocearUserServicesAction());
+		// Login / registration / Manage Docear Services actions removed from UI.
 	}
 
 

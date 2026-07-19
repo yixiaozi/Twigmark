@@ -233,9 +233,6 @@
     </tab>
 
     <tab name="Docear">
-        <separator name="working_directory">
-            <path name="org.docear.working.directory" dir="true"/>
-        </separator>
         <separator name="mcp">
             <boolean name="mcp.enabled"/>
             <string name="mcp.host"/>

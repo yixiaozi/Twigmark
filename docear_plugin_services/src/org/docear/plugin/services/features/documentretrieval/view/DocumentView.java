@@ -38,12 +38,10 @@ import org.docear.plugin.services.features.documentretrieval.model.DocumentEntry
 import org.docear.plugin.services.features.documentretrieval.model.DocumentModelNode;
 import org.docear.plugin.services.features.documentretrieval.model.DocumentsModel;
 import org.docear.plugin.services.features.documentretrieval.recommendations.RecommendationsController;
-import org.docear.plugin.services.features.user.action.DocearUserServicesAction;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.plugin.workspace.WorkspaceController;
 
 import com.jgoodies.forms.factories.FormFactory;
 import com.jgoodies.forms.layout.ColumnSpec;
@@ -438,9 +436,11 @@ public abstract class DocumentView extends JPanel {
 			
 			JButton btnNewButton = new JButton(TextUtils.getText("recommendations.error.no_service.button"));
 			add(btnNewButton, "2, 4");
+			btnNewButton.setEnabled(false);
+			btnNewButton.setToolTipText("Docear cloud services are disabled");
 			btnNewButton.addActionListener(new ActionListener() {				
 				public void actionPerformed(ActionEvent e) {
-					WorkspaceController.getAction(DocearUserServicesAction.KEY).actionPerformed(null);
+					// Manage Docear Services removed.
 				}
 			});
 		}

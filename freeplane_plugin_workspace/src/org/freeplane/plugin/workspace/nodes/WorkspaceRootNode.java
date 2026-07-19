@@ -14,8 +14,6 @@ import javax.swing.tree.TreeNode;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.actions.NodeRefreshAction;
-import org.freeplane.plugin.workspace.actions.WorkspaceImportProjectAction;
-import org.freeplane.plugin.workspace.actions.WorkspaceNewProjectAction;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenuBuilder;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
@@ -57,9 +55,6 @@ public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActi
 		if (popupMenu == null) {			
 			popupMenu = new WorkspacePopupMenu();
 			WorkspacePopupMenuBuilder.addActions(popupMenu, new String[] {
-					WorkspaceNewProjectAction.KEY,
-					WorkspaceImportProjectAction.KEY,
-					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.all.expand",
 					"workspace.action.all.collapse",					 
 					WorkspacePopupMenuBuilder.SEPARATOR,

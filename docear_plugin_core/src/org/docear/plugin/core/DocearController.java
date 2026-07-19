@@ -409,8 +409,9 @@ public class DocearController implements IDocearEventListener {
 	}
 	
 	//TODO Service
-	public boolean isServiceAvailable(){		
-		return !DocearController.getPropertiesController().getBooleanProperty(DOCEAR_SERVICE_NOT_AVAILABLE_PROPERTY);
+	public boolean isServiceAvailable(){
+		// Cloud Docear Services (login / registration / sync) are retired from the product UI.
+		return false;
 	}
 	
 	//TODO Service

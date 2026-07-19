@@ -42,13 +42,6 @@
 			</ribbon_band>
 		</ribbon_task>
 		
-		<ribbon_task name="project" orderPriority="3000">
-			<ribbon_band name="literature" resize_policies="Mirror">
-				<ribbon_action action="workspace.action.node.add.repository" priority="TOP" />
-				<ribbon_action action="workspace.action.ribbon.remove.repository" priority="TOP" />
-			</ribbon_band>
-		</ribbon_task>
-		
 		<ribbon_task name="help" orderPriority="last">
             <ribbon_band name="help_misc" resize_policies="Mirror" orderPriority="0">
                 <ribbon_action action="DocearBackupOpenLocation" priority="medium" />
