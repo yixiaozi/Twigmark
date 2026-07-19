@@ -16,6 +16,7 @@ import java.util.List;
 import javax.swing.AbstractListModel;
 import javax.swing.ButtonGroup;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JEditorPane;
@@ -161,7 +162,7 @@ public class CreateProjectPagePanel extends AWizardPage {
 		lblWarning = new JLabel(TextUtils.getText("docear.setup.wizard.create.warn1"));
 		URL url = WorkspaceController.class.getResource("/images/16x16/dialog-warning-4.png");
 		if(url != null) {
-			lblWarning.setIcon(new ImageIcon(url));
+			lblWarning.setIcon(AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(url, String.valueOf(url))));
 		}
 		lblWarning.setVisible(false);
 		add(lblWarning, "2, 4, 9, 1");

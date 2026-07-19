@@ -81,7 +81,7 @@ public class PushToApplicationButton implements ActionListener {
         comp = new JPanel();
         comp.setLayout(new BorderLayout());
 
-        menuButton = new JButton(new ImageIcon(ARROW_ICON));
+        menuButton = new JButton(GUIGlobals.getImageIcon(ARROW_ICON));
         menuButton.setMargin(new Insets(0,0,0,0));
         menuButton.setPreferredSize(new Dimension(menuButton.getIcon().getIconWidth(),
                 menuButton.getIcon().getIconHeight()));

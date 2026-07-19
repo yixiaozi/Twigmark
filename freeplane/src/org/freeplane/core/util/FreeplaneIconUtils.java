@@ -1,5 +1,6 @@
 package org.freeplane.core.util;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -7,6 +8,7 @@ import javax.swing.Icon;
 import javax.swing.ImageIcon;
 
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.MindIconFactory;
@@ -31,11 +33,16 @@ public class FreeplaneIconUtils {
 	}
 
 	public static ImageIcon createImageIcon(final String resourcePath) {
-		return new ImageIcon(ResourceController.getResourceController().getResource(resourcePath));
+		final URL url = ResourceController.getResourceController().getResource(resourcePath);
+		final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, resourcePath);
+		return icon != null ? icon : new ImageIcon();
 	}
 	
 	public static ImageIcon createImageIconByResourceKey(final String resourceKey) {
 		final ResourceController resourceController = ResourceController.getResourceController();
-		return new ImageIcon(resourceController.getResource(resourceController.getProperty(resourceKey)));
+		final String resourcePath = resourceController.getProperty(resourceKey);
+		final URL url = resourceController.getResource(resourcePath);
+		final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, resourcePath);
+		return icon != null ? icon : new ImageIcon();
 	}
 }

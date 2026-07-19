@@ -5,6 +5,7 @@ import java.net.URL;
 import javax.swing.ImageIcon;
 
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 
 public class IconNotFound extends MindIcon {
 	private static final String DEFAULT_IMAGE_PATH = "/images";
@@ -23,9 +24,9 @@ public class IconNotFound extends MindIcon {
      * creates an ImageIcon from <code>getImagePath()/filename</code>. If this is not possible returns an IconNotFound.
      */
     public static ImageIcon createIconOrReturnNotFoundIcon(final String fileName) {
-        final URL resource = ResourceController.getResourceController()
-            .getResource(DEFAULT_IMAGE_PATH + "/" + fileName);
-        final ImageIcon icon = (resource == null) ? null : new ImageIcon(resource);
+        final String path = DEFAULT_IMAGE_PATH + "/" + fileName;
+        final URL resource = ResourceController.getResourceController().getResource(path);
+        final ImageIcon icon = AFreeplaneAction.loadIconSafely(resource, path);
         return icon == null ? (ImageIcon) instance().getIcon() : icon;
     }
     
@@ -33,9 +34,9 @@ public class IconNotFound extends MindIcon {
      * creates an ImageIcon from <code>getImagePath()/filename</code>. If this is not possible returns null.
      */
     public static ImageIcon createIconOrReturnNull(final String fileName) {
-        final URL resource = ResourceController.getResourceController()
-                .getResource(DEFAULT_IMAGE_PATH + "/" + fileName);
-        return (resource == null) ? null : new ImageIcon(resource);
+        final String path = DEFAULT_IMAGE_PATH + "/" + fileName;
+        final URL resource = ResourceController.getResourceController().getResource(path);
+        return AFreeplaneAction.loadIconSafely(resource, path);
     }
 
     public static IconNotFound instance() {

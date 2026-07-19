@@ -9,6 +9,7 @@ import java.util.Enumeration;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.event.TreeExpansionEvent;
 import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -25,9 +26,9 @@ import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
  * 
  */
 public class FolderFileNode extends DefaultFileNode implements TreeExpansionListener {
-	private static final Icon FOLDER_OPEN_ICON = new ImageIcon(DefaultFileNode.class.getResource("/images/16x16/folder-orange_open.png"));
-	private static final Icon FOLDER_CLOSED_ICON = new ImageIcon(DefaultFileNode.class.getResource("/images/16x16/folder-orange.png"));
-	private static final Icon NOT_EXISTING = new ImageIcon(DefaultFileNode.class.getResource("/images/16x16/folder-orange-missing.png"));
+	private static final Icon FOLDER_OPEN_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(DefaultFileNode.class, "/images/16x16/folder-orange_open.png"));
+	private static final Icon FOLDER_CLOSED_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(DefaultFileNode.class, "/images/16x16/folder-orange.png"));
+	private static final Icon NOT_EXISTING = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(DefaultFileNode.class, "/images/16x16/folder-orange-missing.png"));
 	
 	private static final long serialVersionUID = 1L;
 	

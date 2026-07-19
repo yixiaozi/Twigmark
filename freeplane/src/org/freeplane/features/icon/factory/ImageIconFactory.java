@@ -25,6 +25,7 @@ import java.util.WeakHashMap;
 import javax.swing.ImageIcon;
 
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.features.icon.UIIcon;
 
 /**
@@ -37,9 +38,18 @@ import org.freeplane.features.icon.UIIcon;
 public final class ImageIconFactory {
 	private static final ImageIconFactory FACTORY = new ImageIconFactory();
 	private static final String DEFAULT_IMAGE_PATH = "/images/";
-	private static final ImageIcon ICON_NOT_FOUND = new ImageIcon(ResourceController.getResourceController()
-	    .getResource(DEFAULT_IMAGE_PATH + "IconNotFound.png"));
+	private static ImageIcon iconNotFound;
 	private final WeakHashMap<URL, ImageIcon> ICON_CACHE = new WeakHashMap<URL, ImageIcon>();
+
+	private static ImageIcon getIconNotFound() {
+		if (iconNotFound == null) {
+			final String path = DEFAULT_IMAGE_PATH + "IconNotFound.png";
+			final ImageIcon loaded = AFreeplaneAction.loadIconSafely(
+			    ResourceController.getResourceController().getResource(path), path);
+			iconNotFound = loaded != null ? loaded : new ImageIcon();
+		}
+		return iconNotFound;
+	}
 
 	public static ImageIconFactory getInstance() {
 		return FACTORY;
@@ -50,13 +60,14 @@ public final class ImageIconFactory {
 	}
 
 	public ImageIcon getImageIcon(final URL url) {
-		ImageIcon result = ICON_NOT_FOUND;
+		ImageIcon result = getIconNotFound();
 		if (url != null) {
 			if (ICON_CACHE.containsKey(url)) {
 				result = ICON_CACHE.get(url);
 			}
 			else {
-				result = new ImageIcon(url);
+				final ImageIcon loaded = AFreeplaneAction.loadIconSafely(url, String.valueOf(url));
+				result = loaded != null ? loaded : getIconNotFound();
 				ICON_CACHE.put(url, result);
 			}
 		}

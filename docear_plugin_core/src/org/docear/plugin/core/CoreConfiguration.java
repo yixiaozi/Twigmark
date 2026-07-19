@@ -155,7 +155,11 @@ public class CoreConfiguration extends ALanguageController {
 		AWorkspaceProject.setCurrentProjectCreator(new DocearWorspaceProjectCreator());
 		if(DocearController.getPropertiesController().getProperty("ApplicationName", "Docear").equals("Docear")) {
 			try {
-			DefaultFileNode.setApplicationIcon(new ImageIcon(CoreConfiguration.class.getResource("/images/docear16.png")));
+			URL docear16 = CoreConfiguration.class.getResource("/images/docear16.png");
+			ImageIcon docear16Icon = AFreeplaneAction.loadIconSafely(docear16, "/images/docear16.png");
+			if (docear16Icon != null) {
+				DefaultFileNode.setApplicationIcon(docear16Icon);
+			}
 			}
 			catch (Exception e) {
 				LogUtils.warn("ERROR: default file application icon has not been replaced");
@@ -662,7 +666,10 @@ public class CoreConfiguration extends ALanguageController {
 		AFreeplaneAction action = modeController.getAction("PropertyAction");
 		final URL url = DocearController.getPropertiesController().getResource("/images/docear/tools/tools-Preferences.png");
 		if (url != null && action != null) {
-			final ImageIcon icon = new ImageIcon(url);
+			final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, "/images/docear/tools/tools-Preferences.png");
+		if (icon == null) {
+			return;
+		}
 			action.putValue(AbstractAction.SMALL_ICON, icon);
 		}
 

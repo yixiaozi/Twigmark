@@ -33,6 +33,7 @@ package net.sf.jabref;
 import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,6 +41,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 
+import javax.imageio.ImageIO;
 import javax.swing.ImageIcon;
 import javax.swing.JLabel;
 
@@ -371,7 +373,39 @@ public class GUIGlobals {
 	 */
 	public static ImageIcon getImage(String name) {
 		URL u = getIconUrl(name);
-		return u != null ? new ImageIcon(getIconUrl(name)) : null;
+		if (u == null) {
+			return null;
+		}
+		return getImageIcon(u);
+	}
+
+	/**
+	 * Load an icon from a URL without ImageIcon(URL)/MediaTracker.
+	 * On macOS + OSGi {@code bundle://} URLs, MediaTracker can hang forever after ImageFetcher NPE.
+	 */
+	public static ImageIcon getImageIcon(URL url) {
+		if (url == null) {
+			return null;
+		}
+		InputStream in = null;
+		try {
+			in = url.openStream();
+			if (in == null) {
+				return null;
+			}
+			final BufferedImage image = ImageIO.read(in);
+			return image != null ? new ImageIcon(image) : new ImageIcon();
+		} catch (IOException e) {
+			System.err.println(Globals.lang("Could not find image file") + " '" + url + "': " + e.getMessage());
+			return new ImageIcon();
+		} finally {
+			if (in != null) {
+				try {
+					in.close();
+				} catch (IOException ignored) {
+				}
+			}
+		}
 	}
 
     /**

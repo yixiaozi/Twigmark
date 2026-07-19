@@ -13,6 +13,7 @@ import java.util.Vector;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.filechooser.FileSystemView;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
@@ -43,7 +44,7 @@ public class LinkTypeFileNode extends ALinkNode implements IWorkspaceNodeActionL
 	
 	private static final long serialVersionUID = 1L;		
 
-	private static final Icon NOT_EXISTING = new ImageIcon(AWorkspaceTreeNode.class.getResource("/images/16x16/cross.png"));
+	private static final Icon NOT_EXISTING = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(AWorkspaceTreeNode.class, "/images/16x16/cross.png"));
 	
 	private URI linkPath;	
 	private static WorkspacePopupMenu popupMenu = null;

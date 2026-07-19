@@ -190,8 +190,8 @@ public class FButtonBar extends JComponent implements IAcceleratorChangeListener
 		final JButton[] buttons = new JButton[BUTTON_NUMBER];
 		for (int i = 0; i < BUTTON_NUMBER; i++) {
 			final String name = "/images/f" + (i + 1) + ".png";
-			final JButton button = buttons[i] = new JButton(new ImageIcon(
-			    ResourceController.getResourceController().getResource(name))) {
+			final JButton button = buttons[i] = new JButton(AFreeplaneAction.iconOrEmpty(
+			    AFreeplaneAction.loadIconSafely(ResourceController.getResourceController().getResource(name), name))) {
 				/**
 				 * 
 				 */

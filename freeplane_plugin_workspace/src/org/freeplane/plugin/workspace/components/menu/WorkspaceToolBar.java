@@ -13,6 +13,7 @@ import javax.swing.AbstractAction;
 import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JButton;
 import javax.swing.JToolBar;
 
@@ -27,7 +28,7 @@ public class WorkspaceToolBar extends JToolBar {
 		setFloatable(false);
 		setRollover(true);
 		
-		JButton button = add(new AbstractAction("New", new ImageIcon(WorkspaceToolBar.class.getResource("/images/16x16/document-new-6.png"))) {
+		JButton button = add(new AbstractAction("New", AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(WorkspaceToolBar.class, "/images/16x16/document-new-6.png"))) {
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(ActionEvent e) {
 				//WorkspaceController.getController().actionPerformed(e);				
@@ -35,7 +36,7 @@ public class WorkspaceToolBar extends JToolBar {
 		});
 		configureComponent(button);
 		this.addSeparator((Dimension) null);
-		button = add(new AbstractAction("Delete", new ImageIcon(WorkspaceToolBar.class.getResource("/images/16x16/document-delete.png"))) {			
+		button = add(new AbstractAction("Delete", AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(WorkspaceToolBar.class, "/images/16x16/document-delete.png"))) {			
 			private static final long serialVersionUID = 1L;
 			public void actionPerformed(ActionEvent e) {
 				//WorkspaceController.getController().actionPerformed(e);

@@ -13,6 +13,7 @@ import javax.swing.AbstractButton;
 import javax.swing.Action;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JToolBar;
@@ -39,8 +40,8 @@ public class WorkspaceDocearServiceConnectionBar extends JToolBar {
 	protected static Insets nullInsets = new Insets(0, 0, 0, 0);
 	protected static Insets marginInsets = new Insets(2, 2, 2, 2);
 	
-	private static Icon onIcon = new ImageIcon(WorkspaceDocearServiceConnectionBar.class.getResource("/icons/arrow-refresh-on.png"));
-	private static Icon offIcon = new ImageIcon(WorkspaceDocearServiceConnectionBar.class.getResource("/icons/arrow-refresh-off.png"));
+	private static Icon onIcon = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(WorkspaceDocearServiceConnectionBar.class, "/icons/arrow-refresh-on.png"));
+	private static Icon offIcon = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(WorkspaceDocearServiceConnectionBar.class, "/icons/arrow-refresh-off.png"));
 	
 	
 	
@@ -75,7 +76,7 @@ public class WorkspaceDocearServiceConnectionBar extends JToolBar {
 			}
 		});
 		configureComponent(button);
-		button.setDisabledIcon(new ImageIcon(this.getClass().getResource("/icons/arrow-refresh-disabled.png")));
+		button.setDisabledIcon(AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(getClass(), "/icons/arrow-refresh-disabled.png")));
 		
 		lblUsername = new JLabel();
 		lblUsername.setBorder(new EmptyBorder(marginInsets));	
@@ -90,7 +91,7 @@ public class WorkspaceDocearServiceConnectionBar extends JToolBar {
 		add(lblConnectionState);
 		
 		lblNoCredentials = new JLabel(TextUtils.getText("docear.service.connect.bar.register"));
-		lblNoCredentials.setIcon(new ImageIcon(DocearController.class.getResource("/images/docear16.png")));
+		lblNoCredentials.setIcon(AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(DocearController.class, "/images/docear16.png")));
 		lblNoCredentials.setBorder(new EmptyBorder(marginInsets));
 		lblNoCredentials.addMouseListener(mouseClickDispatcher);
 		lblNoCredentials.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));

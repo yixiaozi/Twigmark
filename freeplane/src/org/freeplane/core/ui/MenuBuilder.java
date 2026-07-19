@@ -352,7 +352,10 @@ public class MenuBuilder extends UIBuilder implements IKeyStrokeProcessor {
 						MenuBuilder.setLabelAndMnemonic(menuItem, TextUtils.getRawText(nameRef));
 						if(iconResource != null){
 							final URL url = ResourceController.getResourceController().getResource(iconResource);
-							menuItem.setIcon(new ImageIcon(url));
+							final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, iconResource);
+							if (icon != null) {
+								menuItem.setIcon(icon);
+							}
 						}
 						addMenuItem(menuPath.parentKey, menuItem, menuPath.key, MenuBuilder.AS_CHILD);
 					}

@@ -7,6 +7,7 @@ import java.util.NoSuchElementException;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.TreeNode;
 
@@ -24,7 +25,7 @@ import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActionListener {
 
 	private static final long serialVersionUID = 1L;
-	private static Icon DEFAULT_ICON = new ImageIcon(FolderLinkNode.class.getResource("/images/16x16/preferences-desktop-filetype-association.png"));
+	private static Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(FolderLinkNode.class, "/images/16x16/preferences-desktop-filetype-association.png"));
 	private static WorkspacePopupMenu popupMenu;
 
 	public WorkspaceRootNode() {

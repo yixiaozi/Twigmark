@@ -14,6 +14,7 @@ import java.net.URL;
 import java.util.Locale;
 
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JLabel;
@@ -83,7 +84,7 @@ public class NewProjectDialogPanel extends JPanel {
 		add(lblWarn, "2, 4, 5, 1");
 		URL url = this.getClass().getResource("/images/16x16/dialog-warning-4.png");
 		if(url != null) {
-			lblWarn.setIcon(new ImageIcon(url));
+			lblWarn.setIcon(AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(url, String.valueOf(url))));
 		}
 		lblWarn.setVisible(false);
 		

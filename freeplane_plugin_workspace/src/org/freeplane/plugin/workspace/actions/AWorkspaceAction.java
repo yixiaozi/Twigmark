@@ -65,21 +65,21 @@ public abstract class AWorkspaceAction extends AFreeplaneAction {
 			// look in this package
 			URL url = this.getClass().getResource(iconResource);
 			if (url != null) {
-				final ImageIcon icon = new ImageIcon(url);
+				final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, String.valueOf(url));
 				putValue(SMALL_ICON, icon);
 				return;
 			}
 			//  look in workspace package
 			url = WorkspaceController.class.getResource(iconResource);
 			if (url != null) {
-				final ImageIcon icon = new ImageIcon(url);
+				final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, String.valueOf(url));
 				putValue(SMALL_ICON, icon);
 				return;
 			}
 			// look in freeplane package
 			url = ResourceController.class.getResource(iconResource);
 			if (url != null) {
-				final ImageIcon icon = new ImageIcon(url);
+				final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, String.valueOf(url));
 				putValue(SMALL_ICON, icon);
 				return;
 			}

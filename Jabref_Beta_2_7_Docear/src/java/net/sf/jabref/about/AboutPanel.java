@@ -96,7 +96,7 @@ public class AboutPanel extends JComponent
     versionStr = "Version " + Globals.VERSION ;
     buildStr = " build " + Globals.BUILD ;
 
-    image = new ImageIcon(getClass().getResource("/images/autumn.png"));
+    image = GUIGlobals.getImageIcon(getClass().getResource("/images/autumn.png"));
 
     HEIGHT = image.getIconHeight() ;
     WIDTH = image.getIconWidth() ;

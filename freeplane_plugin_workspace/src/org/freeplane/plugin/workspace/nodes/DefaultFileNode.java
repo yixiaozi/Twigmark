@@ -10,6 +10,7 @@ import java.util.Vector;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.filechooser.FileSystemView;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
@@ -39,9 +40,9 @@ import org.freeplane.plugin.workspace.model.IMutableLinkNode;
  * 
  */
 public class DefaultFileNode extends AWorkspaceTreeNode implements IWorkspaceNodeActionListener, IWorkspaceTransferableCreator, IFileSystemRepresentation, IMutableLinkNode {
-	private static final Icon DEFAULT_ICON = new ImageIcon(AWorkspaceTreeNode.class.getResource("/images/16x16/text-x-preview.png"));
-	private static final Icon NOT_EXISTING = new ImageIcon(AWorkspaceTreeNode.class.getResource("/images/16x16/cross.png"));
-	private static Icon APPLICATION_ICON = new ImageIcon(ResourceController.class.getResource("/images/Freeplane_frame_icon.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(AWorkspaceTreeNode.class, "/images/16x16/text-x-preview.png"));
+	private static final Icon NOT_EXISTING = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(AWorkspaceTreeNode.class, "/images/16x16/cross.png"));
+	private static Icon APPLICATION_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(ResourceController.class, "/images/Freeplane_frame_icon.png"));
 		
 	private static final long serialVersionUID = 1L;
 	

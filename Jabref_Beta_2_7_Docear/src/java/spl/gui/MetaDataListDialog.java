@@ -247,7 +247,7 @@ public class MetaDataListDialog extends JDialog {
         contentPane = new JPanel();
         contentPane.setLayout(new BorderLayout());
         labelLogo = new JLabel();
-        labelLogo.setIcon(new ImageIcon(getClass().getResource("/spl/gui/mrdlib header.png")));
+        labelLogo.setIcon(GUIGlobals.getImageIcon(getClass().getResource("/spl/gui/mrdlib header.png")));
         labelLogo.setText("");
         contentPane.add(labelLogo, BorderLayout.NORTH);
         panelMetadata = new JPanel();
@@ -272,7 +272,7 @@ public class MetaDataListDialog extends JDialog {
         iconLabel.setBackground(new Color(-1));
         iconLabel.setHorizontalAlignment(0);
         iconLabel.setHorizontalTextPosition(11);
-        iconLabel.setIcon(new ImageIcon(getClass().getResource("/spl/gui/ajax-loader.gif")));
+        iconLabel.setIcon(GUIGlobals.getImageIcon(getClass().getResource("/spl/gui/ajax-loader.gif")));
         iconLabel.setText("");
         panelWait.add(iconLabel, BorderLayout.CENTER);
         labelFetch = new JLabel();

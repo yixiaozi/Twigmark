@@ -17,7 +17,9 @@ public class RecommendationsRefreshAction extends AFreeplaneAction {
 	private static final long serialVersionUID = 1L;
 
 	public RecommendationsRefreshAction() {
-		super(TYPE, TextUtils.getText("recommendations.refresh.title"), new ImageIcon(RecommendationsRefreshAction.class.getResource("/icons/view-refresh-7_16x16.png")));
+		super(TYPE, TextUtils.getText("recommendations.refresh.title"),
+				AFreeplaneAction.imageIconOrEmpty(
+						AFreeplaneAction.loadIconSafely(RecommendationsRefreshAction.class, "/icons/view-refresh-7_16x16.png")));
 	}
 
 	public void setEnabled() {

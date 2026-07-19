@@ -33,6 +33,7 @@ import org.docear.plugin.pdfutilities.features.IAnnotation.AnnotationType;
 import org.docear.plugin.pdfutilities.features.IcomingNodeExtension;
 import org.docear.plugin.pdfutilities.map.AnnotationController;
 import org.docear.plugin.pdfutilities.pdf.PdfFileFilter;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.attribute.AttributeController;
 import org.freeplane.features.attribute.NodeAttributeTableModel;
@@ -54,8 +55,10 @@ import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 public abstract class MonitoringUtils {
 	
-	private static final Icon defaultAnnotationIcon = new ImageIcon(WorkspaceController.class.getResource("/images/16x16/annotation_link.png"));
-	private static final Icon defaultPdfIcon = new ImageIcon(WorkspaceController.class.getResource("/images/16x16/acrobat.png"));
+	private static final Icon defaultAnnotationIcon = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(WorkspaceController.class, "/images/16x16/annotation_link.png"));
+	private static final Icon defaultPdfIcon = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(WorkspaceController.class, "/images/16x16/acrobat.png"));
 	
 	public static boolean isMonitoringNode(NodeModel node) {
 		NodeAttributeTableModel attributeModel = (NodeAttributeTableModel) node.getExtension(NodeAttributeTableModel.class);

@@ -7,12 +7,14 @@ import javax.swing.event.TreeExpansionListener;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.docear.plugin.services.ServiceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.nodes.FolderLinkNode;
 
 public class DownloadFolderNode extends FolderLinkNode implements TreeExpansionListener {
 	private static final long serialVersionUID = 2295413841014945798L;
-	private final Icon FOLDER_DOWNLOADS_ICON = new ImageIcon(ServiceController.class.getResource("/icons/folder-download.png"));
+	private final Icon FOLDER_DOWNLOADS_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(ServiceController.class, "/icons/folder-download.png"));
 	private boolean firstExpand = true;
 
 	@Override

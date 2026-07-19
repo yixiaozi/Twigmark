@@ -17,6 +17,7 @@ import org.docear.plugin.core.event.DocearEvent;
 import org.docear.plugin.core.event.DocearEventType;
 import org.docear.plugin.core.workspace.model.DocearWorkspaceProject;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
@@ -38,7 +39,8 @@ import org.freeplane.plugin.workspace.nodes.ALinkNode;
  * 
  */
 public class LinkTypeMyPublicationsNode extends ALinkNode implements IWorkspaceNodeActionListener, IMutableLinkNode {
-	private static final Icon DEFAULT_ICON = new ImageIcon(ResourceController.class.getResource("/images/docear16.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(ResourceController.class, "/images/docear16.png"));
 
 	private static final long serialVersionUID = 1L;
 

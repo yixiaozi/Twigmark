@@ -41,37 +41,109 @@ fix_docear_app() {
     local app_path="$1"
     echo -e "${YELLOW}正在修复 $app_path ...${NC}"
     
-    # 1. 创建新的启动脚本
+    # 1. 创建启动脚本：优先完整 JDK 8，跳过浏览器插件 JRE；避免 ImageIcon Dock 图标 NPE
     cat > "$app_path/Contents/MacOS/Docear" << 'EOF'
 #!/bin/bash
-# 找到应用包的 Contents 目录
+set -e
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONTENTS_DIR="$(dirname "$SCRIPT_DIR")"
 JAVA_DIR="$CONTENTS_DIR/Resources/Java"
+LOG_DIR="${HOME}/Library/Logs/Docear"
+LOG_FILE="${LOG_DIR}/launch.log"
+mkdir -p "$LOG_DIR"
+exec >>"$LOG_FILE" 2>&1
+echo "========== $(date) =========="
+echo "Launching Docear from: $0"
 
-# 查找合适的 Java
-if [ -x "/usr/libexec/java_home" ]; then
-    JAVA_HOME="$(/usr/libexec/java_home -v 1.8+ 2>/dev/null || /usr/libexec/java_home 2>/dev/null)"
-    if [ -n "$JAVA_HOME" ]; then
-        export JAVA_HOME
-        PATH="$JAVA_HOME/bin:$PATH"
+show_error() {
+    osascript -e "display alert \"Docear 无法启动\" message \"$1\" as critical" 2>/dev/null || true
+    echo "ERROR: $1"
+    exit 1
+}
+
+find_java() {
+    local candidate home
+
+    # 1) 优先：/Library/Java/JavaVirtualMachines 下的完整 JDK 8（Temurin/Zulu 等）
+    for home in /Library/Java/JavaVirtualMachines/*/Contents/Home; do
+        [ -x "${home}/bin/java" ] || continue
+        case "$home" in
+            *"JavaAppletPlugin"*) continue ;;
+        esac
+        if "${home}/bin/java" -version 2>&1 | grep -qE 'version "1\.8'; then
+            echo "$home"
+            return 0
+        fi
+    done
+
+    # 2) 其次：java_home，但排除浏览器插件目录
+    if [ -x "/usr/libexec/java_home" ]; then
+        while IFS= read -r home; do
+            [ -n "$home" ] || continue
+            case "$home" in
+                *"JavaAppletPlugin"*|*"Internet Plug-Ins"*) continue ;;
+            esac
+            if [ -x "${home}/bin/java" ]; then
+                echo "$home"
+                return 0
+            fi
+        done < <(/usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
     fi
+
+    # 3) 最后：PATH 或 /usr/bin/java
+    candidate="$(command -v java 2>/dev/null || true)"
+    [ -z "$candidate" ] && [ -x /usr/bin/java ] && candidate="/usr/bin/java"
+    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
+        if "$candidate" -version 2>&1 | grep -qE 'version "1\.8'; then
+            dirname "$(dirname "$candidate")"
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+JAVA_HOME="$(find_java)" || show_error "未找到 Java 8。请安装 Eclipse Temurin 8：\nhttps://adoptium.net/temurin/releases/?version=8"
+export JAVA_HOME
+JAVACMD="${JAVA_HOME}/bin/java"
+[ -x "$JAVACMD" ] || JAVACMD="$(command -v java)"
+[ -x "$JAVACMD" ] || show_error "Java 可执行文件不存在：${JAVA_HOME}/bin/java"
+
+echo "Using JAVA_HOME=$JAVA_HOME"
+echo "Using JAVACMD=$JAVACMD"
+"$JAVACMD" -version 2>&1 || show_error "Java 版本检查失败，请确认已安装 JDK 8。"
+
+cd "$JAVA_DIR" || show_error "找不到应用资源目录：$JAVA_DIR"
+FREEDIR="$(pwd)"
+
+# 仅设置 Dock 名称；不使用 -Xdock:icon（Java 8 会触发 Uncaught error fetching image NPE）
+# 应用图标由 Info.plist 的 CFBundleIconFile (docear.icns) 提供
+JAVA_ARGS=(
+    -Xmx1024m
+    -Xdock:name=Docear
+    -Dapple.laf.useScreenMenuBar=true
+    -Dcom.apple.macos.useScreenMenuBar=true
+    -Dsun.java2d.opengl=false
+    -Dorg.freeplane.param1="$1"
+    -Dorg.freeplane.param2="$2"
+    -Dorg.freeplane.param3="$3"
+    -Dorg.freeplane.param4="$4"
+    -Dorg.knopflerfish.framework.bundlestorage=memory
+    -Dorg.freeplane.globalresourcedir="${FREEDIR}/resources"
+    -Dorg.knopflerfish.gosg.jars=reference:file:"${FREEDIR}/core/"
+    -jar "${FREEDIR}/framework.jar"
+    -xargs "${FREEDIR}/props.xargs"
+    -xargs "${FREEDIR}/init.xargs"
+)
+
+# Apple Silicon 上若 JVM 为 x86_64，通过 Rosetta 启动更稳定
+if [ "$(uname -m)" = "arm64" ] && file "$JAVACMD" 2>/dev/null | grep -q "x86_64"; then
+    echo "Running x86_64 JVM under Rosetta: $JAVACMD"
+    exec arch -x86_64 "$JAVACMD" "${JAVA_ARGS[@]}"
 fi
 
-# 进入 Java 目录
-cd "$JAVA_DIR" || exit 1
-
-# 启动 Docear
-exec java \
-    -Xmx512m \
-    -Dorg.knopflerfish.framework.bundlestorage=memory \
-    -Dorg.freeplane.globalresourcedir=./resources \
-    -Dorg.knopflerfish.gosg.jars=reference:file:./core/ \
-    -cp "framework.jar" \
-    org.knopflerfish.framework.Main \
-    -xargs ./props.xargs \
-    -xargs ./init.xargs \
-    "$@"
+exec "$JAVACMD" "${JAVA_ARGS[@]}"
 EOF
     
     # 2. 设置执行权限
@@ -80,7 +152,6 @@ EOF
     # 3. 修改 Info.plist
     local plist_path="$app_path/Contents/Info.plist"
     
-    # 尝试使用 PlistBuddy，否则使用 sed
     /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Docear" "$plist_path" 2>/dev/null || {
         sed -i '' 's/FreeplaneJavaApplicationStub/Docear/g' "$plist_path"
     }

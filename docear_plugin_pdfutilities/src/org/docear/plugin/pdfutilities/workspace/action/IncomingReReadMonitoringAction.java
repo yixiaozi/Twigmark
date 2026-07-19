@@ -11,6 +11,7 @@ import javax.swing.ImageIcon;
 import org.docear.plugin.core.workspace.node.LinkTypeIncomingNode;
 import org.docear.plugin.pdfutilities.PdfUtilitiesController;
 import org.docear.plugin.pdfutilities.actions.UpdateMonitoringFolderAction;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
@@ -26,7 +27,8 @@ public class IncomingReReadMonitoringAction extends AWorkspaceAction {
 	private static final Icon icon;
 	
 	static {
-		icon = new ImageIcon(PdfUtilitiesController.class.getResource("/icons/view-refresh-3.png"));
+		icon = AFreeplaneAction.iconOrEmpty(
+				AFreeplaneAction.loadIconSafely(PdfUtilitiesController.class, "/icons/view-refresh-3.png"));
 	}
 	
 	/**

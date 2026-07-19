@@ -49,7 +49,7 @@ public abstract class SidePaneComponent extends SimpleInternalFrame {
 	protected BasePanel panel = null;
 
 	public SidePaneComponent(SidePaneManager manager, URL icon, String title) {
-		super(new ImageIcon(icon), title);
+		super(GUIGlobals.getImageIcon(icon), title);
 		this.manager = manager;
 		setSelected(true);
 		JToolBar tlb = new JToolBar();

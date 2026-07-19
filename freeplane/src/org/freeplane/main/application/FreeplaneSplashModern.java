@@ -78,7 +78,10 @@ public class FreeplaneSplashModern extends JWindow {
 			}
 		}
 		splashResource = ResourceController.getResourceController().getResource("/images/" + appName + "_splash.png");
-		splashImage = new ImageIcon(splashResource);
+		// Avoid ImageIcon(URL)/MediaTracker hang on macOS Java 8 (see AFreeplaneAction.loadIconSafely)
+		final ImageIcon loadedSplash = org.freeplane.core.ui.AFreeplaneAction.loadIconSafely(splashResource,
+		    "/images/" + appName + "_splash.png");
+		splashImage = loadedSplash != null ? loadedSplash : new ImageIcon();
 		getRootPane().setOpaque(false);
 		final Dimension screenSize = Toolkit.getDefaultToolkit().getScreenSize();
 		final Dimension labelSize = new Dimension(splashImage.getIconWidth(), splashImage.getIconHeight());

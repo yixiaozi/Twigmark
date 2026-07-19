@@ -337,7 +337,7 @@ public class StringDialog extends JDialog {
 	StringDialog parent;
 	public CloseAction(StringDialog parent) {
 	    super("Close window");
-	    //, new ImageIcon(GUIGlobals.closeIconFile));
+	    //, GUIGlobals.getImageIcon(GUIGlobals.closeIconFile));
 	    putValue(SHORT_DESCRIPTION, Globals.lang("Close dialog"));
 	    this.parent = parent;
 	}
@@ -483,7 +483,7 @@ public class StringDialog extends JDialog {
     class StringUpAction extends AbstractAction {
 	public StringUpAction() {
 	    super("Move string up",
-		  new ImageIcon(GUIGlobals.upIconFile));
+		  GUIGlobals.getImageIcon(GUIGlobals.upIconFile));
 	    putValue(SHORT_DESCRIPTION, Globals.lang("Move string up"));
 	}
 	public void actionPerformed(ActionEvent e) {
@@ -514,7 +514,7 @@ public class StringDialog extends JDialog {
     class StringDownAction extends AbstractAction {
 	public StringDownAction() {
 	    super("Move string down",
-		  new ImageIcon(GUIGlobals.downIconFile));
+		  GUIGlobals.getImageIcon(GUIGlobals.downIconFile));
 	    putValue(SHORT_DESCRIPTION, Globals.lang("Move string down"));
 	}
 	public void actionPerformed(ActionEvent e) {

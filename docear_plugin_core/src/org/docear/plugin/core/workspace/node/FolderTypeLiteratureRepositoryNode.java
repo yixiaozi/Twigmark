@@ -14,6 +14,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.docear.plugin.core.workspace.AVirtualDirectory;
 import org.docear.plugin.core.workspace.creator.FolderTypeLiteratureRepositoryPathCreator;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
@@ -35,7 +36,8 @@ public class FolderTypeLiteratureRepositoryNode extends AFolderNode implements I
 	private static final long serialVersionUID = 1L;
 	private WorkspacePopupMenu popupMenu = null;
 	
-	private static final Icon DEFAULT_ICON = new ImageIcon(FolderTypeLiteratureRepositoryNode.class.getResource("/images/books.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(FolderTypeLiteratureRepositoryNode.class, "/images/books.png"));
 	public static final String TYPE = "literature_repository";
 
 	/***********************************************************************************

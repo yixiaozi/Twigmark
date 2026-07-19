@@ -24,6 +24,7 @@ import javax.swing.ImageIcon;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.docear.plugin.core.IBibtexDatabase;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenuBuilder;
@@ -37,7 +38,8 @@ import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 public class LinkTypeReferencesNode extends LinkTypeFileNode implements IBibtexDatabase {
 	public static final String TYPE = "references";
 	private static final String DEFAULT_REFERENCE_TEMPLATE = "/conf/reference_db.bib";
-	private static final Icon DEFAULT_ICON = new ImageIcon(LinkTypeReferencesNode.class.getResource("/images/text-x-bibtex.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(LinkTypeReferencesNode.class, "/images/text-x-bibtex.png"));
 
 	private static final long serialVersionUID = 1L;
 	

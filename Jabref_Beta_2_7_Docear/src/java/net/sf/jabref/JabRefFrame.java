@@ -999,7 +999,7 @@ public class JabRefFrame extends JPanel implements OutputPrinter {
 		private String command;
 
 		public GeneralAction(String command, String text, String description, URL icon) {
-			super(new ImageIcon(icon));
+			super(GUIGlobals.getImageIcon(icon));
 			this.command = command;
 			putValue(NAME, text);
 			putValue(SHORT_DESCRIPTION, Globals.lang(description));
@@ -2435,7 +2435,7 @@ public class JabRefFrame extends JPanel implements OutputPrinter {
 		private String command;
 
 		public EditAction(String command, URL icon) {
-			super(new ImageIcon(icon));
+			super(GUIGlobals.getImageIcon(icon));
 			this.command = command;
 			String nName = Util.nCase(command);
 			putValue(NAME, nName);

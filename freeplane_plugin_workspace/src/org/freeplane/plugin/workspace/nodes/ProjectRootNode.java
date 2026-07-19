@@ -9,6 +9,7 @@ import java.net.URI;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JOptionPane;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
@@ -29,7 +30,7 @@ import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 public class ProjectRootNode extends AFolderNode implements IMutableLinkNode, IWorkspaceNodeActionListener {
 
 	private static final long serialVersionUID = 1L;
-	private static final Icon DEFAULT_ICON = new ImageIcon(AFolderNode.class.getResource("/images/project-open-2.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(AFolderNode.class, "/images/project-open-2.png"));
 	private static WorkspacePopupMenu popupMenu = null;
 	private String projectID;
 	private URI projectRoot = null;

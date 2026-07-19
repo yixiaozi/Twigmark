@@ -5,6 +5,7 @@ import javax.swing.ImageIcon;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.docear.plugin.services.features.documentretrieval.documentsearch.actions.ShowDocumentSearchAction;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
@@ -13,7 +14,8 @@ import org.freeplane.plugin.workspace.nodes.AActionNode;
 public class ShowDocumentSearchNode extends AActionNode {
 
 	//private static final Icon DEFAULT_ICON = new ImageIcon(ShowRecommendationsNode.class.getResource("/icons/books.png"));
-	private static final Icon DEFAULT_ICON = new ImageIcon(ShowDocumentSearchNode.class.getResource("/icons/document_search_small.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(ShowDocumentSearchNode.class, "/icons/document_search_small.png"));
 
 	private static final long serialVersionUID = 1L;
 	

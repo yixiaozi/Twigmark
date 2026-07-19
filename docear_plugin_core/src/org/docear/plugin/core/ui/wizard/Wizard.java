@@ -18,6 +18,7 @@ import javax.swing.AbstractButton;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.JButton;
 import javax.swing.JDialog;
 import javax.swing.JEditorPane;
@@ -352,7 +353,7 @@ public class Wizard {
 		headPanel.setBorder(new EmptyBorder(0, 10, 5, 10));
 		headPanel.addMouseMotionListener(mAdapter);
 		headPanel.addMouseListener(mAdapter);
-		closeButton = new JButton(new ImageIcon(Wizard.class.getResource("/images/window-close.png")));
+		closeButton = new JButton(AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(Wizard.class, "/images/window-close.png")));
 		closeButton.setPreferredSize(new Dimension(35, 25));
 		closeButton.setMargin(new Insets(10, 10, 7, 10));
 		

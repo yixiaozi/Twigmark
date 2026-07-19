@@ -59,6 +59,7 @@ import javax.swing.plaf.metal.MetalFileChooserUI;
 
 import org.freeplane.core.resources.NamedObject;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.FixedBasicComboBoxEditor;
 import org.freeplane.core.ui.IUserInputListenerFactory;
 import org.freeplane.core.ui.components.ContainerComboBoxEditor;
@@ -86,6 +87,11 @@ import org.freeplane.features.time.TimeComboBoxEditor;
  */
 abstract public class FrameController implements ViewController {
 	public static final String RIBBON_BAND_COLLAPSED = "ribbon_band_collapsed";
+
+	private static Icon safeIcon(final ResourceController resourceController, final String path) {
+		final ImageIcon icon = AFreeplaneAction.loadIconSafely(resourceController.getResource(path), path);
+		return icon != null ? icon : new ImageIcon();
+	}
 
 	private final class HorizontalToolbarPanel extends JPanel {
 		/**
@@ -163,12 +169,13 @@ abstract public class FrameController implements ViewController {
 		super();
 		final ResourceController resourceController = ResourceController.getResourceController();
 		if(textIcon == null){
-			FrameController.textIcon = new ImageIcon(resourceController.getResource("/images/text.png"));
-			FrameController.numberIcon = new ImageIcon(resourceController.getResource("/images/number.png"));
-			FrameController.dateIcon = new ImageIcon(resourceController.getResource("/images/calendar_red.png"));
-			FrameController.dateTimeIcon = new ImageIcon(resourceController.getResource("/images/calendar_clock_red.png"));
-			FrameController.linkIcon = new ImageIcon(resourceController.getResource("/images/" + resourceController.getProperty("link_icon")));
-			FrameController.localLinkIcon = new ImageIcon(resourceController.getResource("/images/" + resourceController.getProperty("link_local_icon")));
+			// ImageIO-based load: ImageIcon(URL) can hang forever on macOS Java 8 / OSGi
+			FrameController.textIcon = safeIcon(resourceController, "/images/text.png");
+			FrameController.numberIcon = safeIcon(resourceController, "/images/number.png");
+			FrameController.dateIcon = safeIcon(resourceController, "/images/calendar_red.png");
+			FrameController.dateTimeIcon = safeIcon(resourceController, "/images/calendar_clock_red.png");
+			FrameController.linkIcon = safeIcon(resourceController, "/images/" + resourceController.getProperty("link_icon"));
+			FrameController.localLinkIcon = safeIcon(resourceController, "/images/" + resourceController.getProperty("link_local_icon"));
 		}
 		this.propertyKeyPrefix = propertyKeyPrefix;
 		statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 0));

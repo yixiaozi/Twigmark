@@ -74,8 +74,8 @@ public class SidePaneHeader extends JPanel implements ActionListener {
     setLayout(gbl);
         //setPreferredSize(new Dimension(GUIGlobals.SPLIT_PANE_DIVIDER_LOCATION, 18));
         //setMinimumSize(new Dimension(GUIGlobals.SPLIT_PANE_DIVIDER_LOCATION, 18));
-    //imageIcon = new JLabel(new ImageIcon(image));
-    nameLabel = new JLabel(Globals.lang(name), new ImageIcon(image),
+    //imageIcon = new JLabel(GUIGlobals.getImageIcon(image));
+    nameLabel = new JLabel(Globals.lang(name), GUIGlobals.getImageIcon(image),
                    SwingConstants.LEFT);
 //        setBackground(new Color(0, 0, 175)); //SystemColor.activeCaption);
 

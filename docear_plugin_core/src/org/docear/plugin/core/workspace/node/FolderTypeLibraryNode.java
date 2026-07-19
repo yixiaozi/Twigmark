@@ -22,6 +22,7 @@ import org.docear.plugin.core.ILibraryRepository;
 import org.docear.plugin.core.event.DocearEvent;
 import org.docear.plugin.core.event.DocearEventType;
 import org.docear.plugin.core.event.IDocearEventListener;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.URIUtils;
@@ -38,7 +39,8 @@ import org.freeplane.plugin.workspace.nodes.DefaultFileNode;
 import org.freeplane.plugin.workspace.nodes.LinkTypeFileNode;
 
 public class FolderTypeLibraryNode extends AFolderNode implements ILibraryRepository, IDocearEventListener, IWorkspaceNodeActionListener, IWorkspaceTransferableCreator, TreeModelListener {
-	private static final Icon DEFAULT_ICON = new ImageIcon(FolderTypeLibraryNode.class.getResource("/images/folder-database.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(FolderTypeLibraryNode.class, "/images/folder-database.png"));
 	private static final long serialVersionUID = 1L;
 	public static final String TYPE = "library";	
 	

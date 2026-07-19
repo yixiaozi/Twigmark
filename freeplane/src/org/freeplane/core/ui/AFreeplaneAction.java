@@ -19,10 +19,13 @@
  */
 package org.freeplane.core.ui;
 
+import java.awt.image.BufferedImage;
+import java.io.InputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.imageio.ImageIO;
 import javax.swing.AbstractAction;
 import javax.swing.Action;
 import javax.swing.Icon;
@@ -79,6 +82,60 @@ public abstract class AFreeplaneAction extends AbstractAction implements IFreepl
 	
 	static private Map<String, ImageIcon> iconCache = new HashMap<String, ImageIcon>();
 
+	/**
+	 * Load icons via ImageIO instead of {@code new ImageIcon(URL)}.
+	 * On macOS + Java 8, ImageIcon/MediaTracker can hang forever when ImageFetcher
+	 * fails with NPE (common with OSGi/bundle resource URLs), which blocks startup
+	 * before any window is shown.
+	 */
+	public static ImageIcon loadIconSafely(final URL url, final String resourceName) {
+		if (url == null) {
+			LogUtils.severe("can not load icon '" + resourceName + "' (url is null)");
+			return null;
+		}
+		InputStream in = null;
+		try {
+			in = url.openStream();
+			if (in == null) {
+				LogUtils.severe("can not open icon stream '" + resourceName + "' url=" + url);
+				return null;
+			}
+			final BufferedImage image = ImageIO.read(in);
+			if (image == null) {
+				LogUtils.severe("can not decode icon '" + resourceName + "' url=" + url);
+				return null;
+			}
+			return new ImageIcon(image);
+		}
+		catch (final Exception e) {
+			LogUtils.severe("can not load icon '" + resourceName + "' url=" + url, e);
+			return null;
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (final Exception ignored) {
+				}
+			}
+		}
+	}
+
+	public static ImageIcon loadIconSafely(final Class<?> clazz, final String resourcePath) {
+		return loadIconSafely(clazz != null ? clazz.getResource(resourcePath) : null, resourcePath);
+	}
+
+	public static Icon iconOrEmpty(final ImageIcon icon) {
+		return icon != null ? icon : new ImageIcon();
+	}
+
+	/** Prefer when a typed ImageIcon is required. */
+	public static ImageIcon imageIconOrEmpty(final ImageIcon icon) {
+		return icon != null ? icon : new ImageIcon();
+	}
+
+
 	public AFreeplaneAction(final String key) {
 		super();
 		this.key = key;
@@ -96,9 +153,11 @@ public abstract class AFreeplaneAction extends AbstractAction implements IFreepl
 					LogUtils.severe("can not load icon '" + iconResource + "'");
 				}
 				else {
-					final ImageIcon icon = new ImageIcon(url);
-					putValue(SMALL_ICON, icon);
-					iconCache.put(iconKey, icon);
+					final ImageIcon icon = loadIconSafely(url, iconResource);
+					if (icon != null) {
+						putValue(SMALL_ICON, icon);
+						iconCache.put(iconKey, icon);
+					}
 				}
 			}
 		}

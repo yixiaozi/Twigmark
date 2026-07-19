@@ -244,7 +244,8 @@ public class PdfUtilitiesController extends ALanguageController {
 	private PropertyChangeListener iconChangeListener;
 	
 	private static PdfUtilitiesController controller;
-	public static final Icon REFRESH_MONITORING_ICON = new ImageIcon(PdfUtilitiesController.class.getResource("/icons/view-refresh-3.png"));
+	public static final Icon REFRESH_MONITORING_ICON = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(PdfUtilitiesController.class, "/icons/view-refresh-3.png"));
 
 	public PdfUtilitiesController(ModeController modeController) {
 		super();

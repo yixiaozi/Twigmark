@@ -117,13 +117,13 @@ public class FieldTextMenu implements MouseListener
   {
     public BasicAction(String text, String description, URL icon)
     {
-      super(Globals.lang(text), new ImageIcon(icon));
+      super(Globals.lang(text), GUIGlobals.getImageIcon(icon));
       putValue(SHORT_DESCRIPTION, Globals.lang(description));
     }
 
     public BasicAction(String text, String description, URL icon, KeyStroke key)
     {
-      super(Globals.lang(text), new ImageIcon(icon));
+      super(Globals.lang(text), GUIGlobals.getImageIcon(icon));
       putValue(ACCELERATOR_KEY, key);
       putValue(SHORT_DESCRIPTION, Globals.lang(description));
     }

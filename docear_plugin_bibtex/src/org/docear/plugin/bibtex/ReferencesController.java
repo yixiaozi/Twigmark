@@ -118,7 +118,8 @@ import org.pushingpixels.flamingo.api.ribbon.RibbonElementPriority;
 public class ReferencesController extends ALanguageController implements IDocearEventListener {
 	
 	private PropertyChangeListener iconChangeListener;
-	private static final Icon attributesIcon = new ImageIcon(ReferencesController.class.getResource("/images/references_small.png"));
+	private static final Icon attributesIcon = AFreeplaneAction.iconOrEmpty(
+			AFreeplaneAction.loadIconSafely(ReferencesController.class, "/images/references_small.png"));
 	
 	//mapModel with reference which is currently changed
 	private MapModel inChange = null;
@@ -654,8 +655,10 @@ public class ReferencesController extends ALanguageController implements IDocear
 		
 		final URL url = res.getResource("/images/docear/tools/tools-PreferencesReferences.png");
 		if (url != null) {
-			final ImageIcon icon = new ImageIcon(url);
-			showJabrefPreferences.putValue(AbstractAction.SMALL_ICON, icon);
+			final ImageIcon icon = AFreeplaneAction.loadIconSafely(url, "/images/docear/tools/tools-PreferencesReferences.png");
+			if (icon != null) {
+				showJabrefPreferences.putValue(AbstractAction.SMALL_ICON, icon);
+			}
 		}
 	}
 	

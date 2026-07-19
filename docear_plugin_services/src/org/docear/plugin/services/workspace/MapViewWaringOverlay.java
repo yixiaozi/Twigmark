@@ -20,6 +20,7 @@ import org.docear.plugin.core.DocearController;
 import org.docear.plugin.core.ui.IViewportOverlay;
 import org.docear.plugin.core.ui.OverlayLayoutManager;
 import org.docear.plugin.core.ui.OverlayViewport;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
@@ -39,7 +40,8 @@ public class MapViewWaringOverlay implements IViewportOverlay {
 	private OverlayViewport parent;
 
 	public MapViewWaringOverlay() {
-		component = new JLabel(new ImageIcon(CoreConfiguration.class.getResource("/images/dialog-warning-64x64.png")));
+		component = new JLabel(AFreeplaneAction.iconOrEmpty(
+				AFreeplaneAction.loadIconSafely(CoreConfiguration.class, "/images/dialog-warning-64x64.png")));
 		component.setToolTipText(TextUtils.getRawText("docear.map.project.missing"));
 		WorkspaceController.getCurrentModel().addWorldModelListener(new WorkspaceModelListener() {
 			

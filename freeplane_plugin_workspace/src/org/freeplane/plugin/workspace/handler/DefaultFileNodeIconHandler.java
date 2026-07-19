@@ -14,6 +14,7 @@ import java.util.Properties;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 
 import org.apache.commons.io.FilenameUtils;
 import org.freeplane.core.resources.ResourceController;
@@ -81,7 +82,7 @@ public class DefaultFileNodeIconHandler implements INodeTypeIconHandler {
 						}				
 					}
 				}
-				Icon icon = new ImageIcon(url);
+				Icon icon = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(url, String.valueOf(url)));
 				String[] extensions = properties.getProperty(keyName+".extensions", "").split(";");
 				for(String ext : extensions) {
 					iconMap.put(ext, icon);

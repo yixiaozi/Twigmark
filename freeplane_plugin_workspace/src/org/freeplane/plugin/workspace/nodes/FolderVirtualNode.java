@@ -7,6 +7,7 @@ import java.util.List;
 
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import org.freeplane.core.ui.AFreeplaneAction;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.freeplane.core.util.LogUtils;
@@ -23,7 +24,7 @@ public class FolderVirtualNode extends AFolderNode implements IWorkspaceNodeActi
 																, IWorkspaceTransferableCreator {
 	
 	private static final long serialVersionUID = 1L;
-	private static final Icon DEFAULT_ICON = new ImageIcon(AWorkspaceTreeNode.class.getResource("/images/16x16/object-group-2.png"));
+	private static final Icon DEFAULT_ICON = AFreeplaneAction.iconOrEmpty(AFreeplaneAction.loadIconSafely(AWorkspaceTreeNode.class, "/images/16x16/object-group-2.png"));
 	
 	private static WorkspacePopupMenu popupMenu = null;
 	

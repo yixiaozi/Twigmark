@@ -32,6 +32,7 @@ import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.freeplane.core.resources.IFreeplanePropertyListener;
 import org.freeplane.core.resources.ResourceBundles;
@@ -139,41 +140,114 @@ public class ApplicationResourceController extends ResourceController {
 
 	@Override
 	public URL getResource(final String name) {
+		URL resource = null;
 		if (urlResourceLoader == null) {
-			return super.getResource(name);
-		}
-		final String relName;
-		if (name.startsWith("/")) {
-			relName = name.substring(1);
+			resource = super.getResource(name);
 		}
 		else {
-			relName = name;
+			final String relName;
+			if (name.startsWith("/")) {
+				relName = name.substring(1);
+			}
+			else {
+				relName = name;
+			}
+			resource = urlResourceLoader.getResource(relName);
+			if (resource == null) {
+				resource = super.getResource(name);
+			}
 		}
-		URL resource = urlResourceLoader.getResource(relName);
-		if (resource != null) {
-			return resource;
-		}
-		resource = super.getResource(name);
-		if (resource != null) {
-			return resource;
-		}
-		if ("/lib/freeplaneviewer.jar".equals(name)) {
+		if (resource == null && "/lib/freeplaneviewer.jar".equals(name)) {
 			final String rootDir = new File(getResourceBaseDir()).getAbsoluteFile().getParent();
 			try {
 				final File try1 = new File(rootDir + "/plugins/org.freeplane.core/lib/freeplaneviewer.jar");
 				if (try1.exists()) {
-					return try1.toURL();
+					resource = try1.toURL();
 				}
-				final File try2 = new File(rootDir + "/lib/freeplaneviewer.jar");
-				if (try2.exists()) {
-					return try2.toURL();
+				else {
+					final File try2 = new File(rootDir + "/lib/freeplaneviewer.jar");
+					if (try2.exists()) {
+						resource = try2.toURL();
+					}
 				}
 			}
 			catch (final MalformedURLException e) {
 				e.printStackTrace();
 			}
 		}
-		return null;
+		// macOS + Java 8: ImageIcon/MediaTracker hangs on OSGi bundle:// URLs when
+		// ImageFetcher NPEs. Materialize such resources to file: URLs once.
+		return toImageFriendlyUrl(resource);
+	}
+
+	private static final ConcurrentHashMap<String, URL> IMAGE_FRIENDLY_URL_CACHE = new ConcurrentHashMap<String, URL>();
+
+	private static URL toImageFriendlyUrl(final URL resource) {
+		if (resource == null) {
+			return null;
+		}
+		final String protocol = resource.getProtocol();
+		if ("file".equals(protocol) || "jar".equals(protocol)) {
+			return resource;
+		}
+		final String key = resource.toExternalForm();
+		final URL cached = IMAGE_FRIENDLY_URL_CACHE.get(key);
+		if (cached != null) {
+			return cached;
+		}
+		InputStream in = null;
+		OutputStream out = null;
+		try {
+			in = resource.openStream();
+			if (in == null) {
+				return resource;
+			}
+			String fileName = resource.getPath();
+			final int slash = fileName.lastIndexOf('/');
+			if (slash >= 0) {
+				fileName = fileName.substring(slash + 1);
+			}
+			if (fileName.length() == 0) {
+				fileName = "resource.bin";
+			}
+			final File cacheDir = new File(Compat.getApplicationUserDirectory(), "resource-cache");
+			if (!cacheDir.exists()) {
+				cacheDir.mkdirs();
+			}
+			final File outFile = new File(cacheDir, Integer.toHexString(key.hashCode()) + "_" + fileName);
+			if (!outFile.exists() || outFile.length() == 0) {
+				out = new FileOutputStream(outFile);
+				final byte[] buf = new byte[8192];
+				int n;
+				while ((n = in.read(buf)) >= 0) {
+					out.write(buf, 0, n);
+				}
+				out.close();
+				out = null;
+			}
+			final URL fileUrl = outFile.toURI().toURL();
+			IMAGE_FRIENDLY_URL_CACHE.put(key, fileUrl);
+			return fileUrl;
+		}
+		catch (final Exception e) {
+			return resource;
+		}
+		finally {
+			try {
+				if (in != null) {
+					in.close();
+				}
+			}
+			catch (final Exception ignored) {
+			}
+			try {
+				if (out != null) {
+					out.close();
+				}
+			}
+			catch (final Exception ignored) {
+			}
+		}
 	}
 
 	@Override
