@@ -44,6 +44,8 @@ import org.freeplane.core.ui.components.JResizer.Direction;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.CollapseDirection;
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollapseListener;
+import org.freeplane.core.ui.components.DraggableTabbedPane;
+import org.freeplane.core.ui.components.FormatSideTabManager;
 import org.freeplane.core.ui.components.TabbedPaneWidthUtils;
 import org.freeplane.core.ui.components.SideTabTitleUpdater;
 import org.freeplane.core.ui.components.ResizeEvent;
@@ -334,7 +336,7 @@ public class MModeControllerFactory {
 		//userInputListenerFactory.addToolBar("/filter_toolbar", ViewController.TOP, FilterController.getController(controller).getFilterToolbar());
 		userInputListenerFactory.addToolBar("/status", ViewController.BOTTOM, controller.getViewController()
 		    .getStatusBar());
-		final JTabbedPane tabs = new JTabbedPane();
+		final JTabbedPane tabs = new DraggableTabbedPane();
 		Box resisableTabs = Box.createHorizontalBox();
 		//DOCEAR - new OneTouchCollapseResizer
 		boolean expanded = true;
@@ -349,8 +351,8 @@ public class MModeControllerFactory {
 		resisableTabs.add(otcr);
 		//resisableTabs.add(new JResizer(Direction.RIGHT));
 		resisableTabs.add(tabs);
-		final int savedTabWidth = ResourceController.getResourceController().getIntProperty(TABBEDPANE_VIEW_WIDTH, 320);
-		tabs.setPreferredSize(new java.awt.Dimension(Math.max(savedTabWidth, 120), 100));
+		final int savedTabWidth = ResourceController.getResourceController().getIntProperty(TABBEDPANE_VIEW_WIDTH, 360);
+		tabs.setPreferredSize(new java.awt.Dimension(Math.max(savedTabWidth, 200), 100));
 		otcr.addResizerListener(new ResizerListener() {			
 			public void componentResized(ResizeEvent event) {
 				if(event.getComponent().equals(tabs)) {
@@ -465,6 +467,7 @@ public class MModeControllerFactory {
 		if (tabs == null) {
 			return;
 		}
+		FormatSideTabManager.install(tabs);
 		if (formatTabTitleUpdater == null) {
 			formatTabTitleUpdater = SideTabTitleUpdater.install(tabs, new Runnable() {
 				public void run() {
@@ -473,6 +476,7 @@ public class MModeControllerFactory {
 			});
 		}
 		formatTabTitleUpdater.bindRightTabs();
+		FormatSideTabManager.onTabsChanged(tabs);
 		applyFormatTabbedPaneWidth(tabs);
 	}
 
@@ -488,6 +492,7 @@ public class MModeControllerFactory {
 			});
 		}
 		formatTabTitleUpdater.bindRightTabs();
+		FormatSideTabManager.onTabsChanged(tabs);
 		applyFormatTabbedPaneWidth(tabs);
 	}
 }

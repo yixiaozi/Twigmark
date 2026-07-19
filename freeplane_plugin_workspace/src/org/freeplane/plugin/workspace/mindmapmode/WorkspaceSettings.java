@@ -25,6 +25,9 @@ final class WorkspaceSettings implements IWorkspaceSettingsHandler {
 	public static final String WORKSPACE_MODEL_PROJECTS = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".model.projects";
 	public static final String WORKSPACE_MODEL_PROJECTS_SEPARATOR = ",";
 	public static final String WORKSPACE_SIDE_TAB_ORDER = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".side.tab.order";
+	public static final String WORKSPACE_SIDE_TAB_HIDDEN = MModeWorkspaceController.class.getPackage().getName().toLowerCase(Locale.ENGLISH)+".side.tab.hidden";
+	/** Default left dock width — wide enough for wrapped tab headers + content. */
+	public static final String DEFAULT_VIEW_WIDTH = "400";
 	
 	private static final String USER_SETTINGS_FILENAME = "user.settings";
 	private Properties properties = new Properties();
@@ -49,6 +52,7 @@ final class WorkspaceSettings implements IWorkspaceSettingsHandler {
 		try {
 			in = new FileInputStream(settingsFile);
 			properties.load(in);
+			widenLegacyNarrowDock();
 		}
 		catch (final Exception ex) {
 			LogUtils.info("Workspace settings not found, create new file");
@@ -58,6 +62,20 @@ final class WorkspaceSettings implements IWorkspaceSettingsHandler {
 			FileUtils.silentlyClose(in);
 		}
 		
+	}
+
+	/** Old installs defaulted to 150px — bump once so tab headers are usable. */
+	private void widenLegacyNarrowDock() {
+		try {
+			final String raw = properties.getProperty(WORKSPACE_VIEW_WIDTH, DEFAULT_VIEW_WIDTH);
+			final int width = Integer.parseInt(raw.trim());
+			if (width > 0 && width < 280) {
+				setProperty(WORKSPACE_VIEW_WIDTH, DEFAULT_VIEW_WIDTH);
+			}
+		}
+		catch (final Exception e) {
+			setProperty(WORKSPACE_VIEW_WIDTH, DEFAULT_VIEW_WIDTH);
+		}
 	}
 
 	public String removeProperty(String key) {
@@ -94,7 +112,7 @@ final class WorkspaceSettings implements IWorkspaceSettingsHandler {
 	}
 	
 	private void setupDefaultSettings() {
-		setProperty(WORKSPACE_VIEW_WIDTH, "150");
+		setProperty(WORKSPACE_VIEW_WIDTH, DEFAULT_VIEW_WIDTH);
 		setProperty(WORKSPACE_VIEW_ENABLED, "true");
 		setProperty(WORKSPACE_VIEW_COLLAPSED, "false");		
 	}

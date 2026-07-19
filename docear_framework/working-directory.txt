@@ -1,4 +1,8 @@
-# Docear working directory (mind maps live here).
-# All application configuration is stored in <this>/data/
+# EXAMPLE ONLY — Docear does not ship a live working-directory.txt.
+# On first launch (when this file is missing next to docear.exe), you will be
+# asked to choose a folder for mind maps. Configuration is stored in <folder>/data/.
 # Path may be absolute, or relative to the software install directory.
+#
+# After you choose a folder, Docear writes working-directory.txt automatically.
+# If that file already exists, Docear uses it as-is and never deletes your files.
 workspace

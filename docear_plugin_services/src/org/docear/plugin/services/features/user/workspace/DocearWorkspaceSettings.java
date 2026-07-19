@@ -49,7 +49,7 @@ public class DocearWorkspaceSettings extends ADocearServiceFeature implements IW
 	 **********************************************************************************/
 	
 	private void setupDefaultSettings() {
-		setProperty(WORKSPACE_VIEW_WIDTH, "150");
+		setProperty(WORKSPACE_VIEW_WIDTH, "400");
 		setProperty(WORKSPACE_VIEW_ENABLED, "true");
 		setProperty(WORKSPACE_VIEW_COLLAPSED, "false");
 	}

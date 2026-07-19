@@ -25,6 +25,7 @@ import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Shared product visual language for Docear (aligned with the calendar hub).
@@ -115,8 +116,25 @@ public final class DocearUiTheme {
 			UIManager.put("Panel.background", CANVAS);
 			UIManager.put("Viewport.background", CANVAS);
 			UIManager.put("OptionPane.background", CANVAS);
+			UIManager.put("OptionPane.messageForeground", TEXT);
+			UIManager.put("OptionPane.border", new EmptyBorder(16, 18, 12, 18));
+			UIManager.put("OptionPane.messageAreaBorder", new EmptyBorder(0, 0, 12, 0));
+			UIManager.put("OptionPane.buttonAreaBorder", new EmptyBorder(8, 0, 0, 0));
+			localizeOptionPaneButtons();
 			UIManager.put("ToolBar.background", SURFACE);
 			UIManager.put("ToolBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
+
+			UIManager.put("PopupMenu.background", SURFACE);
+			UIManager.put("PopupMenu.border", BorderFactory.createCompoundBorder(
+			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(4, 4, 4, 4)));
+			UIManager.put("MenuItem.selectionBackground", ACCENT_WASH);
+			UIManager.put("MenuItem.selectionForeground", TEXT);
+			UIManager.put("CheckBoxMenuItem.selectionBackground", ACCENT_WASH);
+			UIManager.put("CheckBoxMenuItem.selectionForeground", TEXT);
+			UIManager.put("RadioButtonMenuItem.selectionBackground", ACCENT_WASH);
+			UIManager.put("RadioButtonMenuItem.selectionForeground", TEXT);
+			UIManager.put("Menu.selectionBackground", ACCENT_WASH);
+			UIManager.put("Menu.selectionForeground", TEXT);
 
 			// Shared tab chrome (safe for any L&F). FlatLaf-only keys applied below.
 			UIManager.put("TabbedPane.background", TAB_WELL);
@@ -185,13 +203,43 @@ public final class DocearUiTheme {
 			UIManager.put("Separator.foreground", HAIRLINE);
 			UIManager.put("ToolTip.background", SURFACE);
 			UIManager.put("ToolTip.foreground", TEXT);
-			UIManager.put("ToolTip.border", BorderFactory.createLineBorder(HAIRLINE));
+			UIManager.put("ToolTip.border", BorderFactory.createCompoundBorder(
+			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(6, 8, 6, 8)));
 
 			scaleLegacyFontsIfNeeded();
 		}
 		catch (Throwable t) {
 			LogUtils.warn("DocearUiTheme.applyAfterLookAndFeel failed", t);
 		}
+	}
+
+	/** Prefer Freeplane locale strings over L&amp;F English Yes/No/Cancel. */
+	public static void localizeOptionPaneButtons() {
+		try {
+			putOptionButton("OptionPane.yesButtonText", "yes", "Yes");
+			putOptionButton("OptionPane.noButtonText", "no", "No");
+			putOptionButton("OptionPane.cancelButtonText", "cancel", "Cancel");
+			putOptionButton("OptionPane.okButtonText", "ok", "OK");
+		}
+		catch (Throwable t) {
+			// resources may not be ready yet
+		}
+	}
+
+	private static void putOptionButton(final String uiKey, final String textKey, final String fallback) {
+		String label = null;
+		try {
+			label = TextUtils.getRawText(textKey, null);
+		}
+		catch (Throwable t) {
+		}
+		if (label == null || label.length() == 0 || label.startsWith("[")) {
+			label = fallback;
+		}
+		else {
+			label = TextUtils.removeMnemonic(TextUtils.removeTranslateComment(label));
+		}
+		UIManager.put(uiKey, label);
 	}
 
 	private static void setUiFont(final String key, final Font font) {

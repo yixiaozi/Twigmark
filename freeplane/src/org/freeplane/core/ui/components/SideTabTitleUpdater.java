@@ -90,6 +90,18 @@ public final class SideTabTitleUpdater {
 		refreshTitles();
 	}
 
+	/** Prefer component-type title, else strip count HTML from the tab header. */
+	public static String baseTitleAt(final JTabbedPane tabs, final int index) {
+		if (tabs == null || index < 0 || index >= tabs.getTabCount()) {
+			return "";
+		}
+		final String fromComponent = titleForContentComponent(tabs.getComponentAt(index));
+		if (fromComponent != null) {
+			return fromComponent;
+		}
+		return TabCountLabels.stripHtml(tabs.getTitleAt(index));
+	}
+
 	/**
 	 * Rebuild title/metric lists from the live tab strip. Inserts (文件 / 标签 / AI)
 	 * shift indices; without this, the 1s poller paints stale labels onto the wrong
@@ -107,18 +119,14 @@ public final class SideTabTitleUpdater {
 	}
 
 	private String resolveBaseTitleAt(final int index) {
-		final String fromComponent = titleForContentComponent(tabs.getComponentAt(index));
-		if (fromComponent != null) {
-			return fromComponent;
-		}
-		return TabCountLabels.stripHtml(tabs.getTitleAt(index));
+		return baseTitleAt(tabs, index);
 	}
 
 	/**
 	 * Canonical right-tab titles keyed by content panel type (not by previous label).
 	 * Returns null for left-sidebar / unknown panels so {@link #bindLeftTabs} stays intact.
 	 */
-	private static String titleForContentComponent(final Component content) {
+	static String titleForContentComponent(final Component content) {
 		if (content == null) {
 			return null;
 		}

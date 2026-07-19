@@ -19,6 +19,7 @@ import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenuBuilder;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
 import org.freeplane.plugin.workspace.event.WorkspaceActionEvent;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
+import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActionListener {
 
@@ -85,6 +86,15 @@ public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActi
 	}
 	
 	public void refresh() {
+		for (AWorkspaceProject project : WorkspaceController.getCurrentModel().getProjects()) {
+			if (project == null || project.getModel() == null) {
+				continue;
+			}
+			final AWorkspaceTreeNode projectRoot = project.getModel().getRoot();
+			if (projectRoot != null) {
+				projectRoot.refresh();
+			}
+		}
 		getModel().reload(this);
 	}
 	

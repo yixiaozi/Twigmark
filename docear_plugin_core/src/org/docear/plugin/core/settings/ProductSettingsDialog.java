@@ -348,6 +348,9 @@ public final class ProductSettingsDialog extends JDialog {
 		final boolean workingChanged = !samePath(previous, workingDir);
 		try {
 			MindMapDataRootResolver.setWorkingDirectory(workingDir);
+			if (MindMapDataRootResolver.isEffectivelyEmptyWorkingDirectory(workingDir)) {
+				org.docear.plugin.core.workspace.WorkingDirectoryDefaults.seedInto(workingDir);
+			}
 		}
 		catch (Exception e) {
 			JOptionPane.showMessageDialog(this, e.getMessage(), getTitle(), JOptionPane.ERROR_MESSAGE);
