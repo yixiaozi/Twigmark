@@ -11,6 +11,7 @@ import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpFinanceService;
+import org.docear.plugin.mcp.service.McpGitService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeService;
 import org.docear.plugin.mcp.service.McpPomodoroService;
@@ -310,6 +311,14 @@ public final class McpProtocol {
 		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
 		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
 		tools.add(tool("export_workspace_snapshot", "Export workspace snapshot markdown files."));
+		tools.add(tool("git_status",
+				"Show git status for the mind-map repository (branch, porcelain, remotes).",
+				schema("repoPath", "string", false)));
+		tools.add(tool("git_sync",
+				"Single-writer sync: pull --ff-only, stage .mm changes, commit if dirty, push. "
+						+ "Use after a batch of edits; not on every node write.",
+				schema("repoPath", "string", false), schema("message", "string", false),
+				schema("push", "boolean", false), schema("pullFirst", "boolean", false)));
 		tools.add(tool("list_audit_log",
 				"List MCP audit detail rows from SQLite (data/audit.db): request/response JSON, question summary, operation goal.",
 				schema("limit", "number", false), schema("intent", "string", false), schema("traceId", "string", false),
@@ -621,6 +630,13 @@ public final class McpProtocol {
 		}
 		else if ("export_workspace_snapshot".equals(name)) {
 			textResult = McpMindMapService.exportWorkspaceSnapshot();
+		}
+		else if ("git_status".equals(name)) {
+			textResult = McpGitService.gitStatus(argString(args, "repoPath", ""));
+		}
+		else if ("git_sync".equals(name)) {
+			textResult = McpGitService.gitSync(argString(args, "repoPath", ""), argString(args, "message", ""),
+					argBool(args, "push", true), argBool(args, "pullFirst", true));
 		}
 		else if ("list_audit_log".equals(name)) {
 			textResult = McpAuditService.listAuditLog(argInt(args, "limit", 50), argString(args, "intent", ""),

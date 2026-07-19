@@ -151,7 +151,8 @@ public final class McpAuditService {
 		    || "change_node_text".equals(toolName) || "remove_node".equals(toolName) || "create_todo".equals(toolName)
 		    || "complete_todo".equals(toolName) || "set_reminder".equals(toolName) || "set_priority".equals(toolName)
 		    || "quick_capture".equals(toolName) || "sync_todoist".equals(toolName)
-		    || "export_workspace_snapshot".equals(toolName)) {
+		    || "export_workspace_snapshot".equals(toolName)
+		    || "git_status".equals(toolName) || "git_sync".equals(toolName)) {
 			return McpOperationIntent.MINDMAP;
 		}
 		return McpOperationIntent.UNKNOWN;
