@@ -31,9 +31,6 @@ public final class DrawioBrowserPanel extends JPanel {
 	private static final int BRIDGE_RETRY_MS = 100;
 	private static final int EDITOR_READY_TIMEOUT_MS = 45000;
 
-	private static volatile boolean javafxChecked;
-	private static volatile boolean javafxAvailable;
-
 	private final DrawioEditorListener listener;
 	private final JPanel browserHost = new JPanel(new BorderLayout());
 	private Object webEngine;
@@ -59,7 +56,7 @@ public final class DrawioBrowserPanel extends JPanel {
 		if (loaded || disposed) {
 			return;
 		}
-		if (!isJavaFxAvailable()) {
+		if (!DrawioJavaFxSupport.ensureAvailable()) {
 			showJavaFxMissingHelp();
 			loaded = true;
 			return;
@@ -401,22 +398,6 @@ public final class DrawioBrowserPanel extends JPanel {
 		runLater.invoke(null, runnable);
 	}
 
-	private static boolean isJavaFxAvailable() {
-		if (!javafxChecked) {
-			try {
-				Class.forName("javafx.embed.swing.JFXPanel");
-				Class.forName("javafx.scene.web.WebView");
-				javafxAvailable = true;
-			}
-			catch (Throwable t) {
-				javafxAvailable = false;
-				LogUtils.warn("JavaFX not available for Draw.io: " + t);
-			}
-			javafxChecked = true;
-		}
-		return javafxAvailable;
-	}
-
 	private void showLoading(final String message) {
 		browserHost.removeAll();
 		browserHost.add(new JLabel("<html><div style='padding:16px'>" + message + "</div></html>"),
@@ -426,13 +407,27 @@ public final class DrawioBrowserPanel extends JPanel {
 	}
 
 	private void showJavaFxMissingHelp() {
+		final String javaHome = System.getProperty("java.home", "");
+		final String vendor = System.getProperty("java.vendor", "");
+		final String detail = DrawioJavaFxSupport.getLastError();
+		final StringBuilder candidates = new StringBuilder();
+		final java.util.List<String> hints = DrawioJavaFxSupport.candidateHints();
+		final int max = Math.min(6, hints.size());
+		for (int i = 0; i < max; i++) {
+			candidates.append("· ").append(hints.get(i)).append("<br>");
+		}
 		final JPanel panel = new JPanel(new BorderLayout(8, 8));
 		panel.add(new JLabel("<html><b>Draw.io 内嵌编辑器需要 JavaFX</b><br><br>"
-		        + "当前 Java 运行环境不含 JavaFX（例如 Eclipse Adoptium JDK 8）。<br><br>"
+		        + "当前 JVM：<code>" + escapeHtml(javaHome) + "</code><br>"
+		        + "厂商： " + escapeHtml(vendor) + "<br>"
+		        + (detail.length() > 0 ? ("探测： " + escapeHtml(detail) + "<br><br>") : "<br>")
 		        + "解决方法（任选其一）：<br>"
-		        + "1. 使用带 JavaFX 的 Docear 发行包（含 <code>jre</code> 目录），用 <code>docear.bat</code> 启动<br>"
-		        + "2. 在项目根目录运行：<code>scripts\\setup-drawio-javafx.ps1</code> 后重新构建<br>"
-		        + "3. 安装 BellSoft Liberica JDK 8 <i>Full</i> 版，并用其启动 Docear</html>"), BorderLayout.CENTER);
+		        + "1. 用发行包里的 <code>docear-javafx.bat</code>（或含 <code>jre\\lib\\ext\\jfxrt.jar</code> 的捆绑 JRE）启动<br>"
+		        + "2. 项目根目录运行 <code>scripts\\setup-drawio-javafx.ps1</code> 后重新构建/部署<br>"
+		        + "3. 安装 BellSoft Liberica JDK 8 <i>Full</i>，并用该 JDK 启动 Docear<br>"
+		        + "4. 设置环境变量 <code>DOCEAR_JAVAFX_HOME</code> 指向含 JavaFX 的 JRE 根目录<br><br>"
+		        + (candidates.length() > 0 ? ("已扫描：<br>" + candidates) : "")
+		        + "</html>"), BorderLayout.CENTER);
 		final JButton openExternal = new JButton("用系统默认程序打开 .drawio");
 		openExternal.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -460,6 +455,13 @@ public final class DrawioBrowserPanel extends JPanel {
 			LogUtils.warn("Could not open .drawio externally: " + diagramFile, e);
 			showError("无法用系统程序打开：\n" + e.getMessage());
 		}
+	}
+
+	private static String escapeHtml(final String text) {
+		if (text == null) {
+			return "";
+		}
+		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	private void showError(final String message) {

@@ -71,6 +71,7 @@ public class ActivityAnalysisPanel extends JPanel {
         add(topPanel, BorderLayout.NORTH);
 
         org.freeplane.core.ui.theme.DocearUiTheme.styleTabbedPane(analysisTabs);
+        org.freeplane.core.ui.components.TabbedPaneStableOrder.install(analysisTabs);
         add(analysisTabs, BorderLayout.CENTER);
 
         refreshButton.addActionListener(new ActionListener() {
@@ -276,6 +277,7 @@ public class ActivityAnalysisPanel extends JPanel {
         });
 
         JScrollPane scrollPane = new JScrollPane(table);
+        org.freeplane.core.ui.theme.DocearUiTheme.styleScrollPane(scrollPane);
         return scrollPane;
     }
 
@@ -295,6 +297,7 @@ public class ActivityAnalysisPanel extends JPanel {
         JTable table = new JTable(model);
         table.setAutoCreateRowSorter(true);
         JScrollPane scrollPane = new JScrollPane(table);
+        org.freeplane.core.ui.theme.DocearUiTheme.styleScrollPane(scrollPane);
         return scrollPane;
     }
 
@@ -315,6 +318,7 @@ public class ActivityAnalysisPanel extends JPanel {
 
         JTable table = new JTable(model);
         JScrollPane scrollPane = new JScrollPane(table);
+        org.freeplane.core.ui.theme.DocearUiTheme.styleScrollPane(scrollPane);
         return scrollPane;
     }
 
@@ -356,6 +360,7 @@ public class ActivityAnalysisPanel extends JPanel {
         });
 
         JScrollPane scrollPane = new JScrollPane(list);
+        org.freeplane.core.ui.theme.DocearUiTheme.styleScrollPane(scrollPane);
         return scrollPane;
     }
 

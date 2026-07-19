@@ -17,8 +17,8 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 
 public final class TabCountLabels {
 
-	private static final int HORIZONTAL_PADDING = 14;
-	private static final int VERTICAL_PADDING = 4;
+	private static final int HORIZONTAL_PADDING = 8;
+	private static final int VERTICAL_PADDING = 3;
 	private static final int ICON_GAP = 2;
 
 	private TabCountLabels() {

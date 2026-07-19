@@ -92,7 +92,7 @@ public final class TabbedPaneStableOrder {
 		}
 
 		protected Insets getTabAreaInsets(final int tabPlacement) {
-			return new Insets(6, 6, 4, 6);
+			return new Insets(4, 4, 3, 4);
 		}
 
 		protected Insets getContentBorderInsets(final int tabPlacement) {
@@ -100,7 +100,7 @@ public final class TabbedPaneStableOrder {
 		}
 
 		protected Insets getTabInsets(final int tabPlacement, final int tabIndex) {
-			return new Insets(6, 10, 6, 10);
+			return new Insets(4, 7, 4, 7);
 		}
 
 		protected Insets getSelectedTabPadInsets(final int tabPlacement) {

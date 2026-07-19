@@ -120,9 +120,9 @@ public final class DocearUiTheme {
 			UIManager.put("TabbedPane.selected", TAB_SELECTED);
 			UIManager.put("TabbedPane.selectedBackground", TAB_SELECTED);
 			UIManager.put("TabbedPane.foreground", TEXT_MUTED);
-			UIManager.put("TabbedPane.tabInsets", new Insets(7, 12, 7, 12));
+			UIManager.put("TabbedPane.tabInsets", new Insets(5, 8, 5, 8));
 			UIManager.put("TabbedPane.selectedTabPadInsets", new Insets(0, 0, 0, 0));
-			UIManager.put("TabbedPane.tabAreaInsets", new Insets(6, 6, 4, 6));
+			UIManager.put("TabbedPane.tabAreaInsets", new Insets(4, 4, 3, 4));
 			UIManager.put("TabbedPane.contentBorderInsets", new Insets(0, 0, 0, 0));
 			UIManager.put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
 
@@ -152,10 +152,10 @@ public final class DocearUiTheme {
 
 				UIManager.put("ScrollBar.thumbArc", Integer.valueOf(999));
 				UIManager.put("ScrollBar.trackArc", Integer.valueOf(999));
-				UIManager.put("ScrollBar.width", Integer.valueOf(9));
+				UIManager.put("ScrollBar.width", Integer.valueOf(6));
 				UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
-				UIManager.put("ScrollBar.trackInsets", new Insets(2, 2, 2, 2));
-				UIManager.put("ScrollBar.thumbInsets", new Insets(2, 2, 2, 2));
+				UIManager.put("ScrollBar.trackInsets", new Insets(1, 1, 1, 1));
+				UIManager.put("ScrollBar.thumbInsets", new Insets(1, 1, 1, 1));
 				UIManager.put("ScrollBar.track", CANVAS);
 				UIManager.put("ScrollBar.thumb", SCROLL_THUMB);
 				UIManager.put("ScrollBar.hoverThumbColor", new Color(0x8E, 0x99, 0xA8));
