@@ -202,6 +202,7 @@ class MapViewTabs implements IMapViewChangeListener {
 		mTabbedPane.setFocusable(false);
 		mTabbedPane.setTabPlacement(JTabbedPane.BOTTOM);
 		DocearUiTheme.styleTabbedPane(mTabbedPane);
+		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(mTabbedPane);
 		mTabbedPaneMapViews = new Vector<Component>();
 		visibleTabKeys = new Vector<Component>();
 		mTabbedPane.addChangeListener(new ChangeListener() {

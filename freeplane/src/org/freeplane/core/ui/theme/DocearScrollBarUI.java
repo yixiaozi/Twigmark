@@ -17,7 +17,7 @@ import javax.swing.plaf.basic.BasicScrollBarUI;
  * Thin, pill-thumb scrollbar (iOS-like). No arrow buttons.
  */
 public final class DocearScrollBarUI extends BasicScrollBarUI {
-	private static final int THICKNESS = 9;
+	private static final int THICKNESS = 6;
 	private static final Color THUMB = new Color(0xB8, 0xC0, 0xCC);
 	private static final Color THUMB_HOVER = new Color(0x8E, 0x99, 0xA8);
 
@@ -72,10 +72,10 @@ public final class DocearScrollBarUI extends BasicScrollBarUI {
 		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		final boolean hover = isThumbRollover();
 		g2.setColor(hover ? THUMB_HOVER : THUMB);
-		final int gap = 2;
+		final int gap = 1;
 		if (scrollbar.getOrientation() == JScrollBar.VERTICAL) {
 			final int x = thumbBounds.x + gap;
-			final int w = Math.max(4, thumbBounds.width - gap * 2);
+			final int w = Math.max(3, thumbBounds.width - gap * 2);
 			final int y = thumbBounds.y + 1;
 			final int h = Math.max(16, thumbBounds.height - 2);
 			g2.fillRoundRect(x, y, w, h, 999, 999);
