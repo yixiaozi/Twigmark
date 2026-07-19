@@ -79,6 +79,10 @@ public final class DocearUiTheme {
 	 */
 	public static void applyAfterLookAndFeel() {
 		try {
+			// Re-assert after L&F install: Substance otherwise registers SubstanceRibbonUI
+			// (24px empty taskbar). ZeroTaskbarRibbonUI.createUI is required for this to work.
+			UIManager.put("RibbonUI", "org.freeplane.core.ui.ribbon.ZeroTaskbarRibbonUI");
+
 			final Font ui = font(13f);
 			final Font uiBold = font(13f, Font.BOLD);
 			setUiFont("Label.font", ui);
