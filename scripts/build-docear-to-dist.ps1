@@ -7,7 +7,7 @@
 #
 # Options:
 #   -SkipBuild          reuse existing docear_windows.zip
-#   -TargetDir <path>   install dir (default: %TEMP%\DocearDist or $env:DOCEAR_DIST_DIR)
+#   -TargetDir <path>   install dir (default: E:\Temp\DocearDist, or $env:DOCEAR_DIST_DIR)
 #   -NoLaunch           do not start Docear after deploy
 
 param(
@@ -21,7 +21,7 @@ if ([string]::IsNullOrWhiteSpace($TargetDir)) {
         $TargetDir = $env:DOCEAR_DIST_DIR
     }
     else {
-        $TargetDir = Join-Path $env:TEMP "DocearDist"
+        $TargetDir = "E:\Temp\DocearDist"
     }
 }
 

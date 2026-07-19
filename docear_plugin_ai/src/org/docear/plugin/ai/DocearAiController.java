@@ -468,22 +468,16 @@ public class DocearAiController {
                 return;
             }
 
-            final String tabTitle = AiChatTabInstaller.getTabTitle();
-            for (int i = 0; i < rightTabs.getTabCount(); i++) {
-                if (tabTitle.equals(rightTabs.getTitleAt(i))) {
-                    rightTabs.setSelectedIndex(i);
-                    chatSidebar.switchToMap(Controller.getCurrentController().getMap());
-                    return;
-                }
+            // Select by component identity — title strings can desync from panels.
+            int index = AiChatTabInstaller.indexOfComponent(rightTabs, chatSidebar);
+            if (index < 0) {
+                AiChatTabInstaller.tryInstall(modeController, rightTabs, chatSidebar);
+                index = AiChatTabInstaller.indexOfComponent(rightTabs, chatSidebar);
             }
-
-            AiChatTabInstaller.tryInstall(modeController, rightTabs, chatSidebar);
-            for (int i = 0; i < rightTabs.getTabCount(); i++) {
-                if (tabTitle.equals(rightTabs.getTitleAt(i))) {
-                    rightTabs.setSelectedIndex(i);
-                    chatSidebar.switchToMap(Controller.getCurrentController().getMap());
-                    return;
-                }
+            if (index >= 0) {
+                rightTabs.setSelectedIndex(index);
+                chatSidebar.switchToMap(Controller.getCurrentController().getMap());
+                return;
             }
             LogUtils.warn("AI chat tab could not be selected after install attempt.");
         } catch (Exception ex) {
