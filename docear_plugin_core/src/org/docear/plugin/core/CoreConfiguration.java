@@ -60,6 +60,7 @@ import org.docear.plugin.core.todoist.TodoistIntegrationService;
 import org.docear.plugin.core.logger.DocearLogEvent;
 import org.docear.plugin.core.ui.OverlayViewport;
 import org.docear.plugin.core.ui.ribbons.DocearNodePrivacyContributorFactory;
+import org.docear.plugin.core.workspace.WorkingDirectoryDefaults;
 import org.docear.plugin.core.workspace.actions.DocearAddRepositoryPathAction;
 import org.docear.plugin.core.workspace.actions.DocearImportProjectAction;
 import org.docear.plugin.core.workspace.actions.DocearLibraryNewMindmap;
@@ -85,6 +86,7 @@ import org.freeplane.core.ui.components.OneTouchCollapseResizer.CollapseDirectio
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.help.OnlineDocumentationAction;
 import org.freeplane.features.map.IMapSelection;
@@ -151,6 +153,10 @@ public class CoreConfiguration extends ALanguageController {
 		loadAndStoreVersion(controller);
 		adjustProperties(controller);
 		DocearController.getController().markApplicationInitialized();
+
+		// Register before workspace sync: seeds empty working dirs chosen on first launch.
+		MindMapDataRootResolver.setEmptyDirectorySeeder(new WorkingDirectoryDefaults());
+		MindMapDataRootResolver.seedDefaultsIfPending();
 		
 		AWorkspaceProject.setCurrentProjectCreator(new DocearWorspaceProjectCreator());
 		if(DocearController.getPropertiesController().getProperty("ApplicationName", "Docear").equals("Docear")) {
@@ -753,9 +759,21 @@ public class CoreConfiguration extends ALanguageController {
 			resController.setProperty("links", "relative_to_workspace");
 			resController.setProperty("save_folding", "always_save_folding");
 			resController.setProperty("leftToolbarVisible", "false");
+			resController.setProperty("scrollbarsVisible", "false");
+			resController.setProperty("center_selected_node", "true");
+			resController.setProperty("status_visible", "false");
 			resController.setProperty("styleScrollPaneVisible", "true");
 			//resController.setProperty("language", "en");
 			resController.setProperty(DocearController.DOCEAR_FIRST_RUN_PROPERTY, true);
+		}
+		// One-shot layout defaults for existing profiles (user can still change later).
+		if ("Docear".equals(resController.getProperty("ApplicationName"))
+		        && !"2026-07-layout2".equals(resController.getProperty("docear.ui.layout.defaults", ""))) {
+			resController.setProperty("scrollbarsVisible", "false");
+			resController.setProperty("center_selected_node", "true");
+			resController.setProperty("leftToolbarVisible", "false");
+			resController.setProperty("status_visible", "false");
+			resController.setProperty("docear.ui.layout.defaults", "2026-07-layout2");
 		}
 		WorkspaceController.addAction(new DocearRenameAction());
 		JViewport viewport = (JViewport) Controller.getCurrentController().getMapViewManager().getViewport();

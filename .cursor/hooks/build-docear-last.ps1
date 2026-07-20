@@ -46,5 +46,5 @@ Write-Output "Updated Docear Windows package in $targetDir"
 
 if (Test-Path $deployScript) {
   Write-Output "Deploying to E:\Temp\DocearDist and restarting Docear ..."
-  & powershell -ExecutionPolicy Bypass -File $deployScript -SkipBuild
+  & powershell -ExecutionPolicy Bypass -File $deployScript -SkipBuild -TargetDir "E:\Temp\DocearDist"
 }

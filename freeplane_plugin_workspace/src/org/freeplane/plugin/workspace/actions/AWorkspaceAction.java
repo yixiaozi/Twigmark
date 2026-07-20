@@ -122,13 +122,17 @@ public abstract class AWorkspaceAction extends AFreeplaneAction {
 		else { 
 			WorkspacePopupMenu pop = getRootPopupMenu((Component) e.getSource());
 			if(pop == null) {
-				return null;
+				return new AWorkspaceTreeNode[0];
 			}
 			tree = (JTree)pop.getInvoker();
 		}
-		AWorkspaceTreeNode[] nodes = new AWorkspaceTreeNode[tree.getSelectionPaths().length]; 
+		final TreePath[] paths = tree.getSelectionPaths();
+		if (paths == null || paths.length == 0) {
+			return new AWorkspaceTreeNode[0];
+		}
+		AWorkspaceTreeNode[] nodes = new AWorkspaceTreeNode[paths.length]; 
 		int i = 0;
-		for(TreePath path : tree.getSelectionPaths()) {
+		for(TreePath path : paths) {
 			nodes[i++] = (AWorkspaceTreeNode) path.getLastPathComponent();
 		}
 		return nodes;

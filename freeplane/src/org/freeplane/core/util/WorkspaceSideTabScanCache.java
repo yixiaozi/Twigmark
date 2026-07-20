@@ -4,9 +4,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /**
  * Background scan cache for workspace side tabs (file search, activity analysis, etc.).
@@ -93,11 +91,10 @@ public final class WorkspaceSideTabScanCache {
 	private static void preloadAllFiles() {
 		try {
 			final List<File> files = new ArrayList<File>();
-			final Set<String> seenPaths = new HashSet<String>();
 			final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
 			for (int i = 0; i < scanRoots.length; i++) {
 				if (scanRoots[i] != null && scanRoots[i].exists()) {
-					collectAllFiles(scanRoots[i], files, seenPaths);
+					collectAllFiles(scanRoots[i], files);
 				}
 			}
 			sortByLastModifiedDesc(files);
@@ -113,7 +110,7 @@ public final class WorkspaceSideTabScanCache {
 		}
 	}
 
-	private static void collectAllFiles(final File dir, final List<File> resultList, final Set<String> seenPaths) {
+	private static void collectAllFiles(final File dir, final List<File> resultList) {
 		final File[] children = dir.listFiles();
 		if (children == null) {
 			return;
@@ -123,20 +120,11 @@ public final class WorkspaceSideTabScanCache {
 			if (child.isDirectory()) {
 				final String name = child.getName();
 				if (!name.startsWith(".") && !name.startsWith("_")) {
-					collectAllFiles(child, resultList, seenPaths);
+					collectAllFiles(child, resultList);
 				}
 			}
 			else if (child.isFile()) {
-				String key;
-				try {
-					key = child.getCanonicalPath();
-				}
-				catch (final Exception e) {
-					key = child.getAbsolutePath();
-				}
-				if (seenPaths.add(key)) {
-					resultList.add(child);
-				}
+				MindMapFileIdentity.addFileIfNew(child, resultList);
 			}
 		}
 	}

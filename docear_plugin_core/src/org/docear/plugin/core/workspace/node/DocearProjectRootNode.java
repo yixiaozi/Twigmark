@@ -2,8 +2,11 @@ package org.docear.plugin.core.workspace.node;
 
 import javax.swing.tree.TreeNode;
 
+import org.docear.plugin.core.workspace.FixedLibraryWorkspaceTree;
+import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 import org.freeplane.plugin.workspace.model.IMyFilesTreeHoist;
+import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 import org.freeplane.plugin.workspace.nodes.FolderTypeMyFilesNode;
 import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 
@@ -16,6 +19,16 @@ import org.freeplane.plugin.workspace.nodes.ProjectRootNode;
 public class DocearProjectRootNode extends ProjectRootNode implements IMyFilesTreeHoist {
 
 	private static final long serialVersionUID = 1L;
+
+	@Override
+	public void refresh() {
+		final AWorkspaceProject project = WorkspaceController.getSelectedProject(this);
+		if (project != null && FixedLibraryWorkspaceTree.isFixedLibrary(project)) {
+			FixedLibraryWorkspaceTree.syncProjectFromDisk(project);
+			return;
+		}
+		super.refresh();
+	}
 
 	private FolderTypeMyFilesNode findMyFilesNode() {
 		for (int i = 0; i < getModelChildCount(); i++) {

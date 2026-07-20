@@ -148,22 +148,38 @@ public class RibbonActionContributorFactory implements IRibbonContributorFactory
 	
 	public static void updateRichTooltip(final AbstractCommandButton button, AFreeplaneAction action, KeyStroke ks) {
 		RichTooltip tip = null;
-		final String tooltip = TextUtils.getRawText(action.getTooltipKey(), null);
-		if (tooltip != null && !"".equals(tooltip)) {
-			tip = new RichTooltip(getActionTitle(action), TextUtils.removeTranslateComment(tooltip));
+		final String title = getActionTitle(action);
+		final String tooltip = sanitizeTooltipText(TextUtils.getRawText(action.getTooltipKey(), null));
+		if (tooltip != null) {
+			tip = new RichTooltip(title, tooltip);
 		}
-		if(ks != null) {
-			if(tip == null) {
-				tip = new RichTooltip(getActionTitle(action), "  ");
+		if (ks != null) {
+			if (tip == null) {
+				// Title-only tip + shortcut — avoid blank/"  " body that looks broken.
+				tip = new RichTooltip(title, formatShortcut(ks));
 			}
-			tip.addFooterSection(formatShortcut(ks));
+			else {
+				tip.addFooterSection(formatShortcut(ks));
+			}
 		}
-		if(tip != null) {
+		if (tip != null && title != null && !title.startsWith("[")) {
 			button.setActionRichTooltip(tip);
 		}
 		else {
 			button.setActionRichTooltip(null);
 		}
+	}
+
+	/** Drop missing-resource placeholders like {@code [SomeAction.tooltip]}. */
+	private static String sanitizeTooltipText(final String tooltip) {
+		if (tooltip == null) {
+			return null;
+		}
+		final String cleaned = TextUtils.removeTranslateComment(tooltip).trim();
+		if (cleaned.length() == 0 || cleaned.startsWith("[")) {
+			return null;
+		}
+		return cleaned;
 	}
 
 	public static String formatShortcut(KeyStroke ks) {

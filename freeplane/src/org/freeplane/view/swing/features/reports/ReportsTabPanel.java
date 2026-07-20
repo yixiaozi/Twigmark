@@ -1,11 +1,9 @@
 package org.freeplane.view.swing.features.reports;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
-import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -20,7 +18,6 @@ import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
-import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -34,15 +31,14 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
-import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.usagestats.ToggleUsageStatsReportAction;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.usagestats.UsageStatsReportService;
 
 /**
@@ -53,7 +49,7 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("每种报表回答一个决策问题；点选后在导图区出图");
+	private final JLabel statusLabel = new JLabel("点选报表后在中间导图区出图");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -62,9 +58,6 @@ public class ReportsTabPanel extends JPanel {
 	private final JPanel customRangePanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList reportList = new JList(listModel);
-	private final JButton showButton = DocearUiTheme.primaryButton("显示图表");
-	private final JButton writeButton = DocearUiTheme.softButton("写入节点");
-	private final JButton refreshButton = DocearUiTheme.softButton("刷新");
 	private volatile boolean generating;
 	private boolean suppressSelectionEvent;
 
@@ -156,17 +149,7 @@ public class ReportsTabPanel extends JPanel {
 		final JScrollPane scroll = new JScrollPane(reportList);
 		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 中间出图）"));
 		add(scroll, BorderLayout.CENTER);
-
-		final JPanel south = new JPanel(new GridLayout(1, 3, 6, 0));
-		south.setOpaque(false);
-		showButton.setToolTipText("在中间导图位置显示折线/饼图/柱状图");
-		writeButton.setToolTipText("可选：把报表树写入当前选中导图节点");
-		refreshButton.setToolTipText("重新加载报表目录");
-		south.add(showButton);
-		south.add(writeButton);
-		south.add(refreshButton);
-		add(south, BorderLayout.SOUTH);
-		setPreferredSize(new Dimension(220, 400));
+		setPreferredSize(new Dimension(280, 400));
 	}
 
 	private void wireEvents() {
@@ -176,29 +159,13 @@ public class ReportsTabPanel extends JPanel {
 				revalidate();
 			}
 		});
-		showButton.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				runSelected(false);
-			}
-		});
-		writeButton.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				runSelected(true);
-			}
-		});
-		refreshButton.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				reloadCatalog();
-				statusLabel.setText("已刷新 · 共 " + ReportCatalog.all().size() + " 种报表");
-			}
-		});
 		reportList.addListSelectionListener(new ListSelectionListener() {
 			public void valueChanged(final ListSelectionEvent e) {
 				if (e.getValueIsAdjusting() || suppressSelectionEvent) {
 					return;
 				}
 				if (reportList.getSelectedIndex() >= 0) {
-					runSelected(false);
+					runSelected();
 				}
 			}
 		});
@@ -222,7 +189,7 @@ public class ReportsTabPanel extends JPanel {
 		}
 	}
 
-	private void runSelected(final boolean writeToMindMap) {
+	private void runSelected() {
 		if (generating) {
 			return;
 		}
@@ -236,6 +203,10 @@ public class ReportsTabPanel extends JPanel {
 			showActivityReport();
 			return;
 		}
+		if (ReportCatalog.ID_MCP_AUDIT.equals(def.id)) {
+			showMcpAudit();
+			return;
+		}
 		final ReportTimeRange range;
 		try {
 			range = resolveRange(def);
@@ -247,8 +218,6 @@ public class ReportsTabPanel extends JPanel {
 		}
 		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
 		generating = true;
-		showButton.setEnabled(false);
-		writeButton.setEnabled(false);
 		statusLabel.setText("正在生成「" + def.title + "」…");
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
@@ -281,18 +250,7 @@ public class ReportsTabPanel extends JPanel {
 								return;
 							}
 							service.showReport(resultView, resultTree);
-							if (writeToMindMap) {
-								final NodeModel written = ReportMindMapWriter.writeUnderSelection(resultTree);
-								if (written == null) {
-									statusLabel.setText("图表已显示；写入失败：未选中节点");
-								}
-								else {
-									statusLabel.setText("已显示「" + def.title + "」，并写入节点");
-								}
-							}
-							else {
-								statusLabel.setText("已显示「" + def.title + "」· " + def.decision);
-							}
+							statusLabel.setText("已显示「" + def.title + "」· " + def.decision);
 						}
 						catch (Exception e) {
 							statusLabel.setText(e.getMessage());
@@ -301,8 +259,6 @@ public class ReportsTabPanel extends JPanel {
 						}
 						finally {
 							generating = false;
-							showButton.setEnabled(true);
-							writeButton.setEnabled(true);
 						}
 					}
 				});
@@ -322,9 +278,30 @@ public class ReportsTabPanel extends JPanel {
 		if (charts != null) {
 			charts.hideFromMapViewport();
 		}
-		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, true);
 		service.setReportVisible(true);
-		statusLabel.setText("已显示「活动报表」");
+		statusLabel.setText("已显示「活动报表」· 点右上角「返回导图」关闭");
+	}
+
+	private void showMcpAudit() {
+		try {
+			final AFreeplaneAction action = Controller.getCurrentController().getAction("McpStatusAuditAction");
+			if (action == null) {
+				statusLabel.setText("MCP 插件未加载，无法打开审计");
+				JOptionPane.showMessageDialog(this, "MCP 插件未加载，无法打开审计对话框。\n也可在「产品设置」里打开 MCP 审计。",
+				        "MCP 审计", JOptionPane.INFORMATION_MESSAGE);
+				return;
+			}
+			final ReportViewportService charts = ReportViewportService.get();
+			if (charts != null) {
+				charts.hideFromMapViewport();
+			}
+			action.actionPerformed(null);
+			statusLabel.setText("已打开「MCP 审计」");
+		}
+		catch (Exception e) {
+			statusLabel.setText("打开 MCP 审计失败：" + e.getMessage());
+			LogUtils.warn("showMcpAudit failed", e);
+		}
 	}
 
 	private ReportTimeRange resolveRange(final ReportDefinition def) {

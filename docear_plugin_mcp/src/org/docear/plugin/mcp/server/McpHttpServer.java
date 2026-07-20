@@ -34,7 +34,8 @@ public final class McpHttpServer {
 		server.createContext("/mcp", new McpHandler());
 		server.createContext("/health", new HealthHandler());
 		server.createContext("/", new HealthHandler());
-		executor = Executors.newFixedThreadPool(8);
+		// Keep health/list responsive even when a few write tools block on EDT.
+		executor = Executors.newFixedThreadPool(16);
 		server.setExecutor(executor);
 		server.start();
 		LogUtils.info("Docear MCP server listening on http://" + host + ":" + port + "/mcp");
@@ -70,9 +71,12 @@ public final class McpHttpServer {
 				return;
 			}
 			final String body = readBody(exchange);
+			final long started = System.currentTimeMillis();
+			String methodHint = "";
 			try {
 				McpRequestContext.begin(exchange);
 				final JsonValue request = JsonParser.parse(body);
+				methodHint = extractMethodHint(request);
 				final String response = protocol.handle(request);
 				writeJson(exchange, 200, response);
 			}
@@ -81,6 +85,10 @@ public final class McpHttpServer {
 				writeJson(exchange, 500, errorBody(-32603, e.getMessage()));
 			}
 			finally {
+				final long elapsed = System.currentTimeMillis() - started;
+				if (elapsed >= 3000L) {
+					LogUtils.warn("Slow MCP request " + methodHint + " took " + elapsed + "ms");
+				}
 				McpRequestContext.end();
 			}
 		}
@@ -126,5 +134,24 @@ public final class McpHttpServer {
 		response.put("jsonrpc", JsonValue.ofString("2.0"));
 		response.put("error", JsonValue.ofMap(error));
 		return JsonWriter.write(JsonValue.ofMap(response));
+	}
+
+	private static String extractMethodHint(final JsonValue request) {
+		try {
+			final Map<String, JsonValue> root = request.asMap();
+			final JsonValue methodValue = root.get("method");
+			final String method = methodValue != null ? methodValue.asString() : "";
+			if ("tools/call".equals(method)) {
+				final JsonValue paramsValue = root.get("params");
+				final Map<String, JsonValue> params = paramsValue != null ? paramsValue.asMap() : null;
+				final JsonValue nameValue = params != null ? params.get("name") : null;
+				final String name = nameValue != null ? nameValue.asString() : "";
+				return method + "/" + name;
+			}
+			return method != null ? method : "";
+		}
+		catch (Exception e) {
+			return "";
+		}
 	}
 }

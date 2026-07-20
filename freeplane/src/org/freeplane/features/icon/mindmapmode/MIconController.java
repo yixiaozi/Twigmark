@@ -236,26 +236,7 @@ public class MIconController extends IconController {
 	}
 
 	private void createPreferences() {
-		final MModeController modeController = (MModeController) Controller.getCurrentModeController();
-		final OptionPanelBuilder optionPanelBuilder = modeController.getOptionPanelBuilder();
-		final List<AFreeplaneAction> actions = new ArrayList<AFreeplaneAction>();
-		actions.addAll(iconActions.values());
-		actions.add(modeController.getAction("RemoveIcon_0_Action"));
-		actions.add(modeController.getAction("RemoveIconAction"));
-		actions.add(modeController.getAction("RemoveAllIconsAction"));
-		
-		for (final AFreeplaneAction iconAction : actions) {
-			final IIconInformation info = (IIconInformation) iconAction;
-			optionPanelBuilder.addCreator("Keystrokes/icons", new IPropertyControlCreator() {
-				public IPropertyControl createControl() {
-					final KeyProperty keyProperty = new KeyProperty(info.getShortcutKey());
-					keyProperty.setLabelText(info.getDescription());
-					keyProperty.setImageIcon(info.getIcon());
-					keyProperty.disableModifiers();
-					return keyProperty;
-				}
-			}, IndexedTree.AS_CHILD);
-		}
+		// Keystrokes tab removed from Docear preferences; shortcuts stay on the ribbon.
 	}
 
 	public Collection<AFreeplaneAction> getIconActions() {

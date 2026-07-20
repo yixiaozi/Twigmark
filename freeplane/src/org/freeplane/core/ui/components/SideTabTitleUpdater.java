@@ -1,5 +1,6 @@
 package org.freeplane.core.ui.components;
 
+import java.awt.Component;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -85,15 +86,93 @@ public final class SideTabTitleUpdater {
 	}
 
 	public void bindRightTabs() {
+		syncBindingFromTabs();
+		refreshTitles();
+	}
+
+	/** Prefer component-type title, else strip count HTML from the tab header. */
+	public static String baseTitleAt(final JTabbedPane tabs, final int index) {
+		if (tabs == null || index < 0 || index >= tabs.getTabCount()) {
+			return "";
+		}
+		final String fromComponent = titleForContentComponent(tabs.getComponentAt(index));
+		if (fromComponent != null) {
+			return fromComponent;
+		}
+		return TabCountLabels.stripHtml(tabs.getTitleAt(index));
+	}
+
+	/**
+	 * Rebuild title/metric lists from the live tab strip. Inserts (文件 / 标签 / AI)
+	 * shift indices; without this, the 1s poller paints stale labels onto the wrong
+	 * panels (e.g. 「AI 聊天」header over 「最近修改」content).
+	 */
+	private void syncBindingFromTabs() {
 		baseTitles.clear();
 		metricKeys.clear();
 		for (int i = 0; i < tabs.getTabCount(); i++) {
-			final String title = TabCountLabels.stripHtml(tabs.getTitleAt(i));
+			final String title = resolveBaseTitleAt(i);
 			baseTitles.add(title);
 			metricKeys.add(metricKeyForRightTitle(title));
 		}
 		refreshSnapshotMetrics();
-		refreshTitles();
+	}
+
+	private String resolveBaseTitleAt(final int index) {
+		return baseTitleAt(tabs, index);
+	}
+
+	/**
+	 * Canonical right-tab titles keyed by content panel type (not by previous label).
+	 * Returns null for left-sidebar / unknown panels so {@link #bindLeftTabs} stays intact.
+	 */
+	static String titleForContentComponent(final Component content) {
+		if (content == null) {
+			return null;
+		}
+		final String name = content.getClass().getName();
+		if (name.endsWith(".CurrentMapFolderTabPanel")) {
+			return "\u6587\u4ef6";
+		}
+		if (name.endsWith(".ReminderTabPanel")) {
+			return "\u63d0\u9192";
+		}
+		if (name.endsWith(".EnhancedAllRemindersTabPanel")) {
+			return "\u5168\u90e8\u63d0\u9192";
+		}
+		if (name.endsWith(".EnhancedAllRecurringRemindersTabPanel")) {
+			return "\u5468\u671f\u63d0\u9192";
+		}
+		if (name.endsWith(".ReminderTimelineTabPanel")) {
+			return "\u65f6\u95f4\u8f74";
+		}
+		if (name.endsWith(".TodoTabPanel")) {
+			return "\u5f85\u529e";
+		}
+		if (name.endsWith(".EnhancedAllTodosTabPanel")) {
+			return "\u5168\u90e8\u5f85\u529e";
+		}
+		if (name.endsWith(".PomodoroTabPanel")) {
+			return "\u756a\u8304\u949f";
+		}
+		if (name.endsWith(".PinnedNodesTabPanel")) {
+			try {
+				return TextUtils.getText("workspace.nodepins.tab.title");
+			}
+			catch (final Exception e) {
+				return "\u6807\u7b7e";
+			}
+		}
+		if (name.endsWith(".EnhancedAllPublishTabPanel")) {
+			return "\u5168\u90e8\u53d1\u5e03";
+		}
+		if (name.endsWith(".EnhancedAllRecentlyModified")) {
+			return "\u6700\u8fd1\u4fee\u6539";
+		}
+		if (name.endsWith(".AiChatSidebar") || name.indexOf("AiChatSidebar") >= 0) {
+			return "AI \u804a\u5929";
+		}
+		return null;
 	}
 
 	public void refreshTitles() {
@@ -114,9 +193,19 @@ public final class SideTabTitleUpdater {
 					LogUtils.warn("Left tab metrics hook failed: " + e.getMessage());
 				}
 			}
+			// Keep label list aligned with components after async tab inserts.
+			if (tabs.getTabCount() != baseTitles.size()) {
+				syncBindingFromTabs();
+			}
 			final int count = Math.min(tabs.getTabCount(), Math.min(baseTitles.size(), metricKeys.size()));
 			for (int i = 0; i < count; i++) {
-				final String baseTitle = (String) baseTitles.get(i);
+				final String fromComponent = titleForContentComponent(tabs.getComponentAt(i));
+				String baseTitle = (String) baseTitles.get(i);
+				if (fromComponent != null && !fromComponent.equals(baseTitle)) {
+					baseTitle = fromComponent;
+					baseTitles.set(i, fromComponent);
+					metricKeys.set(i, metricKeyForRightTitle(fromComponent));
+				}
 				final String metricKey = (String) metricKeys.get(i);
 				final int value = metricKey != null && metricKey.length() > 0
 				    ? SideTabMetricRegistry.get(metricKey, 0)

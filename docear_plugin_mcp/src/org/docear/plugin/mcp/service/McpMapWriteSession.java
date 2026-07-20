@@ -1,6 +1,8 @@
 package org.docear.plugin.mcp.service;
 
 import java.io.File;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 import org.docear.plugin.core.util.MapUtils;
@@ -11,14 +13,21 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mapio.mindmapmode.MMapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
+import org.freeplane.features.styles.MapStyle;
+import org.freeplane.features.styles.MapStyleModel;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.mindmapmode.MFileManager;
 
 /**
  * Resolves a mind map for MCP write operations without requiring it to be the active UI tab.
  * Prefers an already-open map instance; otherwise loads headlessly via {@link MapUtils}.
+ * Headless loads are cached briefly to avoid re-parsing the same .mm on bursty add_node calls.
  */
 final class McpMapWriteSession {
+
+	private static final int HEADLESS_CACHE_MAX = 8;
+	private static final Object CACHE_LOCK = new Object();
+	private static final LinkedHashMap HEADLESS_CACHE = new LinkedHashMap(16, 0.75f, true);
 
 	private final MapModel map;
 	private final File file;
@@ -42,7 +51,16 @@ final class McpMapWriteSession {
 		final File file = McpMindMapService.resolveMindMapFileForWrite(filePath);
 		final MapModel openMap = findOpenMap(file);
 		if (openMap != null) {
+			ensureMapStyle(openMap);
 			return new McpMapWriteSession(openMap, file, false);
+		}
+		final String cacheKey = file.getCanonicalPath();
+		synchronized (CACHE_LOCK) {
+			final MapModel cached = (MapModel) HEADLESS_CACHE.get(cacheKey);
+			if (cached != null && isSameFile(cached.getFile(), file)) {
+				ensureMapStyle(cached);
+				return new McpMapWriteSession(cached, file, true);
+			}
 		}
 		final MapModel loaded = MapUtils.getMapFromUri(file.toURI());
 		if (loaded == null) {
@@ -51,7 +69,42 @@ final class McpMapWriteSession {
 		if (loaded.getFile() == null) {
 			loaded.setURL(Compat.fileToUrl(file));
 		}
+		ensureMapStyle(loaded);
+		synchronized (CACHE_LOCK) {
+			HEADLESS_CACHE.put(cacheKey, loaded);
+			while (HEADLESS_CACHE.size() > HEADLESS_CACHE_MAX) {
+				final Iterator it = HEADLESS_CACHE.keySet().iterator();
+				if (!it.hasNext()) {
+					break;
+				}
+				it.next();
+				it.remove();
+			}
+		}
 		return new McpMapWriteSession(loaded, file, true);
+	}
+
+	/**
+	 * Minimal / headless-created maps often have AutomaticEdgeColor but no MapStyleModel.
+	 * Nested addNewNode then NPEs in LogicalStyleController via AutomaticEdgeColorHook.
+	 */
+	static void ensureMapStyle(final MapModel map) {
+		if (map == null || map.getRootNode() == null) {
+			return;
+		}
+		final MapStyleModel existing = MapStyleModel.getExtension(map);
+		if (existing != null && existing.getStyleMap() != null) {
+			return;
+		}
+		try {
+			final MapStyle mapStyle = MapStyle.getController();
+			if (mapStyle != null) {
+				mapStyle.onCreate(map);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("MCP ensureMapStyle failed: " + e.getMessage());
+		}
 	}
 
 	MapModel getMap() {
@@ -69,7 +122,10 @@ final class McpMapWriteSession {
 	NodeModel requireNode(final String nodeId) {
 		final NodeModel node = map.getNodeForID(nodeId);
 		if (node == null) {
-			throw new IllegalArgumentException("Node not found: " + nodeId + " in " + file.getAbsolutePath());
+			final NodeModel root = map.getRootNode();
+			final String rootId = root != null ? root.getID() : "";
+			throw new IllegalArgumentException("Node not found: " + nodeId + " in " + file.getAbsolutePath()
+					+ (rootId != null && rootId.length() > 0 ? " (rootNodeId=" + rootId + ")" : ""));
 		}
 		return node;
 	}
@@ -94,12 +150,25 @@ final class McpMapWriteSession {
 
 	private static MapModel findOpenMap(final File file) {
 		final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
-		final Map<String, MapModel> maps = mapViewManager.getMaps(MModeController.MODENAME);
-		for (final MapModel map : maps.values()) {
+		final Map maps = mapViewManager.getMaps(MModeController.MODENAME);
+		for (final Object value : maps.values()) {
+			final MapModel map = (MapModel) value;
 			if (McpMindMapService.isSameMapFile(map, file)) {
 				return map;
 			}
 		}
 		return null;
+	}
+
+	private static boolean isSameFile(final File a, final File b) {
+		if (a == null || b == null) {
+			return false;
+		}
+		try {
+			return a.getCanonicalFile().equals(b.getCanonicalFile());
+		}
+		catch (Exception e) {
+			return a.getAbsolutePath().equalsIgnoreCase(b.getAbsolutePath());
+		}
 	}
 }

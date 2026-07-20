@@ -62,10 +62,13 @@ public class InputController implements KeyListener, MouseListener, MouseMotionL
 		if (e.isConsumed()) {
 			return;
 		}
-		TreePath path = ((JTree) e.getSource()).getClosestPathForLocation(e.getX(), e.getY());
+		final JTree tree = (JTree) e.getSource();
+		// Exact hit only: getClosestPathForLocation never returns null for blank space,
+		// which incorrectly attached node menus to empty-area right-clicks.
+		final TreePath path = tree.getPathForLocation(e.getX(), e.getY());
 
-		((TreeView) WorkspaceController.getCurrentModeExtension().getView()).addSelectionPath(path);
 		if (path != null) {
+			((TreeView) WorkspaceController.getCurrentModeExtension().getView()).addSelectionPath(path);
 			AWorkspaceTreeNode node = (AWorkspaceTreeNode) path.getLastPathComponent();
 			// encode buttons
 			int eventType = 0;

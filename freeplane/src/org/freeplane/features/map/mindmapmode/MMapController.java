@@ -256,9 +256,13 @@ public class MMapController extends MapController {
 			if (views.size() == 1) {
 				final String text = TextUtils.getText("save_unsaved") + "\n" + map.getTitle();
 				final String title = TextUtils.getText("SaveAction.text");
+				final Object[] options = new Object[] {
+				        TextUtils.removeMnemonic(TextUtils.getText("yes")),
+				        TextUtils.removeMnemonic(TextUtils.getText("no")),
+				        TextUtils.removeMnemonic(TextUtils.getText("cancel")) };
 				final int returnVal = JOptionPane.showOptionDialog(
 				    Controller.getCurrentController().getViewController().getContentPane(), text, title,
-				    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, null, null);
+				    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
 				if (returnVal == JOptionPane.YES_OPTION) {
 					final boolean savingNotCancelled = ((MFileManager) UrlManager.getController())
 					    .save(map);

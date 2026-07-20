@@ -19,6 +19,7 @@ public final class FinanceController implements IExtension {
 		catch (Throwable t) {
 			LogUtils.warn("FinanceViewportService install skipped", t);
 		}
+		FinanceNodeSync.install(modeController);
 		modeController.addExtension(FinanceController.class, new FinanceController());
 		LogUtils.info("FinanceController installed");
 	}

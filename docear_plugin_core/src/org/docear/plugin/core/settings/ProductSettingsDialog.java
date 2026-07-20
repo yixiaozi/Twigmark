@@ -27,6 +27,7 @@ import javax.swing.border.EmptyBorder;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.MindMapFileIdentity;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.view.swing.features.finance.FinanceLedgerService;
@@ -348,6 +349,9 @@ public final class ProductSettingsDialog extends JDialog {
 		final boolean workingChanged = !samePath(previous, workingDir);
 		try {
 			MindMapDataRootResolver.setWorkingDirectory(workingDir);
+			if (MindMapDataRootResolver.isEffectivelyEmptyWorkingDirectory(workingDir)) {
+				org.docear.plugin.core.workspace.WorkingDirectoryDefaults.seedInto(workingDir);
+			}
 		}
 		catch (Exception e) {
 			JOptionPane.showMessageDialog(this, e.getMessage(), getTitle(), JOptionPane.ERROR_MESSAGE);
@@ -387,15 +391,7 @@ public final class ProductSettingsDialog extends JDialog {
 	}
 
 	private static boolean samePath(final File a, final File b) {
-		if (a == null || b == null) {
-			return false;
-		}
-		try {
-			return a.getCanonicalFile().equals(b.getCanonicalFile());
-		}
-		catch (Exception e) {
-			return a.getAbsoluteFile().equals(b.getAbsoluteFile());
-		}
+		return MindMapFileIdentity.isSameFile(a, b);
 	}
 
 	private JButton browseButton(final JTextField field, final boolean directoriesOnly) {

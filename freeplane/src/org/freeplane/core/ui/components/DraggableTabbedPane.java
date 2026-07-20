@@ -1,4 +1,4 @@
-package org.freeplane.plugin.workspace.components;
+package org.freeplane.core.ui.components;
 
 import java.awt.Component;
 import java.awt.event.MouseAdapter;
@@ -7,7 +7,6 @@ import java.awt.event.MouseEvent;
 import javax.swing.Icon;
 import javax.swing.JTabbedPane;
 
-import org.freeplane.core.ui.components.TabbedPaneStableOrder;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 
 /**
@@ -23,13 +22,17 @@ public class DraggableTabbedPane extends JTabbedPane {
 
 	private int dragTabIndex = -1;
 	private TabReorderListener reorderListener;
+	private boolean dragEnabled = true;
 
 	public DraggableTabbedPane() {
 		DocearUiTheme.styleTabbedPane(this);
 		TabbedPaneStableOrder.install(this);
 		addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {
-				if (!isEnabled() || e.isPopupTrigger()) {
+				if (!isEnabled() || !dragEnabled) {
+					return;
+				}
+				if (e.isPopupTrigger()) {
 					return;
 				}
 				dragTabIndex = indexAtLocation(e.getX(), e.getY());
@@ -40,7 +43,7 @@ public class DraggableTabbedPane extends JTabbedPane {
 					dragTabIndex = -1;
 					return;
 				}
-				if (dragTabIndex < 0) {
+				if (dragTabIndex < 0 || !dragEnabled) {
 					return;
 				}
 				final int dropIndex = indexAtLocation(e.getX(), e.getY());
@@ -59,6 +62,10 @@ public class DraggableTabbedPane extends JTabbedPane {
 
 	public void setTabReorderListener(final TabReorderListener listener) {
 		this.reorderListener = listener;
+	}
+
+	public void setDragEnabled(final boolean enabled) {
+		this.dragEnabled = enabled;
 	}
 
 	private void reorderTab(int fromIndex, int toIndex) {

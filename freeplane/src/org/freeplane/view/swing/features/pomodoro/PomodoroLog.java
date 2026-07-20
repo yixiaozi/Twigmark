@@ -52,6 +52,32 @@ public final class PomodoroLog {
 		return encode(list);
 	}
 
+	public static String replaceRecord(final String raw, final int index, final PomodoroSessionRecord record) {
+		final List list = decode(raw);
+		if (index < 0 || index >= list.size() || record == null) {
+			return raw == null ? "" : raw;
+		}
+		list.set(index, record);
+		return encode(list);
+	}
+
+	public static String removeRecord(final String raw, final int index) {
+		final List list = decode(raw);
+		if (index < 0 || index >= list.size()) {
+			return raw == null ? "" : raw;
+		}
+		list.remove(index);
+		return encode(list);
+	}
+
+	public static PomodoroSessionRecord getRecord(final String raw, final int index) {
+		final List list = decode(raw);
+		if (index < 0 || index >= list.size()) {
+			return null;
+		}
+		return (PomodoroSessionRecord) list.get(index);
+	}
+
 	public static long sumFocus(final List records) {
 		long sum = 0L;
 		if (records == null) {

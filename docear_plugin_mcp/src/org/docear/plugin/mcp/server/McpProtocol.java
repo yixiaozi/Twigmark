@@ -304,7 +304,8 @@ public final class McpProtocol {
 				schema("interval", "number", false), schema("weekDays", "string", false),
 				schema("taskLevel", "number", false), schema("jinji", "number", false)));
 		tools.add(tool("create_mindmap",
-				"Create a new .mm file on disk. Optionally open it in Docear UI.",
+				"Create a new .mm file on disk. Returns rootNodeId for subsequent add_node/add_nodes. "
+						+ "Prefer add_nodes (one batch) after create. Optionally open it in Docear UI.",
 				schema("filePath", "string", true), schema("rootText", "string", false),
 				schema("openInUi", "boolean", false)));
 		tools.add(tool("list_projects", "List workspace projects."));

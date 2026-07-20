@@ -12,6 +12,25 @@ final class GitSyncChecker {
 		}
 		final GitCommand.Result fetchResult = GitCommand.runRemote(repoDir, "fetch", "origin");
 		final boolean fetchOk = fetchResult.exitCode == 0;
+		String fetchError = "";
+		if (!fetchOk) {
+			fetchError = fetchResult.errorText();
+			if (fetchError.length() == 0) {
+				fetchError = "fetch 失败";
+			}
+		}
+		return checkAfterFetch(repoDir, fetchOk, fetchError);
+	}
+
+	/** Use after a successful fetch (or when fetch was already attempted). */
+	static GitSyncStatus checkAfterFetch(final File repoDir, final boolean fetchOk) {
+		return checkAfterFetch(repoDir, fetchOk, fetchOk ? "" : "fetch 失败");
+	}
+
+	static GitSyncStatus checkAfterFetch(final File repoDir, final boolean fetchOk, final String fetchError) {
+		if (repoDir == null) {
+			return new GitSyncStatus(0, 0, false, false, "", "", "未找到 Git 仓库");
+		}
 
 		final String branch = readSingleLine(repoDir, "rev-parse", "--abbrev-ref", "HEAD");
 		if (branch.length() == 0) {
@@ -30,8 +49,8 @@ final class GitSyncChecker {
 
 		final GitCommand.Result countResult = GitCommand.run(repoDir, "rev-list", "--left-right", "--count",
 		    upstream + "...HEAD");
-		int behind = 0;
 		int ahead = 0;
+		int behind = 0;
 		if (countResult.exitCode == 0 && !countResult.output.isEmpty()) {
 			final String[] parts = countResult.output.get(0).split("\\s+");
 			if (parts.length >= 2) {
@@ -52,7 +71,7 @@ final class GitSyncChecker {
 
 		String error = "";
 		if (!fetchOk) {
-			error = fetchResult.errorText();
+			error = fetchError == null ? "" : fetchError;
 			if (error.length() == 0) {
 				error = "fetch 失败";
 			}

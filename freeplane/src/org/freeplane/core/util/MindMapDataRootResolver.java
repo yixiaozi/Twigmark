@@ -86,8 +86,69 @@ public final class MindMapDataRootResolver {
 
 	private static volatile File cachedWorkingDirectory;
 	private static volatile File cachedConfigDirectory;
+	/** Set when the user just picked a brand-new / empty working directory. */
+	private static volatile boolean pendingDefaultContentSeed;
+	private static volatile EmptyDirectorySeeder emptyDirectorySeeder;
+	private static volatile boolean configuringInteractively;
+
+	/**
+	 * Optional hook (registered by Docear core) to copy sample mind maps into an empty working directory.
+	 * Must never delete or overwrite existing user files.
+	 */
+	public interface EmptyDirectorySeeder {
+		void seedDefaults(File workingDirectory);
+	}
 
 	private MindMapDataRootResolver() {
+	}
+
+	public static void setEmptyDirectorySeeder(final EmptyDirectorySeeder seeder) {
+		emptyDirectorySeeder = seeder;
+	}
+
+	/** True when {@code working-directory.txt} (or env/sys override) already points at a directory. */
+	public static boolean isWorkingDirectoryConfigured() {
+		if (directoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY)) != null) {
+			return true;
+		}
+		if (directoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY)) != null) {
+			return true;
+		}
+		if (directoryFromPath(System.getenv(WORKING_DIRECTORY_ENV)) != null) {
+			return true;
+		}
+		if (directoryFromPath(System.getenv(DATA_ROOT_ENV)) != null) {
+			return true;
+		}
+		return readWorkingDirectoryFile() != null;
+	}
+
+	public static boolean isEffectivelyEmptyWorkingDirectory(final File directory) {
+		if (directory == null || !directory.exists()) {
+			return true;
+		}
+		if (!directory.isDirectory()) {
+			return false;
+		}
+		final File[] children = directory.listFiles();
+		if (children == null || children.length == 0) {
+			return true;
+		}
+		for (int i = 0; i < children.length; i++) {
+			final File child = children[i];
+			if (child == null) {
+				continue;
+			}
+			final String name = child.getName();
+			if (name.startsWith(".") || name.equalsIgnoreCase("Thumbs.db") || name.equalsIgnoreCase("desktop.ini")) {
+				continue;
+			}
+			if (isConfigDirectoryName(name)) {
+				continue;
+			}
+			return false;
+		}
+		return true;
 	}
 
 	/** Software install / root directory (parent of {@code resources/}). */
@@ -118,6 +179,7 @@ public final class MindMapDataRootResolver {
 	/**
 	 * The single primary product setting: where mind maps and {@code data/} live.
 	 * Always non-null; created on demand.
+	 * When {@code working-directory.txt} is missing (and no env override), prompts once.
 	 */
 	public static File getWorkingDirectory() {
 		File cached = cachedWorkingDirectory;
@@ -316,18 +378,13 @@ public final class MindMapDataRootResolver {
 		if (files == null) {
 			return;
 		}
-		final Set seenPaths = new LinkedHashSet();
 		final File[] roots = getScanRoots();
 		for (int i = 0; i < roots.length; i++) {
-			collectMindmapFilesRecursive(roots[i], files, seenPaths);
+			collectMindmapFilesRecursive(roots[i], files);
 		}
 	}
 
 	public static void collectMindmapFilesRecursive(final File directory, final List files) {
-		collectMindmapFilesRecursive(directory, files, new LinkedHashSet());
-	}
-
-	private static void collectMindmapFilesRecursive(final File directory, final List files, final Set seenPaths) {
 		if (directory == null || !directory.exists() || !directory.isDirectory()) {
 			return;
 		}
@@ -344,20 +401,10 @@ public final class MindMapDataRootResolver {
 				if ("bin".equalsIgnoreCase(child.getName()) || isConfigDirectoryName(child.getName())) {
 					continue;
 				}
-				collectMindmapFilesRecursive(child, files, seenPaths);
+				collectMindmapFilesRecursive(child, files);
 			}
 			else if (child.getName().toLowerCase().endsWith(".mm")) {
-				try {
-					final String key = child.getCanonicalPath();
-					if (seenPaths.add(key)) {
-						files.add(child);
-					}
-				}
-				catch (final Exception e) {
-					if (seenPaths.add(child.getAbsolutePath())) {
-						files.add(child);
-					}
-				}
+				MindMapFileIdentity.addMindmapFileIfNew(child, files);
 			}
 		}
 	}
@@ -381,11 +428,100 @@ public final class MindMapDataRootResolver {
 		}
 		final File fromFile = readWorkingDirectoryFile();
 		if (fromFile != null) {
+			// Existing marker: use as-is, never wipe contents.
 			return fromFile;
 		}
-		final File defaultDir = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME);
-		writeWorkingDirectoryFile(defaultDir);
-		return defaultDir.getAbsoluteFile();
+		return configureWorkingDirectoryInteractively();
+	}
+
+	/**
+	 * First launch without {@code working-directory.txt}: ask the user for a folder.
+	 * Empty folders get default sample content (via optional seeder); non-empty folders are left untouched.
+	 */
+	private static File configureWorkingDirectoryInteractively() {
+		if (configuringInteractively) {
+			final File fallback = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME).getAbsoluteFile();
+			ensureDirectory(fallback);
+			return fallback;
+		}
+		configuringInteractively = true;
+		try {
+			final File suggested = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME).getAbsoluteFile();
+			LogUtils.info("No " + WORKING_DIRECTORY_FILE_NAME + " — prompting for working directory");
+			final File chosen = WorkingDirectoryChooser.choose(suggested);
+			if (chosen == null) {
+				LogUtils.warn("Working directory selection cancelled — exiting");
+				System.err.println("Docear requires a working directory. Exiting.");
+				System.exit(1);
+			}
+			ensureDirectory(chosen);
+			final boolean empty = isEffectivelyEmptyWorkingDirectory(chosen);
+			writeWorkingDirectoryFile(chosen);
+			System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, chosen.getAbsolutePath());
+			if (empty) {
+				pendingDefaultContentSeed = true;
+				runEmptyDirectorySeeder(chosen);
+			}
+			else {
+				pendingDefaultContentSeed = false;
+				LogUtils.info("Using existing working directory without modifying files: "
+				        + chosen.getAbsolutePath());
+			}
+			markSetupCompletedQuietly(chosen);
+			return chosen.getAbsoluteFile();
+		}
+		finally {
+			configuringInteractively = false;
+		}
+	}
+
+	private static void runEmptyDirectorySeeder(final File workingDirectory) {
+		final EmptyDirectorySeeder seeder = emptyDirectorySeeder;
+		if (seeder == null) {
+			LogUtils.info("Working directory is empty; default content will be seeded when Docear core loads: "
+			        + workingDirectory.getAbsolutePath());
+			return;
+		}
+		try {
+			seeder.seedDefaults(workingDirectory);
+			pendingDefaultContentSeed = false;
+			LogUtils.info("Seeded default content into empty working directory: "
+			        + workingDirectory.getAbsolutePath());
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not seed default working-directory content: " + e.getMessage());
+		}
+	}
+
+	/** Write setup.completed under the chosen dir's data/ without requiring the cache. */
+	private static void markSetupCompletedQuietly(final File workingDirectory) {
+		final File marker = new File(resolveConfigDirectory(workingDirectory), SETUP_COMPLETED_MARKER);
+		BufferedWriter writer = null;
+		try {
+			ensureDirectory(marker.getParentFile());
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(marker), "UTF-8"));
+			writer.write(String.valueOf(System.currentTimeMillis()));
+			writer.newLine();
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not write setup marker: " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(writer);
+		}
+	}
+
+	/** Called after Docear core registers a seeder, in case the early prompt ran first. */
+	public static void seedDefaultsIfPending() {
+		if (!pendingDefaultContentSeed) {
+			return;
+		}
+		final File dir = getWorkingDirectory();
+		if (!isEffectivelyEmptyWorkingDirectory(dir)) {
+			pendingDefaultContentSeed = false;
+			return;
+		}
+		runEmptyDirectorySeeder(dir);
 	}
 
 	private static File resolveConfigDirectory(final File workingDirectory) {
@@ -541,12 +677,14 @@ public final class MindMapDataRootResolver {
 		if (root == null || !root.exists()) {
 			return;
 		}
-		try {
-			roots.add(root.getCanonicalFile());
+		final File absolute = root.getAbsoluteFile();
+		for (final Iterator it = roots.iterator(); it.hasNext();) {
+			final File existing = (File) it.next();
+			if (existing != null && MindMapFileIdentity.isSameFile(absolute, existing)) {
+				return;
+			}
 		}
-		catch (final Exception e) {
-			roots.add(root);
-		}
+		roots.add(absolute);
 	}
 
 	private static File[] normalizeScanRoots(final Set roots) {
@@ -575,6 +713,10 @@ public final class MindMapDataRootResolver {
 			boolean covered = false;
 			for (int j = 0; j < normalized.size(); j++) {
 				final File existing = (File) normalized.get(j);
+				if (MindMapFileIdentity.isSameFile(candidate, existing)) {
+					covered = true;
+					break;
+				}
 				String existingPath;
 				try {
 					existingPath = existing.getCanonicalPath();

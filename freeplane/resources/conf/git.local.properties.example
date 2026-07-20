@@ -4,10 +4,14 @@
 # Path to the Git repository shown in the left Git panel:
 git.repo.path=E:\\yixiaozi
 
-# Check remote sync every N seconds (default 120, min 30):
-git.sync.interval.seconds=120
+# Check remote sync every N seconds (default 60, min 30):
+git.sync.interval.seconds=60
 
-# Auto pull/push when in sync is needed (default false; only when working tree is clean):
+# Auto-pull remote commits each interval (default true).
+# Network failures stay silent; conflicts prefer the remote side.
+# git.auto.pull=false
+
+# Auto-push when local is ahead and working tree is clean (default false):
 # git.auto.sync=true
 
 # Run after a successful commit from the Git panel (background PowerShell; skipped if missing):

@@ -22,8 +22,10 @@ public final class GitConfig {
 	public static final String PROP_REPO_PATH = "git.repo.path";
 	public static final String PROP_SYNC_INTERVAL = "git.sync.interval.seconds";
 	public static final String PROP_AUTO_SYNC = "git.auto.sync";
+	/** Auto-pull remote commits each sync interval (default on). */
+	public static final String PROP_AUTO_PULL = "git.auto.pull";
 
-	private static final int DEFAULT_SYNC_INTERVAL_SECONDS = 120;
+	private static final int DEFAULT_SYNC_INTERVAL_SECONDS = 60;
 	private static final int MIN_SYNC_INTERVAL_SECONDS = 30;
 	private static final int MAX_SYNC_INTERVAL_SECONDS = 3600;
 
@@ -78,7 +80,16 @@ public final class GitConfig {
 	}
 
 	public static boolean isAutoSyncEnabled() {
-		final String raw = readProperty(PROP_AUTO_SYNC, "false");
+		return isTruthyProperty(PROP_AUTO_SYNC, "false");
+	}
+
+	/** Prefer remote updates every minute; default enabled. */
+	public static boolean isAutoPullEnabled() {
+		return isTruthyProperty(PROP_AUTO_PULL, "true");
+	}
+
+	private static boolean isTruthyProperty(final String key, final String defaultValue) {
+		final String raw = readProperty(key, defaultValue);
 		return "true".equalsIgnoreCase(raw.trim()) || "yes".equalsIgnoreCase(raw.trim()) || "1".equals(raw.trim());
 	}
 

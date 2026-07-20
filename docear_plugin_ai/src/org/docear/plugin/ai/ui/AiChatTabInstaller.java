@@ -15,107 +15,156 @@ import org.freeplane.features.mode.ModeController;
 
 /**
  * 将 AI 聊天 Tab 安装到右侧格式面板中（位于「最近修改」之后）。
+ * <p>
+ * Must be idempotent: concurrent retries used to insert the same panel twice,
+ * which leaves a blank orphan tab (Swing moves the component to the new index).
  */
 public final class AiChatTabInstaller {
 
-    private static final String TAB_TITLE = "AI \u804a\u5929";
-    private static final String RECENTLY_MODIFIED_TAB_TITLE = "\u6700\u8fd1\u4fee\u6539";
-    private static boolean installed;
+	private static final String TAB_TITLE = "AI \u804a\u5929";
+	private static final String RECENTLY_MODIFIED_TAB_TITLE = "\u6700\u8fd1\u4fee\u6539";
+	private static boolean installed;
 
-    private AiChatTabInstaller() {
-    }
+	private AiChatTabInstaller() {
+	}
 
-    public static void install(final ModeController modeController, final AiChatSidebar chatSidebar) {
-        if (modeController == null || chatSidebar == null) {
-            return;
-        }
-        installWithRetry(modeController, chatSidebar, 0);
-    }
+	public static void install(final ModeController modeController, final AiChatSidebar chatSidebar) {
+		if (modeController == null || chatSidebar == null) {
+			return;
+		}
+		installWithRetry(modeController, chatSidebar, 0);
+	}
 
-    private static void installWithRetry(final ModeController modeController, final AiChatSidebar chatSidebar, final int attempt) {
-        SwingUtilities.invokeLater(new Runnable() {
-            public void run() {
-                if (tryInstall(modeController, chatSidebar)) {
-                    installed = true;
-                    return;
-                }
-                if (attempt >= 40) {
-                    LogUtils.severe("could not install AI chat tab after retries");
-                    return;
-                }
-                final Timer timer = new Timer(250, new java.awt.event.ActionListener() {
-                    public void actionPerformed(final java.awt.event.ActionEvent e) {
-                        installWithRetry(modeController, chatSidebar, attempt + 1);
-                    }
-                });
-                timer.setRepeats(false);
-                timer.start();
-            }
-        });
-    }
+	private static void installWithRetry(final ModeController modeController, final AiChatSidebar chatSidebar,
+	        final int attempt) {
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				if (tryInstall(modeController, chatSidebar)) {
+					return;
+				}
+				if (attempt >= 40) {
+					LogUtils.severe("could not install AI chat tab after retries");
+					return;
+				}
+				final Timer timer = new Timer(250, new java.awt.event.ActionListener() {
+					public void actionPerformed(final java.awt.event.ActionEvent e) {
+						installWithRetry(modeController, chatSidebar, attempt + 1);
+					}
+				});
+				timer.setRepeats(false);
+				timer.start();
+			}
+		});
+	}
 
-    public static boolean tryInstall(final ModeController modeController, final AiChatSidebar chatSidebar) {
-        final JTabbedPane tabs = findFormatTabbedPane(modeController);
-        if (tabs == null) {
-            return false;
-        }
-        return tryInstall(modeController, tabs, chatSidebar);
-    }
+	public static boolean tryInstall(final ModeController modeController, final AiChatSidebar chatSidebar) {
+		final JTabbedPane tabs = findFormatTabbedPane(modeController);
+		if (tabs == null) {
+			return false;
+		}
+		return tryInstall(modeController, tabs, chatSidebar);
+	}
 
-    public static boolean tryInstall(final ModeController modeController, final JTabbedPane tabs, final AiChatSidebar chatSidebar) {
-        if (modeController == null || tabs == null || chatSidebar == null) {
-            return false;
-        }
-        try {
-            for (int i = 0; i < tabs.getTabCount(); i++) {
-                if (TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
-                    installed = true;
-                    return true;
-                }
-            }
-            int insertIndex = tabs.getTabCount();
-            for (int i = 0; i < tabs.getTabCount(); i++) {
-                if (RECENTLY_MODIFIED_TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
-                    insertIndex = i + 1;
-                    break;
-                }
-            }
-            tabs.insertTab(TAB_TITLE, null, chatSidebar, null, insertIndex);
-            tabs.revalidate();
-            tabs.repaint();
-            MModeControllerFactory.refreshFormatTabTitles(tabs);
-            final DocearAiController controller = DocearAiController.getController();
-            if (controller != null) {
-                AiChatTabMetrics.publishForCurrentMap(controller.getChatSessionManager());
-            }
-            installed = true;
-            LogUtils.info("AI chat tab installed at index " + insertIndex);
-            return true;
-        } catch (final Exception e) {
-            LogUtils.warn(e);
-            return false;
-        }
-    }
+	public static synchronized boolean tryInstall(final ModeController modeController, final JTabbedPane tabs,
+	        final AiChatSidebar chatSidebar) {
+		if (modeController == null || tabs == null || chatSidebar == null) {
+			return false;
+		}
+		try {
+			removeOrphanAiTabs(tabs, chatSidebar);
 
-    public static JTabbedPane findFormatTabbedPane(final ModeController modeController) {
-        final Container formatBar = modeController.getUserInputListenerFactory().getToolBar("/format");
-        if (formatBar == null) {
-            return null;
-        }
-        for (int i = 0; i < formatBar.getComponentCount(); i++) {
-            final Component component = formatBar.getComponent(i);
-            if (component instanceof JTabbedPane) {
-                return (JTabbedPane) component;
-            }
-        }
-        return null;
-    }
+			final int existing = indexOfComponent(tabs, chatSidebar);
+			if (existing >= 0) {
+				ensureTitle(tabs, existing);
+				installed = true;
+				MModeControllerFactory.refreshFormatTabTitles(tabs);
+				return true;
+			}
 
-    public static String getTabTitle() {
-        return TAB_TITLE;
-    }
+			for (int i = 0; i < tabs.getTabCount(); i++) {
+				if (TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))
+				        && tabs.getComponentAt(i) == chatSidebar) {
+					installed = true;
+					return true;
+				}
+			}
 
-    public static boolean isInstalled() {
-        return installed;
-    }
+			int insertIndex = tabs.getTabCount();
+			for (int i = 0; i < tabs.getTabCount(); i++) {
+				if (RECENTLY_MODIFIED_TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
+					insertIndex = i + 1;
+					break;
+				}
+			}
+			tabs.insertTab(TAB_TITLE, null, chatSidebar, null, insertIndex);
+			tabs.revalidate();
+			tabs.repaint();
+			MModeControllerFactory.refreshFormatTabTitles(tabs);
+			final DocearAiController controller = DocearAiController.getController();
+			if (controller != null) {
+				AiChatTabMetrics.publishForCurrentMap(controller.getChatSessionManager());
+			}
+			installed = true;
+			LogUtils.info("AI chat tab installed at index " + insertIndex);
+			return true;
+		}
+		catch (final Exception e) {
+			LogUtils.warn(e);
+			return false;
+		}
+	}
+
+	/** Drop blank title shells left when the same panel was inserted twice. */
+	private static void removeOrphanAiTabs(final JTabbedPane tabs, final AiChatSidebar chatSidebar) {
+		for (int i = tabs.getTabCount() - 1; i >= 0; i--) {
+			if (!TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
+				continue;
+			}
+			final Component comp = tabs.getComponentAt(i);
+			if (comp != chatSidebar) {
+				tabs.remove(i);
+				LogUtils.info("Removed orphan AI chat tab at index " + i);
+			}
+		}
+	}
+
+	private static void ensureTitle(final JTabbedPane tabs, final int index) {
+		if (!TAB_TITLE.equals(TabCountLabels.stripHtml(tabs.getTitleAt(index)))) {
+			tabs.setTitleAt(index, TAB_TITLE);
+		}
+	}
+
+	public static int indexOfComponent(final JTabbedPane tabs, final Component component) {
+		if (tabs == null || component == null) {
+			return -1;
+		}
+		for (int i = 0; i < tabs.getTabCount(); i++) {
+			if (tabs.getComponentAt(i) == component) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
+	public static JTabbedPane findFormatTabbedPane(final ModeController modeController) {
+		final Container formatBar = modeController.getUserInputListenerFactory().getToolBar("/format");
+		if (formatBar == null) {
+			return null;
+		}
+		for (int i = 0; i < formatBar.getComponentCount(); i++) {
+			final Component component = formatBar.getComponent(i);
+			if (component instanceof JTabbedPane) {
+				return (JTabbedPane) component;
+			}
+		}
+		return null;
+	}
+
+	public static String getTabTitle() {
+		return TAB_TITLE;
+	}
+
+	public static boolean isInstalled() {
+		return installed;
+	}
 }

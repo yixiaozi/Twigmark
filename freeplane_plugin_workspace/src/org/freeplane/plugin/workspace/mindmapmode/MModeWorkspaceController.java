@@ -12,6 +12,8 @@ import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.dnd.DropTarget;
 import java.awt.dnd.DropTargetDropEvent;
 import java.io.File;
@@ -21,6 +23,8 @@ import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -28,12 +32,18 @@ import java.util.Set;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
+import javax.swing.JScrollPane;
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
 import javax.swing.JTabbedPane;
@@ -178,6 +188,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private DraggableTabbedPane sideTabs;
 	private SideTabTitleUpdater sideTabTitleUpdater;
 	private final List<String> sideTabOrder = new ArrayList<String>();
+	private final Set<String> sideTabHidden = new LinkedHashSet<String>();
 	private final Map<String, Boolean> sideTabLoaded = new HashMap<String, Boolean>();
 	private final Map<String, JComponent> sideTabComponents = new HashMap<String, JComponent>();
 	private IWorkspaceSettingsHandler settings;
@@ -410,19 +421,21 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		otcr.addCollapseListener(adapter);
 		
 		loadSideTabOrder();
+		loadSideTabHidden();
 		sideTabs = new DraggableTabbedPane();
 		// Match the right format sidebar: wrap tab headers onto extra rows when
 		// the dock is narrow, instead of hiding tabs behind a scroll triangle.
 		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(sideTabs);
 		for (final String tabId : sideTabOrder) {
-			final JComponent component = createSideTabPlaceholder(tabId);
-			sideTabComponents.put(tabId, component);
-			sideTabs.add(getSideTabTitle(tabId), component);
+			if (sideTabComponents.get(tabId) == null) {
+				sideTabComponents.put(tabId, createSideTabPlaceholder(tabId));
+			}
 			if (TAB_WORKSPACE.equals(tabId)) {
 				sideTabLoaded.put(tabId, Boolean.TRUE);
 			}
 		}
+		rebuildSideTabs(TAB_WORKSPACE);
 		sideTabs.addChangeListener(new ChangeListener() {
 			private String previousTabId = TAB_WORKSPACE;
 
@@ -447,17 +460,31 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		sideTabs.setTabReorderListener(new DraggableTabbedPane.TabReorderListener() {
 			public void tabReordered(final int fromIndex, final int toIndex) {
 				final String selectedTabId = getSelectedSideTabId();
-				final String tabId = sideTabOrder.remove(fromIndex);
-				sideTabOrder.add(toIndex, tabId);
+				final List<String> visible = visibleSideTabIds();
+				if (fromIndex < 0 || fromIndex >= visible.size() || toIndex < 0 || toIndex >= visible.size()) {
+					return;
+				}
+				final String tabId = visible.remove(fromIndex);
+				visible.add(toIndex, tabId);
+				applyVisibleReorder(visible);
 				rebuildSideTabs(selectedTabId);
 				persistSideTabOrder();
+			}
+		});
+		sideTabs.addMouseListener(new MouseAdapter() {
+			public void mousePressed(final MouseEvent e) {
+				maybeShowSideTabPopup(e);
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				maybeShowSideTabPopup(e);
 			}
 		});
 		// Warm「红旗」scan in background so the badge updates without opening the tab.
 		javax.swing.SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
 				try {
-					final int nextActionsIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
+					final int nextActionsIndex = visibleSideTabIds().indexOf(TAB_NEXT_ACTIONS);
 					if (nextActionsIndex >= 0) {
 						ensureSideTabLoaded(nextActionsIndex);
 					}
@@ -477,9 +504,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 					    WorkspaceSettings.WORKSPACE_VIEW_COLLAPSED, "false"))) {
 						return;
 					}
-					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH, "0"));
+					int width = Integer.parseInt(getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_VIEW_WIDTH,
+					        WorkspaceSettings.DEFAULT_VIEW_WIDTH));
 					if (width <= 10) {
-						width = TabbedPaneWidthUtils.computeMinimumWidth(sideTabs);
+						width = Math.max(TabbedPaneWidthUtils.computeMinimumWidth(sideTabs), 320);
+					}
+					else if (width < 280) {
+						width = Integer.parseInt(WorkspaceSettings.DEFAULT_VIEW_WIDTH);
 					}
 					sideTabs.setPreferredSize(new Dimension(width, 100));
 				}
@@ -565,8 +596,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			return;
 		}
 		final String tabId = BACKGROUND_PRELOAD_TAB_IDS[preloadIndex];
-		if (sideTabOrder.contains(tabId)) {
-			final int tabIndex = sideTabOrder.indexOf(tabId);
+		if (sideTabOrder.contains(tabId) && !sideTabHidden.contains(tabId)) {
+			final int tabIndex = visibleSideTabIds().indexOf(tabId);
 			if (tabIndex >= 0) {
 				ensureSideTabLoaded(tabIndex);
 			}
@@ -886,12 +917,185 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 
 	private void persistSideTabOrder() {
 		saveSideTabOrder();
+		saveSideTabHidden();
 		try {
 			getWorkspaceSettings().store();
 		}
 		catch (final Exception e) {
 			LogUtils.severe("could not store side tab order.", e);
 		}
+	}
+
+	private void loadSideTabHidden() {
+		sideTabHidden.clear();
+		final String saved = getWorkspaceSettings().getProperty(WorkspaceSettings.WORKSPACE_SIDE_TAB_HIDDEN, "");
+		if (saved.length() == 0) {
+			return;
+		}
+		final String[] parts = saved.split(",");
+		for (int i = 0; i < parts.length; i++) {
+			final String tabId = parts[i].trim();
+			if (isValidSideTabId(tabId) && !TAB_WORKSPACE.equals(tabId)) {
+				sideTabHidden.add(tabId);
+			}
+		}
+	}
+
+	private void saveSideTabHidden() {
+		final StringBuffer sb = new StringBuffer();
+		boolean first = true;
+		for (final String tabId : sideTabHidden) {
+			if (!first) {
+				sb.append(',');
+			}
+			sb.append(tabId);
+			first = false;
+		}
+		getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_SIDE_TAB_HIDDEN, sb.toString());
+	}
+
+	private List<String> visibleSideTabIds() {
+		final List<String> visible = new ArrayList<String>();
+		for (final String tabId : sideTabOrder) {
+			if (!sideTabHidden.contains(tabId)) {
+				visible.add(tabId);
+			}
+		}
+		if (visible.isEmpty()) {
+			visible.add(TAB_WORKSPACE);
+			sideTabHidden.remove(TAB_WORKSPACE);
+		}
+		return visible;
+	}
+
+	private void applyVisibleReorder(final List<String> newVisible) {
+		final List<String> result = new ArrayList<String>();
+		int visibleIndex = 0;
+		for (final String tabId : sideTabOrder) {
+			if (sideTabHidden.contains(tabId)) {
+				result.add(tabId);
+			}
+			else if (visibleIndex < newVisible.size()) {
+				result.add(newVisible.get(visibleIndex++));
+			}
+		}
+		while (visibleIndex < newVisible.size()) {
+			result.add(newVisible.get(visibleIndex++));
+		}
+		sideTabOrder.clear();
+		sideTabOrder.addAll(result);
+	}
+
+	private void maybeShowSideTabPopup(final MouseEvent e) {
+		if (!e.isPopupTrigger() || sideTabs == null) {
+			return;
+		}
+		final int index = sideTabs.indexAtLocation(e.getX(), e.getY());
+		final JPopupMenu menu = new JPopupMenu();
+		if (index >= 0) {
+			final List<String> visible = visibleSideTabIds();
+			if (index < visible.size()) {
+				final String tabId = visible.get(index);
+				final String title = getSideTabBaseTitle(tabId);
+				if (!TAB_WORKSPACE.equals(tabId)) {
+					final JMenuItem hide = new JMenuItem("隐藏「" + title + "」");
+					hide.addActionListener(new ActionListener() {
+						public void actionPerformed(final ActionEvent ev) {
+							hideSideTab(tabId);
+						}
+					});
+					menu.add(hide);
+					menu.addSeparator();
+				}
+			}
+		}
+		final JMenuItem manage = new JMenuItem("管理左侧标签…");
+		manage.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent ev) {
+				showManageLeftTabsDialog();
+			}
+		});
+		menu.add(manage);
+		if (!sideTabHidden.isEmpty()) {
+			final JMenuItem showAll = new JMenuItem("显示全部隐藏的标签");
+			showAll.addActionListener(new ActionListener() {
+				public void actionPerformed(final ActionEvent ev) {
+					sideTabHidden.clear();
+					rebuildSideTabs(getSelectedSideTabId());
+					persistSideTabOrder();
+				}
+			});
+			menu.add(showAll);
+		}
+		menu.show(sideTabs, e.getX(), e.getY());
+	}
+
+	private void hideSideTab(final String tabId) {
+		if (tabId == null || TAB_WORKSPACE.equals(tabId)) {
+			return;
+		}
+		if (visibleSideTabIds().size() <= 1) {
+			JOptionPane.showMessageDialog(sideTabs, "至少保留一个标签。", "左侧标签", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final String selected = getSelectedSideTabId();
+		sideTabHidden.add(tabId);
+		rebuildSideTabs(TAB_WORKSPACE.equals(selected) || tabId.equals(selected) ? TAB_WORKSPACE : selected);
+		persistSideTabOrder();
+	}
+
+	private void showManageLeftTabsDialog() {
+		final java.awt.Frame frame = Controller.getCurrentController().getViewController().getFrame();
+		final JDialog dialog = new JDialog(frame, "管理左侧标签", true);
+		final JPanel root = new JPanel(new BorderLayout(8, 8));
+		DocearUiTheme.styleCanvas(root);
+		root.setBorder(DocearUiTheme.pageBorder());
+		root.add(new JLabel("<html>勾选要显示的标签。拖动标签头可调整顺序。</html>"), BorderLayout.NORTH);
+		final JPanel list = new JPanel();
+		list.setOpaque(false);
+		list.setLayout(new BoxLayout(list, BoxLayout.Y_AXIS));
+		final Map<String, JCheckBox> boxes = new LinkedHashMap<String, JCheckBox>();
+		for (final String tabId : sideTabOrder) {
+			final boolean visible = !sideTabHidden.contains(tabId);
+			final JCheckBox box = new JCheckBox(getSideTabBaseTitle(tabId), visible);
+			if (TAB_WORKSPACE.equals(tabId)) {
+				box.setEnabled(false);
+				box.setSelected(true);
+			}
+			boxes.put(tabId, box);
+			list.add(box);
+			list.add(Box.createVerticalStrut(4));
+		}
+		root.add(new JScrollPane(list), BorderLayout.CENTER);
+		final JPanel south = new JPanel();
+		final JButton ok = DocearUiTheme.primaryButton("确定");
+		final JButton cancel = DocearUiTheme.softButton("取消");
+		ok.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				sideTabHidden.clear();
+				for (final String tabId : boxes.keySet()) {
+					final JCheckBox box = boxes.get(tabId);
+					if (!box.isSelected() && !TAB_WORKSPACE.equals(tabId)) {
+						sideTabHidden.add(tabId);
+					}
+				}
+				rebuildSideTabs(getSelectedSideTabId());
+				persistSideTabOrder();
+				dialog.dispose();
+			}
+		});
+		cancel.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				dialog.dispose();
+			}
+		});
+		south.add(ok);
+		south.add(cancel);
+		root.add(south, BorderLayout.SOUTH);
+		dialog.getContentPane().add(root);
+		dialog.setSize(new Dimension(360, 420));
+		dialog.setLocationRelativeTo(frame);
+		dialog.setVisible(true);
 	}
 
 	private boolean isValidSideTabId(final String tabId) {
@@ -994,7 +1198,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		refreshLeftTabMetrics();
 		sideTabTitleUpdater.bindLeftTabs(new SideTabTitleUpdater.LeftTabSource() {
 			public String getTabId(final int index) {
-				return sideTabOrder.get(index);
+				final List<String> visible = visibleSideTabIds();
+				return index >= 0 && index < visible.size() ? visible.get(index) : TAB_WORKSPACE;
 			}
 
 			public String getBaseTitle(final String tabId) {
@@ -1006,7 +1211,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 
 			public int getTabCount() {
-				return sideTabOrder.size();
+				return visibleSideTabIds().size();
 			}
 		});
 	}
@@ -1073,9 +1278,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private String getSelectedSideTabId() {
+		final List<String> visible = visibleSideTabIds();
 		final int selectedIndex = sideTabs.getSelectedIndex();
-		if (selectedIndex >= 0 && selectedIndex < sideTabOrder.size()) {
-			return sideTabOrder.get(selectedIndex);
+		if (selectedIndex >= 0 && selectedIndex < visible.size()) {
+			return visible.get(selectedIndex);
 		}
 		return TAB_WORKSPACE;
 	}
@@ -1090,7 +1296,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 
 	private void rebuildSideTabs(final String selectedTabId) {
 		sideTabs.removeAll();
-		for (final String tabId : sideTabOrder) {
+		final List<String> visible = visibleSideTabIds();
+		for (final String tabId : visible) {
 			JComponent component = sideTabComponents.get(tabId);
 			if (component == null) {
 				component = createSideTabPlaceholder(tabId);
@@ -1098,7 +1305,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 			sideTabs.add(getSideTabTitle(tabId), component);
 		}
-		final int selectedIndex = sideTabOrder.indexOf(selectedTabId);
+		final int selectedIndex = visible.indexOf(selectedTabId);
 		if (selectedIndex >= 0) {
 			sideTabs.setSelectedIndex(selectedIndex);
 		}
@@ -1111,10 +1318,11 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	}
 
 	private void ensureSideTabLoaded(final int tabIndex) {
-		if (tabIndex < 0 || tabIndex >= sideTabOrder.size()) {
+		final List<String> visible = visibleSideTabIds();
+		if (tabIndex < 0 || tabIndex >= visible.size()) {
 			return;
 		}
-		final String tabId = sideTabOrder.get(tabIndex);
+		final String tabId = visible.get(tabIndex);
 		if (TAB_GRAPH.equals(tabId)) {
 			installRelationshipGraphSideTabIfNeeded(false);
 			return;
@@ -1207,7 +1415,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (sideTabs == null || sideTabOrder == null) {
 			return;
 		}
-		final int tabIndex = sideTabOrder.indexOf(TAB_GRAPH);
+		final int tabIndex = visibleSideTabIds().indexOf(TAB_GRAPH);
 		if (tabIndex < 0 || tabIndex >= sideTabs.getTabCount()) {
 			return;
 		}
@@ -1542,7 +1750,13 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (tabId == null || sideTabs == null) {
 			return;
 		}
-		final int index = sideTabOrder.indexOf(tabId);
+		if (sideTabHidden.contains(tabId)) {
+			sideTabHidden.remove(tabId);
+			rebuildSideTabs(tabId);
+			persistSideTabOrder();
+			return;
+		}
+		final int index = visibleSideTabIds().indexOf(tabId);
 		if (index >= 0 && index < sideTabs.getTabCount()) {
 			sideTabs.setSelectedIndex(index);
 		}

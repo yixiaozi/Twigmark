@@ -93,6 +93,15 @@ public class ProjectRootNode extends AFolderNode implements IMutableLinkNode, IW
 	
 	public void refresh() {
 		try {
+			// Use model children: display hoist may expose My Files contents as direct children.
+			for (int i = 0; i < getModelChildCount(); i++) {
+				final AWorkspaceTreeNode child = getModelChildAt(i);
+				if (child instanceof FolderTypeMyFilesNode
+						|| child instanceof FolderFileNode
+						|| child instanceof FolderLinkNode) {
+					child.refresh();
+				}
+			}
 			getModel().reload(this);			
 		}
 		catch (Exception e) {

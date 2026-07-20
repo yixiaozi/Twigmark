@@ -70,6 +70,103 @@ public final class FinanceRules {
 		return Math.abs(limitCents) - budgetSpentCents(categoryName, pnlExpenseCents, expenseByCategory);
 	}
 
+	/**
+	 * Parse start/end dates from labels like
+	 * "总预算 · 2026-07-01~2026-07-21 · ¥13.00" or "房租 · 2026-07-20~2027-07-20 · 每月 · ¥3000".
+	 * Returns String[2] {start, end}; missing parts are "".
+	 */
+	public static String[] parseDateRangeFromLabel(final String label) {
+		final String[] out = new String[] { "", "" };
+		if (label == null || label.trim().length() == 0) {
+			return out;
+		}
+		final java.util.regex.Matcher m = java.util.regex.Pattern
+				.compile("(20\\d{2}-\\d{2}-\\d{2})\\s*[~～-]\\s*(20\\d{2}-\\d{2}-\\d{2})")
+				.matcher(label);
+		if (m.find()) {
+			out[0] = m.group(1);
+			out[1] = m.group(2);
+			return out;
+		}
+		final java.util.regex.Matcher single = java.util.regex.Pattern
+				.compile("(20\\d{2}-\\d{2}-\\d{2})")
+				.matcher(label);
+		if (single.find()) {
+			out[0] = single.group(1);
+		}
+		else {
+			final java.util.regex.Matcher month = java.util.regex.Pattern
+					.compile("(20\\d{2}-\\d{2})(?!\\d)")
+					.matcher(label);
+			if (month.find()) {
+				out[0] = month.group(1) + "-01";
+				out[1] = month.group(1) + "-31";
+			}
+		}
+		return out;
+	}
+
+	/** Detect cycle token in a subscription label (每月/每年/每周/每天). */
+	public static String parseCycleFromLabel(final String label) {
+		if (label == null) {
+			return "";
+		}
+		if (label.indexOf("每天") >= 0 || label.indexOf("每日") >= 0) {
+			return "daily";
+		}
+		if (label.indexOf("每周") >= 0) {
+			return "weekly";
+		}
+		if (label.indexOf("每年") >= 0) {
+			return "yearly";
+		}
+		if (label.indexOf("每月") >= 0 || label.indexOf("月付") >= 0) {
+			return "monthly";
+		}
+		return "";
+	}
+
+	/** Parse amount in cents from a node label such as "关东煮 · ¥8.58" or "总预算 · ¥333.00". */
+	public static Long parseAmountFromLabel(final String label) {
+		if (label == null || label.trim().length() == 0) {
+			return null;
+		}
+		int yen = label.lastIndexOf('¥');
+		if (yen < 0) {
+			yen = label.lastIndexOf('￥');
+		}
+		if (yen < 0) {
+			return null;
+		}
+		String tail = label.substring(yen + 1).trim();
+		final int sep = tail.indexOf(' ');
+		if (sep > 0) {
+			tail = tail.substring(0, sep).trim();
+		}
+		final long cents = FinanceAttributes.parseYuanToCents(tail);
+		return isValidAmountCents(cents) ? Long.valueOf(cents) : null;
+	}
+
+	/** Category portion of a budget label "餐饮 · ¥100.00" or "总预算 · 2026-07 · ¥1000.00". */
+	public static String budgetCategoryFromLabel(final String label, final String fallback) {
+		if (label == null || label.trim().length() == 0) {
+			return fallback == null ? "" : fallback.trim();
+		}
+		final String t = label.trim();
+		final int sep = t.indexOf(" ·");
+		if (sep > 0) {
+			final String head = t.substring(0, sep).trim();
+			if (head.matches("20\\d{2}-\\d{2}(-\\d{2})?")) {
+				return fallback == null ? TOTAL_BUDGET_CATEGORY : fallback.trim();
+			}
+			return head;
+		}
+		if (fallback != null && fallback.trim().length() > 0) {
+			return fallback.trim();
+		}
+		return t;
+	}
+
 	/** Normalize bare coupon/subscription name from a labeled node text "Name · ¥12.00". */
 	public static String bareNameFromLabel(final String label, final String fallback) {
 		if (fallback != null && fallback.trim().length() > 0) {

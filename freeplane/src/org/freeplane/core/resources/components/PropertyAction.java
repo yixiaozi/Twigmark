@@ -143,8 +143,16 @@ public class PropertyAction extends AFreeplaneAction {
 		if (storage == null) {
 			dialog.pack();
 		}
+		ensureMinimumDialogSize(dialog, 960, 580);
 		dialog.setVisible(true);
 		LogUtils.info("PropertyAction.actionPerformed: finished");
+	}
+
+	private static void ensureMinimumDialogSize(final JDialog dialog, final int minWidth, final int minHeight) {
+		final java.awt.Dimension size = dialog.getSize();
+		if (size.width < minWidth || size.height < minHeight) {
+			dialog.setSize(Math.max(size.width, minWidth), Math.max(size.height, minHeight));
+		}
 	}
 
 	@Override

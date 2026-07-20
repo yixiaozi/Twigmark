@@ -314,15 +314,7 @@ public final class MindMapWorkspaceContextScanner {
 	}
 
 	private static String canonicalPath(File file) {
-		if (file == null) {
-			return "";
-		}
-		try {
-			return file.getCanonicalPath();
-		}
-		catch (Exception e) {
-			return file.getAbsolutePath();
-		}
+		return MindMapFileIdentity.storageKey(file);
 	}
 
 	private static void sortReminders(List reminders) {

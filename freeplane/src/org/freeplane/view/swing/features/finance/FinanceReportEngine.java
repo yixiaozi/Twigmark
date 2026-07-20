@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.MapModel;
 import org.freeplane.view.swing.features.reports.ReportChartSeries;
 import org.freeplane.view.swing.features.reports.ReportViewModel;
 
@@ -172,13 +173,15 @@ public final class FinanceReportEngine {
 		view.decision = "对比预算与实际支出";
 		view.dataSource = "个人财务导图 · 预算/交易";
 		final List budgets = FinanceLedgerService.listBudgets(period);
-		final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
+		final List txns = FinanceLedgerService.listTransactions(fromYmd, toYmd);
+		final MapModel map = FinanceLedgerService.preferOpenFinanceMapPublic();
 		view.addKpi("预算条目", String.valueOf(budgets.size()), period);
-		view.addKpi("实际支出", "¥" + FinanceAttributes.formatYuan(summary.expenseCents), "损益支出");
+		view.addKpi("实际支出", "¥" + FinanceAttributes.formatYuan(
+				FinanceNodeRef.sumExpenseForBudgetCategory(map, FinanceNodeRef.TOTAL_BUDGET_NODE_ID, txns)), "损益支出");
 		final ReportChartSeries bar = new ReportChartSeries("预算 vs 已花（元）", ReportChartSeries.TYPE_BAR);
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents, summary.byCategory);
+			final long spent = FinanceNodeRef.sumExpenseForBudgetCategory(map, b.categoryNodeId, txns);
 			bar.add(b.categoryName + "预算", b.amountCents / 100.0);
 			bar.add(b.categoryName + "已花", spent / 100.0);
 			view.addDetail(b.categoryName + " · 预算 ¥" + FinanceAttributes.formatYuan(b.amountCents) + " · 已花 ¥"

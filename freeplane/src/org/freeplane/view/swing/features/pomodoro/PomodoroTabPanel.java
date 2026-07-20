@@ -62,12 +62,12 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private final JScrollPane todayScroll = new JScrollPane(todayList);
 	private final JPanel centerHost = new JPanel(new BorderLayout());
 	private final JLabel statsLabel = new JLabel(" ");
-	private final JToggleButton currentMapButton = new JToggleButton("当前导图", true);
-	private final JToggleButton allMapsButton = new JToggleButton("全部");
-	private final JToggleButton nodesViewButton = new JToggleButton("节点", true);
-	private final JToggleButton todayViewButton = new JToggleButton("今日");
-	private boolean showAllMaps;
-	private boolean todayView;
+	private final JToggleButton currentMapButton = new JToggleButton("当前导图");
+	private final JToggleButton allMapsButton = new JToggleButton("全部", true);
+	private final JToggleButton nodesViewButton = new JToggleButton("节点");
+	private final JToggleButton todayViewButton = new JToggleButton("今日", true);
+	private boolean showAllMaps = true;
+	private boolean todayView = true;
 	private boolean reloadQueued;
 
 	public PomodoroTabPanel(final ModeController modeController) {
@@ -176,6 +176,16 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				}
 			}
 		}));
+		actions.add(btn("修改", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				editSelectedSession();
+			}
+		}));
+		actions.add(btn("删除", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				deleteSelectedSession();
+			}
+		}));
 		actions.add(btn("导出", new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				PomodoroExport.exportInteractive(showAllMaps);
@@ -258,6 +268,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		centerHost.add(treeScroll, BorderLayout.CENTER);
 		add(centerHost, BorderLayout.CENTER);
 		addListeners();
+		showCenter();
 		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 		if (manager != null) {
 			manager.addListener(this);
@@ -285,6 +296,9 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		}
 		NodeModel node = selectedActionNode();
 		if (node == null) {
+			node = manager.getActiveSessionNode();
+		}
+		if (node == null) {
 			node = Controller.getCurrentController().getSelection().getSelected();
 		}
 		if (node != null) {
@@ -311,6 +325,63 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		}
 		final Object user = ((DefaultMutableTreeNode) last).getUserObject();
 		return user instanceof TreeEntry ? ((TreeEntry) user).node : null;
+	}
+
+	private PomodoroTodayEntry selectedTodayEntry() {
+		final Object v = todayList.getSelectedValue();
+		return v instanceof PomodoroTodayEntry ? (PomodoroTodayEntry) v : null;
+	}
+
+	private void editSelectedSession() {
+		final PomodoroTodayEntry entry = selectedTodayEntry();
+		if (entry == null) {
+			javax.swing.JOptionPane.showMessageDialog(this, "请先在「今日」列表中选择一条记录", "修改番茄钟",
+			        javax.swing.JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		if (entry.live || entry.recordIndex < 0) {
+			javax.swing.JOptionPane.showMessageDialog(this, "进行中的会话请先「结束」，再修改历史记录", "修改番茄钟",
+			        javax.swing.JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final PomodoroExtension ext = PomodoroAttributes.read(entry.node);
+		if (ext == null) {
+			return;
+		}
+		final PomodoroSessionRecord record = PomodoroLog.getRecord(ext.getLog(), entry.recordIndex);
+		if (record == null) {
+			reload();
+			return;
+		}
+		if (PomodoroSessionEditDialog.showForRecord(PomodoroSessionEditDialog.ownerFrame(), entry.node,
+		        entry.recordIndex, record)) {
+			reload();
+		}
+	}
+
+	private void deleteSelectedSession() {
+		final PomodoroTodayEntry entry = selectedTodayEntry();
+		if (entry == null) {
+			javax.swing.JOptionPane.showMessageDialog(this, "请先在「今日」列表中选择一条记录", "删除番茄钟",
+			        javax.swing.JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		if (entry.live || entry.recordIndex < 0) {
+			javax.swing.JOptionPane.showMessageDialog(this, "进行中的会话请用「结束」停止，不能直接删除", "删除番茄钟",
+			        javax.swing.JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final int confirm = javax.swing.JOptionPane.showConfirmDialog(this,
+		        "确定删除这条今日记录吗？\n" + entry.label, "删除番茄钟", javax.swing.JOptionPane.YES_NO_OPTION,
+		        javax.swing.JOptionPane.WARNING_MESSAGE);
+		if (confirm != javax.swing.JOptionPane.YES_OPTION) {
+			return;
+		}
+		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+		if (manager != null) {
+			manager.deleteLogRecord(entry.node, entry.recordIndex);
+		}
+		reload();
 	}
 
 	private void addListeners() {
@@ -350,12 +421,6 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			}
 
 			public void afterMapChange(final MapModel oldMap, final MapModel newMap) {
-				if (newMap != null && newMap.getRootNode() != null) {
-					final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
-					if (manager != null) {
-						manager.recoverStaleRunning(newMap.getRootNode());
-					}
-				}
 				reload();
 			}
 		});

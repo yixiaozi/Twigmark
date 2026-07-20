@@ -57,7 +57,7 @@ public final class PinnedNodesTabInstaller {
 		return tryInstall(modeController, tabs);
 	}
 
-	public static boolean tryInstall(final ModeController modeController, final JTabbedPane tabs) {
+	public static synchronized boolean tryInstall(final ModeController modeController, final JTabbedPane tabs) {
 		if (installed) {
 			return true;
 		}
@@ -69,6 +69,7 @@ public final class PinnedNodesTabInstaller {
 			for (int i = 0; i < tabs.getTabCount(); i++) {
 				if (title.equals(TabCountLabels.stripHtml(tabs.getTitleAt(i)))) {
 					installed = true;
+					refreshTitles(tabs);
 					return true;
 				}
 			}
@@ -82,18 +83,22 @@ public final class PinnedNodesTabInstaller {
 			tabs.insertTab(title, null, new PinnedNodesTabPanel(modeController), null, insertIndex);
 			tabs.revalidate();
 			tabs.repaint();
-			try {
-				final Class factoryClass = Class.forName("org.freeplane.main.mindmapmode.MModeControllerFactory");
-				factoryClass.getMethod("refreshFormatTabTitles", JTabbedPane.class).invoke(null, tabs);
-			}
-			catch (final Exception ignored) {
-			}
+			refreshTitles(tabs);
 			installed = true;
 			return true;
 		}
 		catch (final Exception e) {
 			LogUtils.warn(e);
 			return false;
+		}
+	}
+
+	private static void refreshTitles(final JTabbedPane tabs) {
+		try {
+			final Class factoryClass = Class.forName("org.freeplane.main.mindmapmode.MModeControllerFactory");
+			factoryClass.getMethod("refreshFormatTabTitles", JTabbedPane.class).invoke(null, tabs);
+		}
+		catch (final Exception ignored) {
 		}
 	}
 

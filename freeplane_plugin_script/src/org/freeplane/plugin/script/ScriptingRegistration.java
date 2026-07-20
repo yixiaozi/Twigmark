@@ -139,9 +139,6 @@ class ScriptingRegistration {
 	}
 
 	private void addPropertiesToOptionPanel() {
-		final URL preferences = this.getClass().getResource("preferences.xml");
-		if (preferences == null)
-			throw new RuntimeException("cannot open preferences");
 		Controller.getCurrentController().addOptionValidator(new IValidator() {
 			public ValidationResult validate(Properties properties) {
 				final ValidationResult result = new ValidationResult();
@@ -162,8 +159,7 @@ class ScriptingRegistration {
 				return result;
 			}
 		});
-		final MModeController modeController = (MModeController) Controller.getCurrentModeController();
-		modeController.getOptionPanelBuilder().load(preferences);
+		// Plugin tab removed from Docear preferences; script options stay in defaults/properties.
 	}
 
 	public HashMap<String, Object> getScriptCookies() {

@@ -13,6 +13,7 @@ import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.view.swing.features.finance.FinanceAttributes;
 import org.freeplane.view.swing.features.finance.FinanceLedgerService;
+import org.freeplane.view.swing.features.finance.FinanceNodeRef;
 import org.freeplane.view.swing.features.finance.FinanceReportEngine;
 import org.freeplane.view.swing.features.finance.FinanceRules;
 import org.freeplane.view.swing.features.finance.FinanceViewportService;
@@ -218,17 +219,19 @@ public final class McpFinanceService {
 			public Object run() throws Exception {
 				FinanceLedgerService.ensureFinanceMap();
 				final String p = resolvePeriod(period);
-				final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(p);
 				final List budgets = FinanceLedgerService.listBudgets(p);
+				final List txns = FinanceLedgerService.listTransactions(p + "-01", p + "-31");
+				final MapModel map = FinanceLedgerService.preferOpenFinanceMapPublic();
 				final List<JsonValue> out = new ArrayList<JsonValue>();
 				for (int i = 0; i < budgets.size(); i++) {
 					final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-					final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents,
-							summary.byCategory);
+					final long spent = FinanceNodeRef.sumExpenseForBudgetCategory(map, b.categoryNodeId, txns);
 					final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
 					row.put("nodeId", JsonValue.ofString(b.node == null ? "" : b.node.createID()));
 					row.put("period", JsonValue.ofString(b.period));
+					row.put("periodEnd", JsonValue.ofString(b.periodEnd));
 					row.put("category", JsonValue.ofString(b.categoryName));
+					row.put("categoryNodeId", JsonValue.ofString(b.categoryNodeId));
 					row.put("amountCents", JsonValue.ofNumber(Long.valueOf(b.amountCents)));
 					row.put("amountYuan", JsonValue.ofString(FinanceAttributes.formatYuan(b.amountCents)));
 					row.put("spentCents", JsonValue.ofNumber(Long.valueOf(spent)));
@@ -444,8 +447,11 @@ public final class McpFinanceService {
 		row.put("amountCents", JsonValue.ofNumber(Long.valueOf(t.amountCents)));
 		row.put("amountYuan", JsonValue.ofString(FinanceAttributes.formatYuan(t.amountCents)));
 		row.put("category", JsonValue.ofString(t.categoryName));
+		row.put("categoryNodeId", JsonValue.ofString(t.categoryNodeId));
 		row.put("account", JsonValue.ofString(t.accountName));
+		row.put("accountNodeId", JsonValue.ofString(t.accountNodeId));
 		row.put("accountTo", JsonValue.ofString(t.accountTo));
+		row.put("accountToNodeId", JsonValue.ofString(t.accountToNodeId));
 		row.put("merchant", JsonValue.ofString(t.merchant));
 		row.put("note", JsonValue.ofString(t.note));
 		row.put("text", JsonValue.ofString(t.nodeText));

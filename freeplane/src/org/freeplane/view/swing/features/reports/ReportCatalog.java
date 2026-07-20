@@ -13,6 +13,8 @@ import java.util.List;
 public final class ReportCatalog {
 	/** Opens the usage-stats activity panel in the map viewport. */
 	public static final String ID_ACTIVITY = "activity_usage";
+	/** Opens the MCP status / audit dialog (MCP plugin). */
+	public static final String ID_MCP_AUDIT = "mcp_audit";
 	public static final String ID_TODAY = "today_focus";
 	public static final String ID_PLAN_VS_ACTUAL = "plan_vs_actual";
 	public static final String ID_USE_TIME = "use_time";
@@ -67,6 +69,10 @@ public final class ReportCatalog {
 		list.add(def(ID_ACTIVITY, "活动报表",
 		        "导图使用时长与打开记录——最近都在看哪些图",
 		        "决策：看清时间花在哪张图", "使用记录（.docear_stats）", "wizard", false));
+
+		list.add(def(ID_MCP_AUDIT, "MCP 审计",
+		        "MCP 服务状态与工具调用审计（audit.db）——谁调用了什么、是否成功",
+		        "决策：排查 MCP 调用与权限", "MCP audit.db + 运行时状态", "wizard", false));
 
 		list.add(def(ID_TODAY, "今日焦点",
 		        "今天先处理什么？逾期、今日安排、待办与番茄一览",
