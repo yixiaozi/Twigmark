@@ -67,7 +67,17 @@ public class AutomaticEdgeColorHook extends PersistentNodeHook implements IExten
 			else{
 				final MEdgeController controller = (MEdgeController) EdgeController.getController();
 				controller.setColor(child, null);
-				final boolean edgeStylesEquals = controller.getColor(child).equals(controller.getColor(parent));
+				// Headless / minimal maps (e.g. WorkspaceNewMapAction) may lack MapStyleModel.
+				// getColor → LogicalStyleController NPE's when style extension is missing.
+				if (MapStyleModel.getExtension(child.getMap()) == null) {
+					return;
+				}
+				final Color childColor = controller.getColor(child);
+				final Color parentColor = controller.getColor(parent);
+				if (childColor == null || parentColor == null) {
+					return;
+				}
+				final boolean edgeStylesEquals = childColor.equals(parentColor);
 				if(! edgeStylesEquals){
 					OptionalDontShowMeAgainDialog.show("edge_is_formatted_by_style", "confirmation",
 					    "ignore_edge_format_by_style", OptionalDontShowMeAgainDialog.ONLY_OK_SELECTION_IS_SHOWN);

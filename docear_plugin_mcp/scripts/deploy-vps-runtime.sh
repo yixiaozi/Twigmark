@@ -26,7 +26,8 @@ MAPS=/data/mindmaps
 mkdir -p "$DATA" "$MAPS" /var/log/docear
 cd "$RUNTIME"
 # Use Xvfb (not java.awt.headless) so map write paths that touch AWT still work.
-exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xmx1024m \
+# mcp.skipFullTagScan avoids SAX-scanning ~all .mm files (major MCP stall source).
+exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xms256m -Xmx1024m -XX:+UseG1GC \
   -Dorg.knopflerfish.framework.bundlestorage=memory \
   -Dorg.freeplane.globalresourcedir="$RUNTIME/resources" \
   -Dorg.knopflerfish.gosg.jars=reference:file:"$RUNTIME/core/" \
@@ -36,6 +37,8 @@ exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xmx1024m \
   -Dmcp.enabled=true \
   -Dmcp.host=127.0.0.1 \
   -Dmcp.port=7720 \
+  -Dmcp.skipFullTagScan=true \
+  -Dmcp.edtTimeoutMs=90000 \
   -Duser.language=zh -Duser.country=CN \
   -jar "$RUNTIME/framework.jar" \
   -xargs "$RUNTIME/props.xargs" \

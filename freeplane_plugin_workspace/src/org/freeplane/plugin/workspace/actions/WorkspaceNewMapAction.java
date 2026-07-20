@@ -82,6 +82,13 @@ public class WorkspaceNewMapAction extends AFreeplaneAction {
 		}
 		 
 		final ModeController modeController = Controller.getCurrentModeController();
+		// Install default MapStyle so nested inserts (AutomaticEdgeColorHook non-root path)
+		// can resolve edge colors without NPE in LogicalStyleController.
+		final org.freeplane.features.styles.MapStyle mapStyle = org.freeplane.features.styles.MapStyle
+				.getController(modeController);
+		if (mapStyle != null) {
+			mapStyle.onCreate(map);
+		}
 		AutomaticEdgeColorHook al = (AutomaticEdgeColorHook) modeController.getExtension(AutomaticEdgeColorHook.class);
 		al.undoableToggleHook(map.getRootNode());		
 		
