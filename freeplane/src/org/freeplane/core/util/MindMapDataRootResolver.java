@@ -378,18 +378,13 @@ public final class MindMapDataRootResolver {
 		if (files == null) {
 			return;
 		}
-		final Set seenPaths = new LinkedHashSet();
 		final File[] roots = getScanRoots();
 		for (int i = 0; i < roots.length; i++) {
-			collectMindmapFilesRecursive(roots[i], files, seenPaths);
+			collectMindmapFilesRecursive(roots[i], files);
 		}
 	}
 
 	public static void collectMindmapFilesRecursive(final File directory, final List files) {
-		collectMindmapFilesRecursive(directory, files, new LinkedHashSet());
-	}
-
-	private static void collectMindmapFilesRecursive(final File directory, final List files, final Set seenPaths) {
 		if (directory == null || !directory.exists() || !directory.isDirectory()) {
 			return;
 		}
@@ -406,20 +401,10 @@ public final class MindMapDataRootResolver {
 				if ("bin".equalsIgnoreCase(child.getName()) || isConfigDirectoryName(child.getName())) {
 					continue;
 				}
-				collectMindmapFilesRecursive(child, files, seenPaths);
+				collectMindmapFilesRecursive(child, files);
 			}
 			else if (child.getName().toLowerCase().endsWith(".mm")) {
-				try {
-					final String key = child.getCanonicalPath();
-					if (seenPaths.add(key)) {
-						files.add(child);
-					}
-				}
-				catch (final Exception e) {
-					if (seenPaths.add(child.getAbsolutePath())) {
-						files.add(child);
-					}
-				}
+				MindMapFileIdentity.addMindmapFileIfNew(child, files);
 			}
 		}
 	}
@@ -692,12 +677,14 @@ public final class MindMapDataRootResolver {
 		if (root == null || !root.exists()) {
 			return;
 		}
-		try {
-			roots.add(root.getCanonicalFile());
+		final File absolute = root.getAbsoluteFile();
+		for (final Iterator it = roots.iterator(); it.hasNext();) {
+			final File existing = (File) it.next();
+			if (existing != null && MindMapFileIdentity.isSameFile(absolute, existing)) {
+				return;
+			}
 		}
-		catch (final Exception e) {
-			roots.add(root);
-		}
+		roots.add(absolute);
 	}
 
 	private static File[] normalizeScanRoots(final Set roots) {
@@ -726,6 +713,10 @@ public final class MindMapDataRootResolver {
 			boolean covered = false;
 			for (int j = 0; j < normalized.size(); j++) {
 				final File existing = (File) normalized.get(j);
+				if (MindMapFileIdentity.isSameFile(candidate, existing)) {
+					covered = true;
+					break;
+				}
 				String existingPath;
 				try {
 					existingPath = existing.getCanonicalPath();

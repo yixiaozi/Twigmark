@@ -19,8 +19,6 @@ public class Activator implements BundleActivator {
 	static final String MENU_BAR_LOCATION = MENU_BAR_PARENT_LOCATION + "/formula";
 
 	private final class FormulaPluginRegistration implements IModeControllerExtensionProvider {
-		private static final String PREFERENCES_RESOURCE = "preferences.xml";
-
 		public void installExtension(ModeController modeController) {
 			addPluginDefaults();
 			addPreferencesToOptionPanel();
@@ -49,12 +47,7 @@ public class Activator implements BundleActivator {
 		}
 
 		private void addPreferencesToOptionPanel() {
-			final URL preferences = this.getClass().getResource(PREFERENCES_RESOURCE);
-			if (preferences == null)
-				throw new RuntimeException("cannot open preferences");
-			final Controller controller = Controller.getCurrentController();
-			MModeController modeController = (MModeController) controller.getModeController();
-			modeController.getOptionPanelBuilder().load(preferences);
+			// Plugin tab removed from Docear preferences; formula options stay in defaults/properties.
 		}
 
 		private void addPluginDefaults() {

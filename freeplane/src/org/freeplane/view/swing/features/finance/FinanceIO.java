@@ -105,6 +105,7 @@ final class FinanceIO {
 						|| FinanceAttributes.KIND_BUDGET.equals(extension.getKind())
 						|| FinanceAttributes.KIND_SUBSCRIPTION.equals(extension.getKind())
 						|| FinanceAttributes.KIND_COUPON.equals(extension.getKind())
+						|| FinanceAttributes.KIND_PAYMENT.equals(extension.getKind())
 						|| extension.getAmountCents() != 0L) {
 					writer.addAttribute(FinanceAttributes.FINANCE_AMOUNT, extension.getAmountCentsString());
 				}

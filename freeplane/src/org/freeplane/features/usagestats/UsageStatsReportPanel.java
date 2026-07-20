@@ -59,6 +59,8 @@ public class UsageStatsReportPanel extends JPanel {
 	};
 	private final JTable detailTable = new JTable(detailTableModel);
 	private final JButton refreshButton = new JButton("\u5237\u65b0");
+	private final JButton closeButton = new JButton("\u8fd4\u56de\u5bfc\u56fe");
+	private Runnable onClose;
 	private String displayedMapPath = "";
 	private int refreshGeneration = 0;
 	private int detailLoadGeneration = 0;
@@ -70,6 +72,14 @@ public class UsageStatsReportPanel extends JPanel {
 		refreshButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				refresh();
+			}
+		});
+		closeButton.setToolTipText("\u5173\u95ed\u6d3b\u52a8\u62a5\u8868\uff0c\u56de\u5230\u601d\u7ef4\u5bfc\u56fe");
+		closeButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				if (onClose != null) {
+					onClose.run();
+				}
 			}
 		});
 		summaryTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
@@ -89,6 +99,7 @@ public class UsageStatsReportPanel extends JPanel {
 		topPanel.add(headerSummary, BorderLayout.CENTER);
 		final JPanel buttonRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
 		buttonRow.add(refreshButton);
+		buttonRow.add(closeButton);
 		topPanel.add(buttonRow, BorderLayout.EAST);
 		add(topPanel, BorderLayout.NORTH);
 
@@ -103,6 +114,10 @@ public class UsageStatsReportPanel extends JPanel {
 		split.setResizeWeight(0.45);
 		split.setOneTouchExpandable(true);
 		add(split, BorderLayout.CENTER);
+	}
+
+	public void setOnClose(final Runnable onClose) {
+		this.onClose = onClose;
 	}
 
 	public void refresh() {

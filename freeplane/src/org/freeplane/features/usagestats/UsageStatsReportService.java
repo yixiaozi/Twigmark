@@ -5,6 +5,7 @@ import java.awt.EventQueue;
 
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.features.map.IMapSelectionListener;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
@@ -26,6 +27,11 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 	private UsageStatsReportPanel getViewportPanel() {
 		if (viewportPanel == null) {
 			viewportPanel = new UsageStatsReportPanel();
+			viewportPanel.setOnClose(new Runnable() {
+				public void run() {
+					setReportVisible(false);
+				}
+			});
 		}
 		return viewportPanel;
 	}
@@ -56,6 +62,19 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 		}
 		else {
 			hideFromMapViewport();
+		}
+		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, visible);
+		syncToggleAction(visible);
+	}
+
+	private void syncToggleAction(final boolean visible) {
+		final Controller controller = Controller.getCurrentController();
+		if (controller == null) {
+			return;
+		}
+		final AFreeplaneAction action = controller.getAction(ToggleUsageStatsReportAction.KEY);
+		if (action != null) {
+			action.setSelected(visible);
 		}
 	}
 

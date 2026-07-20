@@ -30,6 +30,7 @@ import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTabbedPane;
+import javax.swing.JTextArea;
 import javax.swing.JTextField;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -39,8 +40,13 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.map.IMapChangeListener;
+import org.freeplane.features.map.INodeChangeListener;
+import org.freeplane.features.map.MapChangeEvent;
+import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.view.swing.features.reports.ReportViewModel;
@@ -52,11 +58,17 @@ import org.freeplane.view.swing.features.reports.ReportViewModel;
 public final class FinanceTabPanel extends JPanel implements IMapViewChangeListener {
 	private static final long serialVersionUID = 1L;
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+	private static final SimpleDateFormat DATETIME = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
 	private static final SimpleDateFormat PERIOD = new SimpleDateFormat("yyyy-MM", Locale.CHINA);
 
 	private String viewPeriod = todayPeriod();
+	private boolean dayViewMode;
+	private String viewDay = FinanceAttributes.todayYmd();
 
 	private final JLabel monthLabel = DocearUiTheme.mutedLabel("—");
+	private final JButton prevMonthButton = DocearUiTheme.ghostButton("‹");
+	private final JButton nextMonthButton = DocearUiTheme.ghostButton("›");
+	private final JButton thisPeriodButton = DocearUiTheme.ghostButton("本月");
 	private final JLabel statusLabel = DocearUiTheme.mutedLabel(" ");
 	private final JLabel dailySpendLabel = DocearUiTheme.mutedLabel(" ");
 	private final JLabel incomeValue = kpiValue();
@@ -66,17 +78,32 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private final JComboBox flowCombo = new JComboBox(new String[] { "支出", "收入", "转账", "借入", "借出", "信用卡" });
 	private final JTextField amountField = new JTextField();
-	private final JTextField noteField = new JTextField();
+	private final JTextField merchantField = new JTextField();
+	private final JTextArea noteField = new JTextArea(2, 20);
 	private final JComboBox categoryCombo = new JComboBox();
 	private final JComboBox accountCombo = new JComboBox();
 	private final JComboBox accountToCombo = new JComboBox();
-	private final JTextField dateField = new JTextField(FinanceAttributes.todayYmd());
+	private final JTextField dateField = new JTextField(FinanceAttributes.todayDateTime());
 	private JPanel transferRow;
+	private final JButton dayViewToggle = DocearUiTheme.ghostButton("按天");
+
+	private final Runnable financeRefreshListener = new Runnable() {
+		public void run() {
+			SwingUtilities.invokeLater(new Runnable() {
+				public void run() {
+					refreshAll();
+				}
+			});
+		}
+	};
 
 	private final JList txnList = new JList();
 	private final JList budgetList = new JList();
 	private final JList subList = new JList();
 	private final JList couponList = new JList();
+
+	private JTabbedPane mainTabs;
+	private JButton couponUsedButton;
 
 	private boolean listening;
 	private boolean refreshing;
@@ -99,9 +126,60 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		listening = true;
 		try {
 			Controller.getCurrentController().getMapViewManager().addMapViewChangeListener(this);
+			FinanceChangeNotifier.addListener(financeRefreshListener);
+			final MapController mapController = Controller.getCurrentModeController().getMapController();
+			mapController.addNodeChangeListener(new INodeChangeListener() {
+				public void nodeChanged(final NodeChangeEvent event) {
+					final NodeModel node = event.getNode();
+					if (node != null && isFinanceRootMap(node.getMap())) {
+						financeRefreshListener.run();
+					}
+				}
+			});
+			mapController.addMapChangeListener(new IMapChangeListener() {
+				public void mapChanged(final MapChangeEvent event) {
+					if (event.getMap() != null && isFinanceRootMap(event.getMap())) {
+						financeRefreshListener.run();
+					}
+				}
+
+				public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
+					if (parent != null && isFinanceRootMap(parent.getMap())) {
+						financeRefreshListener.run();
+					}
+				}
+
+				public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
+					if (parent != null && isFinanceRootMap(parent.getMap())) {
+						financeRefreshListener.run();
+					}
+				}
+
+				public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
+						final NodeModel child, final int newIndex) {
+					if (newParent != null && isFinanceRootMap(newParent.getMap())) {
+						financeRefreshListener.run();
+					}
+				}
+
+				public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
+				}
+
+				public void onPreNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
+						final NodeModel child, final int newIndex) {
+				}
+			});
 		}
 		catch (Exception e) {
 		}
+	}
+
+	private static boolean isFinanceRootMap(final MapModel map) {
+		if (map == null || map.getRootNode() == null) {
+			return false;
+		}
+		final FinanceExtension ext = FinanceExtension.getExtension(map.getRootNode());
+		return ext != null && FinanceAttributes.KIND_ROOT.equals(ext.getKind());
 	}
 
 	public void stopListening() {
@@ -111,6 +189,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		listening = false;
 		try {
 			Controller.getCurrentController().getMapViewManager().removeMapViewChangeListener(this);
+			FinanceChangeNotifier.removeListener(financeRefreshListener);
 		}
 		catch (Exception e) {
 		}
@@ -136,16 +215,16 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private JPanel buildHeader() {
-		final JPanel header = new JPanel(new BorderLayout(8, 8));
+		final JPanel header = new JPanel(new BorderLayout(8, 6));
 		header.setOpaque(false);
-		final JLabel title = DocearUiTheme.titleLabel("个人财务");
 
-		final JButton prev = DocearUiTheme.ghostButton("‹");
-		final JButton next = DocearUiTheme.ghostButton("›");
-		final JButton thisMonth = DocearUiTheme.ghostButton("本月");
+		final JButton prev = prevMonthButton;
+		final JButton next = nextMonthButton;
+		final JButton thisMonth = thisPeriodButton;
 		prev.setToolTipText("上一月");
 		next.setToolTipText("下一月");
 		thisMonth.setToolTipText("回到本月");
+		dayViewToggle.setToolTipText("按天浏览流水与汇总");
 		prev.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				shiftPeriod(-1);
@@ -158,26 +237,28 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		});
 		thisMonth.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
+				if (dayViewMode) {
+					viewDay = FinanceAttributes.todayYmd();
+				}
 				viewPeriod = todayPeriod();
 				refreshAll();
 			}
 		});
+		dayViewToggle.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				toggleDayView();
+			}
+		});
 
-		final JPanel monthRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 2, 0));
+		monthLabel.setFont(DocearUiTheme.font(15f, Font.BOLD));
+		monthLabel.setForeground(DocearUiTheme.TEXT);
+		final JPanel monthRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		monthRow.setOpaque(false);
 		monthRow.add(prev);
 		monthRow.add(monthLabel);
 		monthRow.add(next);
 		monthRow.add(thisMonth);
-
-		final JPanel titleCol = new JPanel();
-		titleCol.setOpaque(false);
-		titleCol.setLayout(new BoxLayout(titleCol, BoxLayout.Y_AXIS));
-		titleCol.add(title);
-		titleCol.add(Box.createVerticalStrut(2));
-		titleCol.add(monthRow);
-		statusLabel.setBorder(new EmptyBorder(2, 0, 0, 0));
-		titleCol.add(statusLabel);
+		monthRow.add(dayViewToggle);
 
 		final JButton refresh = softButton("刷新");
 		refresh.addActionListener(new ActionListener() {
@@ -196,22 +277,33 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		actions.add(refresh);
 		actions.add(openMap);
 
-		header.add(titleCol, BorderLayout.CENTER);
-		header.add(actions, BorderLayout.EAST);
+		final JPanel top = new JPanel(new BorderLayout(8, 0));
+		top.setOpaque(false);
+		top.add(monthRow, BorderLayout.CENTER);
+		top.add(actions, BorderLayout.EAST);
+		statusLabel.setBorder(new EmptyBorder(2, 2, 0, 2));
+		statusLabel.setFont(DocearUiTheme.font(11f));
+
+		final JPanel north = new JPanel(new BorderLayout(0, 2));
+		north.setOpaque(false);
+		north.add(top, BorderLayout.CENTER);
+		north.add(statusLabel, BorderLayout.SOUTH);
+
+		header.add(north, BorderLayout.NORTH);
 		final JPanel south = new JPanel(new BorderLayout(0, 4));
 		south.setOpaque(false);
 		south.add(buildKpiRow(), BorderLayout.CENTER);
-		dailySpendLabel.setFont(DocearUiTheme.font(12f));
-		dailySpendLabel.setBorder(new EmptyBorder(0, 2, 2, 2));
+		dailySpendLabel.setFont(DocearUiTheme.font(11f));
+		dailySpendLabel.setBorder(new EmptyBorder(2, 2, 2, 2));
 		south.add(dailySpendLabel, BorderLayout.SOUTH);
 		header.add(south, BorderLayout.SOUTH);
 		return header;
 	}
 
 	private JPanel buildKpiRow() {
-		final JPanel row = new JPanel(new GridLayout(1, 4, 8, 0));
+		final JPanel row = new JPanel(new GridLayout(1, 4, 6, 0));
 		row.setOpaque(false);
-		row.setBorder(new EmptyBorder(10, 0, 8, 0));
+		row.setBorder(new EmptyBorder(8, 0, 6, 0));
 		row.add(kpiCard("收入", incomeValue, DocearUiTheme.SUCCESS));
 		row.add(kpiCard("支出", expenseValue, DocearUiTheme.DANGER));
 		row.add(kpiCard("结余", netValue, DocearUiTheme.ACCENT));
@@ -222,7 +314,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	private static JPanel kpiCard(final String label, final JLabel value, final Color accent) {
 		final JPanel card = new JPanel(new BorderLayout(0, 2));
 		card.setBackground(DocearUiTheme.SURFACE);
-		card.setBorder(BorderFactory.createCompoundBorder(DocearUiTheme.hairlineBorder(), new EmptyBorder(8, 8, 8, 8)));
+		card.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0, 0, 0, 3, accent),
+				new EmptyBorder(8, 10, 8, 8)));
 		final JLabel l = DocearUiTheme.mutedLabel(label);
 		l.setFont(DocearUiTheme.font(11f));
 		value.setForeground(accent);
@@ -243,14 +337,30 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		body.setOpaque(false);
 		body.add(buildQuickEntry(), BorderLayout.NORTH);
 		final JTabbedPane tabs = new JTabbedPane();
+		mainTabs = tabs;
 		DocearUiTheme.styleTabbedPane(tabs);
 		tabs.addTab("流水", wrapList(txnList));
 		tabs.addTab("预算", wrapList(budgetList));
 		tabs.addTab("订阅", wrapList(subList));
 		tabs.addTab("券", wrapList(couponList));
 		tabs.addTab("报表", buildReportPanel());
+		tabs.addChangeListener(new javax.swing.event.ChangeListener() {
+			public void stateChanged(final javax.swing.event.ChangeEvent e) {
+				updateTabActions();
+			}
+		});
 		body.add(tabs, BorderLayout.CENTER);
+		updateTabActions();
 		return body;
+	}
+
+	private void updateTabActions() {
+		if (mainTabs == null || couponUsedButton == null) {
+			return;
+		}
+		final int index = mainTabs.getSelectedIndex();
+		final String title = index >= 0 ? mainTabs.getTitleAt(index) : "";
+		couponUsedButton.setVisible("券".equals(title));
 	}
 
 	private JPanel buildQuickEntry() {
@@ -289,10 +399,22 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		box.add(Box.createVerticalStrut(6));
 
 		final JPanel row3 = fieldRow();
-		row3.add(labeled("日期", dateField));
-		row3.add(Box.createHorizontalStrut(8));
-		row3.add(labeled("备注", noteField));
+		row3.add(labeled("日期时间", dateField));
 		box.add(row3);
+		box.add(Box.createVerticalStrut(6));
+
+		merchantField.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
+		box.add(labeled("花费内容", merchantField));
+		box.add(Box.createVerticalStrut(6));
+		noteField.setRows(3);
+		noteField.setLineWrap(true);
+		noteField.setWrapStyleWord(true);
+		noteField.setFont(DocearUiTheme.font(12f));
+		final JScrollPane noteScroll = new JScrollPane(noteField);
+		noteScroll.setAlignmentX(LEFT_ALIGNMENT);
+		noteScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 72));
+		noteScroll.setPreferredSize(new Dimension(200, 64));
+		box.add(labeled("备注", noteScroll));
 		box.add(Box.createVerticalStrut(8));
 
 		final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
@@ -303,7 +425,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				saveTransaction();
 			}
 		}));
-		final JButton more = softButton("更多 ▾");
+		final JButton more = softButton("更多");
+		more.setToolTipText("分类 / 账户 / 预算 / 订阅 / 优惠券");
 		final JPopupMenu menu = buildMoreMenu();
 		more.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -316,12 +439,20 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				deleteSelected();
 			}
 		}));
-		actions.add(softButton("券已用", new Runnable() {
+		couponUsedButton = softButton("券已用", new Runnable() {
 			public void run() {
 				markSelectedCouponUsed();
 			}
-		}));
+		});
+		couponUsedButton.setVisible(false);
+		actions.add(couponUsedButton);
 		box.add(actions);
+
+		final JLabel tip = DocearUiTheme.mutedLabel("提示：导图改文字可同步金额/日期；节点剪切移动不影响关联");
+		tip.setFont(DocearUiTheme.font(10f));
+		tip.setAlignmentX(LEFT_ALIGNMENT);
+		tip.setBorder(new EmptyBorder(6, 2, 0, 2));
+		box.add(tip);
 
 		flowCombo.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -351,7 +482,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			}
 		}));
 		menu.addSeparator();
-		menu.add(menuItem("加订阅", new Runnable() {
+		menu.add(menuItem("加订阅 / 固定支出", new Runnable() {
 			public void run() {
 				promptAddSubscription();
 			}
@@ -414,18 +545,136 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private void wireRenderers() {
 		txnList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		budgetList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		subList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+		couponList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		txnList.setCellRenderer(rowRenderer());
 		budgetList.setCellRenderer(rowRenderer());
 		subList.setCellRenderer(rowRenderer());
 		couponList.setCellRenderer(rowRenderer());
-		txnList.addMouseListener(new MouseAdapter() {
+		wireListPopup(txnList, new ListPopupHandler() {
+			public void onEdit(final ListRow row) {
+				editTransaction(row);
+			}
+
+			public void onDelete(final ListRow row) {
+				deleteTransactionRow(row);
+			}
+
+			public void onExtra(final JPopupMenu menu, final ListRow row) {
+			}
+		});
+		wireListPopup(budgetList, new ListPopupHandler() {
+			public void onEdit(final ListRow row) {
+				editBudget(row);
+			}
+
+			public void onDelete(final ListRow row) {
+				deleteTransactionRow(row);
+			}
+
+			public void onExtra(final JPopupMenu menu, final ListRow row) {
+			}
+		});
+		wireListPopup(subList, new ListPopupHandler() {
+			public void onEdit(final ListRow row) {
+				editSubscription(row);
+			}
+
+			public void onDelete(final ListRow row) {
+				deleteTransactionRow(row);
+			}
+
+			public void onExtra(final JPopupMenu menu, final ListRow row) {
+				menu.add(menuItem("记一笔付款", new Runnable() {
+					public void run() {
+						recordSubscriptionPayment(row);
+					}
+				}));
+			}
+		});
+		wireListPopup(couponList, new ListPopupHandler() {
+			public void onEdit(final ListRow row) {
+				editCoupon(row);
+			}
+
+			public void onDelete(final ListRow row) {
+				deleteTransactionRow(row);
+			}
+
+			public void onExtra(final JPopupMenu menu, final ListRow row) {
+				menu.add(menuItem("标记已用", new Runnable() {
+					public void run() {
+						if (FinanceLedgerService.markCouponUsed(row.nodeId, true) != null) {
+							refreshAll();
+							setStatus("已标记优惠券为已用", false);
+						}
+					}
+				}));
+			}
+		});
+	}
+
+	private interface ListPopupHandler {
+		void onEdit(ListRow row);
+
+		void onDelete(ListRow row);
+
+		void onExtra(JPopupMenu menu, ListRow row);
+	}
+
+	private void wireListPopup(final JList list, final ListPopupHandler handler) {
+		list.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				if (e.getClickCount() == 2) {
-					final Object value = txnList.getSelectedValue();
+					final Object value = list.getSelectedValue();
 					if (value instanceof ListRow && !((ListRow) value).placeholder) {
-						focusNode(((ListRow) value).nodeId);
+						handler.onEdit((ListRow) value);
 					}
 				}
+			}
+
+			public void mousePressed(final MouseEvent e) {
+				showPopup(e);
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				showPopup(e);
+			}
+
+			private void showPopup(final MouseEvent e) {
+				if (!e.isPopupTrigger()) {
+					return;
+				}
+				final int index = list.locationToIndex(e.getPoint());
+				if (index < 0) {
+					return;
+				}
+				list.setSelectedIndex(index);
+				final Object value = list.getSelectedValue();
+				if (!(value instanceof ListRow) || ((ListRow) value).placeholder) {
+					return;
+				}
+				final ListRow row = (ListRow) value;
+				final JPopupMenu menu = new JPopupMenu();
+				menu.add(menuItem("修改", new Runnable() {
+					public void run() {
+						handler.onEdit(row);
+					}
+				}));
+				handler.onExtra(menu, row);
+				menu.add(menuItem("定位到导图", new Runnable() {
+					public void run() {
+						focusNode(row.nodeId);
+					}
+				}));
+				menu.addSeparator();
+				menu.add(menuItem("删除", new Runnable() {
+					public void run() {
+						handler.onDelete(row);
+					}
+				}));
+				menu.show(list, e.getX(), e.getY());
 			}
 		});
 	}
@@ -461,23 +710,45 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		refreshing = true;
 		try {
 			FinanceLedgerService.ensureFinanceMap();
-			final String period = viewPeriod;
-			monthLabel.setText(period);
-			final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
+			if (dayViewMode) {
+				monthLabel.setText(viewDay);
+				prevMonthButton.setToolTipText("上一天");
+				nextMonthButton.setToolTipText("下一天");
+				thisPeriodButton.setText("今天");
+				thisPeriodButton.setToolTipText("回到今天");
+				dayViewToggle.setText("按月");
+			}
+			else {
+				monthLabel.setText(viewPeriod);
+				prevMonthButton.setToolTipText("上一月");
+				nextMonthButton.setToolTipText("下一月");
+				thisPeriodButton.setText("本月");
+				thisPeriodButton.setToolTipText("回到本月");
+				dayViewToggle.setText("按天");
+			}
+			final FinanceLedgerService.MonthSummary summary = dayViewMode
+					? FinanceLedgerService.daySummary(viewDay)
+					: FinanceLedgerService.monthSummary(viewPeriod);
 			incomeValue.setText("¥" + FinanceAttributes.formatYuan(summary.incomeCents));
 			expenseValue.setText("¥" + FinanceAttributes.formatYuan(summary.expenseCents));
 			netValue.setText("¥" + FinanceAttributes.formatYuan(summary.pnlNetCents()));
-			budgetValue.setText("¥" + FinanceAttributes.formatYuan(budgetRemaining(period, summary)));
+			budgetValue.setText("¥" + FinanceAttributes.formatYuan(budgetRemaining(viewPeriod, summary)));
 			reloadAccountCombo();
 			reloadCategoryCombo();
 			updateTransferUi();
-			reloadTxnList(period);
-			reloadBudgetList(period, summary);
+			if (dayViewMode) {
+				reloadTxnListForDay(viewDay);
+			}
+			else {
+				reloadTxnList(viewPeriod);
+			}
+			reloadBudgetList(viewPeriod, summary);
 			reloadSubList();
 			reloadCouponList();
 			refreshDailySpendStrip();
-			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FINANCE, txnCountForPeriod(period));
-			setStatus(todayPeriod().equals(period) ? "账本 · 个人财务.mm" : "浏览 " + period + " · 个人财务.mm", false);
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_FINANCE,
+					dayViewMode ? txnCountForDay(viewDay) : txnCountForPeriod(viewPeriod));
+			setStatus(" ", false);
 		}
 		catch (Exception ex) {
 			LogUtils.warn("Finance tab refresh failed", ex);
@@ -493,11 +764,15 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		statusLabel.setForeground(error ? DocearUiTheme.DANGER : DocearUiTheme.TEXT_MUTED);
 	}
 
-	private void shiftPeriod(final int deltaMonths) {
+	private void shiftPeriod(final int delta) {
+		if (dayViewMode) {
+			shiftDay(delta);
+			return;
+		}
 		try {
 			final Calendar cal = Calendar.getInstance();
 			cal.setTime(PERIOD.parse(viewPeriod));
-			cal.add(Calendar.MONTH, deltaMonths);
+			cal.add(Calendar.MONTH, delta);
 			viewPeriod = PERIOD.format(cal.getTime());
 			refreshAll();
 		}
@@ -507,7 +782,42 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		}
 	}
 
+	private void shiftDay(final int deltaDays) {
+		try {
+			final Calendar cal = Calendar.getInstance();
+			cal.setTime(DAY.parse(viewDay));
+			cal.add(Calendar.DAY_OF_MONTH, deltaDays);
+			viewDay = DAY.format(cal.getTime());
+			if (viewDay.length() >= 7) {
+				viewPeriod = viewDay.substring(0, 7);
+			}
+			refreshAll();
+		}
+		catch (Exception e) {
+			viewDay = FinanceAttributes.todayYmd();
+			viewPeriod = todayPeriod();
+			refreshAll();
+		}
+	}
+
+	private void toggleDayView() {
+		dayViewMode = !dayViewMode;
+		if (dayViewMode) {
+			if (todayPeriod().equals(viewPeriod)) {
+				viewDay = FinanceAttributes.todayYmd();
+			}
+			else {
+				viewDay = viewPeriod + "-01";
+			}
+		}
+		refreshAll();
+	}
+
 	private static long budgetRemaining(final String period, final FinanceLedgerService.MonthSummary summary) {
+		final MapModel map = FinanceLedgerService.preferOpenFinanceMapPublic();
+		final String from = period + "-01";
+		final String to = period + "-31";
+		final List txns = FinanceLedgerService.listTransactions(from, to);
 		final List budgets = FinanceLedgerService.listBudgets(period);
 		if (budgets.isEmpty()) {
 			return 0L;
@@ -515,8 +825,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		long remaining = 0L;
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			remaining += FinanceRules.budgetRemainingCents(b.categoryName, b.amountCents, summary.expenseCents,
-					summary.byCategory);
+			final long spent = FinanceNodeRef.sumExpenseForBudgetCategory(map, b.categoryNodeId, txns);
+			remaining += b.amountCents - spent;
 		}
 		return remaining;
 	}
@@ -527,24 +837,24 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		return FinanceLedgerService.listTransactions(from, to).size();
 	}
 
+	private static int txnCountForDay(final String day) {
+		return FinanceLedgerService.listTransactions(day, day).size();
+	}
+
 	private void reloadAccountCombo() {
-		final Object selected = accountCombo.getSelectedItem();
-		final Object selectedTo = accountToCombo.getSelectedItem();
+		final String selected = selectedRefNodeId(accountCombo);
+		final String selectedTo = selectedRefNodeId(accountToCombo);
 		accountCombo.removeAllItems();
 		accountToCombo.removeAllItems();
-		final List accounts = FinanceLedgerService.listAccounts();
+		final List accounts = FinanceLedgerService.listAccountRefs();
 		for (int i = 0; i < accounts.size(); i++) {
-			final String name = String.valueOf(accounts.get(i));
-			accountCombo.addItem(name);
-			accountToCombo.addItem(name);
+			final FinanceNodeRef.Ref ref = (FinanceNodeRef.Ref) accounts.get(i);
+			accountCombo.addItem(ref);
+			accountToCombo.addItem(ref);
 		}
-		if (selected != null) {
-			accountCombo.setSelectedItem(selected);
-		}
-		if (selectedTo != null) {
-			accountToCombo.setSelectedItem(selectedTo);
-		}
-		else if (accountToCombo.getItemCount() > 1) {
+		selectRefByNodeId(accountCombo, selected);
+		selectRefByNodeId(accountToCombo, selectedTo);
+		if (selectedTo.length() == 0 && accountToCombo.getItemCount() > 1) {
 			accountToCombo.setSelectedIndex(Math.min(1, accountToCombo.getItemCount() - 1));
 		}
 	}
@@ -561,19 +871,26 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private void reloadCategoryCombo() {
 		final String flow = flowFromCombo();
-		final Object selected = categoryCombo.getSelectedItem();
+		final String selected = selectedRefNodeId(categoryCombo);
 		categoryCombo.removeAllItems();
-		categoryCombo.addItem("（未分类）");
+		categoryCombo.addItem(new FinanceNodeRef.Ref("", "（未分类）"));
 		final String listFlow = FinanceAttributes.FLOW_INCOME.equals(flow)
 				? FinanceAttributes.FLOW_INCOME
 				: FinanceAttributes.FLOW_EXPENSE;
-		final List cats = FinanceLedgerService.listCategories(listFlow);
+		final List cats = FinanceLedgerService.listCategoryRefs(listFlow);
 		for (int i = 0; i < cats.size(); i++) {
-			categoryCombo.addItem(String.valueOf(cats.get(i)));
+			categoryCombo.addItem(cats.get(i));
 		}
-		if (selected != null) {
-			categoryCombo.setSelectedItem(selected);
+		selectRefByNodeId(categoryCombo, selected);
+	}
+
+	private void reloadTxnListForDay(final String day) {
+		final List txns = FinanceLedgerService.listTransactions(day, day);
+		if (txns.isEmpty()) {
+			txnList.setListData(new ListRow[] { ListRow.empty("本日暂无流水 · 上方记一笔即可") });
+			return;
 		}
+		fillTxnListRows(txns);
 	}
 
 	private void reloadTxnList(final String period) {
@@ -582,40 +899,55 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			txnList.setListData(new ListRow[] { ListRow.empty("本月暂无流水 · 上方记一笔即可") });
 			return;
 		}
+		fillTxnListRows(txns);
+	}
+
+	private void fillTxnListRows(final List txns) {
 		final ListRow[] rows = new ListRow[txns.size()];
 		for (int i = 0; i < txns.size(); i++) {
 			final FinanceLedgerService.FinanceTxn t = (FinanceLedgerService.FinanceTxn) txns.get(i);
 			final String sign = FinanceRules.flowSign(t.flow);
 			final String flowZh = FinanceRules.flowLabelZh(t.flow);
 			final String cat = t.categoryName == null || t.categoryName.length() == 0 ? "未分类" : t.categoryName;
-			String extra = t.note == null || t.note.length() == 0
-					? (t.merchant == null ? "" : t.merchant)
-					: t.note;
+			String extra = t.merchant == null || t.merchant.length() == 0
+					? (t.note == null ? "" : t.note)
+					: t.merchant;
+			if (t.merchant != null && t.merchant.length() > 0 && t.note != null && t.note.length() > 0) {
+				extra = t.merchant + " · " + t.note;
+			}
 			if (FinanceRules.isTransfer(t.flow)) {
 				extra = t.accountName + "→" + t.accountTo + (extra.length() == 0 ? "" : " · " + extra);
 			}
 			final String nodeId = t.node == null ? "" : t.node.createID();
-			rows[i] = new ListRow(nodeId, t.dateYmd + "  " + sign + "¥" + FinanceAttributes.formatYuan(t.amountCents)
+			final String when = t.dateYmd == null ? "" : t.dateYmd;
+			rows[i] = new ListRow(nodeId, when + "  " + sign + "¥" + FinanceAttributes.formatYuan(t.amountCents)
 					+ "  [" + flowZh + "] " + cat + (extra.length() == 0 ? "" : " · " + extra));
 		}
 		txnList.setListData(rows);
 	}
 
 	private void reloadBudgetList(final String period, final FinanceLedgerService.MonthSummary summary) {
-		final List budgets = FinanceLedgerService.listBudgets(period);
+		final MapModel map = FinanceLedgerService.preferOpenFinanceMapPublic();
+		final List budgets = dayViewMode
+				? FinanceLedgerService.listBudgetsForRange(viewDay, viewDay)
+				: FinanceLedgerService.listBudgets(period);
 		if (budgets.isEmpty()) {
 			budgetList.setListData(new ListRow[] { ListRow.empty("暂无预算 · 「更多」里可添加") });
 			return;
 		}
+		final String from = dayViewMode ? viewDay : period + "-01";
+		final String to = dayViewMode ? viewDay : period + "-31";
+		final List txns = FinanceLedgerService.listTransactions(from, to);
 		final ListRow[] rows = new ListRow[budgets.size()];
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
-			final long spent = FinanceRules.budgetSpentCents(b.categoryName, summary.expenseCents, summary.byCategory);
-			final String name = FinanceRules.isTotalBudgetCategory(b.categoryName)
-					? FinanceRules.TOTAL_BUDGET_CATEGORY
-					: b.categoryName;
+			final long spent = FinanceNodeRef.sumExpenseForBudgetCategory(map, b.categoryNodeId, txns);
+			final String name = b.categoryName;
+			final String range = b.period.equals(b.periodEnd) || b.periodEnd.length() == 0
+					? b.period
+					: b.period + "~" + b.periodEnd;
 			final String nodeId = b.node == null ? "" : b.node.createID();
-			rows[i] = new ListRow(nodeId, name + "  ¥" + FinanceAttributes.formatYuan(spent)
+			rows[i] = new ListRow(nodeId, name + "  " + range + "  ¥" + FinanceAttributes.formatYuan(spent)
 					+ " / ¥" + FinanceAttributes.formatYuan(b.amountCents)
 					+ "  余 ¥" + FinanceAttributes.formatYuan(b.amountCents - spent));
 		}
@@ -638,6 +970,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			final String cycleZh = FinanceRules.cycleLabelZh(s.cycle);
 			rows[i] = new ListRow(nodeId, s.name + "  ¥" + FinanceAttributes.formatYuan(s.amountCents)
 					+ " / " + cycleZh + "  日均 ¥" + FinanceAttributes.formatYuan(daily)
+					+ "  已付 " + s.paymentCount + " 次"
+					+ (s.startYmd.length() == 0 ? "" : "  起 " + s.startYmd)
+					+ (s.endYmd.length() == 0 ? "" : "  止 " + s.endYmd)
 					+ (s.nextYmd.length() == 0 ? "" : "  下次 " + s.nextYmd)
 					+ (active ? "" : "  [" + s.status + "]"));
 		}
@@ -684,9 +1019,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				return;
 			}
 			final String flow = flowFromCombo();
-			final String cat = selectedComboText(categoryCombo);
-			final String acc = selectedComboText(accountCombo);
-			final String accTo = selectedComboText(accountToCombo);
+			final String cat = selectedCategoryNodeId();
+			final String acc = selectedAccountNodeId(accountCombo);
+			final String accTo = selectedAccountNodeId(accountToCombo);
 			if (FinanceAttributes.FLOW_TRANSFER.equals(flow)) {
 				if (acc.length() == 0 || accTo.length() == 0) {
 					JOptionPane.showMessageDialog(this, "转账需要选择转出账户和转入账户", "记账",
@@ -700,18 +1035,20 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 			}
 			final DateParse dateParse = parseDate(dateField.getText());
 			if (!dateParse.valid) {
-				JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd", "记账", JOptionPane.WARNING_MESSAGE);
+				JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd 或 yyyy-MM-dd HH:mm", "记账",
+						JOptionPane.WARNING_MESSAGE);
 				return;
 			}
+			final String merchant = merchantField.getText() == null ? "" : merchantField.getText().trim();
 			final String note = noteField.getText() == null ? "" : noteField.getText().trim();
 			final NodeModel node = FinanceLedgerService.addTransaction(
 					FinanceAttributes.formatYuan(cents),
 					flow,
 					dateParse.ymd,
-					"（未分类）".equals(cat) ? "" : cat,
+					cat,
 					acc,
 					FinanceAttributes.FLOW_TRANSFER.equals(flow) ? accTo : "",
-					"",
+					merchant,
 					note);
 			if (node == null) {
 				JOptionPane.showMessageDialog(this, "记账失败：无法写入财务导图（转账需双方账户，金额须>0）", "记账",
@@ -719,7 +1056,11 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				return;
 			}
 			amountField.setText("");
+			merchantField.setText("");
 			noteField.setText("");
+			if (dateParse.ymd.length() >= 10) {
+				viewDay = FinanceAttributes.datePart(dateParse.ymd);
+			}
 			if (dateParse.ymd.length() >= 7) {
 				viewPeriod = dateParse.ymd.substring(0, 7);
 			}
@@ -744,6 +1085,342 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		catch (Exception ex) {
 			JOptionPane.showMessageDialog(this, "添加账户失败: " + ex.getMessage(), "账户", JOptionPane.ERROR_MESSAGE);
 		}
+	}
+
+	private void deleteTransactionRow(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final int ok = JOptionPane.showConfirmDialog(this, "确认删除？\n" + row.label, "删除",
+				JOptionPane.OK_CANCEL_OPTION);
+		if (ok != JOptionPane.OK_OPTION) {
+			return;
+		}
+		if (!FinanceLedgerService.deleteFinanceNode(row.nodeId)) {
+			JOptionPane.showMessageDialog(this, "删除失败", "删除", JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		refreshAll();
+		setStatus("已删除", false);
+	}
+
+	private void editTransaction(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final FinanceLedgerService.FinanceTxn txn = FinanceLedgerService.getTransactionByNodeId(row.nodeId);
+		if (txn == null) {
+			JOptionPane.showMessageDialog(this, "无法读取该流水", "修改", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		final JComboBox flowBox = new JComboBox(new String[] { "支出", "收入", "转账", "借入", "借出", "信用卡" });
+		flowBox.setSelectedIndex(flowComboIndex(txn.flow));
+		final JTextField amountLocal = new JTextField(FinanceAttributes.formatYuan(txn.amountCents), 10);
+		final JTextField dateLocal = new JTextField(
+				txn.dateYmd == null || txn.dateYmd.length() == 0 ? FinanceAttributes.todayDateTime() : txn.dateYmd, 16);
+		final JTextField merchantLocal = new JTextField(txn.merchant, 16);
+		final JTextField noteLocal = new JTextField(txn.note, 16);
+		final JComboBox categoryLocal = new JComboBox();
+		categoryLocal.addItem(new FinanceNodeRef.Ref("", "（未分类）"));
+		final List cats = FinanceLedgerService.listCategoryRefs("all");
+		for (int i = 0; i < cats.size(); i++) {
+			categoryLocal.addItem(cats.get(i));
+		}
+		selectRefByNodeId(categoryLocal, txn.categoryNodeId);
+		final JComboBox accountLocal = new JComboBox();
+		final JComboBox accountToLocal = new JComboBox();
+		final List accounts = FinanceLedgerService.listAccountRefs();
+		for (int i = 0; i < accounts.size(); i++) {
+			final FinanceNodeRef.Ref ref = (FinanceNodeRef.Ref) accounts.get(i);
+			accountLocal.addItem(ref);
+			accountToLocal.addItem(ref);
+		}
+		selectRefByNodeId(accountLocal, txn.accountNodeId);
+		selectRefByNodeId(accountToLocal, txn.accountToNodeId);
+		final JPanel form = formPanel(
+				labeled("流向", flowBox),
+				labeled("金额（元）", amountLocal),
+				labeled("日期时间", dateLocal),
+				labeled("分类", categoryLocal),
+				labeled("账户", accountLocal),
+				labeled("转入账户", accountToLocal),
+				labeled("花费内容", merchantLocal),
+				labeled("备注", noteLocal));
+		final int option = JOptionPane.showConfirmDialog(this, form, "修改流水", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION) {
+			return;
+		}
+		try {
+			final String flow = flowFromComboIndex(flowBox.getSelectedIndex());
+			final String cat = selectedRefNodeId(categoryLocal);
+			final String acc = selectedRefNodeId(accountLocal);
+			final String accTo = selectedRefNodeId(accountToLocal);
+			if (FinanceAttributes.FLOW_TRANSFER.equals(flow) && (acc.length() == 0 || accTo.length() == 0)) {
+				JOptionPane.showMessageDialog(this, "转账需要选择转出账户和转入账户", "修改", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			final DateParse dateParse = parseDate(dateLocal.getText());
+			if (!dateParse.valid) {
+				JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd 或 yyyy-MM-dd HH:mm", "修改",
+						JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			final NodeModel node = FinanceLedgerService.updateTransaction(
+					row.nodeId,
+					amountLocal.getText(),
+					flow,
+					dateParse.ymd,
+					cat,
+					acc,
+					FinanceAttributes.FLOW_TRANSFER.equals(flow) ? accTo : "",
+					merchantLocal.getText(),
+					noteLocal.getText());
+			if (node == null) {
+				JOptionPane.showMessageDialog(this, "修改失败", "修改", JOptionPane.ERROR_MESSAGE);
+				return;
+			}
+			refreshAll();
+			setStatus("已修改流水", false);
+		}
+		catch (Exception ex) {
+			JOptionPane.showMessageDialog(this, "修改失败: " + ex.getMessage(), "修改", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void editBudget(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final FinanceLedgerService.FinanceBudget budget = FinanceLedgerService.getBudgetByNodeId(row.nodeId);
+		if (budget == null) {
+			JOptionPane.showMessageDialog(this, "无法读取该预算", "修改", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		final JComboBox categoryBox = new JComboBox();
+		categoryBox.addItem(new FinanceNodeRef.Ref(FinanceNodeRef.TOTAL_BUDGET_NODE_ID, FinanceRules.TOTAL_BUDGET_CATEGORY));
+		final List cats = FinanceLedgerService.listCategoryRefs(FinanceAttributes.FLOW_EXPENSE);
+		for (int i = 0; i < cats.size(); i++) {
+			categoryBox.addItem(cats.get(i));
+		}
+		selectRefByNodeId(categoryBox, budget.categoryNodeId);
+		final JTextField startField = new JTextField(
+				budget.period.length() == 0 ? FinanceAttributes.todayYmd() : budget.period, 12);
+		final JTextField endField = new JTextField(
+				budget.periodEnd.length() == 0 ? budget.period : budget.periodEnd, 12);
+		final JTextField amountFieldLocal = new JTextField(FinanceAttributes.formatYuan(budget.amountCents), 10);
+		final JPanel form = formPanel(
+				labeled("分类", categoryBox),
+				labeled("开始日期", startField),
+				labeled("结束日期", endField),
+				labeled("预算金额（元）", amountFieldLocal));
+		final int option = JOptionPane.showConfirmDialog(this, form, "修改预算", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION) {
+			return;
+		}
+		try {
+			final DateParse start = parseDate(startField.getText());
+			final DateParse end = parseDate(endField.getText());
+			if (!start.valid || !end.valid) {
+				JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd", "预算", JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
+			final String catRef = selectedRefNodeId(categoryBox);
+			FinanceLedgerService.deleteFinanceNode(row.nodeId);
+			FinanceLedgerService.setBudget(FinanceAttributes.datePart(start.ymd), FinanceAttributes.datePart(end.ymd),
+					catRef.length() == 0 ? FinanceRules.TOTAL_BUDGET_CATEGORY : catRef, cents);
+			refreshAll();
+			setStatus("已修改预算", false);
+		}
+		catch (Exception ex) {
+			JOptionPane.showMessageDialog(this, "修改预算失败: " + ex.getMessage(), "预算", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void editSubscription(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final FinanceLedgerService.FinanceSubscription sub = FinanceLedgerService.getSubscriptionByNodeId(row.nodeId);
+		if (sub == null) {
+			JOptionPane.showMessageDialog(this, "无法读取该订阅", "修改", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		final JTextField nameField = new JTextField(sub.name, 18);
+		final JTextField amountFieldLocal = new JTextField(FinanceAttributes.formatYuan(sub.amountCents), 10);
+		final JComboBox cycleBox = new JComboBox(new String[] { "每月", "每年", "每周", "每天" });
+		final String cycleZh = FinanceRules.cycleLabelZh(sub.cycle);
+		cycleBox.setSelectedItem(cycleZh);
+		final JTextField startField = new JTextField(sub.startYmd, 12);
+		final JTextField endField = new JTextField(sub.endYmd, 12);
+		final JTextField nextField = new JTextField(sub.nextYmd, 12);
+		final JComboBox accountBox = new JComboBox();
+		final List accounts = FinanceLedgerService.listAccountRefs();
+		for (int i = 0; i < accounts.size(); i++) {
+			accountBox.addItem(accounts.get(i));
+		}
+		selectRefByNodeId(accountBox, sub.accountNodeId);
+		final JPanel form = formPanel(
+				labeled("名称", nameField),
+				labeled("每期金额（元）", amountFieldLocal),
+				labeled("周期", cycleBox),
+				labeled("开始日期", startField),
+				labeled("结束日期（可空）", endField),
+				labeled("下次付款", nextField),
+				labeled("扣款账户", accountBox));
+		final int option = JOptionPane.showConfirmDialog(this, form, "修改订阅", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION) {
+			return;
+		}
+		try {
+			final String name = nameField.getText() == null ? "" : nameField.getText().trim();
+			if (name.length() == 0) {
+				return;
+			}
+			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
+			final String cycleValue = FinanceRules.normalizeCycle(selectedComboText(cycleBox));
+			final DateParse start = parseOptionalDate(startField.getText());
+			final DateParse end = parseOptionalDate(endField.getText());
+			final DateParse next = parseOptionalDate(nextField.getText());
+			if (FinanceLedgerService.updateSubscription(
+					row.nodeId,
+					name,
+					cents,
+					cycleValue,
+					next.valid ? FinanceAttributes.datePart(next.ymd) : FinanceRules.nextDateForCycle(
+							start.valid ? FinanceAttributes.datePart(start.ymd) : FinanceAttributes.todayYmd(),
+							cycleValue),
+					sub.status,
+					selectedRefNodeId(accountBox),
+					sub.note,
+					start.valid ? FinanceAttributes.datePart(start.ymd) : "",
+					end.valid ? FinanceAttributes.datePart(end.ymd) : "") == null) {
+				JOptionPane.showMessageDialog(this, "修改失败", "订阅", JOptionPane.ERROR_MESSAGE);
+				return;
+			}
+			refreshAll();
+			setStatus("已修改订阅 · " + name, false);
+		}
+		catch (Exception ex) {
+			JOptionPane.showMessageDialog(this, "修改订阅失败: " + ex.getMessage(), "订阅", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private void recordSubscriptionPayment(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final FinanceLedgerService.FinanceSubscription sub = FinanceLedgerService.getSubscriptionByNodeId(row.nodeId);
+		if (sub == null) {
+			return;
+		}
+		final String defaultDate = sub.nextYmd.length() > 0 ? sub.nextYmd : FinanceAttributes.todayYmd();
+		final String payDate = JOptionPane.showInputDialog(this,
+				"付款日期（yyyy-MM-dd）\n将写入流水，并在订阅下增加付款记录", defaultDate);
+		if (payDate == null) {
+			return;
+		}
+		final DateParse parsed = parseOptionalDate(payDate);
+		if (!parsed.valid) {
+			JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd", "订阅付款", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		final NodeModel node = FinanceLedgerService.recordSubscriptionPayment(row.nodeId,
+				FinanceAttributes.datePart(parsed.ymd));
+		if (node == null) {
+			JOptionPane.showMessageDialog(this, "记录付款失败（可能已超过结束日期）", "订阅付款",
+					JOptionPane.ERROR_MESSAGE);
+			return;
+		}
+		refreshAll();
+		setStatus("已记订阅付款 · " + sub.name + " ¥" + FinanceAttributes.formatYuan(sub.amountCents), false);
+	}
+
+	private void editCoupon(final ListRow row) {
+		if (row == null || row.placeholder || row.nodeId.length() == 0) {
+			return;
+		}
+		final List coupons = FinanceLedgerService.listCoupons();
+		FinanceLedgerService.FinanceCoupon coupon = null;
+		for (int i = 0; i < coupons.size(); i++) {
+			final FinanceLedgerService.FinanceCoupon c = (FinanceLedgerService.FinanceCoupon) coupons.get(i);
+			if (c.node != null && row.nodeId.equals(c.node.createID())) {
+				coupon = c;
+				break;
+			}
+		}
+		if (coupon == null) {
+			JOptionPane.showMessageDialog(this, "无法读取该优惠券", "修改", JOptionPane.WARNING_MESSAGE);
+			return;
+		}
+		final JTextField nameField = new JTextField(coupon.name, 18);
+		final JTextField amountFieldLocal = new JTextField(FinanceAttributes.formatYuan(coupon.amountCents), 10);
+		final JTextField expiresField = new JTextField(coupon.expiresYmd, 12);
+		final JPanel form = formPanel(
+				labeled("名称", nameField),
+				labeled("面值（元）", amountFieldLocal),
+				labeled("截止日期（可空）", expiresField));
+		final int option = JOptionPane.showConfirmDialog(this, form, "修改优惠券", JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION) {
+			return;
+		}
+		try {
+			final String name = nameField.getText() == null ? "" : nameField.getText().trim();
+			if (name.length() == 0) {
+				return;
+			}
+			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
+			final DateParse expires = parseOptionalDate(expiresField.getText());
+			FinanceLedgerService.upsertCoupon(name, cents, expires.valid ? FinanceAttributes.datePart(expires.ymd) : "",
+					coupon.status, "", coupon.note);
+			refreshAll();
+			setStatus("已修改优惠券 · " + name, false);
+		}
+		catch (Exception ex) {
+			JOptionPane.showMessageDialog(this, "修改优惠券失败: " + ex.getMessage(), "优惠券", JOptionPane.ERROR_MESSAGE);
+		}
+	}
+
+	private static int flowComboIndex(final String flow) {
+		if (FinanceAttributes.FLOW_INCOME.equals(flow)) {
+			return 1;
+		}
+		if (FinanceAttributes.FLOW_TRANSFER.equals(flow)) {
+			return 2;
+		}
+		if (FinanceAttributes.FLOW_BORROW.equals(flow)) {
+			return 3;
+		}
+		if (FinanceAttributes.FLOW_LEND.equals(flow)) {
+			return 4;
+		}
+		if (FinanceAttributes.FLOW_CREDIT.equals(flow)) {
+			return 5;
+		}
+		return 0;
+	}
+
+	private static String flowFromComboIndex(final int index) {
+		if (index == 1) {
+			return FinanceAttributes.FLOW_INCOME;
+		}
+		if (index == 2) {
+			return FinanceAttributes.FLOW_TRANSFER;
+		}
+		if (index == 3) {
+			return FinanceAttributes.FLOW_BORROW;
+		}
+		if (index == 4) {
+			return FinanceAttributes.FLOW_LEND;
+		}
+		if (index == 5) {
+			return FinanceAttributes.FLOW_CREDIT;
+		}
+		return FinanceAttributes.FLOW_EXPENSE;
 	}
 
 	private void deleteSelected() {
@@ -815,20 +1492,44 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private void promptAddBudget() {
-		final String cat = selectedComboText(categoryCombo);
-		final String category = "（未分类）".equals(cat) || cat.length() == 0
-				? FinanceRules.TOTAL_BUDGET_CATEGORY
-				: cat;
-		final String amount = JOptionPane.showInputDialog(this,
-				"预算金额（元）· " + category + " · " + viewPeriod, "1000");
-		if (amount == null || amount.trim().length() == 0) {
+		final JComboBox categoryBox = new JComboBox();
+		categoryBox.addItem(new FinanceNodeRef.Ref(FinanceNodeRef.TOTAL_BUDGET_NODE_ID, FinanceRules.TOTAL_BUDGET_CATEGORY));
+		final List cats = FinanceLedgerService.listCategoryRefs(FinanceAttributes.FLOW_EXPENSE);
+		for (int i = 0; i < cats.size(); i++) {
+			categoryBox.addItem(cats.get(i));
+		}
+		if (selectedCategoryNodeId().length() > 0) {
+			selectRefByNodeId(categoryBox, selectedCategoryNodeId());
+		}
+		final String monthStart = dayViewMode ? viewDay : viewPeriod + "-01";
+		final String monthEnd = dayViewMode ? viewDay : viewPeriod + "-31";
+		final JTextField startField = new JTextField(monthStart, 12);
+		final JTextField endField = new JTextField(monthEnd, 12);
+		final JTextField amountFieldLocal = new JTextField("1000", 10);
+		final JPanel form = formPanel(
+				labeled("分类", categoryBox),
+				labeled("开始日期", startField),
+				labeled("结束日期", endField),
+				labeled("预算金额（元）", amountFieldLocal));
+		final int option = JOptionPane.showConfirmDialog(this, form, "加预算",
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+		if (option != JOptionPane.OK_OPTION) {
 			return;
 		}
 		try {
-			final long cents = FinanceAttributes.parseYuanToCents(amount);
-			FinanceLedgerService.setBudget(viewPeriod, category, cents);
+			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
+			final DateParse start = parseDate(startField.getText());
+			final DateParse end = parseDate(endField.getText());
+			if (!start.valid || !end.valid) {
+				JOptionPane.showMessageDialog(this, "日期格式应为 yyyy-MM-dd 或 yyyy-MM-dd HH:mm", "预算",
+						JOptionPane.WARNING_MESSAGE);
+				return;
+			}
+			final String catRef = selectedRefNodeId(categoryBox);
+			FinanceLedgerService.setBudget(FinanceAttributes.datePart(start.ymd), FinanceAttributes.datePart(end.ymd),
+					catRef.length() == 0 ? FinanceRules.TOTAL_BUDGET_CATEGORY : catRef, cents);
 			refreshAll();
-			setStatus("已设置预算 · " + category, false);
+			setStatus("已设置预算", false);
 		}
 		catch (Exception ex) {
 			JOptionPane.showMessageDialog(this, "添加预算失败: " + ex.getMessage(), "预算", JOptionPane.ERROR_MESSAGE);
@@ -839,6 +1540,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final JTextField nameField = new JTextField("房租", 18);
 		final JTextField amountFieldLocal = new JTextField("3000", 10);
 		final JComboBox cycleBox = new JComboBox(new String[] { "每月", "每年", "每周", "每天" });
+		final JTextField startField = new JTextField(FinanceAttributes.todayYmd(), 12);
+		final JTextField endField = new JTextField("", 12);
 		final JLabel preview = DocearUiTheme.mutedLabel("日均约 —");
 		preview.setFont(DocearUiTheme.font(12f));
 		final Runnable updatePreview = new Runnable() {
@@ -878,7 +1581,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		final JPanel form = formPanel(
 				labeled("名称（房租/会员等）", nameField),
 				labeled("每期金额（元）", amountFieldLocal),
-				labeled("周期", cycleBox));
+				labeled("周期", cycleBox),
+				labeled("开始日期", startField),
+				labeled("结束日期（可空）", endField));
 		preview.setAlignmentX(LEFT_ALIGNMENT);
 		form.add(Box.createVerticalStrut(8));
 		form.add(preview);
@@ -894,14 +1599,19 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		try {
 			final long cents = FinanceAttributes.parseYuanToCents(amountFieldLocal.getText());
 			final String cycleValue = FinanceRules.normalizeCycle(selectedComboText(cycleBox));
+			final DateParse start = parseOptionalDate(startField.getText());
+			final DateParse end = parseOptionalDate(endField.getText());
+			final String startYmd = start.valid ? FinanceAttributes.datePart(start.ymd) : FinanceAttributes.todayYmd();
 			FinanceLedgerService.upsertSubscription(
 					name,
 					cents,
 					cycleValue,
-					FinanceRules.nextDateForCycle(FinanceAttributes.todayYmd(), cycleValue),
+					FinanceRules.nextDateForCycle(startYmd, cycleValue),
 					"active",
-					selectedComboText(accountCombo),
-					"");
+					selectedAccountNodeId(accountCombo),
+					"",
+					startYmd,
+					end.valid ? FinanceAttributes.datePart(end.ymd) : "");
 			refreshAll();
 			setStatus("已添加 · " + name + " · 日均 ¥"
 					+ FinanceAttributes.formatYuan(FinanceRules.dailyAverageCents(cents, cycleValue)), false);
@@ -985,8 +1695,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 				JOptionPane.showMessageDialog(this, "无法创建/打开账本", "财务", JOptionPane.ERROR_MESSAGE);
 				return;
 			}
-			Controller.getCurrentController().getMapViewManager().newMapView(map,
-					Controller.getCurrentModeController());
+			FinanceLedgerService.activateFinanceMapView(map);
 		}
 		catch (Exception ex) {
 			JOptionPane.showMessageDialog(this, "无法打开账本: " + ex.getMessage(), "财务", JOptionPane.ERROR_MESSAGE);
@@ -997,20 +1706,8 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		if (nodeId == null || nodeId.length() == 0) {
 			return;
 		}
-		try {
-			final MapModel map = FinanceLedgerService.ensureFinanceMap();
-			if (map == null) {
-				return;
-			}
-			Controller.getCurrentController().getMapViewManager().newMapView(map,
-					Controller.getCurrentModeController());
-			final NodeModel node = map.getNodeForID(nodeId);
-			if (node != null) {
-				Controller.getCurrentModeController().getMapController().select(node);
-			}
-		}
-		catch (Exception ex) {
-			LogUtils.warn("Focus finance node failed", ex);
+		if (!FinanceLedgerService.focusFinanceNode(nodeId)) {
+			LogUtils.warn("Focus finance node failed: " + nodeId);
 		}
 	}
 
@@ -1039,16 +1736,60 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 		return v == null ? "" : String.valueOf(v).trim();
 	}
 
+	private static String selectedRefNodeId(final JComboBox combo) {
+		final Object v = combo.getSelectedItem();
+		if (v instanceof FinanceNodeRef.Ref) {
+			return ((FinanceNodeRef.Ref) v).nodeId;
+		}
+		return "";
+	}
+
+	private String selectedCategoryNodeId() {
+		return selectedRefNodeId(categoryCombo);
+	}
+
+	private static String selectedAccountNodeId(final JComboBox combo) {
+		return selectedRefNodeId(combo);
+	}
+
+	private static void selectRefByNodeId(final JComboBox combo, final String nodeId) {
+		if (combo == null || nodeId == null) {
+			return;
+		}
+		for (int i = 0; i < combo.getItemCount(); i++) {
+			final Object item = combo.getItemAt(i);
+			if (item instanceof FinanceNodeRef.Ref && nodeId.equals(((FinanceNodeRef.Ref) item).nodeId)) {
+				combo.setSelectedIndex(i);
+				return;
+			}
+		}
+	}
+
 	private static DateParse parseDate(final String text) {
 		if (text == null || text.trim().length() == 0) {
-			return DateParse.of(FinanceAttributes.todayYmd(), true);
+			return DateParse.of(FinanceAttributes.todayDateTime(), true);
+		}
+		return parseOptionalDate(text);
+	}
+
+	/** Empty input → invalid (for optional end dates). Non-empty must parse. */
+	private static DateParse parseOptionalDate(final String text) {
+		if (text == null || text.trim().length() == 0) {
+			return DateParse.of("", false);
+		}
+		final String s = text.trim();
+		try {
+			DATETIME.setLenient(false);
+			return DateParse.of(DATETIME.format(DATETIME.parse(s)), true);
+		}
+		catch (Exception e) {
 		}
 		try {
 			DAY.setLenient(false);
-			return DateParse.of(DAY.format(DAY.parse(text.trim())), true);
+			return DateParse.of(DAY.format(DAY.parse(s)) + " 00:00", true);
 		}
 		catch (Exception e) {
-			return DateParse.of(FinanceAttributes.todayYmd(), false);
+			return DateParse.of("", false);
 		}
 	}
 
@@ -1058,6 +1799,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private String[] monthRange() {
+		if (dayViewMode) {
+			return new String[] { viewDay, viewDay };
+		}
 		return new String[] { viewPeriod + "-01", viewPeriod + "-31" };
 	}
 

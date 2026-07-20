@@ -38,6 +38,8 @@ public final class FinanceAttributes {
 	public static final String KIND_TXN = "txn";
 	public static final String KIND_SUBSCRIPTION = "subscription";
 	public static final String KIND_COUPON = "coupon";
+	/** Payment history child under a subscription (not counted as a ledger txn). */
+	public static final String KIND_PAYMENT = "payment";
 
 	public static final String FLOW_INCOME = "income";
 	public static final String FLOW_EXPENSE = "expense";
@@ -203,5 +205,50 @@ public final class FinanceAttributes {
 
 	public static String todayYmd() {
 		return new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA).format(new Date());
+	}
+
+	public static String todayDateTime() {
+		return new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).format(new Date());
+	}
+
+	/** Date portion yyyy-MM-dd from yyyy-MM-dd or yyyy-MM-dd HH:mm. */
+	public static String datePart(final String dateTime) {
+		if (dateTime == null) {
+			return "";
+		}
+		final String s = dateTime.trim();
+		return s.length() >= 10 ? s.substring(0, 10) : s;
+	}
+
+	/**
+	 * Normalize user input to yyyy-MM-dd or yyyy-MM-dd HH:mm.
+	 * Unknown input falls back to {@link #todayDateTime()}.
+	 */
+	public static String normalizeDateTime(final String text) {
+		if (text == null || text.trim().length() == 0) {
+			return todayDateTime();
+		}
+		final String s = text.trim().replace('T', ' ');
+		if (s.length() == 10) {
+			return s + " 00:00";
+		}
+		if (s.length() >= 16) {
+			return s.substring(0, 16);
+		}
+		try {
+			final SimpleDateFormat day = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+			day.setLenient(false);
+			return day.format(day.parse(s)) + " 00:00";
+		}
+		catch (Exception e) {
+			try {
+				final SimpleDateFormat dt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
+				dt.setLenient(false);
+				return dt.format(dt.parse(s));
+			}
+			catch (Exception e2) {
+				return todayDateTime();
+			}
+		}
 	}
 }

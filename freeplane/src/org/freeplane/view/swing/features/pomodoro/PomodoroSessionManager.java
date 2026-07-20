@@ -91,6 +91,33 @@ public final class PomodoroSessionManager {
 		return null;
 	}
 
+	/** Running session, or the most recent paused segment that can be resumed. */
+	public NodeModel getActiveSessionNode() {
+		final NodeModel running = getRunningNode();
+		if (running != null) {
+			return running;
+		}
+		NodeModel bestPaused = null;
+		long bestSessionAt = 0L;
+		final List open = collectOpenPomodoroNodes();
+		for (int i = 0; i < open.size(); i++) {
+			final NodeModel node = (NodeModel) open.get(i);
+			final PomodoroExtension ext = PomodoroExtension.getExtension(node);
+			if (ext == null || !ext.isEnabled() || !PomodoroExtension.STATE_PAUSED.equals(ext.getState())) {
+				continue;
+			}
+			if (ext.getActiveMs() <= 0 && ext.getSessionAt() <= 0) {
+				continue;
+			}
+			final long sessionAt = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
+			if (bestPaused == null || sessionAt >= bestSessionAt) {
+				bestPaused = node;
+				bestSessionAt = sessionAt;
+			}
+		}
+		return bestPaused;
+	}
+
 	public void start(final NodeModel node) {
 		if (node == null) {
 			return;
@@ -179,6 +206,48 @@ public final class PomodoroSessionManager {
 		final PomodoroSessionRecord record = new PomodoroSessionRecord(startMs, endMs, focusMs);
 		next.setLog(PomodoroLog.append(next.getLog(), record));
 		next.setTotalMs(next.getTotalMs() + focusMs);
+		PomodoroAttributes.write(node, next);
+		PomodoroNoteSync.sync(node, next);
+		fireChanged();
+		refreshWindow();
+	}
+
+	public void updateLogRecord(final NodeModel node, final int logIndex, final PomodoroSessionRecord record) {
+		if (node == null || record == null || logIndex < 0) {
+			return;
+		}
+		final PomodoroExtension ext = PomodoroExtension.getExtension(node);
+		if (ext == null) {
+			return;
+		}
+		final List records = PomodoroLog.decode(ext.getLog());
+		if (logIndex >= records.size()) {
+			return;
+		}
+		final PomodoroExtension next = ext.copy();
+		next.setLog(PomodoroLog.replaceRecord(next.getLog(), logIndex, record));
+		next.setTotalMs(PomodoroLog.sumFocus(PomodoroLog.decode(next.getLog())));
+		PomodoroAttributes.write(node, next);
+		PomodoroNoteSync.sync(node, next);
+		fireChanged();
+		refreshWindow();
+	}
+
+	public void deleteLogRecord(final NodeModel node, final int logIndex) {
+		if (node == null || logIndex < 0) {
+			return;
+		}
+		final PomodoroExtension ext = PomodoroExtension.getExtension(node);
+		if (ext == null) {
+			return;
+		}
+		final List records = PomodoroLog.decode(ext.getLog());
+		if (logIndex >= records.size()) {
+			return;
+		}
+		final PomodoroExtension next = ext.copy();
+		next.setLog(PomodoroLog.removeRecord(next.getLog(), logIndex));
+		next.setTotalMs(PomodoroLog.sumFocus(PomodoroLog.decode(next.getLog())));
 		PomodoroAttributes.write(node, next);
 		PomodoroNoteSync.sync(node, next);
 		fireChanged();
@@ -463,10 +532,10 @@ public final class PomodoroSessionManager {
 		}
 		final List children = node.getChildren();
 		if (children != null) {
-			for (int i = 0; i < children.size(); i++) {
-				recoverRecursive((NodeModel) children.get(i));
-			}
+		for (int i = 0; i < children.size(); i++) {
+			recoverRecursive((NodeModel) children.get(i));
 		}
+	}
 	}
 
 	private void pauseAllRunningExcept(final NodeModel keep) {

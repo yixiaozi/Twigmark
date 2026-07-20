@@ -31,7 +31,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
@@ -40,7 +39,6 @@ import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.features.usagestats.ToggleUsageStatsReportAction;
 import org.freeplane.features.usagestats.UsageStatsReportService;
 
 /**
@@ -280,9 +278,8 @@ public class ReportsTabPanel extends JPanel {
 		if (charts != null) {
 			charts.hideFromMapViewport();
 		}
-		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, true);
 		service.setReportVisible(true);
-		statusLabel.setText("已显示「活动报表」");
+		statusLabel.setText("已显示「活动报表」· 点右上角「返回导图」关闭");
 	}
 
 	private void showMcpAudit() {

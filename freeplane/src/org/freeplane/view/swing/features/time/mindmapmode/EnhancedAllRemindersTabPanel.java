@@ -428,10 +428,14 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 	}
 
 	private void purgeStaleReminders(Set activeFileKeys) {
+		if (activeFileKeys == null) {
+			activeFileKeys = Collections.emptySet();
+		}
 		List staleFileKeys = new ArrayList();
 		for (Object fileKeyObj : reminderKeysByFile.keySet()) {
 			String fileKey = (String) fileKeyObj;
-			if (!activeFileKeys.contains(fileKey) || !isValidMindmapFile(new File(fileKey))) {
+			// MindMapFileIdentity.storageKey is not a path — do not use new File(fileKey).
+			if (!activeFileKeys.contains(fileKey) || !hasValidBackingReminderFile(fileKey)) {
 				staleFileKeys.add(fileKey);
 			}
 		}
@@ -447,10 +451,27 @@ public class EnhancedAllRemindersTabPanel extends JPanel {
 		}
 		for (Object cacheKeyObj : new ArrayList(cacheByFile.keySet())) {
 			String cacheKey = (String) cacheKeyObj;
-			if (!activeFileKeys.contains(cacheKey) || !isValidMindmapFile(new File(cacheKey))) {
+			if (!activeFileKeys.contains(cacheKey)) {
 				cacheByFile.remove(cacheKey);
 			}
 		}
+	}
+
+	private boolean hasValidBackingReminderFile(final String fileKey) {
+		final List keys = (List) reminderKeysByFile.get(fileKey);
+		if (keys == null || keys.isEmpty()) {
+			return false;
+		}
+		for (int i = 0; i < keys.size(); i++) {
+			final Object item = remindersByKey.get(keys.get(i));
+			if (item instanceof ReminderRecord) {
+				final ReminderRecord record = (ReminderRecord) item;
+				if (isValidMindmapFile(record.file)) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	private List getRemindersForFile(final File file) {

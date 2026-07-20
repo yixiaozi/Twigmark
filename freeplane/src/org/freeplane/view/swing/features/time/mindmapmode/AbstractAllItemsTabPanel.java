@@ -42,6 +42,7 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.MindMapFileIdentity;
 import org.freeplane.features.icon.IconNotFound;
 import org.freeplane.features.icon.IconStore;
 import org.freeplane.features.icon.MindIcon;
@@ -657,7 +658,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		List staleFileKeys = new ArrayList();
 		for (Object fileKeyObj : itemKeysByFile.keySet()) {
 			String fileKey = (String) fileKeyObj;
-			if (!activeFileKeys.contains(fileKey) || !isValidMindmapFile(new File(fileKey))) {
+			// storageKey is an identity token (id:/f:/…), not a filesystem path — never
+			// reconstruct File from it or every scan result is wiped after merge.
+			if (!activeFileKeys.contains(fileKey) || !hasValidBackingMindmap(fileKey)) {
 				staleFileKeys.add(fileKey);
 			}
 		}
@@ -673,10 +676,25 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 		for (Object cacheKeyObj : new ArrayList(cacheByFile.keySet())) {
 			String cacheKey = (String) cacheKeyObj;
-			if (!activeFileKeys.contains(cacheKey) || !isValidMindmapFile(new File(cacheKey))) {
+			if (!activeFileKeys.contains(cacheKey)) {
 				cacheByFile.remove(cacheKey);
 			}
 		}
+	}
+
+	/** True when at least one cached item for this identity key still points at a real .mm file. */
+	private boolean hasValidBackingMindmap(final String fileKey) {
+		final List keys = (List) itemKeysByFile.get(fileKey);
+		if (keys == null || keys.isEmpty()) {
+			return false;
+		}
+		for (int i = 0; i < keys.size(); i++) {
+			final ItemRecord record = (ItemRecord) itemsByKey.get(keys.get(i));
+			if (record != null && isValidMindmapFile(record.file)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private List collectAllMindmapFiles() {
@@ -969,14 +987,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private String fileKey(File file) {
-		if (file == null) {
-			return "";
-		}
-		try {
-			return file.getCanonicalPath();
-		} catch (Exception e) {
-			return file.getAbsolutePath();
-		}
+		return MindMapFileIdentity.storageKey(file);
 	}
 
 	private String findNearestTodoParentOnStack(List nodeStack) {

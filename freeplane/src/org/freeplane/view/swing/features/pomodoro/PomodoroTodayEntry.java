@@ -18,15 +18,18 @@ final class PomodoroTodayEntry {
 	final long endMs;
 	final long focusMs;
 	final boolean live;
+	/** Index in {@link PomodoroLog#decode(String)}; {@code -1} for live segment. */
+	final int recordIndex;
 	final String label;
 
 	PomodoroTodayEntry(final NodeModel node, final long startMs, final long endMs, final long focusMs,
-			final boolean live) {
+			final boolean live, final int recordIndex) {
 		this.node = node;
 		this.startMs = startMs;
 		this.endMs = endMs;
 		this.focusMs = focusMs;
 		this.live = live;
+		this.recordIndex = recordIndex;
 		this.label = buildLabel(node, startMs, endMs, focusMs, live);
 	}
 
@@ -78,14 +81,14 @@ final class PomodoroTodayEntry {
 				final PomodoroSessionRecord rec = (PomodoroSessionRecord) records.get(r);
 				if (rec.endMs >= todayStart || rec.startMs >= todayStart) {
 					out.add(new PomodoroTodayEntry(node, Math.max(rec.startMs, todayStart), rec.endMs, rec.focusMs,
-							false));
+							false, r));
 				}
 			}
 			final long liveMs = ext.liveSegmentMs(now);
 			if (liveMs > 0) {
 				final long anchor = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
 				if (anchor >= todayStart) {
-					out.add(new PomodoroTodayEntry(node, anchor, now, liveMs, true));
+					out.add(new PomodoroTodayEntry(node, anchor, now, liveMs, true, -1));
 				}
 			}
 		}

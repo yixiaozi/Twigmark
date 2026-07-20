@@ -33,6 +33,7 @@ import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapFileIdentity;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.plugin.workspace.URIUtils;
 import org.freeplane.plugin.workspace.WorkspaceController;
@@ -261,22 +262,16 @@ public class ImportProjectDialogPanel extends JPanel {
 		if (WorkspaceController.getCurrentModel().getProject(importProject.getProjectID()) != null) {
 			return true;
 		}
-		try {
-			final File importHome = URIUtils.getAbsoluteFile(importProject.getProjectHome());
-			if (importHome == null) {
-				return false;
-			}
-			final String importCanon = importHome.getCanonicalPath();
-			final List<AWorkspaceProject> loaded = WorkspaceController.getCurrentModel().getProjects();
-			for (int i = 0; i < loaded.size(); i++) {
-				final File loadedHome = URIUtils.getAbsoluteFile(loaded.get(i).getProjectHome());
-				if (loadedHome != null && importCanon.equals(loadedHome.getCanonicalPath())) {
-					return true;
-				}
-			}
+		final File importHome = URIUtils.getAbsoluteFile(importProject.getProjectHome());
+		if (importHome == null) {
+			return false;
 		}
-		catch (IOException e) {
-			LogUtils.warn(e);
+		final List<AWorkspaceProject> loaded = WorkspaceController.getCurrentModel().getProjects();
+		for (int i = 0; i < loaded.size(); i++) {
+			final File loadedHome = URIUtils.getAbsoluteFile(loaded.get(i).getProjectHome());
+			if (loadedHome != null && MindMapFileIdentity.isSameFile(importHome, loadedHome)) {
+				return true;
+			}
 		}
 		return false;
 	}

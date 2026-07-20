@@ -641,9 +641,9 @@ final class PomodoroWindow extends JFrame {
 		if (focusedNode != null) {
 			return focusedNode;
 		}
-		final NodeModel running = manager.getRunningNode();
-		if (running != null) {
-			return running;
+		final NodeModel active = manager.getActiveSessionNode();
+		if (active != null) {
+			return active;
 		}
 		return Controller.getCurrentController().getSelection().getSelected();
 	}
