@@ -13,11 +13,17 @@ import java.util.Set;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
 
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.NodeModel;
 
 public final class NodePinsIndex {
 
 	private static final int RESCAN_DEBOUNCE_MS = 800;
+	/**
+	 * Full-library SAX rescans thrash disk/CPU on large workspaces and can starve the
+	 * MCP HTTP/EDT path. Set {@code -Dmcp.skipFullTagScan=true} on headless MCP servers.
+	 */
+	private static final String SKIP_FULL_TAG_SCAN_PROP = "mcp.skipFullTagScan";
 
 	private static NodePinsIndex instance;
 
@@ -26,6 +32,7 @@ public final class NodePinsIndex {
 	private SwingWorker activeWorker;
 	private boolean rescanRequested;
 	private final Timer rescanDebounceTimer;
+	private boolean loggedSkipFullScan;
 
 	private NodePinsIndex() {
 		rescanDebounceTimer = new Timer(RESCAN_DEBOUNCE_MS, new ActionListener() {
@@ -45,7 +52,15 @@ public final class NodePinsIndex {
 
 	/** Debounced full-project rescan; coalesces rapid calls. */
 	public void scheduleRescan() {
+		if (isFullTagScanSkipped()) {
+			return;
+		}
 		rescanDebounceTimer.restart();
+	}
+
+	static boolean isFullTagScanSkipped() {
+		final String value = System.getProperty(SKIP_FULL_TAG_SCAN_PROP, "");
+		return "true".equalsIgnoreCase(value) || "1".equals(value) || "yes".equalsIgnoreCase(value);
 	}
 
 	public void updateFromNode(final NodeModel node) {
@@ -122,6 +137,14 @@ public final class NodePinsIndex {
 	}
 
 	public void rescan() {
+		if (isFullTagScanSkipped()) {
+			if (!loggedSkipFullScan) {
+				loggedSkipFullScan = true;
+				LogUtils.info("NodePinsIndex: skipped full tag rescan (" + SKIP_FULL_TAG_SCAN_PROP + "=true)");
+			}
+			rescanRequested = false;
+			return;
+		}
 		if (activeWorker != null) {
 			rescanRequested = true;
 			return;
