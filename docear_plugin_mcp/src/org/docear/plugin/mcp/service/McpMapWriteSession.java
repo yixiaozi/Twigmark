@@ -13,6 +13,8 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mapio.mindmapmode.MMapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
+import org.freeplane.features.styles.MapStyle;
+import org.freeplane.features.styles.MapStyleModel;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.mindmapmode.MFileManager;
 
@@ -49,12 +51,14 @@ final class McpMapWriteSession {
 		final File file = McpMindMapService.resolveMindMapFileForWrite(filePath);
 		final MapModel openMap = findOpenMap(file);
 		if (openMap != null) {
+			ensureMapStyle(openMap);
 			return new McpMapWriteSession(openMap, file, false);
 		}
 		final String cacheKey = file.getCanonicalPath();
 		synchronized (CACHE_LOCK) {
 			final MapModel cached = (MapModel) HEADLESS_CACHE.get(cacheKey);
 			if (cached != null && isSameFile(cached.getFile(), file)) {
+				ensureMapStyle(cached);
 				return new McpMapWriteSession(cached, file, true);
 			}
 		}
@@ -65,6 +69,7 @@ final class McpMapWriteSession {
 		if (loaded.getFile() == null) {
 			loaded.setURL(Compat.fileToUrl(file));
 		}
+		ensureMapStyle(loaded);
 		synchronized (CACHE_LOCK) {
 			HEADLESS_CACHE.put(cacheKey, loaded);
 			while (HEADLESS_CACHE.size() > HEADLESS_CACHE_MAX) {
@@ -77,6 +82,29 @@ final class McpMapWriteSession {
 			}
 		}
 		return new McpMapWriteSession(loaded, file, true);
+	}
+
+	/**
+	 * Minimal / headless-created maps often have AutomaticEdgeColor but no MapStyleModel.
+	 * Nested addNewNode then NPEs in LogicalStyleController via AutomaticEdgeColorHook.
+	 */
+	static void ensureMapStyle(final MapModel map) {
+		if (map == null || map.getRootNode() == null) {
+			return;
+		}
+		final MapStyleModel existing = MapStyleModel.getExtension(map);
+		if (existing != null && existing.getStyleMap() != null) {
+			return;
+		}
+		try {
+			final MapStyle mapStyle = MapStyle.getController();
+			if (mapStyle != null) {
+				mapStyle.onCreate(map);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("MCP ensureMapStyle failed: " + e.getMessage());
+		}
 	}
 
 	MapModel getMap() {

@@ -287,6 +287,8 @@ public final class McpNodeService {
 				if (map == null) {
 					throw new IllegalStateException("Failed to create mind map.");
 				}
+				// Older WorkspaceNewMapAction builds omit MapStyle; nested add_nodes needs it.
+				McpMapWriteSession.ensureMapStyle(map);
 				final String rootNodeId = map.getRootNode() != null ? map.getRootNode().createID() : "";
 				if (openInUi) {
 					WorkspaceNewMapAction.openMap(file.toURI());
