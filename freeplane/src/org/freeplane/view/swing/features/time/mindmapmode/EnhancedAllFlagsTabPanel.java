@@ -24,6 +24,15 @@ public class EnhancedAllFlagsTabPanel extends AbstractAllItemsTabPanel {
 	}
 
 	@Override
+	protected String[] getIconTextProbes() {
+		// Prefix match: flag, flag-yellow, flag-blue, ...
+		return new String[] {
+				"BUILTIN=\"flag",
+				"BUILTIN='flag"
+		};
+	}
+
+	@Override
 	protected String getRootLabel() {
 		return "\u7ea2\u65d7";
 	}

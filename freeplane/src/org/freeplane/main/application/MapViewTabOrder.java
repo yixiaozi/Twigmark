@@ -159,6 +159,14 @@ public final class MapViewTabOrder {
 		}
 	}
 
+	/** Force-remove a ghost/orphan tab entry that is no longer a live map view. */
+	public static void forceRemoveTabKey(final Component tabKey) {
+		final MapViewTabs tabs = MapViewTabs.getInstance();
+		if (tabs != null) {
+			tabs.forceRemoveTabKey(tabKey);
+		}
+	}
+
 	@SuppressWarnings("unchecked")
 	public static List getAllTabKeysInOrder() {
 		final MapViewTabs tabs = MapViewTabs.getInstance();

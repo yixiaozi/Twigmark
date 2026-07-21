@@ -25,7 +25,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import javax.swing.BorderFactory;
@@ -47,6 +49,11 @@ import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
  * Horizontal cascade rows for nested tag groups: one FlowLayout row per depth.
  * Child rows lead with 「全部」(subtree) and 「未分组」(direct tags only).
  * Optional root 「全部」 scope ({@link #ALL_SCOPE_ID}) shows every tag regardless of group.
+ * <p>
+ * Remembers the last subcategory under each parent (persisted with
+ * {@code propActiveGroup + ".memory"}). Switching back to parent A restores A2 if that
+ * was last used under A; the active group itself is restored on restart via
+ * {@code propActiveGroup}.
  */
 public class TagGroupCascadeBar extends JPanel {
 
@@ -77,6 +84,7 @@ public class TagGroupCascadeBar extends JPanel {
 	private final TagGroupStore groupStore;
 	private final String propActiveGroup;
 	private final String propDirectOnly;
+	private final String propPathMemory;
 	private final boolean includeAllScope;
 	private final JPanel rowsPanel = new JPanel();
 	private Listener listener;
@@ -86,6 +94,11 @@ public class TagGroupCascadeBar extends JPanel {
 	private String activeGroupId = TagGroupStore.UNGROUPED_ID;
 	/** When true, only tags assigned directly to {@link #activeGroupId} (not subgroups). */
 	private boolean directOnly;
+	/**
+	 * Per-parent last selection: parentGroupId → "childId" or "childId!" (directOnly).
+	 * Switching back to parent A restores the last child (e.g. A2) under A.
+	 */
+	private final Map pathMemory = new LinkedHashMap();
 
 	public TagGroupCascadeBar(final TagGroupStore groupStore, final String propActiveGroup,
 			final String propDirectOnly) {
@@ -98,12 +111,14 @@ public class TagGroupCascadeBar extends JPanel {
 		this.groupStore = groupStore != null ? groupStore : TagGroupStore.getInstance();
 		this.propActiveGroup = propActiveGroup;
 		this.propDirectOnly = propDirectOnly;
+		this.propPathMemory = propActiveGroup + ".memory";
 		this.includeAllScope = includeAllScope;
 		setOpaque(false);
 		rowsPanel.setOpaque(false);
 		rowsPanel.setLayout(new BoxLayout(rowsPanel, BoxLayout.Y_AXIS));
 		rowsPanel.setBorder(BorderFactory.createEmptyBorder(0, 0, 2, 0));
 		add(rowsPanel, java.awt.BorderLayout.CENTER);
+		loadPathMemory();
 		final String defaultGroup = includeAllScope ? ALL_SCOPE_ID : TagGroupStore.UNGROUPED_ID;
 		activeGroupId = ResourceController.getResourceController().getProperty(propActiveGroup, defaultGroup);
 		directOnly = "true".equalsIgnoreCase(
@@ -112,6 +127,8 @@ public class TagGroupCascadeBar extends JPanel {
 			activeGroupId = defaultGroup;
 			directOnly = false;
 		}
+		// Seed per-parent memory from the restored selection so A→A2 works after upgrade / first run.
+		rememberSelectionAlongPath(activeGroupId, directOnly);
 	}
 
 	/** @deprecated use {@link #TagGroupCascadeBar(TagGroupStore, String, String)} */
@@ -245,9 +262,12 @@ public class TagGroupCascadeBar extends JPanel {
 		row.setBorder(BorderFactory.createEmptyBorder(1, 0, 2, 0));
 		if (parentIdForAdd != null) {
 			row.add(createScopeButton(parentIdForAdd, false));
-			// 「未分组」only when subgroups exist; otherwise 全部 already covers direct tags.
+			// 「未分组」only when subgroups exist and there is at least one direct tag.
 			if (!groupStore.isUngrouped(parentIdForAdd) && !groupIdsOnRow.isEmpty()) {
-				row.add(createScopeButton(parentIdForAdd, true));
+				final boolean directSelected = parentIdForAdd.equals(activeGroupId) && directOnly;
+				if (directSelected || !collectScopeTags(parentIdForAdd, true).isEmpty()) {
+					row.add(createScopeButton(parentIdForAdd, true));
+				}
 			}
 		}
 		else if (includeAllScope) {
@@ -256,6 +276,13 @@ public class TagGroupCascadeBar extends JPanel {
 		}
 		for (final Iterator it = groupIdsOnRow.iterator(); it.hasNext();) {
 			final String groupId = (String) it.next();
+			// Hide root 「未分组」 when it has no maps/tags (unless it is the active filter).
+			if (parentIdForAdd == null && groupStore.isUngrouped(groupId)) {
+				final boolean ungroupedSelected = groupId.equals(activeGroupId) && !directOnly;
+				if (!ungroupedSelected && collectScopeTags(groupId, false).isEmpty()) {
+					continue;
+				}
+			}
 			final boolean exact = groupId.equals(activeGroupId) && !directOnly;
 			final boolean onPath = !exact && (groupId.equals(activeGroupId)
 					|| (selectedOnRow != null && groupId.equals(selectedOnRow)));
@@ -418,6 +445,22 @@ public class TagGroupCascadeBar extends JPanel {
 	}
 
 	public void selectGroup(final String groupId, final boolean direct) {
+		String targetId = groupId;
+		boolean targetDirect = direct;
+		if (!direct && shouldRestoreRememberedChild(groupId)) {
+			final String[] remembered = resolveRememberedSelection(groupId);
+			if (remembered != null) {
+				targetId = remembered[0];
+				targetDirect = "true".equals(remembered[1]);
+			}
+		}
+		applyActiveSelection(targetId, targetDirect);
+		rememberSelectionAlongPath(activeGroupId, directOnly);
+		rebuild();
+		fireSelectionChanged();
+	}
+
+	private void applyActiveSelection(final String groupId, final boolean direct) {
 		if (ALL_SCOPE_ID.equals(groupId)) {
 			activeGroupId = ALL_SCOPE_ID;
 			directOnly = false;
@@ -426,10 +469,135 @@ public class TagGroupCascadeBar extends JPanel {
 			activeGroupId = groupId != null ? groupId : TagGroupStore.UNGROUPED_ID;
 			directOnly = direct && !groupStore.isUngrouped(activeGroupId);
 		}
+		// Skip persist during quit — shutdown hook would otherwise save「全部」over the real filter.
+		if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+			return;
+		}
 		ResourceController.getResourceController().setProperty(propActiveGroup, activeGroupId);
 		ResourceController.getResourceController().setProperty(propDirectOnly, directOnly ? "true" : "false");
-		rebuild();
-		fireSelectionChanged();
+	}
+
+	/**
+	 * Restore last child only when entering a branch from outside its path.
+	 * Clicking an ancestor already on the path keeps navigate-up (e.g. A2 → A 全部).
+	 */
+	private boolean shouldRestoreRememberedChild(final String groupId) {
+		if (groupId == null || ALL_SCOPE_ID.equals(groupId) || groupStore.isUngrouped(groupId)) {
+			return false;
+		}
+		if (isOnActivePath(groupId)) {
+			return false;
+		}
+		return !groupStore.getChildIds(groupId).isEmpty();
+	}
+
+	private boolean isOnActivePath(final String groupId) {
+		if (groupId == null || isAllScope()) {
+			return false;
+		}
+		if (groupId.equals(activeGroupId)) {
+			return true;
+		}
+		return groupStore.isDescendantOf(activeGroupId, groupId);
+	}
+
+	/**
+	 * Walk parent→remembered-child until a leaf intent (self / direct / no further memory).
+	 * @return {groupId, "true"|"false"} or null to keep the clicked group
+	 */
+	private String[] resolveRememberedSelection(final String startGroupId) {
+		String current = startGroupId;
+		boolean currentDirect = false;
+		final Set seen = new HashSet();
+		while (current != null && seen.add(current)) {
+			final String encoded = (String) pathMemory.get(current);
+			if (encoded == null || encoded.length() == 0) {
+				break;
+			}
+			final boolean rememberedDirect = encoded.endsWith("!");
+			final String rememberedId = rememberedDirect ? encoded.substring(0, encoded.length() - 1) : encoded;
+			if (rememberedId.length() == 0 || !isValidActiveGroup(rememberedId)) {
+				pathMemory.remove(current);
+				break;
+			}
+			if (rememberedId.equals(current)) {
+				currentDirect = rememberedDirect;
+				break;
+			}
+			if (!groupStore.isDescendantOf(rememberedId, current)) {
+				pathMemory.remove(current);
+				break;
+			}
+			current = rememberedId;
+			currentDirect = rememberedDirect;
+			if (currentDirect || groupStore.getChildIds(current).isEmpty()) {
+				break;
+			}
+		}
+		if (current == null || (current.equals(startGroupId) && !currentDirect)) {
+			return null;
+		}
+		return new String[] { current, currentDirect ? "true" : "false" };
+	}
+
+	private void rememberSelectionAlongPath(final String selectedId, final boolean selectedDirect) {
+		if (selectedId == null || ALL_SCOPE_ID.equals(selectedId)) {
+			return;
+		}
+		final String encoded = selectedDirect ? selectedId + "!" : selectedId;
+		pathMemory.put(selectedId, encoded);
+		String parent = groupStore.getParentId(selectedId);
+		final Set seen = new HashSet();
+		seen.add(selectedId);
+		while (parent != null && seen.add(parent)) {
+			pathMemory.put(parent, encoded);
+			parent = groupStore.getParentId(parent);
+		}
+		persistPathMemory();
+	}
+
+	private void loadPathMemory() {
+		pathMemory.clear();
+		final String raw = ResourceController.getResourceController().getProperty(propPathMemory, "");
+		if (raw == null || raw.length() == 0) {
+			return;
+		}
+		final String[] entries = raw.split(";");
+		for (int i = 0; i < entries.length; i++) {
+			final String entry = entries[i];
+			if (entry == null || entry.length() == 0) {
+				continue;
+			}
+			final int sep = entry.indexOf('>');
+			if (sep <= 0 || sep >= entry.length() - 1) {
+				continue;
+			}
+			final String parentId = entry.substring(0, sep);
+			final String value = entry.substring(sep + 1);
+			if (parentId.length() > 0 && value.length() > 0) {
+				pathMemory.put(parentId, value);
+			}
+		}
+	}
+
+	private void persistPathMemory() {
+		if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+			return;
+		}
+		final StringBuffer sb = new StringBuffer();
+		for (final Iterator it = pathMemory.entrySet().iterator(); it.hasNext();) {
+			final Map.Entry entry = (Map.Entry) it.next();
+			final String parentId = (String) entry.getKey();
+			final String value = (String) entry.getValue();
+			if (parentId == null || value == null || parentId.length() == 0 || value.length() == 0) {
+				continue;
+			}
+			if (sb.length() > 0) {
+				sb.append(';');
+			}
+			sb.append(parentId).append('>').append(value);
+		}
+		ResourceController.getResourceController().setProperty(propPathMemory, sb.toString());
 	}
 
 	private boolean isValidActiveGroup(final String groupId) {

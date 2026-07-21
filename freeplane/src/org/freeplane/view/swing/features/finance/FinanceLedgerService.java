@@ -41,6 +41,9 @@ public final class FinanceLedgerService {
 	public static final String SUB_EXPENSE = "支出";
 	public static final String SUB_INCOME = "收入";
 
+	/** True while {@code closeAllMaps()} runs — blocks auto-reopen of 个人财务.mm during quit. */
+	private static volatile boolean closingAllMaps;
+
 	private FinanceLedgerService() {
 	}
 
@@ -76,16 +79,30 @@ public final class FinanceLedgerService {
 		return new File(dir, configured);
 	}
 
+	public static void setClosingAllMaps(final boolean closing) {
+		closingAllMaps = closing;
+	}
+
+	public static boolean isClosingAllMaps() {
+		return closingAllMaps;
+	}
+
 	/**
 	 * Ensure the finance map exists (create skeleton if missing) and is open.
+	 * During application quit ({@link #isClosingAllMaps()}), never opens or creates a map.
 	 */
 	public static MapModel ensureFinanceMap() {
 		final File file = resolveFinanceMapFile();
 		try {
 			final MapModel open = findOpenFinanceMap(file);
 			if (open != null) {
-				ensureSkeleton(open);
+				if (!closingAllMaps) {
+					ensureSkeleton(open);
+				}
 				return open;
+			}
+			if (closingAllMaps) {
+				return null;
 			}
 			if (file.isFile()) {
 				final URL url = Compat.fileToUrl(file);
@@ -386,7 +403,7 @@ public final class FinanceLedgerService {
 	public static NodeModel updateTransaction(final String nodeId, final String amountYuanOrCents, final String flow,
 			final String dateYmd, final String categoryName, final String accountName, final String accountTo,
 			final String merchant, final String note) {
-		final MapModel map = preferOpenFinanceMap();
+		final MapModel map = ensureFinanceMap();
 		if (map == null || nodeId == null) {
 			return null;
 		}
@@ -746,7 +763,7 @@ public final class FinanceLedgerService {
 	public static NodeModel updateSubscription(final String nodeId, final String name, final long amountCents,
 			final String cycle, final String nextYmd, final String status, final String accountName,
 			final String note, final String startYmd, final String endYmd) {
-		final MapModel map = preferOpenFinanceMap();
+		final MapModel map = ensureFinanceMap();
 		if (map == null || nodeId == null || name == null || name.trim().length() == 0) {
 			return null;
 		}
@@ -824,7 +841,7 @@ public final class FinanceLedgerService {
 	 * subscription node, then advances {@code next} by one cycle.
 	 */
 	public static NodeModel recordSubscriptionPayment(final String subscriptionNodeId, final String payDateYmd) {
-		final MapModel map = preferOpenFinanceMap();
+		final MapModel map = ensureFinanceMap();
 		if (map == null || subscriptionNodeId == null) {
 			return null;
 		}
@@ -1003,7 +1020,7 @@ public final class FinanceLedgerService {
 	}
 
 	public static NodeModel markCouponUsed(final String nodeId, final boolean used) {
-		final MapModel map = preferOpenFinanceMap();
+		final MapModel map = ensureFinanceMap();
 		if (map == null || nodeId == null || nodeId.trim().length() == 0) {
 			return null;
 		}
@@ -1023,7 +1040,7 @@ public final class FinanceLedgerService {
 	}
 
 	public static boolean deleteFinanceNode(final String nodeId) {
-		final MapModel map = preferOpenFinanceMap();
+		final MapModel map = ensureFinanceMap();
 		if (map == null || nodeId == null || nodeId.trim().length() == 0) {
 			return false;
 		}
@@ -1116,6 +1133,10 @@ public final class FinanceLedgerService {
 		}
 	}
 
+	/**
+	 * Return an already-open finance map, or null. Never opens/creates a map
+	 * (sidebar refresh and read paths must not reopen 个人财务.mm during quit).
+	 */
 	private static MapModel preferOpenFinanceMap() {
 		final File file = resolveFinanceMapFile();
 		final MapModel open = findOpenFinanceMap(file);
@@ -1133,7 +1154,7 @@ public final class FinanceLedgerService {
 		}
 		catch (Exception e) {
 		}
-		return ensureFinanceMap();
+		return null;
 	}
 
 	public static MapModel preferOpenFinanceMapPublic() {

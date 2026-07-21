@@ -25,6 +25,7 @@ import java.awt.ComponentOrientation;
 import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.EventQueue;
+import java.awt.Font;
 import java.awt.Frame;
 import java.awt.GraphicsDevice;
 import java.awt.GraphicsEnvironment;
@@ -42,25 +43,34 @@ import java.net.URL;
 import java.text.MessageFormat;
 import java.util.Locale;
 
+import javax.swing.BorderFactory;
 import javax.swing.ImageIcon;
 import javax.swing.JComponent;
+import javax.swing.JDialog;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JLayeredPane;
+import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.KeyStroke;
 import javax.swing.RootPaneContainer;
+import javax.swing.WindowConstants;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.FreeplaneMenuBar;
 import org.freeplane.core.ui.components.UITools;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.Compat;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.FrameController;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.mindmapmode.FileOpener;
+import org.freeplane.view.swing.map.MapViewController;
 import org.freeplane.view.swing.ui.DefaultMapMouseListener;
 
 import sun.net.www.ParseUtil;
@@ -353,11 +363,93 @@ class ApplicationViewController extends FrameController {
 
 	@Override
 	public boolean quit() {
-		if (!super.quit()) {
-			return false;
+		final boolean wasVisible = frame.isVisible();
+		frame.setVisible(false);
+
+		final JDialog progressDlg = new JDialog(frame, quitText("quit.progress.title", "正在退出 Docear"), false);
+		progressDlg.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		progressDlg.setAlwaysOnTop(true);
+		progressDlg.setUndecorated(false);
+
+		final JLabel titleLabel = new JLabel(quitText("quit.progress.title", "正在退出 Docear"));
+		titleLabel.setFont(titleLabel.getFont().deriveFont(Font.BOLD, 14f));
+		titleLabel.setForeground(DocearUiTheme.TEXT);
+
+		final JLabel statusLabel = new JLabel(quitText("quit.progress.starting", "正在准备退出…"));
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 0, 10, 0));
+
+		final JProgressBar bar = new JProgressBar(0, 100);
+		bar.setIndeterminate(true);
+		bar.setStringPainted(false);
+		bar.setForeground(DocearUiTheme.ACCENT);
+		bar.setBackground(DocearUiTheme.SURFACE_SOFT);
+		bar.setBorder(BorderFactory.createEmptyBorder());
+		bar.setPreferredSize(new Dimension(320, 8));
+
+		final JPanel body = new JPanel(new BorderLayout(0, 0));
+		body.setBackground(DocearUiTheme.SURFACE);
+		body.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createLineBorder(DocearUiTheme.HAIRLINE),
+				BorderFactory.createEmptyBorder(18, 22, 18, 22)));
+		body.add(titleLabel, BorderLayout.NORTH);
+		body.add(statusLabel, BorderLayout.CENTER);
+		body.add(bar, BorderLayout.SOUTH);
+		progressDlg.setContentPane(body);
+		progressDlg.pack();
+		progressDlg.setSize(Math.max(380, progressDlg.getWidth()), Math.max(120, progressDlg.getHeight()));
+		progressDlg.setLocationRelativeTo(null);
+		progressDlg.setVisible(true);
+		progressDlg.toFront();
+
+		MapViewController.setQuitProgressListener(new MapViewController.QuitProgressListener() {
+			public void status(final String message) {
+				statusLabel.setText(message == null || message.length() == 0 ? " " : message);
+				statusLabel.paintImmediately(0, 0, Math.max(1, statusLabel.getWidth()),
+						Math.max(1, statusLabel.getHeight()));
+				bar.paintImmediately(0, 0, Math.max(1, bar.getWidth()), Math.max(1, bar.getHeight()));
+			}
+
+			public void progress(final int current, final int total) {
+				if (total <= 0) {
+					bar.setIndeterminate(true);
+					return;
+				}
+				bar.setIndeterminate(false);
+				bar.setMaximum(total);
+				bar.setValue(Math.min(current, total));
+				bar.paintImmediately(0, 0, Math.max(1, bar.getWidth()), Math.max(1, bar.getHeight()));
+			}
+		});
+		try {
+			if (!super.quit()) {
+				progressDlg.dispose();
+				if (wasVisible) {
+					frame.setVisible(true);
+					frame.toFront();
+				}
+				return false;
+			}
+		}
+		finally {
+			MapViewController.setQuitProgressListener(null);
+			progressDlg.dispose();
 		}
 		frame.dispose();
 		return true;
+	}
+
+	private static String quitText(final String key, final String fallback) {
+		try {
+			final String text = TextUtils.getText(key, fallback);
+			if (text == null || text.length() == 0 || text.charAt(0) == '[') {
+				return fallback;
+			}
+			return text;
+		}
+		catch (Exception e) {
+			return fallback;
+		}
 	}
 
 	@Override

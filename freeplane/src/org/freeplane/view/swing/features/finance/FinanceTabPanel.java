@@ -89,6 +89,9 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 
 	private final Runnable financeRefreshListener = new Runnable() {
 		public void run() {
+			if (FinanceLedgerService.isClosingAllMaps()) {
+				return;
+			}
 			SwingUtilities.invokeLater(new Runnable() {
 				public void run() {
 					refreshAll();
@@ -196,7 +199,7 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	public void afterViewChange(final Component oldView, final Component newView) {
-		if (listening) {
+		if (listening && !FinanceLedgerService.isClosingAllMaps()) {
 			SwingUtilities.invokeLater(new Runnable() {
 				public void run() {
 					refreshAll();
@@ -704,12 +707,12 @@ public final class FinanceTabPanel extends JPanel implements IMapViewChangeListe
 	}
 
 	private void refreshAll() {
-		if (refreshing) {
+		if (refreshing || FinanceLedgerService.isClosingAllMaps()) {
 			return;
 		}
 		refreshing = true;
 		try {
-			FinanceLedgerService.ensureFinanceMap();
+			// Read-only: never ensureFinanceMap() here — that reopens 个人财务.mm during quit.
 			if (dayViewMode) {
 				monthLabel.setText(viewDay);
 				prevMonthButton.setToolTipText("上一天");

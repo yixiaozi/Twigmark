@@ -372,6 +372,27 @@ class MapViewTabs implements IMapViewChangeListener {
 		}
 	}
 
+	/**
+	 * Force-remove a tab key from the master list (ghost/orphan tabs whose MapView
+	 * is no longer in {@code MapViewController}).
+	 */
+	public void forceRemoveTabKey(final Component tabKey) {
+		if (tabKey == null) {
+			return;
+		}
+		boolean removed = false;
+		for (int i = mTabbedPaneMapViews.size() - 1; i >= 0; --i) {
+			if (mTabbedPaneMapViews.get(i) == tabKey) {
+				mTabbedPaneMapViews.remove(i);
+				removed = true;
+			}
+		}
+		if (removed) {
+			rebuildVisibleTabs(null);
+			notifyTabsChanged();
+		}
+	}
+
 	public void afterViewChange(final Component pOldMap, final Component pNewMap) {
 		if (pNewMap == null) {
 			return;
@@ -545,7 +566,9 @@ class MapViewTabs implements IMapViewChangeListener {
 	}
 
 	private void setTabsVisible() {
-		final boolean visible = mTabbedPane.getTabCount() > 1;
+		// Always show the tab strip when at least one document is open (including a
+		// single map) so the group filter chrome and tab title stay visible.
+		final boolean visible = mTabbedPane.getTabCount() >= 1;
 		if (visible == areTabsVisible()) {
 			return;
 		}
@@ -602,6 +625,9 @@ class MapViewTabs implements IMapViewChangeListener {
 			return;
 		}
 		if (tabKey != null && !isAllowedByFilter(tabKey) && outsideFilterHandler != null) {
+			if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+				return;
+			}
 			if (outsideFilterHandler.revealTab(tabKey)) {
 				// Handler updated the cascade and refreshed the strip; just select.
 				final int idx = visibleTabKeys.indexOf(tabKey);
@@ -724,6 +750,11 @@ class MapViewTabs implements IMapViewChangeListener {
 			}
 			if (visibleTabKeys.isEmpty() && !mTabbedPaneMapViews.isEmpty() && visibilityFilter != null
 					&& outsideFilterHandler != null) {
+				if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+					mTabbedPaneSelectionUpdate = true;
+					setTabsVisible();
+					return;
+				}
 				rebuildingVisibleTabs = false;
 				mTabbedPaneSelectionUpdate = true;
 				if (outsideFilterHandler.revealAll()) {

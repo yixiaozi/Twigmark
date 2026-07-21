@@ -6,6 +6,8 @@ import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
@@ -28,6 +30,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
+import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.Timer;
 import javax.swing.KeyStroke;
@@ -47,12 +50,15 @@ import org.freeplane.features.icon.IconNotFound;
 import org.freeplane.features.icon.IconStore;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.IMapLifeCycleListener;
 import org.freeplane.features.map.INodeChangeListener;
+import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
@@ -132,6 +138,18 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 	}
 
+	/** Raw substrings to look for in .mm XML before running SAX (must be cheap). */
+	protected String[] getIconTextProbes() {
+		final String name = getIconName();
+		if (name == null || name.length() == 0) {
+			return new String[0];
+		}
+		return new String[] {
+				"BUILTIN=\"" + name + "\"",
+				"BUILTIN='" + name + "'"
+		};
+	}
+
 	protected abstract String getIconName();
 	protected abstract String getRootLabel();
 	protected abstract String getStatusLabelPrefix();
@@ -148,7 +166,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 	protected final JButton refreshButton = new JButton("\u5237\u65b0");
 	protected final JLabel statusLabel = new JLabel();
-	protected final JTree tree = new JTree();
+	/** Empty root — never use {@code new JTree()} default (colors/sports/food demo). */
+	protected final JTree tree = new JTree(new DefaultTreeModel(new DefaultMutableTreeNode("")));
 	protected final DecimalFormat twoDigits = new DecimalFormat("00");
 	protected final Map cacheByFile = new HashMap();
 	protected final Map itemsByKey = new HashMap();
@@ -164,6 +183,8 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 	public AbstractAllItemsTabPanel() {
 		super(new BorderLayout(4, 4));
+		((DefaultMutableTreeNode) tree.getModel().getRoot()).setUserObject(getRootLabel());
+		statusLabel.setText(getStatusLabelPrefix() + ": 0");
 		JPanel top = new JPanel(new BorderLayout(4, 0));
 		top.add(statusLabel, BorderLayout.CENTER);
 		top.add(refreshButton, BorderLayout.EAST);
@@ -262,15 +283,22 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		});
 		autoRefreshTimer.start();
 
-		liveRefreshTimer = new Timer(400, new java.awt.event.ActionListener() {
+		liveRefreshTimer = new Timer(500, new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
-				triggerRescan();
+				refreshFromOpenMapsQuick();
 			}
 		});
 		liveRefreshTimer.setRepeats(false);
 
 		installOpenMapListeners();
-		triggerRescan();
+		addHierarchyListener(new HierarchyListener() {
+			public void hierarchyChanged(final HierarchyEvent e) {
+				if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) != 0 && isShowing()) {
+					refreshFromOpenMapsQuick();
+				}
+			}
+		});
+		triggerRescan(true);
 	}
 
 	private void installOpenMapListeners() {
@@ -285,9 +313,39 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			final org.freeplane.features.map.MapController mapController = modeController.getMapController();
 			mapController.addNodeChangeListener(new INodeChangeListener() {
 				public void nodeChanged(final NodeChangeEvent event) {
-					if (event != null && NodeModel.NODE_ICON.equals(event.getProperty())) {
+					if (event == null) {
+						return;
+					}
+					final Object prop = event.getProperty();
+					if (NodeModel.NODE_ICON.equals(prop) || NodeModel.NODE_TEXT.equals(prop)
+							|| "hierarchical_icons".equals(prop)) {
 						scheduleLiveRefresh();
 					}
+				}
+			});
+			mapController.addMapChangeListener(new IMapChangeListener() {
+				public void mapChanged(final MapChangeEvent event) {
+					scheduleLiveRefresh();
+				}
+
+				public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
+					scheduleLiveRefresh();
+				}
+
+				public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
+					scheduleLiveRefresh();
+				}
+
+				public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
+						final NodeModel child, final int newIndex) {
+					scheduleLiveRefresh();
+				}
+
+				public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
+				}
+
+				public void onPreNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
+						final NodeModel child, final int newIndex) {
 				}
 			});
 			mapController.addMapLifeCycleListener(new IMapLifeCycleListener() {
@@ -318,9 +376,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private void scheduleLiveRefresh() {
-		if (!isDisplayable()) {
-			return;
-		}
+		// Open-map-only refresh; do not kick a full-disk scan on every keystroke.
 		liveRefreshTimer.restart();
 	}
 
@@ -337,96 +393,157 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	/**
-	 * Background refresh that keeps the current tree/status until a full pass finishes.
-	 * Unlike the old clear-then-fill path, the list is not emptied on save.
+	 * Fast path: refresh from currently open maps on the EDT so the list updates
+	 * immediately. Optional full-disk scan runs in the background afterward.
 	 *
-	 * @param forceDiskRescan when true (Refresh button), ignore file mtime cache and re-parse
-	 *        closed maps from disk; still keeps {@link #itemsByKey} until merge completes.
+	 * @param forceDiskRescan when true (Refresh button / first load), also re-parse
+	 *        closed maps from disk in the background.
 	 */
 	protected void triggerRescan(final boolean forceDiskRescan) {
+		if (forceDiskRescan) {
+			pendingForceDiskRescan = true;
+		}
+		if (SwingUtilities.isEventDispatchThread()) {
+			refreshFromOpenMapsQuick();
+			maybeStartDiskScan();
+		}
+		else {
+			SwingUtilities.invokeLater(new Runnable() {
+				public void run() {
+					refreshFromOpenMapsQuick();
+					maybeStartDiskScan();
+				}
+			});
+		}
+	}
+
+	/**
+	 * Instant UI update from open MapModels only (no disk walk).
+	 * This is what makes 红旗/全部待办 usable while the workspace has 10k+ .mm files.
+	 */
+	private void refreshFromOpenMapsQuick() {
+		try {
+			final Map openByKey = collectOpenMapModels();
+			for (final Object entryObj : openByKey.entrySet()) {
+				final Map.Entry entry = (Map.Entry) entryObj;
+				final String key = (String) entry.getKey();
+				final MapModel map = (MapModel) entry.getValue();
+				final List items = getItemsFromOpenMap(map);
+				mergeChunk(new ScanChunk(key, items, 0, 0));
+			}
+			rebuildTreeFromCache();
+			statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
+			publishItemCountMetric(itemsByKey.size());
+		}
+		catch (Exception e) {
+			LogUtils.warn("All-items tab: open-map refresh failed", e);
+		}
+	}
+
+	private void maybeStartDiskScan() {
+		final boolean forceDisk = pendingForceDiskRescan;
+		if (!forceDisk && diskScanCompletedOnce) {
+			return;
+		}
+		pendingForceDiskRescan = false;
+		startDiskScanWorker(forceDisk);
+	}
+
+	private boolean diskScanCompletedOnce;
+
+	private void startDiskScanWorker(final boolean forceDisk) {
 		if (activeWorker != null) {
 			rescanRequested = true;
-			if (forceDiskRescan) {
+			if (forceDisk) {
 				pendingForceDiskRescan = true;
 			}
 			return;
 		}
-
 		rescanRequested = false;
-		final boolean forceDisk = forceDiskRescan || pendingForceDiskRescan;
-		pendingForceDiskRescan = false;
 		if (forceDisk) {
 			cacheByFile.clear();
 		}
 		activeWorker = new SwingWorker() {
 			private volatile boolean completedPass;
+			private long lastUiPublishMs;
 
 			protected Object doInBackground() throws Exception {
-				List files = collectAllMindmapFiles();
-				Set activeFileKeys = new HashSet();
+				final List files = collectAllMindmapFiles();
+				final Set activeFileKeys = new HashSet();
 				for (int i = 0; i < files.size(); i++) {
 					activeFileKeys.add(fileKey((File) files.get(i)));
 				}
 				final Map openByKey = collectOpenMapModels();
-				for (Object keyObj : openByKey.keySet()) {
+				for (final Object keyObj : openByKey.keySet()) {
 					activeFileKeys.add((String) keyObj);
 				}
 				lastActiveFileKeys = activeFileKeys;
 				final Set scannedOpenKeys = new HashSet();
-				int progress = 0;
-				final int total = files.size() + openByKey.size();
-				for (Object entryObj : openByKey.entrySet()) {
-					if (rescanRequested) {
-						return null;
-					}
+				for (final Object entryObj : openByKey.entrySet()) {
 					final Map.Entry entry = (Map.Entry) entryObj;
 					final String key = (String) entry.getKey();
 					final MapModel map = (MapModel) entry.getValue();
 					final List items = getItemsFromOpenMap(map);
 					scannedOpenKeys.add(key);
-					progress++;
-					publish(new ScanChunk(key, items, progress, total));
+					publish(new ScanChunk(key, items, 0, 0));
 				}
 				for (int i = 0; i < files.size(); i++) {
-					if (rescanRequested) {
-						return null;
-					}
-					File file = (File) files.get(i);
+					final File file = (File) files.get(i);
 					if (!isValidMindmapFile(file)) {
 						continue;
 					}
 					final String key = fileKey(file);
 					if (scannedOpenKeys.contains(key)) {
-						progress++;
 						continue;
 					}
-					List items = getItemsForFile(file);
-					progress++;
-					publish(new ScanChunk(key, items, progress, total));
+					final CachedFileResult prev = (CachedFileResult) cacheByFile.get(key);
+					final boolean hadItems = prev != null && prev.items != null && !prev.items.isEmpty();
+					final List items = getItemsForFile(file);
+					// Skip empty files with no prior hits — most .mm have neither flag nor todo.
+					if (items.isEmpty() && !hadItems) {
+						continue;
+					}
+					publish(new ScanChunk(key, items, 0, 0));
 				}
 				completedPass = true;
 				return null;
 			}
 
-			protected void process(List chunks) {
+			protected void process(final List chunks) {
 				for (int i = 0; i < chunks.size(); i++) {
 					mergeChunk((ScanChunk) chunks.get(i));
 				}
-				// Keep status/badge stable during scan — no "N (scanned/total)" flicker.
-			}
-
-			protected void done() {
-				activeWorker = null;
-				if (completedPass) {
-					purgeStaleItems(lastActiveFileKeys);
+				final long now = System.currentTimeMillis();
+				if (now - lastUiPublishMs >= 500L) {
+					lastUiPublishMs = now;
 					rebuildTreeFromCache();
 					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
 					publishItemCountMetric(itemsByKey.size());
 				}
-				// Another save/icon change arrived mid-pass: keep the previous tree and
-				// start a fresh complete scan (do not rebuild from partial merges).
-				if (rescanRequested) {
-					triggerRescan(pendingForceDiskRescan);
+			}
+
+			protected void done() {
+				activeWorker = null;
+				try {
+					if (completedPass) {
+						purgeStaleItems(lastActiveFileKeys);
+						diskScanCompletedOnce = true;
+					}
+					rebuildTreeFromCache();
+					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
+					publishItemCountMetric(itemsByKey.size());
+				}
+				catch (Exception e) {
+					LogUtils.warn("All-items tab: rebuild after disk scan failed", e);
+					statusLabel.setText(getStatusLabelPrefix() + ": " + itemsByKey.size());
+				}
+				if (rescanRequested || pendingForceDiskRescan) {
+					final boolean force = pendingForceDiskRescan;
+					pendingForceDiskRescan = false;
+					rescanRequested = false;
+					if (force || !diskScanCompletedOnce) {
+						startDiskScanWorker(force);
+					}
 				}
 			}
 		};
@@ -698,6 +815,15 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 	}
 
 	private List collectAllMindmapFiles() {
+		try {
+			WorkspaceSideTabScanCache.schedulePreload();
+			final List cached = WorkspaceSideTabScanCache.getMindMapFilesSnapshot();
+			if (cached != null && !cached.isEmpty()) {
+				return new ArrayList(cached);
+			}
+		}
+		catch (Exception e) {
+		}
 		final List files = new ArrayList();
 		MindMapDataRootResolver.collectMindmapFiles(files);
 		return files;
@@ -712,6 +838,13 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		CachedFileResult cached = (CachedFileResult) cacheByFile.get(fileKey(file));
 		if (cached != null && cached.modified == modified && cached.length == length) {
 			return cached.items;
+		}
+
+		// Cheap text probe: skip SAX when the file cannot contain our icons.
+		if (!fileMayContainTargetIcon(file)) {
+			final List empty = Collections.emptyList();
+			cacheByFile.put(fileKey(file), new CachedFileResult(modified, length, empty));
+			return empty;
 		}
 
 		final List items = new ArrayList();
@@ -758,6 +891,95 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 		cacheByFile.put(fileKey(file), new CachedFileResult(modified, length, items));
 		return items;
+	}
+
+	/**
+	 * Stream-search .mm for icon marker text. Most files have no flags/todos — skip SAX for them.
+	 */
+	private boolean fileMayContainTargetIcon(final File file) {
+		final String[] probes = getIconTextProbes();
+		if (probes == null || probes.length == 0) {
+			return true;
+		}
+		final byte[][] needles = new byte[probes.length][];
+		int maxNeedle = 0;
+		try {
+			for (int i = 0; i < probes.length; i++) {
+				needles[i] = probes[i].getBytes("UTF-8");
+				if (needles[i].length > maxNeedle) {
+					maxNeedle = needles[i].length;
+				}
+			}
+		}
+		catch (Exception e) {
+			return true;
+		}
+		if (maxNeedle == 0) {
+			return true;
+		}
+		java.io.InputStream in = null;
+		try {
+			in = new java.io.BufferedInputStream(new java.io.FileInputStream(file), 64 * 1024);
+			final byte[] buf = new byte[64 * 1024];
+			final byte[] window = new byte[Math.max(maxNeedle * 2, 256)];
+			int windowLen = 0;
+			int read;
+			while ((read = in.read(buf)) >= 0) {
+				if (read == 0) {
+					continue;
+				}
+				// Search in current chunk
+				if (indexOfAny(buf, read, needles) >= 0) {
+					return true;
+				}
+				// Also check overlap across chunk boundary
+				final int keep = Math.min(windowLen, maxNeedle - 1);
+				if (keep > 0 || read > 0) {
+					final int overlapLen = Math.min(maxNeedle - 1, read);
+					final byte[] overlap = new byte[keep + overlapLen];
+					if (keep > 0) {
+						System.arraycopy(window, windowLen - keep, overlap, 0, keep);
+					}
+					System.arraycopy(buf, 0, overlap, keep, overlapLen);
+					if (indexOfAny(overlap, overlap.length, needles) >= 0) {
+						return true;
+					}
+				}
+				windowLen = Math.min(read, window.length);
+				System.arraycopy(buf, read - windowLen, window, 0, windowLen);
+			}
+			return false;
+		}
+		catch (Exception e) {
+			return true;
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (Exception e) {
+				}
+			}
+		}
+	}
+
+	private static int indexOfAny(final byte[] hay, final int hayLen, final byte[][] needles) {
+		for (int n = 0; n < needles.length; n++) {
+			final byte[] needle = needles[n];
+			if (needle.length == 0 || needle.length > hayLen) {
+				continue;
+			}
+			outer: for (int i = 0; i <= hayLen - needle.length; i++) {
+				for (int j = 0; j < needle.length; j++) {
+					if (hay[i + j] != needle[j]) {
+						continue outer;
+					}
+				}
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	private Map collectOpenMapModels() {
@@ -943,6 +1165,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 
 		tree.setModel(new DefaultTreeModel(root));
+		if (records.isEmpty()) {
+			statusLabel.setText(getStatusLabelPrefix() + ": 0");
+		}
 
 		for (int i = 0; i < tree.getRowCount(); i++) {
 			tree.expandRow(i);

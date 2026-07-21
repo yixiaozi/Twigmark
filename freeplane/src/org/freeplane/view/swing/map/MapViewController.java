@@ -69,6 +69,7 @@ import org.freeplane.features.styles.MapViewLayout;
 import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.ui.ViewController;
+import org.freeplane.view.swing.features.finance.FinanceLedgerService;
 
 /**
  * Manages the list of MapViews. As this task is very complex, I exported it
@@ -77,6 +78,19 @@ import org.freeplane.features.ui.ViewController;
  * (the controller observes changes to the map mapViews here).
  */
 public class MapViewController implements IMapViewManager , IMapViewChangeListener, IFreeplanePropertyListener {
+	/** True while {@link #closeAllMaps()} runs (quit / shutdown). */
+	private static volatile boolean closingAllMaps;
+
+	/** Optional UI hook for quit progress (status text on a small dialog). */
+	public interface QuitProgressListener {
+		void status(String message);
+
+		/** Optional determinate progress; total &lt;= 0 keeps indeterminate. */
+		void progress(int current, int total);
+	}
+
+	private static QuitProgressListener quitProgressListener;
+
 	private String lastModeName;
 	/** reference to the current mapmapView; null is allowed, too. */
 	private MapView mapView;
@@ -244,26 +258,100 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		return null;
 	}
 
+	public static boolean isClosingAllMaps() {
+		return closingAllMaps;
+	}
+
+	public static void setQuitProgressListener(final QuitProgressListener listener) {
+		quitProgressListener = listener;
+	}
+
+	private static void reportQuitStatus(final String message) {
+		if (quitProgressListener != null && message != null) {
+			try {
+				quitProgressListener.status(message);
+			}
+			catch (Exception e) {
+			}
+		}
+	}
+
+	private static void reportQuitProgress(final int current, final int total) {
+		if (quitProgressListener != null) {
+			try {
+				quitProgressListener.progress(current, total);
+			}
+			catch (Exception e) {
+			}
+		}
+	}
+
+	private static String quitMsg(final String key, final String fallback) {
+		try {
+			final String text = TextUtils.getText(key, fallback);
+			if (text == null || text.length() == 0 || text.charAt(0) == '[') {
+				return fallback;
+			}
+			return text;
+		}
+		catch (Exception e) {
+			return fallback;
+		}
+	}
+
+	private static String quitMsg(final String key, final String fallback, final Object arg0) {
+		try {
+			final String pattern = quitMsg(key, fallback);
+			return MessageFormat.format(pattern, new Object[] { arg0 });
+		}
+		catch (Exception e) {
+			return fallback;
+		}
+	}
+
+	private static String quitMsg(final String key, final String fallback, final Object arg0, final Object arg1,
+			final Object arg2) {
+		try {
+			final String pattern = quitMsg(key, fallback);
+			return MessageFormat.format(pattern, new Object[] { arg0, arg1, arg2 });
+		}
+		catch (Exception e) {
+			return fallback;
+		}
+	}
+
 	/* (non-Javadoc)
 	 * @see org.freeplane.core.frame.IMapViewController#close(boolean)
 	 */
 	public boolean close(final boolean force) {
-		final MapView mapView = getMapView();
-		if (mapView == null) {
+		return close(force, true);
+	}
+
+	/**
+	 * @param selectNext when false, do not activate another map after close
+	 *        (used by quit to avoid tab-group expand / sidebar refresh thrashing).
+	 */
+	private boolean close(final boolean force, final boolean selectNext) {
+		final MapView mapViewToClose = getMapView();
+		if (mapViewToClose == null) {
 			return false;
 		}
-		final MapController mapController = mapView.getModeController().getMapController();
+		final MapController mapController = mapViewToClose.getModeController().getMapController();
 		final boolean closingNotCancelled = mapController.close(force);
 		if (!closingNotCancelled) {
 			return false;
 		}
-		int index = mapViewVector.indexOf(mapView);
-		mapController.removeMapChangeListener(mapView);
-		ResourceController.getResourceController().removePropertyChangeListener(mapView);
-		mapViewVector.remove(mapView);
-		if (mapViewVector.isEmpty()) {
-			/* Keep the current running mode */
-			changeToMapView((MapView) null);
+		int index = mapViewVector.indexOf(mapViewToClose);
+		mapController.removeMapChangeListener(mapViewToClose);
+		ResourceController.getResourceController().removePropertyChangeListener(mapViewToClose);
+		mapViewVector.remove(mapViewToClose);
+		if (!selectNext || mapViewVector.isEmpty()) {
+			if (mapView == mapViewToClose) {
+				mapView = null;
+			}
+			if (mapViewVector.isEmpty()) {
+				changeToMapView((MapView) null);
+			}
 		}
 		else {
 			if (index >= mapViewVector.size() || index < 0) {
@@ -271,7 +359,7 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 			}
 			changeToMapView((mapViewVector.get(index)));
 		}
-		mapViewChangeListeners.afterMapViewClose(mapView);
+		mapViewChangeListeners.afterMapViewClose(mapViewToClose);
 		return true;
 	}
 
@@ -797,20 +885,77 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	}
 
 	public boolean closeAllMaps() {
-		while (getMapViewVector().size() > 0) {
-			if (getMapView() != null) {
-				final boolean closingNotCancelled = close(false);
-				if (!closingNotCancelled) {
+		closingAllMaps = true;
+		FinanceLedgerService.setClosingAllMaps(true);
+		try {
+			reportQuitStatus(quitMsg("quit.progress.checkUnsaved", "正在保存未保存的导图…"));
+			final java.util.LinkedHashSet unsaved = new java.util.LinkedHashSet();
+			for (int i = 0; i < mapViewVector.size(); i++) {
+				final MapView view = mapViewVector.get(i);
+				if (view == null || view.getModel() == null) {
+					continue;
+				}
+				final MapModel model = view.getModel();
+				if (!model.isSaved()) {
+					unsaved.add(model);
+				}
+			}
+			int saveIndex = 0;
+			final int saveTotal = Math.max(1, unsaved.size());
+			for (final java.util.Iterator it = unsaved.iterator(); it.hasNext();) {
+				final MapModel model = (MapModel) it.next();
+				saveIndex++;
+				reportQuitProgress(saveIndex, saveTotal);
+				reportQuitStatus(quitMsg("quit.progress.saving", "正在保存 ({0}/{1})：{2}",
+						Integer.valueOf(saveIndex), Integer.valueOf(saveTotal),
+						model.getTitle() == null ? "" : model.getTitle()));
+				autoSaveMap(model);
+			}
+			final int total = mapViewVector.size();
+			int closed = 0;
+			reportQuitProgress(0, Math.max(1, total));
+			while (!mapViewVector.isEmpty()) {
+				mapView = mapViewVector.get(mapViewVector.size() - 1);
+				final String title = mapView.getModel() != null ? mapView.getModel().getTitle() : mapView.getName();
+				closed++;
+				reportQuitProgress(closed, Math.max(total, closed));
+				reportQuitStatus(quitMsg("quit.progress.closing", "正在关闭导图 ({0}/{1})：{2}",
+						Integer.valueOf(closed), Integer.valueOf(Math.max(total, closed)),
+						title == null ? "" : title));
+				if (!close(true, false)) {
 					return false;
 				}
 			}
-			else {
-				nextMapView();
-			}
+			reportQuitStatus(quitMsg("quit.progress.cleanup", "正在清理…"));
+			ResourceController.getResourceController().setProperty("antialiasEdges", (antialiasEdges ? "true" : "false"));
+			ResourceController.getResourceController().setProperty("antialiasAll", (antialiasAll ? "true" : "false"));
+			return true;
 		}
-		ResourceController.getResourceController().setProperty("antialiasEdges", (antialiasEdges ? "true" : "false"));
-		ResourceController.getResourceController().setProperty("antialiasAll", (antialiasAll ? "true" : "false"));
-		return true;
+		finally {
+			closingAllMaps = false;
+			FinanceLedgerService.setClosingAllMaps(false);
+		}
+	}
+
+	/** Save without prompting. Failures are logged; quit still proceeds. */
+	private void autoSaveMap(final MapModel map) {
+		if (map == null || map.isSaved()) {
+			return;
+		}
+		try {
+			final List views = getViews(map);
+			if (views != null && !views.isEmpty()) {
+				final Component view = (Component) views.get(0);
+				if (view instanceof MapView) {
+					mapView = (MapView) view;
+				}
+			}
+			((org.freeplane.features.url.mindmapmode.MFileManager) org.freeplane.features.url.UrlManager.getController())
+					.save(map);
+		}
+		catch (Exception e) {
+			org.freeplane.core.util.LogUtils.warn("Quit auto-save failed for " + map.getTitle(), e);
+		}
 	}
 	private boolean antialiasAll = false;
 	private boolean antialiasEdges = false;

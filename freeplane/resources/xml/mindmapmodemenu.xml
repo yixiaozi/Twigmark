@@ -477,7 +477,9 @@
 		<menu_action action="GotoNodeAction"/>
 		-->
 			<menu_separator />
-		<menu_action action="MapBackgroundColorAction" />	
+		<menu_action action="MapBackgroundColorAction" />
+			<menu_separator />
+		<menu_action action="CloseAction" />
 	</menu_category>
 	<menu_category name="node_popup">
 	    <!-- DOCEAR: hidden node popup items (rarely used) -->

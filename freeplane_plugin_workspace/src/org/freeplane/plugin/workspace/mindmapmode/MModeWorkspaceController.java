@@ -420,8 +420,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		otcr.addResizerListener(adapter);
 		otcr.addCollapseListener(adapter);
 		
-		loadSideTabOrder();
 		loadSideTabHidden();
+		loadSideTabOrder();
 		sideTabs = new DraggableTabbedPane();
 		// Match the right format sidebar: wrap tab headers onto extra rows when
 		// the dock is narrow, instead of hiding tabs behind a scroll triangle.
@@ -698,6 +698,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		getWorkspaceSettings().setProperty(WorkspaceSettings.WORKSPACE_MODEL_PROJECTS, sb.toString());
 		saveSideTabOrder();
+		saveSideTabHidden();
 		try {
 			getWorkspaceSettings().store();
 		}
@@ -778,7 +779,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		else {
 			sideTabOrder.add(TAB_GRAPH);
 		}
-		persistSideTabOrder();
+		// Only persist order here — sideTabHidden may not be loaded yet during startup.
+		saveSideTabOrder();
 	}
 
 	/** Keep「报表」immediately to the right of Git. */

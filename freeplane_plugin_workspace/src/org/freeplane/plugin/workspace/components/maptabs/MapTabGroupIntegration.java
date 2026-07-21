@@ -18,7 +18,9 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.IDocumentTabView;
+import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.main.application.MapViewTabOrder;
 import org.freeplane.plugin.workspace.components.tagfilter.TagGroupCascadeBar;
 import org.freeplane.plugin.workspace.features.nodepins.TagGroupStore;
@@ -32,6 +34,9 @@ import org.freeplane.view.swing.map.MapView;
  * {@code {dataRoot}/_data/map-tab-groups.properties}. Default filter is 「全部」.
  * Activating a map outside the active group expands the filter to 「全部」 so the
  * tab strip never carries “forced” out-of-group tabs (which broke map/view switches).
+ * <p>
+ * Active group and per-parent subcategory memory are restored on restart via
+ * {@link TagGroupCascadeBar} properties ({@code workspace.maptabs.group.active} etc.).
  */
 public final class MapTabGroupIntegration {
 
@@ -84,9 +89,13 @@ public final class MapTabGroupIntegration {
 		});
 		MapViewTabOrder.setTabsChangedListener(new MapViewTabOrder.TabsChangedListener() {
 			public void tabsChanged() {
+				if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+					return;
+				}
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						if (cascade != null && !applyingFilter) {
+						if (cascade != null && !applyingFilter
+								&& !org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
 							cascade.rebuild();
 						}
 					}
@@ -107,6 +116,11 @@ public final class MapTabGroupIntegration {
 	private static boolean expandFilterToAll() {
 		if (cascade == null) {
 			return false;
+		}
+		// During quit, never expand — that would overwrite the remembered group
+		// (shutdown hook persists properties after closeAllMaps).
+		if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+			return cascade.isAllScope();
 		}
 		if (cascade.isAllScope()) {
 			return true;
@@ -149,32 +163,90 @@ public final class MapTabGroupIntegration {
 	}
 
 	private static JPopupMenu createMoveToGroupPopup(final Component tabKey) {
-		final String key = resolveAssignmentKey(tabKey);
-		if (key == null) {
-			return null;
-		}
-		final TagGroupStore store = TagGroupStore.getInstance(STORE_FILE);
 		final JPopupMenu popup = new JPopupMenu();
-		final JMenuItem header = new JMenuItem(TextUtils.getText("workspace.maptabs.group.assign"));
-		header.setEnabled(false);
-		popup.add(header);
-		popup.addSeparator();
-		final List groupIds = store.getGroupIds();
-		for (final Iterator it = groupIds.iterator(); it.hasNext();) {
-			final String groupId = (String) it.next();
-			final String indent = buildDepthPrefix(store.getDepth(groupId));
-			final String label = resolveGroupLabel(store, groupId);
-			final JMenuItem item = new JMenuItem(TextUtils.format("workspace.nodepins.group.move.to", indent + label));
-			item.setEnabled(!groupId.equals(store.getTagGroupId(key)));
-			item.addActionListener(new ActionListener() {
-				public void actionPerformed(final ActionEvent e) {
-					store.setTagGroup(key, groupId);
-					applyFilter();
-				}
-			});
-			popup.add(item);
+		final String key = resolveAssignmentKey(tabKey);
+		if (key != null) {
+			final TagGroupStore store = TagGroupStore.getInstance(STORE_FILE);
+			final JMenuItem header = new JMenuItem(TextUtils.getText("workspace.maptabs.group.assign"));
+			header.setEnabled(false);
+			popup.add(header);
+			popup.addSeparator();
+			final List groupIds = store.getGroupIds();
+			for (final Iterator it = groupIds.iterator(); it.hasNext();) {
+				final String groupId = (String) it.next();
+				final String indent = buildDepthPrefix(store.getDepth(groupId));
+				final String label = resolveGroupLabel(store, groupId);
+				final JMenuItem item = new JMenuItem(TextUtils.format("workspace.nodepins.group.move.to", indent + label));
+				item.setEnabled(!groupId.equals(store.getTagGroupId(key)));
+				item.addActionListener(new ActionListener() {
+					public void actionPerformed(final ActionEvent e) {
+						store.setTagGroup(key, groupId);
+						applyFilter();
+					}
+				});
+				popup.add(item);
+			}
+			popup.addSeparator();
 		}
+		final JMenuItem closeItem = new JMenuItem(TextUtils.getText("workspace.maptabs.close"));
+		closeItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				closeTabKey(tabKey, false);
+			}
+		});
+		popup.add(closeItem);
+		final JMenuItem forceCloseItem = new JMenuItem(TextUtils.getText("workspace.maptabs.forceClose"));
+		forceCloseItem.setToolTipText(TextUtils.getText("workspace.maptabs.forceClose.tip"));
+		forceCloseItem.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				closeTabKey(tabKey, true);
+			}
+		});
+		popup.add(forceCloseItem);
 		return popup;
+	}
+
+	/**
+	 * Close a bottom tab. With {@code force=true}, skips save dialogs and removes
+	 * ghost tabs whose MapView is no longer registered.
+	 */
+	private static void closeTabKey(final Component tabKey, final boolean force) {
+		if (tabKey == null) {
+			return;
+		}
+		try {
+			if (tabKey instanceof IDocumentTabView) {
+				((IDocumentTabView) tabKey).requestClose(force);
+				return;
+			}
+			if (tabKey instanceof MapView) {
+				final Controller controller = Controller.getCurrentController();
+				final IMapViewManager views = controller.getMapViewManager();
+				final List registered = views.getMapViewVector();
+				boolean stillOpen = false;
+				if (registered != null) {
+					for (int i = 0; i < registered.size(); i++) {
+						if (registered.get(i) == tabKey) {
+							stillOpen = true;
+							break;
+						}
+					}
+				}
+				if (stillOpen) {
+					views.changeToMapView(tabKey);
+					views.close(force);
+					return;
+				}
+				// Ghost tab: MapView gone from controller but label remains.
+				MapViewTabOrder.forceRemoveTabKey(tabKey);
+				return;
+			}
+			// Unknown / orphan placeholder
+			MapViewTabOrder.forceRemoveTabKey(tabKey);
+		}
+		catch (Exception e) {
+			MapViewTabOrder.forceRemoveTabKey(tabKey);
+		}
 	}
 
 	private static String resolveGroupLabel(final TagGroupStore store, final String groupId) {
