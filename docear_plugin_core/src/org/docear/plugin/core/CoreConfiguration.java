@@ -59,6 +59,7 @@ import org.docear.plugin.core.graph.RelationshipGraphIntegration;
 import org.docear.plugin.core.todoist.TodoistIntegrationService;
 import org.docear.plugin.core.logger.DocearLogEvent;
 import org.docear.plugin.core.ui.OverlayViewport;
+import org.docear.plugin.core.ui.MapTagFilterOverlay;
 import org.docear.plugin.core.ui.ribbons.DocearNodePrivacyContributorFactory;
 import org.docear.plugin.core.workspace.WorkingDirectoryDefaults;
 import org.docear.plugin.core.workspace.actions.DocearAddRepositoryPathAction;
@@ -785,6 +786,7 @@ public class CoreConfiguration extends ALanguageController {
 		JViewport viewport = (JViewport) Controller.getCurrentController().getMapViewManager().getViewport();
 		final OverlayViewport overlayViewport = new OverlayViewport(viewport);
 		Controller.getCurrentController().getMapViewManager().getScrollPane().setViewport(overlayViewport);
+		MapTagFilterOverlay.install();
 	}
 	
 	private void registerListeners(ModeController modeController) {

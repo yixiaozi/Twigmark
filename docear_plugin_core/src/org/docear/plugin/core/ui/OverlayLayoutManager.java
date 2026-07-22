@@ -87,25 +87,40 @@ public class OverlayLayoutManager implements LayoutManager {
 
 	@Override
 	public void layoutContainer(Container parent) {
-		if(wrappedLayout != null) {
+		if (wrappedLayout != null) {
 			wrappedLayout.layoutContainer(parent);
-			Insets insets = parent.getInsets();
-			if(insets == null) {
-				insets = new Insets(5, 5, 5, 5);
+		}
+		final Insets insets = parent.getInsets() != null ? parent.getInsets() : new Insets(5, 5, 5, 5);
+		final int gap = 8;
+		final int top = Math.max(insets.top, 0) + 8;
+		final int parentW = Math.max(1, parent.getWidth());
+		final int parentH = Math.max(1, parent.getHeight());
+		// Never let overlays cover most of the map — keep them as floating cards.
+		final int maxOverlayW = Math.max(96, Math.min(360, parentW / 3));
+		// Cap height so overlays stay floating cards, not full-height sheets.
+		final int maxOverlayH = Math.max(48, Math.min(420, parentH - top - Math.max(insets.bottom, 0) - 16));
+		int tr = parentW - insets.right;
+		for (Component overlayComp : overlayComponents) {
+			if (!overlayComp.isVisible()) {
+				continue;
 			}
-			int tr = parent.getWidth()-parent.getInsets().right;
-//			int tl = parent.getInsets().left;
-//			int cr = parent.getWidth()-parent.getInsets().right;
-//			int cl = parent.getInsets().left;
-//			int br = parent.getWidth()-parent.getInsets().right;
-//			int bl = parent.getInsets().left;
-			for (Component overlayComp : overlayComponents) {
-				if(overlayComp.isVisible()) {
-					Dimension prefSize = overlayComp.getSize();
-					tr -= prefSize.width - 5; 
-					overlayComp.setBounds(tr, parent.getInsets().top+5, 100, 100);
+			final Dimension prefSize = overlayComp.getPreferredSize();
+			int width = Math.max(1, prefSize != null ? prefSize.width : 120);
+			int height = Math.max(1, prefSize != null ? prefSize.height : 32);
+			width = Math.min(width, maxOverlayW);
+			height = Math.min(height, maxOverlayH);
+			// Also respect component-reported maximum when smaller than the soft cap.
+			final Dimension max = overlayComp.getMaximumSize();
+			if (max != null) {
+				if (max.width > 0 && max.width < Integer.MAX_VALUE / 2) {
+					width = Math.min(width, max.width);
+				}
+				if (max.height > 0 && max.height < Integer.MAX_VALUE / 2) {
+					height = Math.min(height, max.height);
 				}
 			}
+			tr -= width + gap;
+			overlayComp.setBounds(Math.max(insets.left, tr), top, width, height);
 		}
 	}
 }

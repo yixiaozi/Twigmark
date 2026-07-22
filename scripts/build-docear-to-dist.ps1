@@ -122,8 +122,9 @@ if (-not $SkipBuild) {
     }
 
     if (Test-Path $frameworkBuildPlugins) {
-        Write-Step "Verify build output (relationship graph)"
+        Write-Step "Verify build output (relationship graph + map tag filter)"
         Assert-RelationshipGraphPluginLayout -PluginsRoot $frameworkBuildPlugins -Context "docear_framework/build/plugins"
+        Assert-MapTagFilterLayout -PluginsRoot $frameworkBuildPlugins -Context "docear_framework/build/plugins"
     }
 }
 else {
@@ -173,6 +174,7 @@ Write-Step "Verify installed layout"
 $installPlugins = Join-Path $installDir "plugins"
 Assert-RelationshipGraphPluginLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
 Assert-CalendarHubLayout -InstallDir $installDir -Context "installed $installDir"
+Assert-MapTagFilterLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
 
 $drawioPlugin = Join-Path $installPlugins "org.docear.plugin.drawio"
 if (!(Test-Path $drawioPlugin)) {

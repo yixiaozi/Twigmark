@@ -308,7 +308,76 @@ Calendar hub check ($Context) FAILED:
         }
     }
 
-    Write-Output "Calendar hub check OK ($Context): ReminderCalendarBridge + CalendarTaskService present."
+	Write-Output "Calendar hub check OK ($Context): ReminderCalendarBridge + CalendarTaskService present."
+}
+
+<#
+.SYNOPSIS
+  Ensure map tag-filter overlay classes shipped (top-right 【标签】 filter).
+#>
+function Assert-MapTagFilterLayout {
+    param(
+        [Parameter(Mandatory = $true)][string] $PluginsRoot,
+        [string] $Context = "plugins"
+    )
+
+    if (!(Test-Path $PluginsRoot)) {
+        throw "Map tag filter check ($Context): plugins root not found: $PluginsRoot"
+    }
+
+    $workspaceJar = Join-Path $PluginsRoot "org.freeplane.plugin.workspace\lib\plugin.jar"
+    $coreJar = Join-Path $PluginsRoot "org.docear.plugin.core\lib\plugin.jar"
+    $workspaceManifest = Join-Path $PluginsRoot "org.freeplane.plugin.workspace\META-INF\MANIFEST.MF"
+
+    if (!(Test-Path $workspaceJar)) {
+        throw "Map tag filter check ($Context): missing $workspaceJar"
+    }
+    if (!(Test-Path $coreJar)) {
+        throw "Map tag filter check ($Context): missing $coreJar"
+    }
+    if (!(Test-Path $workspaceManifest)) {
+        throw "Map tag filter check ($Context): missing $workspaceManifest"
+    }
+
+    $manifestText = Get-Content -Path $workspaceManifest -Raw -ErrorAction Stop
+    if ($manifestText -notmatch 'org\.freeplane\.plugin\.workspace\.components\.mapfilter') {
+        throw @"
+Map tag filter check ($Context) FAILED:
+  workspace META-INF/MANIFEST.MF must Export-Package
+  org.freeplane.plugin.workspace.components.mapfilter
+"@
+    }
+    if ($manifestText -notmatch 'org\.freeplane\.plugin\.workspace\.features\.mapfilter') {
+        throw @"
+Map tag filter check ($Context) FAILED:
+  workspace META-INF/MANIFEST.MF must Export-Package
+  org.freeplane.plugin.workspace.features.mapfilter
+"@
+    }
+
+    $requiredWorkspace = @(
+        "org/freeplane/plugin/workspace/components/mapfilter/MapTagFilterPanel.class",
+        "org/freeplane/plugin/workspace/features/mapfilter/MapTagFilterController.class",
+        "org/freeplane/plugin/workspace/features/mapfilter/MapTagFilterService.class",
+        "org/freeplane/plugin/workspace/features/mapfilter/TagFilterMapExtension.class"
+    )
+    foreach ($entry in $requiredWorkspace) {
+        if (-not (Test-JarContainsEntry -JarPath $workspaceJar -EntryPath $entry)) {
+            throw "Map tag filter check ($Context): $workspaceJar is missing $entry"
+        }
+    }
+
+    $requiredCore = @(
+        "org/docear/plugin/core/ui/MapTagFilterOverlay.class",
+        "org/docear/plugin/core/ui/OverlayViewport.class"
+    )
+    foreach ($entry in $requiredCore) {
+        if (-not (Test-JarContainsEntry -JarPath $coreJar -EntryPath $entry)) {
+            throw "Map tag filter check ($Context): $coreJar is missing $entry"
+        }
+    }
+
+    Write-Output "Map tag filter check OK ($Context): overlay + mapfilter packages present."
 }
 
 function Find-Jdk8Home {
