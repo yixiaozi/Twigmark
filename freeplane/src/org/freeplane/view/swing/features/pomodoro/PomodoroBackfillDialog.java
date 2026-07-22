@@ -6,6 +6,8 @@ import java.awt.Frame;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
 import java.util.Calendar;
 import java.util.Date;
 
@@ -17,11 +19,10 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
-import javax.swing.JSpinner;
 import javax.swing.KeyStroke;
-import javax.swing.SpinnerDateModel;
 import javax.swing.border.EmptyBorder;
 
+import org.freeplane.core.ui.components.DateTimeFieldsPanel;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.NodeModel;
@@ -33,11 +34,10 @@ import org.freeplane.features.text.TextController;
  */
 final class PomodoroBackfillDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
-	private static final String PATTERN = "yyyy-MM-dd HH:mm";
 
 	private final NodeModel node;
-	private final JSpinner startSpinner;
-	private final JSpinner endSpinner;
+	private final DateTimeFieldsPanel startEditor;
+	private final DateTimeFieldsPanel endEditor;
 	private final JLabel previewLabel;
 
 	static void showForNode(final NodeModel node) {
@@ -72,14 +72,14 @@ final class PomodoroBackfillDialog extends JDialog {
 		final Calendar startCal = (Calendar) endCal.clone();
 		startCal.add(Calendar.MINUTE, -25);
 
-		startSpinner = createDateSpinner(startCal.getTime());
-		endSpinner = createDateSpinner(endCal.getTime());
+		startEditor = new DateTimeFieldsPanel(true, startCal.getTime());
+		endEditor = new DateTimeFieldsPanel(true, endCal.getTime());
 
 		final JPanel form = new JPanel();
 		form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
-		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.startLabel"), startSpinner));
+		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.startLabel"), startEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
-		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.endLabel"), endSpinner));
+		form.add(labeledRow(TextUtils.getText("BackfillPomodoroAction.endLabel"), endEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 
 		previewLabel = new JLabel();
@@ -87,13 +87,13 @@ final class PomodoroBackfillDialog extends JDialog {
 		form.add(previewLabel);
 		root.add(form, BorderLayout.CENTER);
 
-		final javax.swing.event.ChangeListener refresh = new javax.swing.event.ChangeListener() {
-			public void stateChanged(final javax.swing.event.ChangeEvent e) {
+		final PropertyChangeListener refresh = new PropertyChangeListener() {
+			public void propertyChange(final PropertyChangeEvent evt) {
 				refreshPreview();
 			}
 		};
-		startSpinner.getModel().addChangeListener(refresh);
-		endSpinner.getModel().addChangeListener(refresh);
+		startEditor.setChangeListener(refresh);
+		endEditor.setChangeListener(refresh);
 		refreshPreview();
 
 		final JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
@@ -123,34 +123,28 @@ final class PomodoroBackfillDialog extends JDialog {
 		});
 	}
 
-	private static JSpinner createDateSpinner(final Date initial) {
-		final SpinnerDateModel model = new SpinnerDateModel(initial, null, null, Calendar.MINUTE);
-		final JSpinner spinner = new JSpinner(model);
-		spinner.setEditor(new JSpinner.DateEditor(spinner, PATTERN));
-		return spinner;
-	}
-
-	private static JPanel labeledRow(final String label, final JSpinner spinner) {
+	private static JPanel labeledRow(final String label, final java.awt.Component field) {
 		final JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
 		row.add(new JLabel(label));
-		row.add(spinner);
+		row.add(field);
 		return row;
 	}
 
 	private void refreshPreview() {
-		final long startMs = ((Date) startSpinner.getValue()).getTime();
-		final long endMs = ((Date) endSpinner.getValue()).getTime();
+		final long startMs = startEditor.getTimeMillis();
+		final long endMs = endEditor.getTimeMillis();
 		if (endMs <= startMs) {
 			previewLabel.setText(TextUtils.getText("BackfillPomodoroAction.invalidRange"));
 			return;
 		}
 		final long focusMs = endMs - startMs;
-		previewLabel.setText(TextUtils.getText("BackfillPomodoroAction.previewPrefix") + PomodoroFormatter.formatDuration(focusMs));
+		previewLabel.setText(TextUtils.getText("BackfillPomodoroAction.previewPrefix")
+				+ PomodoroFormatter.formatDuration(focusMs));
 	}
 
 	private void apply() {
-		final long startMs = ((Date) startSpinner.getValue()).getTime();
-		final long endMs = ((Date) endSpinner.getValue()).getTime();
+		final long startMs = startEditor.getTimeMillis();
+		final long endMs = endEditor.getTimeMillis();
 		if (startMs <= 0 || endMs <= startMs) {
 			JOptionPane.showMessageDialog(this, TextUtils.getText("BackfillPomodoroAction.invalidRange"),
 					TextUtils.getText("BackfillPomodoroAction.text"), JOptionPane.WARNING_MESSAGE);

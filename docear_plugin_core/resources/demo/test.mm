@@ -3,7 +3,7 @@
 <node TEXT="test (1)" FOLDED="false" ID="ID_405580281" CREATED="1784116370421" MODIFIED="1784116370422">
 <hook NAME="AutomaticEdgeColor" COUNTER="1"/>
 <hook NAME="MapStyle">
-    <properties show_note_icons="true"/>
+    <properties show_note_icons="false"/>
 
 <map_styles>
 <stylenode LOCALIZED_TEXT="styles.root_node">

@@ -23,6 +23,7 @@ import org.freeplane.view.swing.features.pomodoro.PomodoroAttributes;
 import org.freeplane.view.swing.features.pomodoro.PomodoroExtension;
 import org.freeplane.view.swing.features.pomodoro.PomodoroFormatter;
 import org.freeplane.view.swing.features.pomodoro.PomodoroLog;
+import org.freeplane.view.swing.features.pomodoro.PomodoroPauseInterval;
 import org.freeplane.view.swing.features.pomodoro.PomodoroSessionManager;
 import org.freeplane.view.swing.features.pomodoro.PomodoroSessionRecord;
 import org.freeplane.view.swing.features.pomodoro.PomodoroTotals;
@@ -297,7 +298,27 @@ public final class McpPomodoroService {
 		data.put("subtree", JsonValue.ofString(PomodoroFormatter.formatDuration(PomodoroTotals.subtreeMs(node, now))));
 		data.put("sessionAt", JsonValue.ofNumber(Long.valueOf(ext.getSessionAt())));
 		data.put("startedAt", JsonValue.ofNumber(Long.valueOf(ext.getStartedAt())));
+		data.put("pausedAt", JsonValue.ofNumber(Long.valueOf(ext.getPausedAt())));
 		data.put("sessionCount", JsonValue.ofNumber(Integer.valueOf(ext.sessionCount())));
+		final List openPauses = new ArrayList(PomodoroPauseInterval.decodeList(ext.getSessionPauses()));
+		if (PomodoroExtension.STATE_PAUSED.equals(ext.getState()) && ext.getPausedAt() > 0 && now > ext.getPausedAt()) {
+			openPauses.add(new PomodoroPauseInterval(ext.getPausedAt(), now));
+		}
+		data.put("pauseRanges", JsonValue.ofString(PomodoroPauseInterval.formatRanges(openPauses)));
+		final List pauseJson = new ArrayList();
+		for (int i = 0; i < openPauses.size(); i++) {
+			final PomodoroPauseInterval p = (PomodoroPauseInterval) openPauses.get(i);
+			final Map<String, JsonValue> one = new LinkedHashMap<String, JsonValue>();
+			one.put("startMs", JsonValue.ofNumber(Long.valueOf(p.startMs)));
+			one.put("endMs", JsonValue.ofNumber(Long.valueOf(p.endMs)));
+			one.put("startAt", JsonValue.ofString(formatTime(p.startMs)));
+			one.put("endAt", JsonValue.ofString(formatTime(p.endMs)));
+			one.put("durationMs", JsonValue.ofNumber(Long.valueOf(p.durationMs())));
+			one.put("open", JsonValue.ofBoolean(Boolean.valueOf(
+					PomodoroExtension.STATE_PAUSED.equals(ext.getState()) && p.startMs == ext.getPausedAt())));
+			pauseJson.add(JsonValue.ofMap(one));
+		}
+		data.put("pauses", JsonValue.ofList(pauseJson));
 		final List records = PomodoroLog.decode(ext.getLog());
 		final long todayMs = PomodoroLog.sumFocusSince(records, PomodoroLog.startOfToday())
 				+ contribLive(ext, now, PomodoroLog.startOfToday());
@@ -339,6 +360,7 @@ public final class McpPomodoroService {
 		final long focusMs;
 		final long pauseMs;
 		final String display;
+		final List pauseIntervals;
 
 		HistoryRow(final String mapFile, final String nodeId, final String text, final PomodoroSessionRecord rec) {
 			this.mapFile = mapFile;
@@ -349,6 +371,7 @@ public final class McpPomodoroService {
 			this.focusMs = rec.focusMs;
 			this.pauseMs = rec.pauseMs();
 			this.display = rec.toDisplayLine();
+			this.pauseIntervals = rec.pauseIntervals;
 		}
 
 		JsonValue toJson() {
@@ -363,6 +386,21 @@ public final class McpPomodoroService {
 			row.put("startAt", JsonValue.ofString(formatTime(startMs)));
 			row.put("endAt", JsonValue.ofString(formatTime(endMs)));
 			row.put("focus", JsonValue.ofString(PomodoroFormatter.formatDuration(focusMs)));
+			row.put("pauseRanges", JsonValue.ofString(PomodoroPauseInterval.formatRanges(pauseIntervals)));
+			final List pauseJson = new ArrayList();
+			if (pauseIntervals != null) {
+				for (int i = 0; i < pauseIntervals.size(); i++) {
+					final PomodoroPauseInterval p = (PomodoroPauseInterval) pauseIntervals.get(i);
+					final Map<String, JsonValue> one = new LinkedHashMap<String, JsonValue>();
+					one.put("startMs", JsonValue.ofNumber(Long.valueOf(p.startMs)));
+					one.put("endMs", JsonValue.ofNumber(Long.valueOf(p.endMs)));
+					one.put("startAt", JsonValue.ofString(formatTime(p.startMs)));
+					one.put("endAt", JsonValue.ofString(formatTime(p.endMs)));
+					one.put("durationMs", JsonValue.ofNumber(Long.valueOf(p.durationMs())));
+					pauseJson.add(JsonValue.ofMap(one));
+				}
+			}
+			row.put("pauses", JsonValue.ofList(pauseJson));
 			row.put("display", JsonValue.ofString(display));
 			return JsonValue.ofMap(row);
 		}

@@ -17,7 +17,7 @@
       </html>
     </richcontent>
     <hook NAME="MapStyle" zoom="1.099">
-      <properties show_icon_for_attributes="true" show_note_icons="true" />
+      <properties show_icon_for_attributes="true" show_note_icons="false" />
       <map_styles>
         <stylenode LOCALIZED_TEXT="styles.root_node">
           <stylenode LOCALIZED_TEXT="styles.predefined" POSITION="right">

@@ -15,6 +15,8 @@ public final class PomodoroAttributes {
 	public static final String POMODORO_STATE = "POMODORO_STATE";
 	public static final String POMODORO_STARTED_AT = "POMODORO_STARTED_AT";
 	public static final String POMODORO_SESSION_AT = "POMODORO_SESSION_AT";
+	public static final String POMODORO_PAUSED_AT = "POMODORO_PAUSED_AT";
+	public static final String POMODORO_SESSION_PAUSES = "POMODORO_SESSION_PAUSES";
 	public static final String POMODORO_LOG = "POMODORO_LOG";
 
 	/** Visible AttributeModel names (Chinese, shown under the node). */
@@ -111,6 +113,8 @@ public final class PomodoroAttributes {
 			desired.setStartedAt(0);
 			desired.setActiveMs(0);
 			desired.setSessionAt(0);
+			desired.setPausedAt(0);
+			desired.setSessionPauses("");
 		}
 		write(node, desired);
 	}

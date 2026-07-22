@@ -61,7 +61,7 @@ final class PomodoroExport {
 			sb.append("stats,paused,").append(stats[5]).append('\n');
 		}
 		sb.append('\n');
-		sb.append("mapFile,nodeId,nodeText,startAt,endAt,focusMs,focus,pauseMs,live\n");
+		sb.append("mapFile,nodeId,nodeText,startAt,endAt,focusMs,focus,pauseMs,pauseRanges,live\n");
 		final List nodes = manager == null ? java.util.Collections.EMPTY_LIST
 				: (allMaps ? manager.listOpenPomodoroNodes() : manager.listCurrentMapPomodoroNodes());
 		final long now = System.currentTimeMillis();
@@ -72,6 +72,9 @@ final class PomodoroExport {
 			final PomodoroTodayEntry e = (PomodoroTodayEntry) today.get(i);
 			final String mapFile = e.node.getMap() != null && e.node.getMap().getFile() != null
 					? e.node.getMap().getFile().getAbsolutePath() : "";
+			final long pauseMs = e.pauseIntervals.isEmpty()
+					? Math.max(0L, e.endMs - e.startMs - e.focusMs)
+					: PomodoroPauseInterval.sumMs(e.pauseIntervals);
 			sb.append(csv(mapFile)).append(',');
 			sb.append(csv(e.node.getID())).append(',');
 			sb.append(csv(plain(e.node))).append(',');
@@ -79,13 +82,14 @@ final class PomodoroExport {
 			sb.append(csv(e.live ? "" : fmt.format(new Date(e.endMs)))).append(',');
 			sb.append(e.focusMs).append(',');
 			sb.append(csv(PomodoroFormatter.formatDuration(e.focusMs))).append(',');
-			sb.append(Math.max(0L, e.endMs - e.startMs - e.focusMs)).append(',');
+			sb.append(pauseMs).append(',');
+			sb.append(csv(PomodoroPauseInterval.formatRanges(e.pauseIntervals))).append(',');
 			sb.append(e.live).append('\n');
 		}
 		// Full history (all days) for enabled nodes
 		sb.append('\n');
 		sb.append("# full_history\n");
-		sb.append("mapFile,nodeId,nodeText,startAt,endAt,focusMs,focus,pauseMs\n");
+		sb.append("mapFile,nodeId,nodeText,startAt,endAt,focusMs,focus,pauseMs,pauseRanges\n");
 		for (int i = 0; i < nodes.size(); i++) {
 			final NodeModel node = (NodeModel) nodes.get(i);
 			final PomodoroExtension ext = PomodoroAttributes.read(node);
@@ -104,7 +108,8 @@ final class PomodoroExport {
 				sb.append(csv(fmt.format(new Date(rec.endMs)))).append(',');
 				sb.append(rec.focusMs).append(',');
 				sb.append(csv(PomodoroFormatter.formatDuration(rec.focusMs))).append(',');
-				sb.append(rec.pauseMs()).append('\n');
+				sb.append(rec.pauseMs()).append(',');
+				sb.append(csv(PomodoroPauseInterval.formatRanges(rec.pauseIntervals))).append('\n');
 			}
 		}
 		return sb.toString();

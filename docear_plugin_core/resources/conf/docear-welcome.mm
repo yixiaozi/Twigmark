@@ -3,7 +3,7 @@
   <node TEXT="Welcome" FOLDED="false" ID="ID_1723255651" CREATED="1283093380553" MODIFIED="1322910607046" COLOR="#ffffff" BACKGROUND_COLOR="#0099cc">
     <font SIZE="16" BOLD="true" ITALIC="false" />
     <hook NAME="MapStyle" zoom="1.003">
-      <properties show_icon_for_attributes="true" show_note_icons="true" show_notes_in_map="false" />
+      <properties show_icon_for_attributes="true" show_note_icons="false" show_notes_in_map="false" />
       <map_styles>
         <stylenode LOCALIZED_TEXT="styles.root_node">
           <stylenode LOCALIZED_TEXT="styles.predefined" POSITION="right">

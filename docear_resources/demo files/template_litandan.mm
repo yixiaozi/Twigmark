@@ -2,7 +2,7 @@
 <!--To view this file, download Docear - The Academic Literature Suite from http://www.docear.org -->
 <attribute_registry SHOW_ATTRIBUTES="hide"/>
 <node TEXT="Literature &amp; Annotations" FOLDED="false" ID="ID_1723255651" CREATED="1283093380553" MODIFIED="1345646166454"><hook NAME="MapStyle" zoom="1.099">
-    <properties show_icon_for_attributes="true" show_note_icons="true"/>
+    <properties show_icon_for_attributes="true" show_note_icons="false"/>
 
 <map_styles>
 <stylenode LOCALIZED_TEXT="styles.root_node">

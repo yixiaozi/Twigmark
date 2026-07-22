@@ -44,6 +44,16 @@ final class PomodoroIO {
 				e.setSessionAt(PomodoroAttributes.parseLong(v, 0L));
 			}
 		});
+		add(mapController, PomodoroAttributes.POMODORO_PAUSED_AT, new Setter() {
+			public void set(final PomodoroExtension e, final String v) {
+				e.setPausedAt(PomodoroAttributes.parseLong(v, 0L));
+			}
+		});
+		add(mapController, PomodoroAttributes.POMODORO_SESSION_PAUSES, new Setter() {
+			public void set(final PomodoroExtension e, final String v) {
+				e.setSessionPauses(v);
+			}
+		});
 		add(mapController, PomodoroAttributes.POMODORO_LOG, new Setter() {
 			public void set(final PomodoroExtension e, final String v) {
 				e.setLog(v);
@@ -77,6 +87,12 @@ final class PomodoroIO {
 				}
 				if (extension.getSessionAt() > 0) {
 					writer.addAttribute(PomodoroAttributes.POMODORO_SESSION_AT, Long.toString(extension.getSessionAt()));
+				}
+				if (extension.getPausedAt() > 0) {
+					writer.addAttribute(PomodoroAttributes.POMODORO_PAUSED_AT, Long.toString(extension.getPausedAt()));
+				}
+				if (extension.getSessionPauses().length() > 0) {
+					writer.addAttribute(PomodoroAttributes.POMODORO_SESSION_PAUSES, extension.getSessionPauses());
 				}
 				if (extension.getLog().length() > 0) {
 					writer.addAttribute(PomodoroAttributes.POMODORO_LOG, extension.getLog());

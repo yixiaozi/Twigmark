@@ -61,7 +61,8 @@ public final class TagChipContentTransformer extends AbstractContentTransformer 
 		final float size = Math.max(9f, Math.round(style.getFontSize(node) * UITools.FONT_SCALE_FACTOR));
 		final Font baseFont = styleFont.deriveFont(size);
 		final Color fg = style.getColor(node);
-		return new NodeTagChipIcon(segments, baseFont, fg);
+		final int maxWidth = Math.max(40, style.getMaxWidth(node));
+		return new NodeTagChipIcon(segments, baseFont, fg, maxWidth);
 	}
 
 	private static String resolveSourceText(final Object content, final Object transformedExtension) {

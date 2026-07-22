@@ -1,14 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- REFERENCES: dedicated ribbon tab removed; keep quick actions on Home. -->
+<!-- Home「杂项」文献快捷入口已按需求从 Ribbon 移除；功能仍可通过菜单/快捷键使用。 -->
 <menu_structure>
 	<menu_category name="ribbon">
-	    <ribbon_task name="home">
-	    	<ribbon_band name="misc" resize_policies="Mirror" orderPriority="last" >
-			   	<ribbon_action action="AddNewReferenceAction" priority="medium" >
-					<ribbon_action action="AddExistingReferenceAction"/>
-					<ribbon_action action="SelectInRefManagerAction"/>
-				</ribbon_action>				
-			</ribbon_band>
-		</ribbon_task>
 	</menu_category>
 </menu_structure>

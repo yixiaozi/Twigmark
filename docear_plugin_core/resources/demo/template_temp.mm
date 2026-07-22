@@ -3,7 +3,7 @@
   <attribute_registry SHOW_ATTRIBUTES="hide" />
   <node TEXT="Temp" FOLDED="false" ID="ID_1723255651" CREATED="1283093380553" MODIFIED="1358858509753" DCR_PRIVACY_LEVEL="DEMO">
     <hook NAME="MapStyle">
-      <properties show_icon_for_attributes="true" show_note_icons="true" />
+      <properties show_icon_for_attributes="true" show_note_icons="false" />
       <map_styles>
         <stylenode LOCALIZED_TEXT="styles.root_node">
           <stylenode LOCALIZED_TEXT="styles.predefined" POSITION="right">

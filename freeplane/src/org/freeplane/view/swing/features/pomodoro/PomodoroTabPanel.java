@@ -3,16 +3,24 @@ package org.freeplane.view.swing.features.pomodoro;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.List;
 
+import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -20,10 +28,11 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 import javax.swing.JTree;
+import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.border.EmptyBorder;
-import javax.swing.DefaultListCellRenderer;
 import javax.swing.DefaultListModel;
+import org.freeplane.core.ui.components.DateTimeFieldsPanel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -65,9 +74,12 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private final JToggleButton currentMapButton = new JToggleButton("当前导图");
 	private final JToggleButton allMapsButton = new JToggleButton("全部", true);
 	private final JToggleButton nodesViewButton = new JToggleButton("节点");
-	private final JToggleButton todayViewButton = new JToggleButton("今日", true);
+	private final JToggleButton todayViewButton = new JToggleButton("时间", true);
+	private final DateTimeFieldsPanel dayPicker;
+	private final JButton todayResetButton = new JButton("回到今天");
 	private boolean showAllMaps = true;
 	private boolean todayView = true;
+	private long selectedDayStart = PomodoroLog.startOfToday();
 	private boolean reloadQueued;
 
 	public PomodoroTabPanel(final ModeController modeController) {
@@ -103,6 +115,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				todayView = false;
 				nodesViewButton.setSelected(true);
 				todayViewButton.setSelected(false);
+				updateDayControlsVisible();
 				showCenter();
 				reload();
 			}
@@ -112,7 +125,27 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				todayView = true;
 				todayViewButton.setSelected(true);
 				nodesViewButton.setSelected(false);
+				updateDayControlsVisible();
 				showCenter();
+				reload();
+			}
+		});
+		dayPicker = new DateTimeFieldsPanel(false, new Date(selectedDayStart));
+		dayPicker.setToolTipText("选择查看的日期");
+		dayPicker.setChangeListener(new PropertyChangeListener() {
+			public void propertyChange(final PropertyChangeEvent evt) {
+				selectedDayStart = PomodoroLog.startOfDay(dayPicker.getTimeMillis());
+				if (todayView) {
+					reload();
+				}
+			}
+		});
+		todayResetButton.setToolTipText("跳到今天");
+		todayResetButton.setFocusable(false);
+		todayResetButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				selectedDayStart = PomodoroLog.startOfToday();
+				dayPicker.setDate(new Date(selectedDayStart));
 				reload();
 			}
 		});
@@ -120,6 +153,9 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		modeBar.add(allMapsButton);
 		modeBar.add(nodesViewButton);
 		modeBar.add(todayViewButton);
+		modeBar.add(dayPicker);
+		modeBar.add(todayResetButton);
+		updateDayControlsVisible();
 		top.add(modeBar, BorderLayout.NORTH);
 
 		statsLabel.setFont(DocearUiTheme.font(11f));
@@ -232,22 +268,8 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 
 		todayList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		todayList.setFont(DocearUiTheme.font(12f));
-		todayList.setCellRenderer(new DefaultListCellRenderer() {
-			private static final long serialVersionUID = 1L;
-
-			public Component getListCellRendererComponent(final JList list, final Object value, final int index,
-					final boolean isSelected, final boolean cellHasFocus) {
-				super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-				if (value instanceof PomodoroTodayEntry) {
-					final PomodoroTodayEntry entry = (PomodoroTodayEntry) value;
-					setText(entry.label);
-					if (entry.live) {
-						setForeground(isSelected ? getForeground() : DocearUiTheme.WARNING);
-					}
-				}
-				return this;
-			}
-		});
+		todayList.setFixedCellHeight(24);
+		todayList.setCellRenderer(new PomodoroTodayRowRenderer());
 		todayList.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				final Object v = todayList.getSelectedValue();
@@ -281,6 +303,11 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		centerHost.add(todayView ? todayScroll : treeScroll, BorderLayout.CENTER);
 		centerHost.revalidate();
 		centerHost.repaint();
+	}
+
+	private void updateDayControlsVisible() {
+		dayPicker.setVisible(todayView);
+		todayResetButton.setVisible(todayView);
 	}
 
 	private static JButton btn(final String text, final ActionListener listener) {
@@ -460,7 +487,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 
 		if (todayView) {
 			todayModel.clear();
-			final List today = PomodoroTodayEntry.collect(nodes, now);
+			final List today = PomodoroTodayEntry.collect(nodes, now, selectedDayStart);
 			for (int i = 0; i < today.size(); i++) {
 				todayModel.addElement(today.get(i));
 			}
@@ -502,14 +529,17 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		final long[] stats = manager.computeStats(showAllMaps);
 		final String scope = showAllMaps ? "全部已打开" : "当前导图";
 		if (todayView) {
-			statsLabel.setText(scope + " · 今日 " + PomodoroFormatter.formatDuration(stats[0]) + " · "
-					+ todayModel.size() + " 段 · 进行中 " + stats[4]);
+			final boolean isToday = selectedDayStart == PomodoroLog.startOfToday();
+			final String dayLabel = isToday ? "今日" : new java.text.SimpleDateFormat("MM-dd", java.util.Locale.CHINA)
+					.format(new Date(selectedDayStart));
+			statsLabel.setText(scope + " · " + dayLabel + " " + todayModel.size() + " 段"
+					+ (isToday ? " · 进行中 " + stats[4] : ""));
 		}
 		else {
 			statsLabel.setText(scope + " · 今日 " + PomodoroFormatter.formatDuration(stats[0]) + " · 本周 "
 					+ PomodoroFormatter.formatDuration(stats[1]) + " · 累计 "
-					+ PomodoroFormatter.formatDuration(stats[2]) + " · " + stats[3] + " 节点 · ▶" + stats[4] + " ❚❚"
-					+ stats[5]);
+					+ PomodoroFormatter.formatDuration(stats[2]) + " · " + stats[3] + " 节点 · 进行中 " + stats[4]
+					+ " · 已暂停 " + stats[5]);
 		}
 	}
 
@@ -635,6 +665,78 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		catch (Exception e) {
 		}
 		return node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+	}
+
+	/**
+	 * Fixed columns so task titles share one left edge; pause stays on the right.
+	 */
+	private static final class PomodoroTodayRowRenderer extends JPanel implements ListCellRenderer {
+		private static final long serialVersionUID = 1L;
+		private static final int TIME_W = 108;
+		private static final int DUR_W = 52;
+		private final JLabel timeLabel = new JLabel();
+		private final JLabel durationLabel = new JLabel();
+		private final JLabel titleLabel = new JLabel();
+		private final JLabel pauseLabel = new JLabel();
+
+		PomodoroTodayRowRenderer() {
+			super(new GridBagLayout());
+			setOpaque(true);
+			setBorder(new EmptyBorder(1, 4, 1, 4));
+			final Font font = DocearUiTheme.font(12f);
+			timeLabel.setFont(font);
+			durationLabel.setFont(font);
+			titleLabel.setFont(font);
+			pauseLabel.setFont(font);
+			final GridBagConstraints c = new GridBagConstraints();
+			c.gridy = 0;
+			c.insets = new Insets(0, 0, 0, 8);
+			c.anchor = GridBagConstraints.WEST;
+			c.fill = GridBagConstraints.NONE;
+			c.gridx = 0;
+			c.weightx = 0;
+			timeLabel.setPreferredSize(new Dimension(TIME_W, 18));
+			timeLabel.setMinimumSize(new Dimension(TIME_W, 18));
+			add(timeLabel, c);
+			c.gridx = 1;
+			durationLabel.setPreferredSize(new Dimension(DUR_W, 18));
+			durationLabel.setMinimumSize(new Dimension(DUR_W, 18));
+			add(durationLabel, c);
+			c.gridx = 2;
+			c.weightx = 1;
+			c.fill = GridBagConstraints.HORIZONTAL;
+			add(titleLabel, c);
+			c.gridx = 3;
+			c.weightx = 0;
+			c.fill = GridBagConstraints.NONE;
+			c.insets = new Insets(0, 8, 0, 0);
+			add(pauseLabel, c);
+		}
+
+		public Component getListCellRendererComponent(final JList list, final Object value, final int index,
+				final boolean isSelected, final boolean cellHasFocus) {
+			if (value instanceof PomodoroTodayEntry) {
+				final PomodoroTodayEntry entry = (PomodoroTodayEntry) value;
+				timeLabel.setText(entry.timeText);
+				durationLabel.setText(entry.durationText);
+				titleLabel.setText(entry.titleText);
+				pauseLabel.setText(entry.pauseText);
+				final Color fg = entry.live && !isSelected ? DocearUiTheme.WARNING
+						: (isSelected ? list.getSelectionForeground() : list.getForeground());
+				timeLabel.setForeground(fg);
+				durationLabel.setForeground(isSelected ? fg : DocearUiTheme.TEXT_MUTED);
+				titleLabel.setForeground(fg);
+				pauseLabel.setForeground(isSelected ? fg : DocearUiTheme.TEXT_MUTED);
+			}
+			else {
+				timeLabel.setText("");
+				durationLabel.setText("");
+				titleLabel.setText(value == null ? "" : value.toString());
+				pauseLabel.setText("");
+			}
+			setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+			return this;
+		}
 	}
 
 	private static final class TreeEntry {

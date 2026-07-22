@@ -329,8 +329,17 @@ public class TagGroupCascadeBar extends JPanel {
 		final int tagCount = collectScopeTags(groupId, false).size();
 		final JToggleButton tab = createStyledToggle(resolveGroupLabel(groupId) + " " + tagCount, exactSelected,
 				onPath);
+		// Empty groups stay visible but are not selectable (unless already current / on path).
+		if (tagCount <= 0 && !exactSelected && !onPath) {
+			tab.setEnabled(false);
+			tab.setToolTipText("暂无内容");
+		}
 		tab.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
+				if (tagCount <= 0 && !exactSelected) {
+					tab.setSelected(false);
+					return;
+				}
 				selectGroup(groupId, false);
 			}
 		});
@@ -480,9 +489,14 @@ public class TagGroupCascadeBar extends JPanel {
 	/**
 	 * Restore last child only when entering a branch from outside its path.
 	 * Clicking an ancestor already on the path keeps navigate-up (e.g. A2 → A 全部).
+	 * From 「全部」, always open the clicked parent itself — do not jump into the
+	 * last remembered child (often empty after a new subcategory was just added).
 	 */
 	private boolean shouldRestoreRememberedChild(final String groupId) {
 		if (groupId == null || ALL_SCOPE_ID.equals(groupId) || groupStore.isUngrouped(groupId)) {
+			return false;
+		}
+		if (isAllScope()) {
 			return false;
 		}
 		if (isOnActivePath(groupId)) {

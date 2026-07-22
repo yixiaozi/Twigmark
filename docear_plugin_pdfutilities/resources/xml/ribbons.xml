@@ -1,17 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <menu_structure>
 	<menu_category name="ribbon">
-		<ribbon_task name="home">
-		    <ribbon_band name="misc" resize_policies="Mirror" orderPriority="last">
-		        <ribbon_action action="UpdateMonitoringFolderAction" priority="medium" />
-		        <ribbon_action action="ImportNewAnnotationsAction" priority="medium" >
-					<ribbon_action action="ImportAllAnnotationsAction" />
-				</ribbon_action>
-		    </ribbon_band>
-		</ribbon_task>
-		
-		<ribbon_task name="help" orderPriority="last">
-            <ribbon_band name="help_misc" resize_policies="Mirror" orderPriority="0">
+		<ribbon_task name="tools_and_settings" orderPriority="last">
+            <ribbon_band name="help_misc" resize_policies="Mirror">
                 <ribbon_action action="DocearBackupOpenLocation" priority="medium" />
 			</ribbon_band>
 		</ribbon_task>

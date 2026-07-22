@@ -130,8 +130,12 @@ public final class PomodoroSessionManager {
 			PomodoroAttributes.write(node, next);
 		}
 		else {
+			// Resume from pause: close the open pause interval first.
+			closeOpenPause(next, now);
 			if (next.getSessionAt() <= 0 || PomodoroExtension.STATE_IDLE.equals(next.getState())) {
 				next.setSessionAt(now);
+				next.setSessionPauses("");
+				next.setPausedAt(0);
 			}
 			next.setState(PomodoroExtension.STATE_RUNNING);
 			next.setStartedAt(now);
@@ -151,10 +155,9 @@ public final class PomodoroSessionManager {
 		if (ext == null || !PomodoroExtension.STATE_RUNNING.equals(ext.getState())) {
 			return;
 		}
+		final long now = System.currentTimeMillis();
 		final PomodoroExtension next = ext.copy();
-		flushRunningIntoActive(next);
-		next.setState(PomodoroExtension.STATE_PAUSED);
-		next.setStartedAt(0);
+		markPaused(next, now);
 		PomodoroAttributes.write(node, next);
 		updateTickState();
 		fireChanged();
@@ -173,16 +176,21 @@ public final class PomodoroSessionManager {
 		final long now = System.currentTimeMillis();
 		final PomodoroExtension next = ext.copy();
 		flushRunningIntoActive(next);
+		// If stopped while paused, close the open pause into sessionPauses.
+		closeOpenPause(next, now);
 		final long focusMs = next.getActiveMs();
 		if (focusMs > 0) {
 			final long sessionStart = next.getSessionAt() > 0 ? next.getSessionAt() : now - focusMs;
-			final PomodoroSessionRecord record = new PomodoroSessionRecord(sessionStart, now, focusMs);
+			final List pauses = PomodoroPauseInterval.decodeList(next.getSessionPauses());
+			final PomodoroSessionRecord record = new PomodoroSessionRecord(sessionStart, now, focusMs, pauses);
 			next.setLog(PomodoroLog.append(next.getLog(), record));
 			next.setTotalMs(next.getTotalMs() + focusMs);
 		}
 		next.setActiveMs(0);
 		next.setStartedAt(0);
 		next.setSessionAt(0);
+		next.setPausedAt(0);
+		next.setSessionPauses("");
 		next.setState(PomodoroExtension.STATE_IDLE);
 		next.setEnabled(true);
 		PomodoroAttributes.write(node, next);
@@ -523,8 +531,7 @@ public final class PomodoroSessionManager {
 			final PomodoroExtension next = ext.copy();
 			// Crash reopen: keep accrued activeMs; only fold in live delta if short (avoid overnight inflation).
 			flushRunningIntoActiveBounded(next, 4L * 60L * 60L * 1000L);
-			next.setState(PomodoroExtension.STATE_PAUSED);
-			next.setStartedAt(0);
+			markPaused(next, System.currentTimeMillis());
 			PomodoroAttributes.writeSilent(node, next);
 		}
 		else if (ext != null && ext.isEnabled()) {
@@ -548,9 +555,7 @@ public final class PomodoroSessionManager {
 			final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 			if (ext != null && PomodoroExtension.STATE_RUNNING.equals(ext.getState())) {
 				final PomodoroExtension next = ext.copy();
-				flushRunningIntoActive(next);
-				next.setState(PomodoroExtension.STATE_PAUSED);
-				next.setStartedAt(0);
+				markPaused(next, System.currentTimeMillis());
 				PomodoroAttributes.write(node, next);
 			}
 		}
@@ -559,6 +564,7 @@ public final class PomodoroSessionManager {
 	private void pauseAllForShutdown() {
 		shuttingDown = true;
 		try {
+			final long now = System.currentTimeMillis();
 			final List open = collectOpenPomodoroNodes();
 			for (int i = 0; i < open.size(); i++) {
 				final NodeModel node = (NodeModel) open.get(i);
@@ -567,14 +573,37 @@ public final class PomodoroSessionManager {
 					continue;
 				}
 				final PomodoroExtension next = ext.copy();
-				flushRunningIntoActive(next);
-				next.setState(PomodoroExtension.STATE_PAUSED);
-				next.setStartedAt(0);
+				markPaused(next, now);
 				PomodoroAttributes.writeSilent(node, next);
 			}
 		}
 		catch (Exception e) {
 		}
+	}
+
+	/** Fold running delta into activeMs, enter paused, and stamp pause start. */
+	private static void markPaused(final PomodoroExtension next, final long now) {
+		if (next == null) {
+			return;
+		}
+		flushRunningIntoActive(next);
+		next.setState(PomodoroExtension.STATE_PAUSED);
+		next.setStartedAt(0);
+		if (next.getPausedAt() <= 0) {
+			next.setPausedAt(now > 0 ? now : System.currentTimeMillis());
+		}
+	}
+
+	/** Close an open pause into {@code sessionPauses} when resuming or stopping. */
+	private static void closeOpenPause(final PomodoroExtension next, final long now) {
+		if (next == null || next.getPausedAt() <= 0) {
+			return;
+		}
+		final long end = now > 0 ? now : System.currentTimeMillis();
+		if (end > next.getPausedAt()) {
+			next.setSessionPauses(PomodoroPauseInterval.append(next.getSessionPauses(), next.getPausedAt(), end));
+		}
+		next.setPausedAt(0);
 	}
 
 	private static void flushRunningIntoActive(final PomodoroExtension next) {

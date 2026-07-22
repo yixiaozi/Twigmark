@@ -37,7 +37,7 @@
             </conjunct_condition>
         </conditional_style>
     </conditional_styles>
-    <properties show_icon_for_attributes="false" show_note_icons="true" show_notes_in_map="false"/>
+    <properties show_icon_for_attributes="false" show_note_icons="false" show_notes_in_map="false"/>
 
 <map_styles>
 <stylenode LOCALIZED_TEXT="styles.root_node">

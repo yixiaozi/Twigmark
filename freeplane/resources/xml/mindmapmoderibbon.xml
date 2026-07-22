@@ -51,23 +51,6 @@
 					<ribbon_action action="ExternalImageChangeAction" />
 					<ribbon_action action="ExternalImageRemoveAction" />
 				</ribbon_action>
-				<ribbon_action action="LatexEditLatexAction" plugin="org.freeplane.plugin.latex" >
-					<ribbon_action action="LatexDeleteLatexAction" plugin="org.freeplane.plugin.latex" />
-				</ribbon_action>
-				<ribbon_action action="EditAttributesAction" accelerator="alt F9" priority="medium">
-					<ribbon_action action="attributes_AddAttributeAction" />
-					<ribbon_action action="AssignAttributesAction" />
-					<ribbon_action action="CopyAttributes" />
-					<ribbon_action action="PasteAttributes" />
-					<ribbon_action action="attributes_RemoveAllAttributesAction"/>
-					<ribbon_action action="attributes_RemoveFirstAttributeAction"/>
-					<ribbon_action action="attributes_RemoveLastAttributeAction" />
-					<ribbon_action action="ShowSelectedAttributesAction" />
-					<ribbon_action action="ShowAllAttributesAction" />
-					<ribbon_action action="HideAllAttributesAction" />
-					<ribbon_action action="SetBooleanMapPropertyAction.show_icon_for_attributes" />
-					<ribbon_action action="ShowAttributeDialogAction" />
-				</ribbon_action>
 				<ribbon_action action="AddConnectorAction">
 					<ribbon_action action="AddLocalLinkAction" accelerator="alt shift L" />				    
 					<ribbon_action action="SetLinkByFileChooserAction" />
@@ -143,31 +126,6 @@
 				<!--ribbon_action action="SetImageByFileChooserAction"	accelerator="alt shift K" /-->
 				<ribbon_action action="ExternalImageChangeAction" />
 				<ribbon_action action="ExternalImageRemoveAction" />
-			</ribbon_band>
-			<ribbon_band name="formula_latex" resize_policies="Mirror">				
-				<ribbon_action action="LatexEditLatexAction" plugin="org.freeplane.plugin.latex" />
-				<ribbon_action action="LatexDeleteLatexAction" plugin="org.freeplane.plugin.latex" />
-			</ribbon_band>
-			<ribbon_band name="attributes" resize_policies="Mirror">
-				<ribbon_action action="EditAttributesAction" accelerator="alt F9" priority="medium">
-    				<ribbon_action action="attributes_AddAttributeAction" />
-                </ribbon_action>
-				<ribbon_action action="AssignAttributesAction" />
-				<!--ribbon_action action="CopyStyleExtensionsAction" /-->
-				<ribbon_action action="CopyAttributes" />
-				<ribbon_action action="PasteAttributes" />
-				<!--ribbon_action action="AddStyleAttributes" /-->
-				<ribbon_action action="attributes_RemoveAllAttributesAction">
-    				<ribbon_action action="attributes_RemoveFirstAttributeAction"/>
-    				<ribbon_action action="attributes_RemoveLastAttributeAction" />
-                </ribbon_action>
-				<ribbon_action name="menu_displayAttributes">
-					<ribbon_action action="ShowSelectedAttributesAction" />
-					<ribbon_action action="ShowAllAttributesAction" />
-					<ribbon_action action="HideAllAttributesAction" />
-					<ribbon_action action="SetBooleanMapPropertyAction.show_icon_for_attributes" />
-				</ribbon_action>
-				<ribbon_action action="ShowAttributeDialogAction" />					
 			</ribbon_band>
 			<ribbon_band name="links" resize_policies="Mirror">
 				<ribbon_action action="AddConnectorAction"/>
@@ -281,7 +239,7 @@
 			</ribbon_band>
 		</ribbon_task>
 		
-		<!-- SEARCH & FILTER -->
+		<!-- SEARCH + NAVIGATE (merged) -->
 		<ribbon_task name="search_and_filter">
 			<ribbon_band name="filter" resize_policies="Mirror, High2Low">
 			    <ribbon_action action="EditFilterAction" priority="top"/>	
@@ -289,22 +247,14 @@
     				<ribbon_action action="AllMapsNodeListAction" />
                 </ribbon_action>
                 <ribbon_action action="FindAction" accelerator="control shift F" />
-                <!--ribbon_action action="QuickFindAction.FORWARD" />
-                <ribbon_action action="QuickFindAction.BACK" /-->
                 <ribbon_action action="UndoFilterAction" priority="medium"/>
 				<ribbon_action action="RedoFilterAction"/>
 				<ribbon_action action="ReapplyFilterAction" priority="medium"/>				
-				<!--uses quick filter bar -> not applicable for ribbonsi 
-				<menu_action action="QuickFilterAction" /-->
 				<ribbon_action action="ApplySelectedViewConditionAction" priority="medium"/>
 				<ribbon_action action="QuickFindAllAction" priority="medium"/>
 				<ribbon_action action="ApplyNoFilteringAction" priority="medium"/>				
 				<ribbon_contributor name="filterConditionsContributor" />
 			</ribbon_band>
-		</ribbon_task>		
-		
-		<!-- NAVIGATE -->
-		<ribbon_task name="navigate">
 			<ribbon_band name="navigate_main" resize_policies="Mirror">
 				<ribbon_action action="NavigationPreviousMapAction"	accelerator="control shift TAB" priority="Top" />
 				<ribbon_action action="NavigationNextMapAction" accelerator="control TAB" priority="Top" />
@@ -316,36 +266,33 @@
 				<ribbon_action action="NextNodeAction.FORWARD" accelerator="control alt RIGHT" priority="Top">
 				    <ribbon_action action="NextNodeAction.FORWARD_N_FOLD" accelerator="control shift RIGHT" />
                 </ribbon_action>
-			</ribbon_band>		   			
+			</ribbon_band>
 			<ribbon_band name="goto" resize_policies="Mirror">
 				<ribbon_action action="MoveToRootAction" accelerator="ESCAPE" priority="Top"/>
 				<ribbon_action action="FollowLinkAction" accelerator="control ENTER" />
-				<ribbon_action action="GotoNodeAction"/>					
-				</ribbon_band>		   
+				<ribbon_action action="GotoNodeAction"/>
+			</ribbon_band>
 			<ribbon_band name="navigate_nodes" resize_policies="Mirror">
                 <ribbon_action action="ToggleFoldedAction" accelerator="SPACE" priority="top" >
-				<ribbon_action action="ToggleChildrenFoldedAction" accelerator="control SPACE" />
+					<ribbon_action action="ToggleChildrenFoldedAction" accelerator="control SPACE" />
 				</ribbon_action>
 				<ribbon_action action="UnfoldAllAction" accelerator="alt END" priority="top" />
 				<ribbon_action action="FoldAllAction" accelerator="alt HOME" priority="top" />
    				<ribbon_action action="UnfoldOneLevelAction" accelerator="alt PAGE_DOWN" />
                 <ribbon_action action="FoldOneLevelAction" accelerator="alt PAGE_UP" />
 				<ribbon_action action="NextPresentationItemAction"/>
-			</ribbon_band>		   
+			</ribbon_band>
 			<ribbon_band name="navigate_select" resize_policies="Mirror">
 				<ribbon_action action="SelectAllAction" accelerator="control A" priority="medium"/>
 				<ribbon_action action="SelectBranchAction" accelerator="control shift A" />
-			</ribbon_band>		   
-	
-		</ribbon_task>		
+			</ribbon_band>
+		</ribbon_task>
 		
-		<!-- TOOLS & Extras-->
-		<ribbon_task name="tools_and_settings">
+		<!-- TOOLS + HELP (merged) -->
+		<ribbon_task name="tools_and_settings" orderPriority="last">
 			<ribbon_band name="tools_misc" resize_policies="Mirror">
 				<ribbon_action action="OpenUserDirAction" priority="top"/>							
 				<ribbon_action action="PropertyAction" accelerator="control COMMA" priority="top"/>
-				<ribbon_action action="show_jabref_preferences" priority="TOP" />
-				<!--ribbon_action action="AddMenuItemLinkAction" /-->
 				<ribbon_action name="menu_time" priority="medium">
 					<ribbon_action action="TimeManagementAction" accelerator="control T" />
 					<ribbon_action action="TimeListAction" />
@@ -365,16 +312,6 @@
 					<ribbon_action action="EncryptionSettingsAction" />
 					<ribbon_action action="RemoveEncryption" />
 				</ribbon_action>
-				<ribbon_action action="SetAcceleratorOnNextClickAction" priority="Top" />								
-				<ribbon_action name="scripting" plugin="org.freeplane.plugin.script">				    
-					<ribbon_action action="ExecuteScriptForSelectionAction" plugin="org.freeplane.plugin.script"/>
-					<ribbon_action action="ExecuteScriptForAllNodes" plugin="org.freeplane.plugin.script"/>					
-					<ribbon_action action="ScriptEditor" plugin="org.freeplane.plugin.script"/>					
-				</ribbon_action>
-				<ribbon_action name="formula.menuname" plugin="org.freeplane.plugin.formula">
-					<ribbon_action action="formula.EvaluateAllAction" plugin="org.freeplane.plugin.formula"/>
-				</ribbon_action>
-				
 				<ribbon_action name="export">
 					<ribbon_action action="ExportAction"/>
 					<ribbon_action action="ExportBranchAction" accelerator="alt shift A" />
@@ -383,24 +320,18 @@
 					<ribbon_action action="ImportBranchAction" />
 					<ribbon_action action="ImportLinkedBranchAction"/>
 					<ribbon_action action="ImportLinkedBranchWithoutRootAction"/>
-						
 					<ribbon_action action="ImportExplorerFavoritesAction"/>
 					<ribbon_action action="ImportFolderStructureAction"/>
 					<ribbon_action action="ImportMindmanagerFiles"/>
-				</ribbon_action>								
+				</ribbon_action>
 			</ribbon_band>
-
-			<ribbon_band name="maps" resize_policies="Mirror">
-				<ribbon_action action="OpenMapsAddLocation" plugin="org.freeplane.plugin.openmaps" />
-				<ribbon_action action="OpenMapsRemoveLocation" plugin="org.freeplane.plugin.openmaps" />
-				<ribbon_action action="OpenMapsViewLocation" plugin="org.freeplane.plugin.openmaps" />
+			<ribbon_band name="help_misc" resize_policies="Mirror">
+			    <ribbon_action action="GettingStartedAction" accelerator="F1" priority="top" mandatory="true"/>
+			    <ribbon_action action="HotKeyInfoAction" priority="top" mandatory="true"/>
 			</ribbon_band>
-
+			<!-- Keep only Docear4Word shortcut; other add-on launchers hidden from ribbon. -->
 			<ribbon_band name="add_ons" resize_policies="Mirror">
 				<ribbon_action action="docear4WordLocationAction" priority="Top"/>
-				<ribbon_action action="docearPdfInspectorLocationAction" />
-				<ribbon_action action="freeplaneAddOnLocationAction" />
-				<ribbon_action action="jabrefAddOnLocationAction" />
 			</ribbon_band>
 		</ribbon_task>
 
@@ -455,16 +386,6 @@
 				<ribbon_action action="SetBooleanPropertyAction.highlight_formulas" />
 			</ribbon_band>
 		</ribbon_task>
-		
-		<!-- HELP -->
-		<ribbon_task name="help" orderPriority="last">
-			<ribbon_band name="help_misc" resize_policies="Mirror" orderPriority="0">
-                <ribbon_action action="OpenUserDirAction" priority="top" mandatory="true"/>
-			    <ribbon_action action="GettingStartedAction" accelerator="F1" mandatory="true"/>
-			    <ribbon_action action="HotKeyInfoAction" mandatory="true"/>
-			    <ribbon_action action="EncryptionSettingsAction" priority="medium"/>
-			</ribbon_band>			
-		</ribbon_task>	
 		
 	</menu_category>
 </menu_structure>

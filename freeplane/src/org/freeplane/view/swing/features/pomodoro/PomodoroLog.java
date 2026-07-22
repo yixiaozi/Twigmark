@@ -104,7 +104,13 @@ public final class PomodoroLog {
 	}
 
 	public static long startOfToday() {
+		return startOfDay(System.currentTimeMillis());
+	}
+
+	/** Local calendar-day midnight for {@code millis}. */
+	public static long startOfDay(final long millis) {
 		final Calendar cal = Calendar.getInstance(TimeZone.getDefault(), Locale.CHINA);
+		cal.setTimeInMillis(millis > 0 ? millis : System.currentTimeMillis());
 		cal.set(Calendar.HOUR_OF_DAY, 0);
 		cal.set(Calendar.MINUTE, 0);
 		cal.set(Calendar.SECOND, 0);

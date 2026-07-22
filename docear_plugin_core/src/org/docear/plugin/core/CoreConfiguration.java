@@ -243,6 +243,12 @@ public class CoreConfiguration extends ALanguageController {
 		res.setDefaultProperty("UpdateCheckAction.icon", "/images/docear/help/help-check4updates.png");
 		res.setDefaultProperty("OpenUserDirAction.icon", "/images/docear/help/help-openUserDirectory.png");
 		res.setDefaultProperty("GettingStartedAction.icon", "/images/docear/help/help-tutorial.png");
+		res.setDefaultProperty("QuickCaptureAction.icon", "/images/docear/monitoring/PDF-ImportNewAnnotations.png");
+		res.setDefaultProperty("QuickCommandAction.icon", "/images/docear/tools/Tools-AssignHotkey.png");
+		res.setDefaultProperty("MapSwitcherAction.icon", "/images/docear/navigate/navigate-NodesUn-fold.png");
+		res.setDefaultProperty("CalendarViewportAction.icon", "/images/docear/tools/tools-TimeManagement.png");
+		res.setDefaultProperty("EncryptionSettingsAction.icon", "/images/docear/tools/tools-PasswordProtection.png");
+		res.setDefaultProperty("DocearRemoveNodeLinkAction.icon", "/images/docear/references/References-Remove.png");
 		
 		res.setDefaultProperty("OpenLogsFolderAction.icon", "/images/docear/help/help-showSystemLog.png");
 		res.setDefaultProperty("ManualAction.icon", "/images/docear/help/help-Manual.png");

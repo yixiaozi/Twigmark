@@ -12,7 +12,7 @@
             <time_condition_modified_after user_name="1.2.12_03" DATE="1330531663397"/>
         </conditional_style>
     </conditional_styles>
-    <properties show_icon_for_attributes="false" show_note_icons="true" show_notes_in_map="false"/>
+    <properties show_icon_for_attributes="false" show_note_icons="false" show_notes_in_map="false"/>
 
 <map_styles>
 <stylenode LOCALIZED_TEXT="styles.root_node">

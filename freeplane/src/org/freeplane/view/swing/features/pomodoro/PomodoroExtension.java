@@ -18,6 +18,13 @@ public final class PomodoroExtension implements IExtension {
 	private long startedAt;
 	/** Wall-clock when the current multi-pause session began (idle→running). */
 	private long sessionAt;
+	/** Wall-clock when the current pause began; 0 if not paused. */
+	private long pausedAt;
+	/**
+	 * Encoded pause intervals for the open session ({@link PomodoroPauseInterval#encodeList}),
+	 * before the session is committed to {@link #log}.
+	 */
+	private String sessionPauses = "";
 	/** Encoded session history ({@link PomodoroLog}). */
 	private String log = "";
 
@@ -36,6 +43,8 @@ public final class PomodoroExtension implements IExtension {
 
 	boolean isEmpty() {
 		return !enabled && totalMs <= 0 && activeMs <= 0 && startedAt <= 0 && sessionAt <= 0
+				&& pausedAt <= 0
+				&& (sessionPauses == null || sessionPauses.length() == 0)
 				&& (state == null || STATE_IDLE.equals(state))
 				&& (log == null || log.length() == 0);
 	}
@@ -48,6 +57,8 @@ public final class PomodoroExtension implements IExtension {
 		copy.state = state;
 		copy.startedAt = startedAt;
 		copy.sessionAt = sessionAt;
+		copy.pausedAt = pausedAt;
+		copy.sessionPauses = sessionPauses == null ? "" : sessionPauses;
 		copy.log = log == null ? "" : log;
 		return copy;
 	}
@@ -60,6 +71,8 @@ public final class PomodoroExtension implements IExtension {
 			state = STATE_IDLE;
 			startedAt = 0;
 			sessionAt = 0;
+			pausedAt = 0;
+			sessionPauses = "";
 			log = "";
 			return;
 		}
@@ -69,6 +82,8 @@ public final class PomodoroExtension implements IExtension {
 		state = source.state == null ? STATE_IDLE : source.state;
 		startedAt = source.startedAt;
 		sessionAt = source.sessionAt;
+		pausedAt = source.pausedAt;
+		sessionPauses = source.sessionPauses == null ? "" : source.sessionPauses;
 		log = source.log == null ? "" : source.log;
 	}
 
@@ -118,6 +133,22 @@ public final class PomodoroExtension implements IExtension {
 
 	public void setSessionAt(final long sessionAt) {
 		this.sessionAt = Math.max(0L, sessionAt);
+	}
+
+	public long getPausedAt() {
+		return pausedAt;
+	}
+
+	public void setPausedAt(final long pausedAt) {
+		this.pausedAt = Math.max(0L, pausedAt);
+	}
+
+	public String getSessionPauses() {
+		return sessionPauses == null ? "" : sessionPauses;
+	}
+
+	public void setSessionPauses(final String sessionPauses) {
+		this.sessionPauses = sessionPauses == null ? "" : sessionPauses;
 	}
 
 	public String getLog() {

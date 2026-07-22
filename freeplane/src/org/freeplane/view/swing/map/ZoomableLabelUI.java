@@ -18,6 +18,7 @@ import javax.swing.plaf.basic.BasicHTML;
 import javax.swing.plaf.basic.BasicLabelUI;
 import javax.swing.text.View;
 
+import org.freeplane.core.ui.components.WidthConstrainedIcon;
 import org.freeplane.core.ui.components.html.ScaledHTML;
 import org.freeplane.core.util.TextUtils;
 
@@ -217,8 +218,14 @@ public class ZoomableLabelUI extends BasicLabelUI {
 		        else {
 		            availTextWidth = viewR.width - (iconR.width + gap);
 		        }
-			textR.width = Math.min(availTextWidth, textRenderingIcon.getIconWidth());
-			textR.height = textRenderingIcon.getIconHeight();
+			Icon layoutIcon = textRenderingIcon;
+			if (availTextWidth > 0 && textRenderingIcon instanceof WidthConstrainedIcon
+					&& textRenderingIcon.getIconWidth() > availTextWidth) {
+				layoutIcon = ((WidthConstrainedIcon) textRenderingIcon).withMaxWidth(availTextWidth);
+				zLabel.putClientProperty(ZoomableLabel.TEXT_RENDERING_ICON, layoutIcon);
+			}
+			textR.width = Math.min(availTextWidth, layoutIcon.getIconWidth());
+			textR.height = layoutIcon.getIconHeight();
 		
 		
 		    /* Compute textR.x,y given the verticalTextPosition and
@@ -382,7 +389,12 @@ public class ZoomableLabelUI extends BasicLabelUI {
         if (icon != null) {
             icon.paintIcon(label, g, paintIconR.x, paintIconR.y);
         }
-        textRenderingIcon.paintIcon(label, g, paintTextR.x, paintTextR.y);
+        // layoutCL may re-wrap WidthConstrainedIcon into the client property
+        Icon paintTextIcon = getTextRenderingIcon(label);
+        if (paintTextIcon == null) {
+        	paintTextIcon = textRenderingIcon;
+        }
+        paintTextIcon.paintIcon(label, g, paintTextR.x, paintTextR.y);
 	}
 
 	@Override
