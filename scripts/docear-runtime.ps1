@@ -354,12 +354,29 @@ Map tag filter check ($Context) FAILED:
   org.freeplane.plugin.workspace.features.mapfilter
 "@
     }
+    if ($manifestText -notmatch 'org\.freeplane\.plugin\.workspace\.components\.mapactivity') {
+        throw @"
+Map activity check ($Context) FAILED:
+  workspace META-INF/MANIFEST.MF must Export-Package
+  org.freeplane.plugin.workspace.components.mapactivity
+"@
+    }
+    if ($manifestText -notmatch 'org\.freeplane\.plugin\.workspace\.features\.mapactivity') {
+        throw @"
+Map activity check ($Context) FAILED:
+  workspace META-INF/MANIFEST.MF must Export-Package
+  org.freeplane.plugin.workspace.features.mapactivity
+"@
+    }
 
     $requiredWorkspace = @(
         "org/freeplane/plugin/workspace/components/mapfilter/MapTagFilterPanel.class",
         "org/freeplane/plugin/workspace/features/mapfilter/MapTagFilterController.class",
         "org/freeplane/plugin/workspace/features/mapfilter/MapTagFilterService.class",
-        "org/freeplane/plugin/workspace/features/mapfilter/TagFilterMapExtension.class"
+        "org/freeplane/plugin/workspace/features/mapfilter/TagFilterMapExtension.class",
+        "org/freeplane/plugin/workspace/components/mapactivity/MapActivityOverlayPanel.class",
+        "org/freeplane/plugin/workspace/features/mapactivity/MapActivityOverlayController.class",
+        "org/freeplane/plugin/workspace/features/mapactivity/MapActivityCollector.class"
     )
     foreach ($entry in $requiredWorkspace) {
         if (-not (Test-JarContainsEntry -JarPath $workspaceJar -EntryPath $entry)) {
@@ -369,6 +386,7 @@ Map tag filter check ($Context) FAILED:
 
     $requiredCore = @(
         "org/docear/plugin/core/ui/MapTagFilterOverlay.class",
+        "org/docear/plugin/core/ui/MapActivityOverlay.class",
         "org/docear/plugin/core/ui/OverlayViewport.class"
     )
     foreach ($entry in $requiredCore) {
@@ -377,7 +395,7 @@ Map tag filter check ($Context) FAILED:
         }
     }
 
-    Write-Output "Map tag filter check OK ($Context): overlay + mapfilter packages present."
+    Write-Output "Map overlay check OK ($Context): tag filter + map activity packages present."
 }
 
 function Find-Jdk8Home {

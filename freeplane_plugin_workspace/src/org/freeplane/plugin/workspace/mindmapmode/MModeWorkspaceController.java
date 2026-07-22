@@ -122,6 +122,7 @@ import org.freeplane.plugin.workspace.features.nodepins.NodePinsIndex;
 import org.freeplane.plugin.workspace.features.nodepins.NodePinsMetricsPublisher;
 import org.freeplane.plugin.workspace.features.nodepins.TagChipContentTransformer;
 import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
+import org.freeplane.plugin.workspace.features.mapactivity.MapActivityOverlayController;
 import org.freeplane.plugin.workspace.features.mapfilter.MapTagFilterController;
 import org.freeplane.plugin.workspace.creator.DefaultFileNodeCreator;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferable;
@@ -211,6 +212,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		setupCurrentMapFolderTab(modeController);
 		setupMapTabGroups();
 		MapTagFilterController.install(modeController);
+		MapActivityOverlayController.install(modeController);
 		scheduleLoadAfterFrameVisible();
 	}
 

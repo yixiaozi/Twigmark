@@ -4,6 +4,8 @@ package org.freeplane.plugin.workspace.features.mapfilter;
  * Per-map tag filter modes. Each mode keeps its own selected tag set.
  */
 public enum TagFilterMode {
+	/** Inspect one tag's nodes in the panel (does not filter the map). */
+	VIEW("view"),
 	/** Show nodes that have at least one of the selected tags (OR). */
 	INCLUDE("include"),
 	/** Hide nodes that have any of the selected tags. */
@@ -32,6 +34,11 @@ public enum TagFilterMode {
 			}
 		}
 		return INCLUDE;
+	}
+
+	/** Whether this mode drives Freeplane map filtering. */
+	public boolean filtersMap() {
+		return this != VIEW;
 	}
 
 	/** Default for untagged nodes when the user has not overridden it for this mode switch. */

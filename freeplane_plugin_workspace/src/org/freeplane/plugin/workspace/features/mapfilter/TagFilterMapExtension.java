@@ -17,6 +17,7 @@ import org.freeplane.features.map.MapModel;
 public class TagFilterMapExtension implements IExtension {
 
 	private TagFilterMode mode = TagFilterMode.INCLUDE;
+	private final LinkedHashSet viewTags = new LinkedHashSet();
 	private final LinkedHashSet includeTags = new LinkedHashSet();
 	private final LinkedHashSet excludeTags = new LinkedHashSet();
 	private final LinkedHashSet allTags = new LinkedHashSet();
@@ -92,6 +93,16 @@ public class TagFilterMapExtension implements IExtension {
 		}
 		final String normalized = tag.trim();
 		final LinkedHashSet target = mutableTags(forMode);
+		if (forMode == TagFilterMode.VIEW) {
+			if (target.contains(normalized) && target.size() == 1) {
+				target.clear();
+			}
+			else {
+				target.clear();
+				target.add(normalized);
+			}
+			return;
+		}
 		if (target.contains(normalized)) {
 			target.remove(normalized);
 		}
@@ -105,13 +116,14 @@ public class TagFilterMapExtension implements IExtension {
 	}
 
 	public void clearAllModes() {
+		viewTags.clear();
 		includeTags.clear();
 		excludeTags.clear();
 		allTags.clear();
 	}
 
 	public boolean hasActiveFilter() {
-		return !getActiveTags().isEmpty();
+		return mode.filtersMap() && !getActiveTags().isEmpty();
 	}
 
 	public int getActiveTagCount() {
@@ -124,6 +136,9 @@ public class TagFilterMapExtension implements IExtension {
 
 	private LinkedHashSet mutableTags(final TagFilterMode forMode) {
 		final TagFilterMode resolved = forMode != null ? forMode : mode;
+		if (resolved == TagFilterMode.VIEW) {
+			return viewTags;
+		}
 		if (resolved == TagFilterMode.EXCLUDE) {
 			return excludeTags;
 		}

@@ -26,6 +26,7 @@ public class TagFilterMapExtensionIO implements IExtensionAttributeWriter {
 	public static final String INCLUDE_ATTR = "docear_tag_filter_include";
 	public static final String EXCLUDE_ATTR = "docear_tag_filter_exclude";
 	public static final String ALL_ATTR = "docear_tag_filter_all";
+	public static final String VIEW_ATTR = "docear_tag_filter_view";
 	public static final String UNTAGGED_ATTR = "docear_tag_filter_untagged";
 
 	private TagFilterMapExtensionIO(final MapController mapController) {
@@ -85,6 +86,14 @@ public class TagFilterMapExtensionIO implements IExtensionAttributeWriter {
 				}
 			}
 		});
+		reader.addAttributeHandler(MAP_TAG, VIEW_ATTR, new IAttributeHandler() {
+			public void setAttribute(final Object userObject, final String value) {
+				final TagFilterMapExtension extension = extensionOf(userObject);
+				if (extension != null) {
+					extension.setTagsForMode(TagFilterMode.VIEW, parseTags(value));
+				}
+			}
+		});
 		reader.addAttributeHandler(MAP_TAG, UNTAGGED_ATTR, new IAttributeHandler() {
 			public void setAttribute(final Object userObject, final String value) {
 				final TagFilterMapExtension extension = extensionOf(userObject);
@@ -101,6 +110,7 @@ public class TagFilterMapExtensionIO implements IExtensionAttributeWriter {
 			return;
 		}
 		writer.addAttribute(MODE_ATTR, state.getMode().getXmlValue());
+		writeTags(writer, VIEW_ATTR, state.getTagsForMode(TagFilterMode.VIEW));
 		writeTags(writer, INCLUDE_ATTR, state.getTagsForMode(TagFilterMode.INCLUDE));
 		writeTags(writer, EXCLUDE_ATTR, state.getTagsForMode(TagFilterMode.EXCLUDE));
 		writeTags(writer, ALL_ATTR, state.getTagsForMode(TagFilterMode.ALL));
@@ -108,7 +118,8 @@ public class TagFilterMapExtensionIO implements IExtensionAttributeWriter {
 	}
 
 	private static boolean hasAnyState(final TagFilterMapExtension state) {
-		return !state.getTagsForMode(TagFilterMode.INCLUDE).isEmpty()
+		return !state.getTagsForMode(TagFilterMode.VIEW).isEmpty()
+				|| !state.getTagsForMode(TagFilterMode.INCLUDE).isEmpty()
 				|| !state.getTagsForMode(TagFilterMode.EXCLUDE).isEmpty()
 				|| !state.getTagsForMode(TagFilterMode.ALL).isEmpty()
 				|| state.getMode() != TagFilterMode.INCLUDE
@@ -137,6 +148,7 @@ public class TagFilterMapExtensionIO implements IExtensionAttributeWriter {
 			extension.setMode(TagFilterMode.fromXml(mode));
 			xml.removeAttribute(MODE_ATTR);
 		}
+		promoteTags(xml, extension, VIEW_ATTR, TagFilterMode.VIEW);
 		promoteTags(xml, extension, INCLUDE_ATTR, TagFilterMode.INCLUDE);
 		promoteTags(xml, extension, EXCLUDE_ATTR, TagFilterMode.EXCLUDE);
 		promoteTags(xml, extension, ALL_ATTR, TagFilterMode.ALL);

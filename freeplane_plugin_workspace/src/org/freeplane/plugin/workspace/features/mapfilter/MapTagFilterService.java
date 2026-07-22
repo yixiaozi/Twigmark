@@ -24,18 +24,37 @@ public final class MapTagFilterService {
 	}
 
 	public static List collectMapTags(final MapModel map) {
-		final LinkedHashSet tags = new LinkedHashSet();
+		return new ArrayList(collectMapTagCounts(map).keySet());
+	}
+
+	/** tag -> node count (nodes that contain the tag). */
+	public static java.util.Map collectMapTagCounts(final MapModel map) {
+		final java.util.LinkedHashMap counts = new java.util.LinkedHashMap();
 		if (map == null || map.getRootNode() == null) {
-			return new ArrayList();
+			return counts;
 		}
-		collectTagsRecursive(map.getRootNode(), tags);
-		final ArrayList sorted = new ArrayList(tags);
-		Collections.sort(sorted, new Comparator() {
+		collectTagCountsRecursive(map.getRootNode(), counts);
+		final ArrayList keys = new ArrayList(counts.keySet());
+		Collections.sort(keys, new Comparator() {
 			public int compare(final Object a, final Object b) {
 				return String.valueOf(a).compareToIgnoreCase(String.valueOf(b));
 			}
 		});
+		final java.util.LinkedHashMap sorted = new java.util.LinkedHashMap();
+		for (int i = 0; i < keys.size(); i++) {
+			final Object key = keys.get(i);
+			sorted.put(key, counts.get(key));
+		}
 		return sorted;
+	}
+
+	public static List collectNodesWithTag(final MapModel map, final String tag) {
+		final ArrayList nodes = new ArrayList();
+		if (map == null || map.getRootNode() == null || tag == null || tag.trim().length() == 0) {
+			return nodes;
+		}
+		collectNodesWithTagRecursive(map.getRootNode(), tag.trim(), nodes);
+		return nodes;
 	}
 
 	private static void collectTagsRecursive(final NodeModel node, final Set tags) {
@@ -55,13 +74,52 @@ public final class MapTagFilterService {
 		}
 	}
 
+	private static void collectTagCountsRecursive(final NodeModel node, final java.util.Map counts) {
+		if (node == null) {
+			return;
+		}
+		final Set nodeTags = NodeDetailsTagUtils.parseUserTags(node.getText());
+		if (nodeTags != null) {
+			final Iterator it = nodeTags.iterator();
+			while (it.hasNext()) {
+				final String tag = String.valueOf(it.next());
+				final Integer prev = (Integer) counts.get(tag);
+				counts.put(tag, Integer.valueOf(prev == null ? 1 : prev.intValue() + 1));
+			}
+		}
+		final List children = node.getChildren();
+		if (children == null) {
+			return;
+		}
+		for (int i = 0; i < children.size(); i++) {
+			collectTagCountsRecursive((NodeModel) children.get(i), counts);
+		}
+	}
+
+	private static void collectNodesWithTagRecursive(final NodeModel node, final String tag, final List out) {
+		if (node == null) {
+			return;
+		}
+		final Set nodeTags = NodeDetailsTagUtils.parseUserTags(node.getText());
+		if (nodeTags != null && nodeTags.contains(tag)) {
+			out.add(node);
+		}
+		final List children = node.getChildren();
+		if (children == null) {
+			return;
+		}
+		for (int i = 0; i < children.size(); i++) {
+			collectNodesWithTagRecursive((NodeModel) children.get(i), tag, out);
+		}
+	}
+
 	public static void applyFromExtension(final MapModel map) {
 		if (map == null) {
 			return;
 		}
 		TagFilterMapExtensionIO.ensureLoadedFromUnknownElements(map);
 		final TagFilterMapExtension extension = TagFilterMapExtension.getOrCreate(map);
-		if (!extension.hasActiveFilter()) {
+		if (!extension.getMode().filtersMap() || !extension.hasActiveFilter()) {
 			// Already transparent / not our filter — avoid a full map re-filter.
 			if (isOurFilterActive(map)) {
 				clearFilter(map);
@@ -191,10 +249,13 @@ public final class MapTagFilterService {
 	}
 
 	public static String summarizeActive(final TagFilterMapExtension extension) {
-		if (extension == null || !extension.hasActiveFilter()) {
+		if (extension == null || extension.getActiveTagCount() == 0) {
 			return "";
 		}
 		final StringBuilder sb = new StringBuilder();
+		if (extension.getMode() == TagFilterMode.VIEW) {
+			sb.append("查看 ");
+		}
 		final Iterator it = extension.getActiveTags().iterator();
 		int count = 0;
 		while (it.hasNext() && count < 3) {

@@ -23,23 +23,21 @@ import javax.swing.Timer;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
-import org.freeplane.plugin.workspace.components.mapfilter.MapTagFilterPanel;
-import org.freeplane.plugin.workspace.features.mapfilter.MapTagFilterController;
+import org.freeplane.plugin.workspace.components.mapactivity.MapActivityOverlayPanel;
+import org.freeplane.plugin.workspace.features.mapactivity.MapActivityOverlayController;
 
 /**
- * Hosts the map tag-filter panel on the frame {@link JLayeredPane} (not inside
- * {@link JViewport}). Putting overlays as viewport children breaks Freeplane's
- * map layout and can blank the canvas.
+ * Hosts the current-map activity panel on the frame {@link JLayeredPane}
+ * at the top-LEFT (tag filter stays top-RIGHT).
  */
-public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
+public class MapActivityOverlay implements MapActivityOverlayPanel.LayoutListener {
 
-	private static MapTagFilterOverlay instance;
+	private static MapActivityOverlay instance;
 
-	private final MapTagFilterPanel panel;
+	private final MapActivityOverlayPanel panel;
 	private JLayeredPane layeredPane;
 	private JScrollPane scrollPane;
 	private boolean installed;
-	/** When true, keep the user's dragged position (only update size). */
 	private boolean userPositioned;
 	private Point lastLocation;
 
@@ -57,11 +55,11 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 		}
 	};
 
-	private MapTagFilterOverlay() {
-		panel = new MapTagFilterPanel();
+	private MapActivityOverlay() {
+		panel = new MapActivityOverlayPanel();
 		panel.setVisible(false);
 		panel.setLayoutListener(this);
-		MapTagFilterController.getInstance().setPanel(panel);
+		MapActivityOverlayController.getInstance().setPanel(panel);
 	}
 
 	public void onPanelLayoutChanged() {
@@ -76,9 +74,9 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 		reposition(true);
 	}
 
-	public static synchronized MapTagFilterOverlay getInstance() {
+	public static synchronized MapActivityOverlay getInstance() {
 		if (instance == null) {
-			instance = new MapTagFilterOverlay();
+			instance = new MapActivityOverlay();
 		}
 		return instance;
 	}
@@ -98,10 +96,10 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 			}
 		}
 		catch (final Exception e) {
-			LogUtils.warn("MapTagFilterOverlay install attempt failed: " + e.getMessage());
+			LogUtils.warn("MapActivityOverlay install attempt failed: " + e.getMessage());
 		}
 		if (attempt >= 40) {
-			LogUtils.warn("MapTagFilterOverlay could not install after retries");
+			LogUtils.warn("MapActivityOverlay could not install after retries");
 			return;
 		}
 		final Timer timer = new Timer(250, new java.awt.event.ActionListener() {
@@ -176,8 +174,7 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 							public void run() {
 								userPositioned = false;
 								lastLocation = null;
-								MapTagFilterController.getInstance().applyCurrentMapFilter();
-								MapTagFilterController.getInstance().refreshUi();
+								MapActivityOverlayController.getInstance().refreshUi();
 								reposition(true);
 							}
 						});
@@ -198,13 +195,10 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 		installed = true;
 		panel.setVisible(true);
 		reposition(true);
-		LogUtils.info("MapTagFilterOverlay installed on frame layered pane (viewport-safe)");
+		LogUtils.info("MapActivityOverlay installed on frame layered pane (top-left)");
 		return true;
 	}
 
-	/**
-	 * @param forceSize when true (expand/collapse), always apply preferred size now.
-	 */
 	private void reposition(final boolean forceSize) {
 		if (panel == null || layeredPane == null || scrollPane == null) {
 			return;
@@ -230,7 +224,8 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 			}
 			else {
 				final Point spOnLp = SwingUtilities.convertPoint(scrollPane, new Point(0, 0), layeredPane);
-				x = spOnLp.x + scrollPane.getWidth() - width - 12;
+				// Top-LEFT mirror of the tag filter's top-RIGHT placement.
+				x = spOnLp.x + 12;
 				y = spOnLp.y + 12;
 			}
 
@@ -239,7 +234,6 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 
 			final Rectangle bounds = new Rectangle(x, y, width, height);
 			final Rectangle old = panel.getBounds();
-			// Always apply when forceSize, or when size shrank (collapse), or position changed.
 			final boolean sizeChanged = old.width != width || old.height != height;
 			if (forceSize || sizeChanged || old.x != x || old.y != y) {
 				panel.setBounds(bounds);

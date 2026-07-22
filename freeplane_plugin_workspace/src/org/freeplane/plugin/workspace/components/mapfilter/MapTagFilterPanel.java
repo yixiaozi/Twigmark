@@ -39,9 +39,12 @@ import javax.swing.event.DocumentListener;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.workspace.components.favorites.TagChipFactory;
 import org.freeplane.plugin.workspace.components.favorites.WrapFlowLayout;
+import org.freeplane.plugin.workspace.components.overlay.FillWidthScrollPanel;
+import org.freeplane.plugin.workspace.components.overlay.FloatingOverlayInteraction;
 import org.freeplane.plugin.workspace.features.mapfilter.MapTagFilterService;
 import org.freeplane.plugin.workspace.features.mapfilter.TagFilterMapExtension;
 import org.freeplane.plugin.workspace.features.mapfilter.TagFilterMode;
@@ -63,8 +66,8 @@ public class MapTagFilterPanel extends JPanel {
 	private static final int DEFAULT_WIDTH = 300;
 	private static final int MIN_WIDTH = 220;
 	private static final int MAX_WIDTH = 520;
-	private static final int MIN_EXPANDED_HEIGHT = 220;
-	private static final int MAX_EXPANDED_HEIGHT = 560;
+	private static final int MIN_EXPANDED_HEIGHT = 200;
+	private static final int MAX_EXPANDED_HEIGHT = 10000;
 	private static final int RESIZE_HANDLE = 14;
 	private static final int COLLAPSED_PAD_X = 12;
 	private static final int COLLAPSED_PAD_Y = 5;
@@ -90,21 +93,26 @@ public class MapTagFilterPanel extends JPanel {
 	private final JLabel collapsedBadge;
 	private final JPanel expandedCard;
 	private final JPanel headerBar;
+	private final JToggleButton viewToggle;
 	private final JToggleButton includeToggle;
 	private final JToggleButton excludeToggle;
 	private final JToggleButton allToggle;
 	private final JTextField searchField;
 	private final JPanel chipHost;
 	private final JScrollPane chipScroll;
+	private final JPanel nodeListHost;
+	private final JScrollPane nodeScroll;
 	private final JToggleButton untaggedToggle;
 	private final JLabel statusLabel;
 	private final JButton clearButton;
 	private final JButton collapseButton;
+	private final JButton homeButton;
 	private final JPanel resizeCorner;
 
 	private boolean expanded;
 	private String searchQuery = "";
 	private List availableTags = new ArrayList();
+	private java.util.Map tagCounts = new java.util.LinkedHashMap();
 	private boolean rebuilding;
 	private LayoutListener layoutListener;
 
@@ -112,6 +120,7 @@ public class MapTagFilterPanel extends JPanel {
 	private int userHeight = 300;
 	private boolean userSized;
 	private boolean positionDirty;
+	private boolean homeRequested;
 
 	private Point dragStartOnScreen;
 	private Point dragStartLocation;
@@ -140,19 +149,22 @@ public class MapTagFilterPanel extends JPanel {
 		expandedCard = buildExpandedShell();
 		headerBar = buildHeaderBar();
 
+		viewToggle = createModeButton("查看");
 		includeToggle = createModeButton("仅看");
 		excludeToggle = createModeButton("排除");
 		allToggle = createModeButton("同时包含");
 		final ButtonGroup modeGroup = new ButtonGroup();
+		modeGroup.add(viewToggle);
 		modeGroup.add(includeToggle);
 		modeGroup.add(excludeToggle);
 		modeGroup.add(allToggle);
+		wireModeToggle(viewToggle, TagFilterMode.VIEW);
 		wireModeToggle(includeToggle, TagFilterMode.INCLUDE);
 		wireModeToggle(excludeToggle, TagFilterMode.EXCLUDE);
 		wireModeToggle(allToggle, TagFilterMode.ALL);
 
 		searchField = buildSearchField();
-		chipHost = new JPanel(new WrapFlowLayout());
+		chipHost = new FillWidthScrollPanel(new WrapFlowLayout());
 		chipHost.setOpaque(true);
 		chipHost.setBackground(CHIP_AREA_BG);
 		chipHost.setBorder(new EmptyBorder(6, 6, 6, 6));
@@ -167,15 +179,30 @@ public class MapTagFilterPanel extends JPanel {
 		chipScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		DocearUiTheme.styleScrollPane(chipScroll);
 
+		nodeListHost = new FillWidthScrollPanel();
+		nodeListHost.setOpaque(true);
+		nodeListHost.setBackground(CHIP_AREA_BG);
+		nodeListHost.setLayout(new BoxLayout(nodeListHost, BoxLayout.Y_AXIS));
+		nodeListHost.setBorder(new EmptyBorder(4, 4, 4, 4));
+		nodeScroll = new JScrollPane(nodeListHost);
+		nodeScroll.setBorder(BorderFactory.createLineBorder(CARD_BORDER));
+		nodeScroll.getViewport().setBackground(CHIP_AREA_BG);
+		nodeScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+		DocearUiTheme.styleScrollPane(nodeScroll);
+		nodeScroll.setVisible(false);
+
 		untaggedToggle = createModeButton("无标签：隐藏");
 		statusLabel = DocearUiTheme.mutedLabel("");
 		clearButton = DocearUiTheme.ghostButton("清除");
 		collapseButton = DocearUiTheme.ghostButton("收起");
+		homeButton = DocearUiTheme.ghostButton("归位");
+		homeButton.setToolTipText("回到导图右上角默认位置");
 		resizeCorner = buildResizeCorner();
 
 		assembleExpandedCard();
 		wireActions();
 		installDragAndResize();
+		installEdgeResize();
 
 		expanded = false;
 		add(collapsedBar, BorderLayout.CENTER);
@@ -195,6 +222,18 @@ public class MapTagFilterPanel extends JPanel {
 		final boolean dirty = positionDirty;
 		positionDirty = false;
 		return dirty;
+	}
+
+	public boolean takeHomeRequest() {
+		final boolean req = homeRequested;
+		homeRequested = false;
+		return req;
+	}
+
+	public void requestHome() {
+		homeRequested = true;
+		positionDirty = false;
+		fireLayoutChanged();
 	}
 
 	private JPanel buildCollapsedBar() {
@@ -259,16 +298,21 @@ public class MapTagFilterPanel extends JPanel {
 
 	private void assembleExpandedCard() {
 		expandedCard.setLayout(new BorderLayout());
-		headerBar.add(collapseButton, BorderLayout.EAST);
+		final JPanel headerActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		headerActions.setOpaque(false);
+		headerActions.add(homeButton);
+		headerActions.add(collapseButton);
+		headerBar.add(headerActions, BorderLayout.EAST);
 
 		final JPanel body = new JPanel();
 		body.setOpaque(false);
 		body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
 		body.setBorder(new EmptyBorder(8, 10, 6, 10));
 
-		final JPanel modeRow = new JPanel(new GridLayout(1, 3, 6, 0));
+		final JPanel modeRow = new JPanel(new GridLayout(1, 4, 4, 0));
 		modeRow.setOpaque(false);
 		modeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
+		modeRow.add(viewToggle);
 		modeRow.add(includeToggle);
 		modeRow.add(excludeToggle);
 		modeRow.add(allToggle);
@@ -291,6 +335,7 @@ public class MapTagFilterPanel extends JPanel {
 		tagsLabel.setBorder(new EmptyBorder(8, 0, 4, 0));
 
 		chipScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
+		nodeScroll.setAlignmentX(Component.LEFT_ALIGNMENT);
 
 		final JPanel footer = new JPanel(new BorderLayout(8, 0));
 		footer.setOpaque(false);
@@ -309,11 +354,21 @@ public class MapTagFilterPanel extends JPanel {
 		searchWrap.setMaximumSize(new Dimension(Short.MAX_VALUE, 56));
 		footer.setMaximumSize(new Dimension(Short.MAX_VALUE, 40));
 
+		final JPanel centerStack = new JPanel();
+		centerStack.setOpaque(false);
+		centerStack.setLayout(new BoxLayout(centerStack, BoxLayout.Y_AXIS));
+		centerStack.setAlignmentX(Component.LEFT_ALIGNMENT);
+		centerStack.setMaximumSize(new Dimension(Short.MAX_VALUE, Short.MAX_VALUE));
+		centerStack.add(chipScroll);
+		centerStack.add(Box.createVerticalStrut(6));
+		centerStack.add(nodeScroll);
+
 		body.add(modeRow);
 		body.add(Box.createVerticalStrut(6));
 		body.add(searchWrap);
 		body.add(tagsLabel);
-		body.add(chipScroll);
+		body.add(centerStack);
+		body.add(Box.createVerticalGlue());
 		body.add(footer);
 
 		final JPanel south = new JPanel(new BorderLayout());
@@ -359,6 +414,7 @@ public class MapTagFilterPanel extends JPanel {
 				// Update chrome first so the click feels instant; filter runs after paint.
 				MapTagFilterService.setModeStateOnly(map, mode);
 				refreshSelectionState();
+				rebuildChips();
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
 						MapTagFilterService.applyFromExtension(map);
@@ -374,6 +430,11 @@ public class MapTagFilterPanel extends JPanel {
 				setExpanded(false);
 			}
 		});
+		homeButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				requestHome();
+			}
+		});
 		clearButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final MapModel map = currentMap();
@@ -382,6 +443,7 @@ public class MapTagFilterPanel extends JPanel {
 				}
 				MapTagFilterService.clearActiveModeTagsStateOnly(map);
 				refreshSelectionState();
+				rebuildChips();
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
 						MapTagFilterService.applyFromExtension(map);
@@ -494,6 +556,43 @@ public class MapTagFilterPanel extends JPanel {
 		});
 	}
 
+	private void installEdgeResize() {
+		FloatingOverlayInteraction.install(this, new FloatingOverlayInteraction.Host() {
+			public boolean isResizeEnabled() {
+				return expanded;
+			}
+
+			public boolean isDragEnabled(final MouseEvent e) {
+				return false;
+			}
+
+			public Dimension getMinSize() {
+				return new Dimension(MIN_WIDTH, MIN_EXPANDED_HEIGHT);
+			}
+
+			public Dimension getMaxSize() {
+				return new Dimension(MAX_WIDTH, MAX_EXPANDED_HEIGHT);
+			}
+
+			public void onUserMoved() {
+				positionDirty = true;
+				fireLayoutChanged();
+			}
+
+			public void onUserResized(final int width, final int height) {
+				userWidth = width;
+				userHeight = height;
+				userSized = true;
+				updateChipScrollSize();
+				fireLayoutChanged();
+			}
+
+			public void onInteractionFinished() {
+				fireLayoutChanged();
+			}
+		});
+	}
+
 	public void setExpanded(final boolean expanded) {
 		if (this.expanded == expanded) {
 			fireLayoutChanged();
@@ -542,9 +641,11 @@ public class MapTagFilterPanel extends JPanel {
 
 	public void refreshFromCurrentMap() {
 		final MapModel map = currentMap();
-		availableTags = MapTagFilterService.collectMapTags(map);
+		tagCounts = MapTagFilterService.collectMapTagCounts(map);
+		availableTags = new ArrayList(tagCounts.keySet());
 		refreshSelectionState();
 		rebuildChips();
+		rebuildViewNodes();
 		updateChipScrollSize();
 		revalidate();
 		repaint();
@@ -560,9 +661,11 @@ public class MapTagFilterPanel extends JPanel {
 		try {
 			final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.getOrCreate(map) : null;
 			final TagFilterMode mode = extension != null ? extension.getMode() : TagFilterMode.INCLUDE;
+			viewToggle.setSelected(mode == TagFilterMode.VIEW);
 			includeToggle.setSelected(mode == TagFilterMode.INCLUDE);
 			excludeToggle.setSelected(mode == TagFilterMode.EXCLUDE);
 			allToggle.setSelected(mode == TagFilterMode.ALL);
+			updateModeLook(viewToggle);
 			updateModeLook(includeToggle);
 			updateModeLook(excludeToggle);
 			updateModeLook(allToggle);
@@ -571,10 +674,13 @@ public class MapTagFilterPanel extends JPanel {
 					: TagFilterMode.INCLUDE.defaultShowUntagged();
 			untaggedToggle.setSelected(showUntagged);
 			refreshUntaggedLabel(showUntagged);
+			untaggedToggle.setVisible(mode != TagFilterMode.VIEW);
 
 			syncChipSelection(extension);
+			rebuildViewNodes();
 			refreshCollapsed();
 			refreshStatus(extension);
+			updateChipScrollSize();
 		}
 		finally {
 			rebuilding = false;
@@ -610,7 +716,15 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private void refreshStatus(final TagFilterMapExtension extension) {
-		if (extension == null || !extension.hasActiveFilter()) {
+		if (extension == null) {
+			statusLabel.setText("未筛选");
+			return;
+		}
+		if (extension.getMode() == TagFilterMode.VIEW) {
+			statusLabel.setText(extension.getActiveTagCount() == 0 ? "选一个标签查看" : "查看节点列表");
+			return;
+		}
+		if (!extension.hasActiveFilter()) {
 			statusLabel.setText("未筛选");
 			return;
 		}
@@ -620,9 +734,12 @@ public class MapTagFilterPanel extends JPanel {
 	private void refreshCollapsed() {
 		final MapModel map = currentMap();
 		final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.get(map) : null;
-		final boolean active = extension != null && extension.hasActiveFilter();
+		final boolean filtering = extension != null && extension.hasActiveFilter();
+		final boolean viewing = extension != null && extension.getMode() == TagFilterMode.VIEW
+		        && extension.getActiveTagCount() > 0;
+		final int totalTags = availableTags != null ? availableTags.size() : 0;
 		final RoundedPanel pill = (RoundedPanel) collapsedBar;
-		if (active) {
+		if (filtering || viewing) {
 			collapsedBadge.setText(String.valueOf(extension.getActiveTagCount()));
 			collapsedBadge.setVisible(true);
 			collapsedTitle.setText(modeShortLabel(extension.getMode()));
@@ -632,17 +749,17 @@ public class MapTagFilterPanel extends JPanel {
 			pill.setAccent(true);
 		}
 		else {
-			collapsedBadge.setVisible(false);
-			collapsedBadge.setText("");
+			collapsedBadge.setText(String.valueOf(totalTags));
+			collapsedBadge.setVisible(totalTags > 0);
 			collapsedTitle.setText("标签");
 			collapsedTitle.setForeground(MODE_ON_BG);
-			collapsedBar.setToolTipText("按节点【标签】筛选；点开展开");
+			collapsedBar.setToolTipText(totalTags > 0 ? ("本图共 " + totalTags + " 个标签；点开展开")
+			        : "按节点【标签】筛选；点开展开");
 			pill.setColors(PILL_BG, PILL_BORDER);
 			pill.setAccent(false);
 		}
-		// Hide the strut gap when badge is gone so the pill hugs the title.
 		if (collapsedBar.getComponentCount() >= 3) {
-			collapsedBar.getComponent(1).setVisible(active);
+			collapsedBar.getComponent(1).setVisible(collapsedBadge.isVisible());
 		}
 		collapsedBar.invalidate();
 		collapsedBar.revalidate();
@@ -653,6 +770,9 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private static String modeShortLabel(final TagFilterMode mode) {
+		if (mode == TagFilterMode.VIEW) {
+			return "查看";
+		}
 		if (mode == TagFilterMode.EXCLUDE) {
 			return "排除";
 		}
@@ -676,7 +796,9 @@ public class MapTagFilterPanel extends JPanel {
 				continue;
 			}
 			final boolean isSelected = selected.contains(tag);
-			final JToggleButton chip = TagChipFactory.createFilterChip(tag, tag, isSelected);
+			final int count = tagCountOf(tag);
+			final String label = count > 0 ? (tag + " " + count) : tag;
+			final JToggleButton chip = TagChipFactory.createFilterChip(label, tag, isSelected);
 			chip.putClientProperty("mapTag", tag);
 			enhanceChipLook(chip, tag, isSelected);
 			chip.addActionListener(new ActionListener() {
@@ -687,6 +809,8 @@ public class MapTagFilterPanel extends JPanel {
 					}
 					MapTagFilterService.toggleTagStateOnly(current, tag);
 					refreshSelectionState();
+					rebuildChips();
+					rebuildViewNodes();
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
 							MapTagFilterService.applyFromExtension(current);
@@ -704,6 +828,114 @@ public class MapTagFilterPanel extends JPanel {
 		}
 		chipHost.revalidate();
 		chipHost.repaint();
+	}
+
+	private int tagCountOf(final String tag) {
+		if (tagCounts == null || tag == null) {
+			return 0;
+		}
+		final Object v = tagCounts.get(tag);
+		return v instanceof Integer ? ((Integer) v).intValue() : 0;
+	}
+
+	private void rebuildViewNodes() {
+		nodeListHost.removeAll();
+		final MapModel map = currentMap();
+		final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.getOrCreate(map) : null;
+		final boolean viewMode = extension != null && extension.getMode() == TagFilterMode.VIEW;
+		nodeScroll.setVisible(viewMode);
+		if (!viewMode) {
+			nodeListHost.revalidate();
+			nodeListHost.repaint();
+			return;
+		}
+		final Set selected = extension.getActiveTags();
+		if (selected.isEmpty()) {
+			final JLabel tip = DocearUiTheme.mutedLabel("选择一个标签，在此列出对应节点");
+			tip.setBorder(new EmptyBorder(12, 8, 12, 8));
+			nodeListHost.add(tip);
+		}
+		else {
+			final String tag = String.valueOf(selected.iterator().next());
+			final List nodes = MapTagFilterService.collectNodesWithTag(map, tag);
+			if (nodes.isEmpty()) {
+				nodeListHost.add(DocearUiTheme.mutedLabel("没有带该标签的节点"));
+			}
+			else {
+				for (int i = 0; i < nodes.size(); i++) {
+					final NodeModel node = (NodeModel) nodes.get(i);
+					nodeListHost.add(buildViewNodeRow(node, i));
+				}
+			}
+		}
+		nodeListHost.revalidate();
+		nodeListHost.repaint();
+		updateChipScrollSize();
+	}
+
+	private JPanel buildViewNodeRow(final NodeModel node, final int index) {
+		final JPanel row = new JPanel(new BorderLayout());
+		row.setOpaque(true);
+		row.setBackground(index % 2 == 0 ? DocearUiTheme.SURFACE : DocearUiTheme.SURFACE_SOFT);
+		row.setBorder(new EmptyBorder(4, 8, 4, 8));
+		row.setMaximumSize(new Dimension(Short.MAX_VALUE, 80));
+		row.setAlignmentX(Component.LEFT_ALIGNMENT);
+		row.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+		String text = node.getText() == null ? "" : org.freeplane.core.util.HtmlUtils.htmlToPlain(node.getText());
+		text = text.replaceAll("\\s+", " ").trim();
+		final JLabel label = new JLabel("<html><body style='width:220px'>" + escapeHtml(text) + "</body></html>");
+		label.setFont(DocearUiTheme.font(12f));
+		row.add(label, BorderLayout.CENTER);
+		row.addMouseListener(new MouseAdapter() {
+			public void mouseClicked(final MouseEvent e) {
+				if (SwingUtilities.isLeftMouseButton(e)) {
+					navigateToNode(node);
+				}
+			}
+		});
+		return row;
+	}
+
+	private void navigateToNode(final NodeModel node) {
+		if (node == null) {
+			return;
+		}
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					final Controller controller = Controller.getCurrentController();
+					if (controller == null || controller.getSelection() == null) {
+						return;
+					}
+					Controller.getCurrentModeController().getMapController().displayNode(node);
+					controller.getSelection().selectAsTheOnlyOneSelected(node);
+					controller.getSelection().centerNode(node);
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							try {
+								if (Controller.getCurrentController() != null
+								        && Controller.getCurrentController().getSelection() != null) {
+									Controller.getCurrentController().getSelection().centerNode(node);
+								}
+							}
+							catch (final Exception ignored) {
+								// ignore
+							}
+						}
+					});
+				}
+				catch (final Exception e) {
+					// ignore
+				}
+			}
+		});
+	}
+
+	private static String escapeHtml(final String text) {
+		if (text == null) {
+			return "";
+		}
+		return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
 	}
 
 	private void enhanceChipLook(final JToggleButton chip, final String tag, final boolean selected) {
@@ -740,11 +972,32 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private void updateChipScrollSize() {
-		final int w = Math.max(MIN_WIDTH, (expanded ? (userSized ? userWidth : DEFAULT_WIDTH) : DEFAULT_WIDTH) - 28);
-		final int h = expanded ? Math.max(80, (userSized ? userHeight : 300) - 180) : 80;
-		final Dimension d = new Dimension(w, Math.min(220, h));
-		chipScroll.setPreferredSize(d);
-		chipScroll.setMaximumSize(new Dimension(Short.MAX_VALUE, d.height));
+		final int panelW = Math.max(MIN_WIDTH, (expanded ? (userSized ? userWidth : DEFAULT_WIDTH) : DEFAULT_WIDTH) - 28);
+		final int panelH = expanded ? Math.max(MIN_EXPANDED_HEIGHT, (userSized ? userHeight : 300)) : 80;
+		final MapModel map = currentMap();
+		final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.get(map) : null;
+		final boolean viewMode = extension != null && extension.getMode() == TagFilterMode.VIEW;
+		if (viewMode) {
+			final int chipH = Math.min(140, Math.max(72, panelH / 4));
+			final int nodeH = Math.max(100, panelH - 210 - chipH);
+			chipScroll.setPreferredSize(new Dimension(panelW, chipH));
+			chipScroll.setMaximumSize(new Dimension(Short.MAX_VALUE, chipH));
+			chipScroll.setVisible(true);
+			nodeScroll.setVisible(true);
+			nodeScroll.setPreferredSize(new Dimension(panelW, nodeH));
+			nodeScroll.setMaximumSize(new Dimension(Short.MAX_VALUE, Integer.MAX_VALUE));
+		}
+		else {
+			// Prefer content height; do not stretch chips into a huge empty white area.
+			final int contentH = Math.max(72, chipHost.getPreferredSize().height + 8);
+			final int chipH = Math.min(contentH, Math.max(72, panelH - 200));
+			chipScroll.setPreferredSize(new Dimension(panelW, chipH));
+			chipScroll.setMaximumSize(new Dimension(Short.MAX_VALUE, chipH));
+			chipScroll.setVisible(true);
+			nodeScroll.setVisible(false);
+			nodeScroll.setPreferredSize(new Dimension(panelW, 0));
+			nodeScroll.setMaximumSize(new Dimension(Short.MAX_VALUE, 0));
+		}
 	}
 
 	private void applyCurrentSize() {
