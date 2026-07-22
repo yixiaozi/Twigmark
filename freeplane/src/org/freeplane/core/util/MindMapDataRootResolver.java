@@ -547,6 +547,10 @@ public final class MindMapDataRootResolver {
 			String line;
 			while ((line = reader.readLine()) != null) {
 				line = line.trim();
+				// PowerShell Set-Content -Encoding UTF8 may prepend a BOM.
+				if (line.length() > 0 && line.charAt(0) == '\uFEFF') {
+					line = line.substring(1).trim();
+				}
 				if (line.length() == 0 || line.startsWith("#")) {
 					continue;
 				}

@@ -7,7 +7,6 @@ import java.util.List;
 
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
 
 /**
  * One focus segment for the day timeline view (completed or live).
@@ -52,9 +51,9 @@ final class PomodoroTodayEntry {
 	private static String buildPlainLabel(final String time, final String duration, final String title,
 			final String pause) {
 		final StringBuilder sb = new StringBuilder();
-		sb.append(time).append("  ").append(duration).append("  ·  ").append(title);
+		sb.append(time).append("  ").append(duration).append("  ").append(title);
 		if (pause != null && pause.length() > 0) {
-			sb.append("  ·  ").append(pause);
+			sb.append("  ").append(pause);
 		}
 		return sb.toString();
 	}
@@ -62,7 +61,7 @@ final class PomodoroTodayEntry {
 	private static String formatTimeRange(final long startMs, final long endMs, final boolean live) {
 		final String start = formatHm(startMs);
 		final String end = live ? "进行中" : formatHm(endMs);
-		return start + " → " + end;
+		return start + " -> " + end;
 	}
 
 	private static String formatPauseTail(final List pauseIntervals, final long startMs, final long endMs,
@@ -95,15 +94,24 @@ final class PomodoroTodayEntry {
 	}
 
 	private static String plain(final NodeModel node) {
-		try {
-			final String text = TextController.getController().getPlainTextContent(node);
-			if (text != null) {
-				return HtmlUtils.htmlToPlain(text).replaceAll("\\s+", " ").trim();
-			}
+		// Use stored node text (not TextController transformed content): the pomodoro
+		// display chip (⏱ / Σ / ▶) is display-only and often renders as □ in list fonts.
+		String text = node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		text = text.replaceAll("\\s+", " ").trim();
+		text = stripPomodoroChip(text);
+		return text;
+	}
+
+	/** Removes display-only pomodoro suffixes that may have leaked into stored/plain text. */
+	static String stripPomodoroChip(final String raw) {
+		if (raw == null || raw.length() == 0) {
+			return "";
 		}
-		catch (Exception e) {
-		}
-		return node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		String t = raw;
+		t = t.replaceAll("\\s*[⏱\\u23F1\\u23F0]\\S*(\\s*[·\\u00B7]\\s*Σ\\S*)?(\\s*[▶❚\\|]+)?\\s*$", "").trim();
+		t = t.replaceAll("\\s*[·\\u00B7]\\s*Σ\\S*(\\s*[▶❚\\|]+)?\\s*$", "").trim();
+		t = t.replaceAll("^[▶❚\\|\\s]+", "").trim();
+		return t;
 	}
 
 	public String toString() {

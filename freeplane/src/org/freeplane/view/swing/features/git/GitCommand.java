@@ -29,11 +29,11 @@ final class GitCommand {
 		}
 
 		String errorText() {
-			return joinLines(errors);
+			return joinLines(filterNoise(errors));
 		}
 
 		String outputText() {
-			return joinLines(output);
+			return joinLines(filterNoise(output));
 		}
 
 		String messageText() {
@@ -46,6 +46,28 @@ final class GitCommand {
 				return err;
 			}
 			return out;
+		}
+
+		/** Drop CRLF/LF autocrlf chatter that floods the Git panel. */
+		static List<String> filterNoise(final List<String> lines) {
+			if (lines == null || lines.isEmpty()) {
+				return lines;
+			}
+			final List<String> kept = new ArrayList<String>();
+			for (int i = 0; i < lines.size(); i++) {
+				final String line = lines.get(i);
+				if (line == null) {
+					continue;
+				}
+				final String lower = line.toLowerCase();
+				if (lower.indexOf("lf will be replaced by crlf") >= 0
+						|| lower.indexOf("crlf will be replaced by lf") >= 0
+						|| lower.indexOf("warning: in the working copy of") >= 0) {
+					continue;
+				}
+				kept.add(line);
+			}
+			return kept;
 		}
 
 		String failureMessage(final String actionLabel) {
@@ -110,6 +132,10 @@ final class GitCommand {
 			final byte[] combined = collector.getBytes();
 			rawText = decodeProcessOutput(combined);
 			appendDecodedLines(rawText, output);
+			// Keep CRLF autocrlf chatter out of both display lists.
+			final List<String> cleanOutput = Result.filterNoise(output);
+			output.clear();
+			output.addAll(cleanOutput);
 			if (exitCode != 0 && output.isEmpty()) {
 				errors.add("Git 未返回错误详情");
 			}
@@ -173,13 +199,18 @@ final class GitCommand {
 	}
 
 	private static String[] buildCommand(final File repoDir, final boolean remote, final String[] args) {
-		final String[] command = new String[args.length + 5];
+		// Inject per-invocation config so CRLF/LF warnings don't fail or spam the UI.
+		final String[] command = new String[args.length + 9];
 		int index = 0;
 		command[index++] = resolveGitExecutable();
 		command[index++] = "-C";
 		command[index++] = repoDir.getAbsolutePath();
 		command[index++] = "-c";
 		command[index++] = "core.quotepath=false";
+		command[index++] = "-c";
+		command[index++] = "core.autocrlf=true";
+		command[index++] = "-c";
+		command[index++] = "core.safecrlf=false";
 		System.arraycopy(args, 0, command, index, args.length);
 		return command;
 	}

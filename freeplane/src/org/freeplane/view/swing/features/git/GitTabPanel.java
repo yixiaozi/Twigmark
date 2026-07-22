@@ -58,7 +58,11 @@ public class GitTabPanel extends JPanel {
 	private final JButton commitButton = DocearUiTheme.primaryButton("提交");
 	private final JCheckBox selectAllCheckBox = new JCheckBox("全选", true);
 	private final JTextField summaryField = new JTextField();
-	private final JTextArea descriptionArea = new JTextArea(2, 20);
+	private final JTextArea descriptionArea = new JTextArea(6, 20);
+	private static final String PLACEHOLDER_SUMMARY = "Summary";
+	private static final String PLACEHOLDER_DESCRIPTION = "Description";
+	private boolean summaryShowingHint = true;
+	private boolean descriptionShowingHint = true;
 	private final JTable changesTable = new JTable(new ChangesTableModel());
 	private final GitHistoryPanel historyPanel = new GitHistoryPanel();
 	private final List<GitFileChange> changes = new ArrayList<GitFileChange>();
@@ -331,9 +335,29 @@ public class GitTabPanel extends JPanel {
 			clearStatusError();
 			return;
 		}
-		statusErrorLabel.setText("<html>" + escapeHtml(lastErrorDetail) + "</html>");
-		statusErrorLabel.setToolTipText(lastErrorDetail + "\n（点击查看完整详情）");
+		final String shortText = shortenErrorForStrip(lastErrorDetail);
+		statusErrorLabel.setText("<html>" + escapeHtml(shortText) + "</html>");
+		statusErrorLabel.setToolTipText("点击查看完整详情");
 		statusErrorLabel.setVisible(true);
+	}
+
+	/** Keep the status strip short; full text stays in the click dialog. */
+	private static String shortenErrorForStrip(final String error) {
+		if (error == null || error.length() == 0) {
+			return "";
+		}
+		String first = error;
+		final int nl = error.indexOf('\n');
+		if (nl > 0) {
+			first = error.substring(0, nl).trim();
+		}
+		if (first.length() > 120) {
+			first = first.substring(0, 117) + "...";
+		}
+		if (error.length() > first.length() + 2) {
+			return first + " （点击查看详情）";
+		}
+		return first;
 	}
 
 	private void showErrorDetailDialog() {
@@ -441,40 +465,119 @@ public class GitTabPanel extends JPanel {
 
 		final JPanel tablePanel = new JPanel(new BorderLayout(0, 2));
 		tablePanel.add(tableHeader, BorderLayout.NORTH);
-		tablePanel.add(new JScrollPane(changesTable), BorderLayout.CENTER);
+		final JScrollPane changesScroll = new JScrollPane(changesTable);
+		DocearUiTheme.styleScrollPane(changesScroll);
+		tablePanel.add(changesScroll, BorderLayout.CENTER);
 
-		final JPanel commitPanel = new JPanel(new BorderLayout(4, 4));
-		commitPanel.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		// GitHub Desktop–style commit box: placeholders inside fields, no avatar / outer labels.
+		final JPanel commitPanel = new JPanel(new BorderLayout(4, 6));
+		commitPanel.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(1, 0, 0, 0, DocearUiTheme.HAIRLINE),
+				BorderFactory.createEmptyBorder(8, 6, 6, 6)));
+		commitPanel.setOpaque(true);
+		commitPanel.setBackground(DocearUiTheme.CANVAS);
 
-		final JPanel summaryPanel = new JPanel(new BorderLayout(4, 0));
-		summaryPanel.add(new JLabel("Summary"), BorderLayout.WEST);
-		summaryField.setPreferredSize(new Dimension(200, 24));
-		summaryPanel.add(summaryField, BorderLayout.CENTER);
-		commitPanel.add(summaryPanel, BorderLayout.NORTH);
+		summaryField.setPreferredSize(new Dimension(200, 30));
+		summaryField.setFont(DocearUiTheme.font(13f));
+		summaryField.setBorder(BorderFactory.createCompoundBorder(
+				DocearUiTheme.hairlineBorder(),
+				BorderFactory.createEmptyBorder(6, 10, 6, 10)));
+		summaryField.putClientProperty("JTextField.placeholderText", PLACEHOLDER_SUMMARY);
+		installSummaryHint();
 
-		final JPanel descriptionPanel = new JPanel(new BorderLayout(4, 0));
-		descriptionPanel.add(new JLabel("Description"), BorderLayout.NORTH);
 		descriptionArea.setLineWrap(true);
 		descriptionArea.setWrapStyleWord(true);
-		descriptionArea.setBorder(BorderFactory.createCompoundBorder(
-				DocearUiTheme.hairlineBorder(),
-				BorderFactory.createEmptyBorder(6, 8, 6, 8)));
-		descriptionArea.setFont(DocearUiTheme.font(12f));
+		descriptionArea.setRows(6);
+		descriptionArea.setFont(DocearUiTheme.font(12.5f));
 		descriptionArea.setBackground(DocearUiTheme.SURFACE);
+		descriptionArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+		descriptionArea.putClientProperty("JTextArea.placeholderText", PLACEHOLDER_DESCRIPTION);
+		installDescriptionHint();
+
 		final JScrollPane descScroll = new JScrollPane(descriptionArea);
 		DocearUiTheme.styleScrollPane(descScroll);
-		descScroll.setPreferredSize(new Dimension(100, 52));
-		descScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 64));
-		descriptionPanel.add(descScroll, BorderLayout.CENTER);
-		commitPanel.add(descriptionPanel, BorderLayout.CENTER);
+		descScroll.setBorder(DocearUiTheme.hairlineBorder());
+		descScroll.setPreferredSize(new Dimension(100, 128));
+		descScroll.setMinimumSize(new Dimension(80, 96));
+
+		final JPanel fields = new JPanel(new BorderLayout(0, 6));
+		fields.setOpaque(false);
+		fields.add(summaryField, BorderLayout.NORTH);
+		fields.add(descScroll, BorderLayout.CENTER);
+		commitPanel.add(fields, BorderLayout.CENTER);
 
 		final JPanel commitButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0));
+		commitButtons.setOpaque(false);
 		commitButtons.add(commitButton);
 		commitPanel.add(commitButtons, BorderLayout.SOUTH);
 
 		panel.add(tablePanel, BorderLayout.CENTER);
 		panel.add(commitPanel, BorderLayout.SOUTH);
 		return panel;
+	}
+
+	private void installSummaryHint() {
+		showSummaryHint();
+		summaryField.addFocusListener(new java.awt.event.FocusAdapter() {
+			public void focusGained(final java.awt.event.FocusEvent e) {
+				if (summaryShowingHint) {
+					summaryField.setText("");
+					summaryField.setForeground(DocearUiTheme.TEXT);
+					summaryShowingHint = false;
+				}
+			}
+
+			public void focusLost(final java.awt.event.FocusEvent e) {
+				if (summaryField.getText().trim().length() == 0) {
+					showSummaryHint();
+				}
+			}
+		});
+	}
+
+	private void showSummaryHint() {
+		summaryShowingHint = true;
+		summaryField.setForeground(DocearUiTheme.TEXT_FAINT);
+		summaryField.setText(PLACEHOLDER_SUMMARY);
+	}
+
+	private void installDescriptionHint() {
+		showDescriptionHint();
+		descriptionArea.addFocusListener(new java.awt.event.FocusAdapter() {
+			public void focusGained(final java.awt.event.FocusEvent e) {
+				if (descriptionShowingHint) {
+					descriptionArea.setText("");
+					descriptionArea.setForeground(DocearUiTheme.TEXT);
+					descriptionShowingHint = false;
+				}
+			}
+
+			public void focusLost(final java.awt.event.FocusEvent e) {
+				if (descriptionArea.getText().trim().length() == 0) {
+					showDescriptionHint();
+				}
+			}
+		});
+	}
+
+	private void showDescriptionHint() {
+		descriptionShowingHint = true;
+		descriptionArea.setForeground(DocearUiTheme.TEXT_FAINT);
+		descriptionArea.setText(PLACEHOLDER_DESCRIPTION);
+	}
+
+	private String readSummaryText() {
+		if (summaryShowingHint) {
+			return "";
+		}
+		return summaryField.getText().trim();
+	}
+
+	private String readDescriptionText() {
+		if (descriptionShowingHint) {
+			return "";
+		}
+		return descriptionArea.getText().trim();
 	}
 
 	private void wireEvents() {
@@ -862,7 +965,7 @@ public class GitTabPanel extends JPanel {
 	}
 
 	private void commitChanges() {
-		final String summary = summaryField.getText().trim();
+		final String summary = readSummaryText();
 		if (summary.isEmpty()) {
 			statusLabel.setText("请输入提交摘要");
 			return;
@@ -883,7 +986,7 @@ public class GitTabPanel extends JPanel {
 			return;
 		}
 
-		final String description = descriptionArea.getText().trim();
+		final String description = readDescriptionText();
 		final String commitMessage = summary + (description.isEmpty() ? "" : "\n\n" + description);
 
 		statusLabel.setText("正在提交...");
@@ -929,8 +1032,8 @@ public class GitTabPanel extends JPanel {
 					public void run() {
 						if (finalSuccess) {
 							setStatusMessage("提交成功");
-							summaryField.setText("");
-							descriptionArea.setText("");
+							showSummaryHint();
+							showDescriptionHint();
 							GitPostCommitScriptRunner.scheduleAfterSuccessfulCommit();
 							refreshLocalChanges(false);
 						} else {

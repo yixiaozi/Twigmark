@@ -184,8 +184,8 @@
 			<fileset file="${framework.jar}" />
 			<!--<fileset file="windows-launcher/${ApplicationNameToLowerCase}.exe" casesensitive="no" /-->
 		</copy>
-		<!-- Do not ship working-directory.txt — first launch prompts the user to choose a folder.
-		     Keep an example next to the exe for documentation. -->
+		<!-- Ship default working directory (E:\yixiaozi) so rebuilds don't re-prompt. -->
+		<copy file="${basedir}/working-directory.txt" tofile="${build}/working-directory.txt" failonerror="false" />
 		<copy file="${basedir}/working-directory.txt" tofile="${build}/working-directory.txt.example" failonerror="false" />
 		<chmod file="${build}/${ApplicationNameToLowerCase}.sh" perm="ugo+rx" />
 		

@@ -244,6 +244,12 @@ public final class McpGitService {
 		command.add("git");
 		command.add("-C");
 		command.add(repo.getAbsolutePath());
+		command.add("-c");
+		command.add("core.quotepath=false");
+		command.add("-c");
+		command.add("core.autocrlf=true");
+		command.add("-c");
+		command.add("core.safecrlf=false");
 		for (final String arg : args) {
 			command.add(arg);
 		}

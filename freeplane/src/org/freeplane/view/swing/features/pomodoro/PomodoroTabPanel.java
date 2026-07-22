@@ -21,15 +21,20 @@ import java.util.Iterator;
 import java.util.List;
 
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JToggleButton;
 import javax.swing.JTree;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.DefaultListModel;
 import org.freeplane.core.ui.components.DateTimeFieldsPanel;
@@ -38,6 +43,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreePath;
 
+import org.freeplane.core.ui.components.WrapFlowLayout;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
@@ -52,7 +58,6 @@ import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
-import org.freeplane.features.text.TextController;
 import org.freeplane.features.ui.IMapViewManager;
 
 /**
@@ -77,6 +82,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private final JToggleButton todayViewButton = new JToggleButton("时间", true);
 	private final DateTimeFieldsPanel dayPicker;
 	private final JButton todayResetButton = new JButton("回到今天");
+	private JPanel dayBar;
 	private boolean showAllMaps = true;
 	private boolean todayView = true;
 	private long selectedDayStart = PomodoroLog.startOfToday();
@@ -90,10 +96,14 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		DocearUiTheme.styleScrollPane(treeScroll);
 		DocearUiTheme.styleScrollPane(todayScroll);
 
-		final JPanel top = new JPanel(new BorderLayout(2, 2));
+		final JPanel top = new JPanel();
 		top.setOpaque(false);
-		final JPanel modeBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 2));
-		modeBar.setOpaque(false);
+		top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+
+		// Natural wrap: scope + date +「回到今天」share one bar and reflow when narrow.
+		final JPanel scopeBar = new JPanel(new WrapFlowLayout(FlowLayout.LEFT, 4, 2));
+		scopeBar.setOpaque(false);
+		scopeBar.setAlignmentX(Component.LEFT_ALIGNMENT);
 		currentMapButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				showAllMaps = false;
@@ -149,85 +159,27 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				reload();
 			}
 		});
-		modeBar.add(currentMapButton);
-		modeBar.add(allMapsButton);
-		modeBar.add(nodesViewButton);
-		modeBar.add(todayViewButton);
-		modeBar.add(dayPicker);
-		modeBar.add(todayResetButton);
+		scopeBar.add(currentMapButton);
+		scopeBar.add(allMapsButton);
+		scopeBar.add(nodesViewButton);
+		scopeBar.add(todayViewButton);
+		scopeBar.add(dayPicker);
+		scopeBar.add(todayResetButton);
+		dayBar = scopeBar;
 		updateDayControlsVisible();
-		top.add(modeBar, BorderLayout.NORTH);
+		scopeBar.addComponentListener(new java.awt.event.ComponentAdapter() {
+			public void componentResized(final java.awt.event.ComponentEvent e) {
+				scopeBar.revalidate();
+			}
+		});
 
 		statsLabel.setFont(DocearUiTheme.font(11f));
 		statsLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		statsLabel.setBorder(new EmptyBorder(2, 6, 4, 6));
-		top.add(statsLabel, BorderLayout.CENTER);
+		statsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-		final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 3, 2));
-		actions.add(btn("开始", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				startSelectedOrFocused();
-			}
-		}));
-		actions.add(btn("暂停", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
-				final NodeModel node = selectedActionNode();
-				if (manager != null && node != null) {
-					manager.pause(node);
-				}
-			}
-		}));
-		actions.add(btn("结束", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
-				final NodeModel node = selectedActionNode();
-				if (manager != null && node != null) {
-					manager.stop(node);
-				}
-			}
-		}));
-		actions.add(btn("开关", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
-				if (node != null) {
-					PomodoroAttributes.toggleEnabled(node);
-					reload();
-				}
-			}
-		}));
-		actions.add(btn("小窗", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
-				if (manager != null) {
-					manager.showWindow();
-				}
-			}
-		}));
-		actions.add(btn("历史", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				final NodeModel node = selectedActionNode();
-				if (node != null) {
-					PomodoroHistoryDialog.showForNode(node);
-				}
-			}
-		}));
-		actions.add(btn("修改", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				editSelectedSession();
-			}
-		}));
-		actions.add(btn("删除", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				deleteSelectedSession();
-			}
-		}));
-		actions.add(btn("导出", new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				PomodoroExport.exportInteractive(showAllMaps);
-			}
-		}));
-		top.add(actions, BorderLayout.SOUTH);
+		top.add(scopeBar);
+		top.add(statsLabel);
 		add(top, BorderLayout.NORTH);
 
 		tree.setRootVisible(false);
@@ -254,6 +206,9 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		});
 		tree.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
+				if (!SwingUtilities.isLeftMouseButton(e)) {
+					return;
+				}
 				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 				final NodeModel node = selectedMindMapNode();
 				if (manager == null || node == null) {
@@ -264,14 +219,27 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 					PomodoroHistoryDialog.showForNode(node);
 				}
 			}
+
+			public void mousePressed(final MouseEvent e) {
+				maybeShowPomodoroPopup(e, false);
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				maybeShowPomodoroPopup(e, false);
+			}
 		});
 
 		todayList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		todayList.setFont(DocearUiTheme.font(12f));
-		todayList.setFixedCellHeight(24);
+		todayList.setFixedCellHeight(26);
+		todayList.setSelectionBackground(DocearUiTheme.SELECTION);
+		todayList.setSelectionForeground(DocearUiTheme.TEXT);
 		todayList.setCellRenderer(new PomodoroTodayRowRenderer());
 		todayList.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
+				if (!SwingUtilities.isLeftMouseButton(e)) {
+					return;
+				}
 				final Object v = todayList.getSelectedValue();
 				if (!(v instanceof PomodoroTodayEntry)) {
 					return;
@@ -284,6 +252,14 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				if (e.getClickCount() >= 2) {
 					PomodoroHistoryDialog.showForNode(entry.node);
 				}
+			}
+
+			public void mousePressed(final MouseEvent e) {
+				maybeShowPomodoroPopup(e, true);
+			}
+
+			public void mouseReleased(final MouseEvent e) {
+				maybeShowPomodoroPopup(e, true);
 			}
 		});
 
@@ -308,12 +284,134 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private void updateDayControlsVisible() {
 		dayPicker.setVisible(todayView);
 		todayResetButton.setVisible(todayView);
+		if (dayBar != null) {
+			dayBar.revalidate();
+			dayBar.repaint();
+		}
 	}
 
-	private static JButton btn(final String text, final ActionListener listener) {
-		final JButton b = DocearUiTheme.softButton(text);
-		b.addActionListener(listener);
-		return b;
+	private void maybeShowPomodoroPopup(final MouseEvent e, final boolean fromTodayList) {
+		if (!e.isPopupTrigger()) {
+			return;
+		}
+		if (fromTodayList) {
+			final int index = todayList.locationToIndex(e.getPoint());
+			if (index >= 0) {
+				todayList.setSelectedIndex(index);
+			}
+		}
+		else {
+			final TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+			if (path != null) {
+				tree.setSelectionPath(path);
+			}
+		}
+		buildPomodoroPopup().show(e.getComponent(), e.getX(), e.getY());
+	}
+
+	private JPopupMenu buildPomodoroPopup() {
+		final JPopupMenu menu = new JPopupMenu();
+		menu.add(menuItem("开始", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				startSelectedOrFocused();
+			}
+		}));
+		menu.add(menuItem("暂停", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+				final NodeModel node = selectedActionNode();
+				if (manager != null && node != null) {
+					manager.pause(node);
+				}
+			}
+		}));
+		menu.add(menuItem("结束", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+				final NodeModel node = selectedActionNode();
+				if (manager != null && node != null) {
+					manager.stop(node);
+				}
+			}
+		}));
+		menu.add(menuItem("开关番茄钟", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final NodeModel node = selectedActionNode();
+				final NodeModel target = node != null ? node
+						: Controller.getCurrentController().getSelection().getSelected();
+				if (target != null) {
+					PomodoroAttributes.toggleEnabled(target);
+					reload();
+				}
+			}
+		}));
+		menu.addSeparator();
+		menu.add(menuItem("小窗", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
+				if (manager != null) {
+					manager.showWindow();
+				}
+			}
+		}));
+		menu.add(menuItem("历史", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final NodeModel node = selectedActionNode();
+				if (node != null) {
+					PomodoroHistoryDialog.showForNode(node);
+				}
+			}
+		}));
+		menu.add(menuItem("查看详情", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				showSelectedEntryDetails();
+			}
+		}));
+		menu.add(menuItem("修改", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				editSelectedSession();
+			}
+		}));
+		menu.add(menuItem("删除", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				deleteSelectedSession();
+			}
+		}));
+		menu.addSeparator();
+		menu.add(menuItem("导出", new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				PomodoroExport.exportInteractive(showAllMaps);
+			}
+		}));
+		return menu;
+	}
+
+	private static JMenuItem menuItem(final String text, final ActionListener listener) {
+		final JMenuItem item = new JMenuItem(text);
+		item.addActionListener(listener);
+		return item;
+	}
+
+	private void showSelectedEntryDetails() {
+		final PomodoroTodayEntry entry = selectedTodayEntry();
+		if (entry != null) {
+			final StringBuilder sb = new StringBuilder();
+			sb.append(entry.timeText).append('\n');
+			sb.append("专注 ").append(entry.durationText).append('\n');
+			sb.append(entry.titleText);
+			if (entry.pauseText != null && entry.pauseText.length() > 0) {
+				sb.append("\n\n").append(entry.pauseText);
+			}
+			JOptionPane.showMessageDialog(this, sb.toString(), "番茄钟详情", JOptionPane.INFORMATION_MESSAGE);
+			return;
+		}
+		final NodeModel node = selectedActionNode();
+		if (node != null) {
+			PomodoroHistoryDialog.showForNode(node);
+		}
+		else {
+			JOptionPane.showMessageDialog(this, "请先选择一条记录", "番茄钟详情", JOptionPane.INFORMATION_MESSAGE);
+		}
 	}
 
 	private void startSelectedOrFocused() {
@@ -532,7 +630,15 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			final boolean isToday = selectedDayStart == PomodoroLog.startOfToday();
 			final String dayLabel = isToday ? "今日" : new java.text.SimpleDateFormat("MM-dd", java.util.Locale.CHINA)
 					.format(new Date(selectedDayStart));
-			statsLabel.setText(scope + " · " + dayLabel + " " + todayModel.size() + " 段"
+			long dayFocusMs = 0L;
+			for (int i = 0; i < todayModel.size(); i++) {
+				final Object row = todayModel.get(i);
+				if (row instanceof PomodoroTodayEntry) {
+					dayFocusMs += ((PomodoroTodayEntry) row).focusMs;
+				}
+			}
+			statsLabel.setText(scope + " · " + dayLabel + " " + todayModel.size() + " 段 · 共 "
+					+ PomodoroFormatter.formatDuration(dayFocusMs)
 					+ (isToday ? " · 进行中 " + stats[4] : ""));
 		}
 		else {
@@ -561,7 +667,7 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			final String name = map.getFile() != null ? map.getFile().getName() : "未命名";
 			final long[] mapStats = statsForMap(map, now);
 			mapRoot = new DefaultMutableTreeNode(new TreeEntry(null,
-					"▸ " + name + "  [" + PomodoroFormatter.formatDuration(mapStats[0]) + " 今日 · " + mapStats[1]
+					"> " + name + "  [" + PomodoroFormatter.formatDuration(mapStats[0]) + " 今日 / " + mapStats[1]
 							+ " 节点]",
 					false, false));
 			rootNode.add(mapRoot);
@@ -628,47 +734,42 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			holder.setUserObject(new TreeEntry(node, formatLabel(node, now, ext), true, running));
 		}
 		else {
-			holder.setUserObject(new TreeEntry(null, "▹ " + plain(node), false, false));
+			holder.setUserObject(new TreeEntry(null, "- " + plain(node), false, false));
 		}
 		parent.add(holder);
 		return (enabled ? 1 : 0) + childCount;
 	}
 
 	private static String formatLabel(final NodeModel node, final long now, final PomodoroExtension ext) {
-		String mark = "·";
+		String mark = "-";
 		if (PomodoroExtension.STATE_RUNNING.equals(ext.getState())) {
-			mark = "▶";
+			mark = ">";
 		}
 		else if (PomodoroExtension.STATE_PAUSED.equals(ext.getState())) {
-			mark = "❚❚";
+			mark = "||";
 		}
 		final long self = ext.liveTotalMs(now);
 		final long subtree = PomodoroTotals.subtreeMs(node, now);
 		String time = PomodoroFormatter.formatDuration(self);
 		if (subtree > self) {
-			time += " · Σ" + PomodoroFormatter.formatDuration(subtree);
+			time += " +子树" + PomodoroFormatter.formatDuration(subtree);
 		}
 		final int sessions = ext.sessionCount();
 		if (sessions > 0) {
-			time += " · " + sessions + "次";
+			time += " / " + sessions + "次";
 		}
 		return mark + " " + plain(node) + "  [" + time + "]";
 	}
 
 	private static String plain(final NodeModel node) {
-		try {
-			final String text = TextController.getController().getPlainTextContent(node);
-			if (text != null) {
-				return HtmlUtils.htmlToPlain(text).replaceAll("\\s+", " ").trim();
-			}
-		}
-		catch (Exception e) {
-		}
-		return node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		String text = node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
+		text = text.replaceAll("\\s+", " ").trim();
+		return PomodoroTodayEntry.stripPomodoroChip(text);
 	}
 
 	/**
-	 * Fixed columns so task titles share one left edge; pause stays on the right.
+	 * Fixed columns so task titles share one left edge. Pause details are in the
+	 * context menu only (not painted inline).
 	 */
 	private static final class PomodoroTodayRowRenderer extends JPanel implements ListCellRenderer {
 		private static final long serialVersionUID = 1L;
@@ -677,17 +778,14 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		private final JLabel timeLabel = new JLabel();
 		private final JLabel durationLabel = new JLabel();
 		private final JLabel titleLabel = new JLabel();
-		private final JLabel pauseLabel = new JLabel();
 
 		PomodoroTodayRowRenderer() {
 			super(new GridBagLayout());
 			setOpaque(true);
-			setBorder(new EmptyBorder(1, 4, 1, 4));
 			final Font font = DocearUiTheme.font(12f);
 			timeLabel.setFont(font);
 			durationLabel.setFont(font);
 			titleLabel.setFont(font);
-			pauseLabel.setFont(font);
 			final GridBagConstraints c = new GridBagConstraints();
 			c.gridy = 0;
 			c.insets = new Insets(0, 0, 0, 8);
@@ -706,11 +804,6 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			c.weightx = 1;
 			c.fill = GridBagConstraints.HORIZONTAL;
 			add(titleLabel, c);
-			c.gridx = 3;
-			c.weightx = 0;
-			c.fill = GridBagConstraints.NONE;
-			c.insets = new Insets(0, 8, 0, 0);
-			add(pauseLabel, c);
 		}
 
 		public Component getListCellRendererComponent(final JList list, final Object value, final int index,
@@ -720,21 +813,27 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 				timeLabel.setText(entry.timeText);
 				durationLabel.setText(entry.durationText);
 				titleLabel.setText(entry.titleText);
-				pauseLabel.setText(entry.pauseText);
 				final Color fg = entry.live && !isSelected ? DocearUiTheme.WARNING
-						: (isSelected ? list.getSelectionForeground() : list.getForeground());
+						: (isSelected ? DocearUiTheme.TEXT : list.getForeground());
 				timeLabel.setForeground(fg);
-				durationLabel.setForeground(isSelected ? fg : DocearUiTheme.TEXT_MUTED);
+				durationLabel.setForeground(isSelected ? DocearUiTheme.TEXT : DocearUiTheme.TEXT_MUTED);
 				titleLabel.setForeground(fg);
-				pauseLabel.setForeground(isSelected ? fg : DocearUiTheme.TEXT_MUTED);
 			}
 			else {
 				timeLabel.setText("");
 				durationLabel.setText("");
 				titleLabel.setText(value == null ? "" : value.toString());
-				pauseLabel.setText("");
 			}
-			setBackground(isSelected ? list.getSelectionBackground() : list.getBackground());
+			if (isSelected) {
+				setBackground(DocearUiTheme.SELECTION);
+				setBorder(BorderFactory.createCompoundBorder(
+						BorderFactory.createMatteBorder(0, 3, 0, 0, DocearUiTheme.ACCENT),
+						new EmptyBorder(2, 4, 2, 4)));
+			}
+			else {
+				setBackground(index % 2 == 0 ? DocearUiTheme.SURFACE : DocearUiTheme.SURFACE_SOFT);
+				setBorder(new EmptyBorder(2, 7, 2, 4));
+			}
 			return this;
 		}
 	}

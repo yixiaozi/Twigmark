@@ -58,7 +58,10 @@ import org.xml.sax.helpers.DefaultHandler;
 
 public class EnhancedAllRecentlyModified extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final int MAX_DAYS = 7;
+	/** Look back far enough to fill the list; display is capped at {@link #MAX_ITEMS}. */
+	private static final int MAX_DAYS = 365;
+	/** Show at most the newest N modified nodes. */
+	private static final int MAX_ITEMS = 1000;
 
 	private static final class ModifiedNode {
 		private final File file;
@@ -241,8 +244,9 @@ public class EnhancedAllRecentlyModified extends JPanel {
 			}
 
 			protected void done() {
-				statusLabel.setText("最近修改: " + nodesByKey.size());
-				publishRecentlyModifiedMetric(nodesByKey.size());
+				final int shown = Math.min(MAX_ITEMS, nodesByKey.size());
+				statusLabel.setText("最近修改: " + shown + (nodesByKey.size() > MAX_ITEMS ? " / " + nodesByKey.size() : ""));
+				publishRecentlyModifiedMetric(shown);
 				if (rescanRequested) {
 					rescanRequested = false;
 					refreshInBackground();
@@ -416,6 +420,9 @@ public class EnhancedAllRecentlyModified extends JPanel {
 				return Long.compare(b.modifiedAt, a.modifiedAt);
 			}
 		});
+		if (records.size() > MAX_ITEMS) {
+			records = new ArrayList(records.subList(0, MAX_ITEMS));
+		}
 
 		DefaultMutableTreeNode root = new DefaultMutableTreeNode("最近修改");
 		Map timeNodes = new HashMap();

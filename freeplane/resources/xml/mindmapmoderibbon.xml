@@ -288,10 +288,9 @@
 			</ribbon_band>
 		</ribbon_task>
 		
-		<!-- TOOLS + HELP (merged) -->
+		<!-- TOOLS + HELP (merged into one tab; no separate ribbon.help task) -->
 		<ribbon_task name="tools_and_settings" orderPriority="last">
 			<ribbon_band name="tools_misc" resize_policies="Mirror">
-				<ribbon_action action="OpenUserDirAction" priority="top"/>							
 				<ribbon_action action="PropertyAction" accelerator="control COMMA" priority="top"/>
 				<ribbon_action name="menu_time" priority="medium">
 					<ribbon_action action="TimeManagementAction" accelerator="control T" />
@@ -326,8 +325,10 @@
 				</ribbon_action>
 			</ribbon_band>
 			<ribbon_band name="help_misc" resize_policies="Mirror">
+				<ribbon_action action="OpenUserDirAction" priority="top" mandatory="true"/>
 			    <ribbon_action action="GettingStartedAction" accelerator="F1" priority="top" mandatory="true"/>
 			    <ribbon_action action="HotKeyInfoAction" priority="top" mandatory="true"/>
+			    <ribbon_action action="EncryptionSettingsAction" priority="medium"/>
 			</ribbon_band>
 			<!-- Keep only Docear4Word shortcut; other add-on launchers hidden from ribbon. -->
 			<ribbon_band name="add_ons" resize_policies="Mirror">

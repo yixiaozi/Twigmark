@@ -11,12 +11,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 import javax.swing.BorderFactory;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import javax.swing.table.AbstractTableModel;
 
 import org.freeplane.core.util.LogUtils;
@@ -24,27 +28,34 @@ import org.freeplane.core.util.LogUtils;
 class GitHistoryPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String LOG_DATE_FORMAT = "--date=format:%Y-%m-%d %H:%M:%S";
-	private static final int DETAIL_HEIGHT = 56;
-	/** Set true to show commit detail panel below history table. */
-	private static final boolean SHOW_COMMIT_DETAIL = false;
+	private static final int DETAIL_MIN_HEIGHT = 80;
+	private static final int DETAIL_PREF_HEIGHT = 140;
 
 	private final JTable historyTable = new JTable(new HistoryTableModel());
 	private final JTextArea detailArea = new JTextArea();
 	private final List<HistoryEntry> entries = new ArrayList<HistoryEntry>();
+	private final JSplitPane split;
 	private File repoDir;
 
 	GitHistoryPanel() {
 		super(new BorderLayout(4, 4));
 		historyTable.setRowHeight(22);
 		historyTable.setShowGrid(true);
+		historyTable.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 		historyTable.getTableHeader().setReorderingAllowed(false);
 		historyTable.getColumnModel().getColumn(0).setPreferredWidth(130);
 		historyTable.getColumnModel().getColumn(0).setMaxWidth(150);
 		historyTable.getColumnModel().getColumn(1).setPreferredWidth(220);
+		historyTable.getSelectionModel().addListSelectionListener(new ListSelectionListener() {
+			public void valueChanged(final ListSelectionEvent e) {
+				if (!e.getValueIsAdjusting()) {
+					showSelectedCommit();
+				}
+			}
+		});
 		historyTable.addMouseListener(new MouseAdapter() {
-			@Override
 			public void mouseClicked(final MouseEvent e) {
-				if (SHOW_COMMIT_DETAIL) {
+				if (e.getClickCount() >= 2) {
 					showSelectedCommit();
 				}
 			}
@@ -53,38 +64,47 @@ class GitHistoryPanel extends JPanel {
 		detailArea.setEditable(false);
 		detailArea.setLineWrap(true);
 		detailArea.setWrapStyleWord(true);
-		detailArea.setRows(2);
-		detailArea.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+		detailArea.setFont(DocearUiTheme.font(12f));
+		detailArea.setBackground(DocearUiTheme.SURFACE);
+		detailArea.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
+		detailArea.setText("选择一条提交以查看描述");
+		detailArea.setForeground(DocearUiTheme.TEXT_MUTED);
 
 		final JScrollPane detailScroll = new JScrollPane(detailArea);
-		detailScroll.setPreferredSize(new Dimension(100, DETAIL_HEIGHT));
-		detailScroll.setMinimumSize(new Dimension(50, DETAIL_HEIGHT));
-		detailScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, DETAIL_HEIGHT + 12));
-		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "提交详情"));
+		DocearUiTheme.styleScrollPane(detailScroll);
+		detailScroll.setPreferredSize(new Dimension(100, DETAIL_PREF_HEIGHT));
+		detailScroll.setMinimumSize(new Dimension(50, DETAIL_MIN_HEIGHT));
 
-		if (SHOW_COMMIT_DETAIL) {
-			final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-			split.setResizeWeight(1.0);
-			split.setOneTouchExpandable(true);
-			split.setTopComponent(new JScrollPane(historyTable));
-			split.setBottomComponent(detailScroll);
-			split.setDividerSize(5);
-			add(split, BorderLayout.CENTER);
-		}
-		else {
-			add(new JScrollPane(historyTable), BorderLayout.CENTER);
-		}
+		final JPanel detailPanel = new JPanel(new BorderLayout(0, 2));
+		detailPanel.setOpaque(false);
+		final JLabel detailTitle = new JLabel("提交描述");
+		detailTitle.setFont(DocearUiTheme.font(11f));
+		detailTitle.setForeground(DocearUiTheme.TEXT_MUTED);
+		detailTitle.setBorder(BorderFactory.createEmptyBorder(2, 4, 0, 4));
+		detailPanel.add(detailTitle, BorderLayout.NORTH);
+		detailPanel.add(detailScroll, BorderLayout.CENTER);
+
+		final JScrollPane tableScroll = new JScrollPane(historyTable);
+		DocearUiTheme.styleScrollPane(tableScroll);
+
+		split = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
+		split.setResizeWeight(0.72);
+		split.setContinuousLayout(true);
+		split.setOneTouchExpandable(true);
+		split.setDividerSize(6);
+		split.setTopComponent(tableScroll);
+		split.setBottomComponent(detailPanel);
+		add(split, BorderLayout.CENTER);
 	}
 
 	void refresh(final File repository) {
 		repoDir = repository;
-		detailArea.setText("");
+		detailArea.setForeground(DocearUiTheme.TEXT_MUTED);
+		detailArea.setText("选择一条提交以查看描述");
 		new Thread(new Runnable() {
-			@Override
 			public void run() {
 				final List<HistoryEntry> loaded = loadHistory(repository);
 				SwingUtilities.invokeLater(new Runnable() {
-					@Override
 					public void run() {
 						entries.clear();
 						entries.addAll(loaded);
@@ -121,13 +141,13 @@ class GitHistoryPanel extends JPanel {
 			return;
 		}
 		final HistoryEntry entry = entries.get(row);
+		detailArea.setForeground(DocearUiTheme.TEXT_MUTED);
 		detailArea.setText("正在加载...");
 		final String hash = entry.hash;
 		new Thread(new Runnable() {
-			@Override
 			public void run() {
 				final GitCommand.Result gitResult = GitCommand.run(repoDir, "show", LOG_DATE_FORMAT, "--no-patch",
-				    "--pretty=format:日期: %ad%n%n%s%n%n%b", hash);
+				    "--pretty=format:%s%n%n%b", hash);
 				final StringBuilder text = new StringBuilder();
 				for (int i = 0; i < gitResult.output.size(); i++) {
 					if (i > 0) {
@@ -135,14 +155,19 @@ class GitHistoryPanel extends JPanel {
 					}
 					text.append(gitResult.output.get(i));
 				}
-				if (text.length() == 0 && gitResult.errors.size() > 0) {
-					text.append(gitResult.errorText());
+				String body = text.toString().trim();
+				if (body.length() == 0 && gitResult.errors.size() > 0) {
+					body = gitResult.errorText();
 				}
-				final String finalText = text.toString();
+				if (body.length() == 0) {
+					body = entry.summary + "\n\n（无详细描述）";
+				}
+				final String finalText = body;
 				SwingUtilities.invokeLater(new Runnable() {
-					@Override
 					public void run() {
+						detailArea.setForeground(DocearUiTheme.TEXT);
 						detailArea.setText(finalText);
+						detailArea.setCaretPosition(0);
 					}
 				});
 			}

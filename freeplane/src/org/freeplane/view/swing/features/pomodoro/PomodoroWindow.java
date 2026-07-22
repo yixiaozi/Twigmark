@@ -746,9 +746,8 @@ final class PomodoroWindow extends JFrame {
 		String t = node.getText() == null ? "" : HtmlUtils.htmlToPlain(node.getText());
 		t = t.replaceAll("\\s+", " ").trim();
 		// Strip accidental chip leftovers if present in stored text.
-		t = t.replaceAll("\\s*⏱[^\\s]*(\\s*·\\s*Σ[^\\s]*)?(\\s*[▶❚]+)?\\s*$", "").trim();
-		t = t.replaceAll("^[▶❚\\s]+", "").trim();
-		return t.length() > maxLen ? t.substring(0, maxLen) + "…" : t;
+		t = PomodoroTodayEntry.stripPomodoroChip(t);
+		return t.length() > maxLen ? t.substring(0, maxLen) + "..." : t;
 	}
 
 	private static final class HistoryRow {
@@ -759,9 +758,12 @@ final class PomodoroWindow extends JFrame {
 			this.node = node;
 			final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 			final String state = ext == null ? PomodoroExtension.STATE_IDLE : ext.getState();
-			String mark = "·";
+			String mark = "-";
 			if (PomodoroExtension.STATE_PAUSED.equals(state)) {
-				mark = "❚❚";
+				mark = "||";
+			}
+			else if (PomodoroExtension.STATE_RUNNING.equals(state)) {
+				mark = ">";
 			}
 			final long total = ext == null ? 0L : ext.liveTotalMs(now);
 			final int chars = Math.max(24, panelWidth / 7);

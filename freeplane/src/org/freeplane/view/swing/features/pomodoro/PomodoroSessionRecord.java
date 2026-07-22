@@ -77,12 +77,12 @@ public final class PomodoroSessionRecord {
 		final SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA);
 		fmt.setTimeZone(TimeZone.getDefault());
 		final StringBuilder sb = new StringBuilder();
-		sb.append(fmt.format(new Date(startMs))).append(" → ").append(fmt.format(new Date(endMs)));
+		sb.append(fmt.format(new Date(startMs))).append(" -> ").append(fmt.format(new Date(endMs)));
 		sb.append("  ").append(PomodoroFormatter.formatDuration(focusMs));
 		final long pause = pauseMs();
 		if (pause > 0) {
 			// Pause details always last so the focus duration column stays readable.
-			sb.append("  ·  暂停");
+			sb.append("  / 暂停");
 			final String ranges = PomodoroPauseInterval.formatRanges(pauseIntervals);
 			if (ranges.length() > 0) {
 				sb.append(' ').append(ranges);

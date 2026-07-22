@@ -223,7 +223,9 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 
 			final Rectangle bounds = new Rectangle(x, y, width, height);
 			final Rectangle old = panel.getBounds();
-			if (forceSize || !bounds.equals(old)) {
+			// Always apply when forceSize, or when size shrank (collapse), or position changed.
+			final boolean sizeChanged = old.width != width || old.height != height;
+			if (forceSize || sizeChanged || old.x != x || old.y != y) {
 				panel.setBounds(bounds);
 			}
 			lastLocation = new Point(x, y);

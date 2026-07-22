@@ -62,7 +62,10 @@ public final class MapTagFilterService {
 		TagFilterMapExtensionIO.ensureLoadedFromUnknownElements(map);
 		final TagFilterMapExtension extension = TagFilterMapExtension.getOrCreate(map);
 		if (!extension.hasActiveFilter()) {
-			clearFilter(map);
+			// Already transparent / not our filter — avoid a full map re-filter.
+			if (isOurFilterActive(map)) {
+				clearFilter(map);
+			}
 			return;
 		}
 		final MapTagFilterCondition condition = new MapTagFilterCondition(extension.getMode(),
@@ -104,6 +107,12 @@ public final class MapTagFilterService {
 	}
 
 	public static void setMode(final MapModel map, final TagFilterMode mode) {
+		setModeStateOnly(map, mode);
+		applyFromExtension(map);
+	}
+
+	/** Persist mode change without applying filter (UI can paint first). */
+	public static void setModeStateOnly(final MapModel map, final TagFilterMode mode) {
 		if (map == null || mode == null) {
 			return;
 		}
@@ -115,20 +124,28 @@ public final class MapTagFilterService {
 		// Switching mode restores that mode's tags and resets untagged to the mode default.
 		extension.clearShowUntaggedOverride();
 		markDirty(map);
-		applyFromExtension(map);
 	}
 
 	public static void toggleTag(final MapModel map, final String tag) {
+		toggleTagStateOnly(map, tag);
+		applyFromExtension(map);
+	}
+
+	public static void toggleTagStateOnly(final MapModel map, final String tag) {
 		if (map == null || tag == null || tag.trim().length() == 0) {
 			return;
 		}
 		final TagFilterMapExtension extension = TagFilterMapExtension.getOrCreate(map);
 		extension.toggleTag(extension.getMode(), tag.trim());
 		markDirty(map);
-		applyFromExtension(map);
 	}
 
 	public static void setShowUntagged(final MapModel map, final boolean show) {
+		setShowUntaggedStateOnly(map, show);
+		applyFromExtension(map);
+	}
+
+	public static void setShowUntaggedStateOnly(final MapModel map, final boolean show) {
 		if (map == null) {
 			return;
 		}
@@ -138,17 +155,20 @@ public final class MapTagFilterService {
 		}
 		extension.setShowUntagged(show);
 		markDirty(map);
-		applyFromExtension(map);
 	}
 
 	public static void clearActiveModeTags(final MapModel map) {
+		clearActiveModeTagsStateOnly(map);
+		applyFromExtension(map);
+	}
+
+	public static void clearActiveModeTagsStateOnly(final MapModel map) {
 		if (map == null) {
 			return;
 		}
 		final TagFilterMapExtension extension = TagFilterMapExtension.getOrCreate(map);
 		extension.clearTagsForMode(extension.getMode());
 		markDirty(map);
-		applyFromExtension(map);
 	}
 
 	public static void clearAll(final MapModel map) {

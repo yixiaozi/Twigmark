@@ -170,6 +170,43 @@ if ($null -eq $installDir) {
     throw "Docear install folder not found under $extractDir (missing freeplanelauncher.jar)"
 }
 
+Write-Step "Write default working-directory.txt"
+$defaultWorkDir = "E:\yixiaozi"
+function Write-WorkingDirectoryFile([string] $FilePath, [string] $Value) {
+    # UTF-8 without BOM — a BOM makes Java read "\uFEFFE:\yixiaozi" and breaks startup.
+    [System.IO.File]::WriteAllText($FilePath, ($Value.Trim() + "`n"), [System.Text.UTF8Encoding]::new($false))
+}
+$wdFile = Join-Path $installDir "working-directory.txt"
+Write-WorkingDirectoryFile -FilePath $wdFile -Value $defaultWorkDir
+Write-Host "working-directory.txt -> $defaultWorkDir"
+
+# Keep the user's daily install (E:\SoftWare\Docear) in sync when building to a dist folder.
+$dailyInstall = "E:\SoftWare\Docear"
+$launchDir = $installDir
+if ((Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
+    Write-Step "Sync core + plugins into $dailyInstall"
+    $srcCoreLib = Join-Path $installDir "core\org.freeplane.core\lib"
+    $dstCoreLib = Join-Path $dailyInstall "core\org.freeplane.core\lib"
+    if ((Test-Path $srcCoreLib) -and (Test-Path $dstCoreLib)) {
+        Copy-Item -Path (Join-Path $srcCoreLib "*") -Destination $dstCoreLib -Force
+        Write-Host "Updated core lib jars (ribbon / pomodoro / git UI)"
+    }
+    $srcPlugins = Join-Path $installDir "plugins"
+    $dstPlugins = Join-Path $dailyInstall "plugins"
+    if ((Test-Path $srcPlugins) -and (Test-Path $dstPlugins)) {
+        Copy-Item -Path (Join-Path $srcPlugins "*") -Destination $dstPlugins -Recurse -Force
+        Write-Host "Updated plugins"
+    }
+    Write-WorkingDirectoryFile -FilePath (Join-Path $dailyInstall "working-directory.txt") -Value $defaultWorkDir
+    $cacheDir = Join-Path $dailyInstall "workspace\data\resource-cache"
+    if (Test-Path $cacheDir) {
+        Get-ChildItem $cacheDir -Filter "*mindmapmoderibbon*" -ErrorAction SilentlyContinue |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+        Write-Host "Cleared cached mindmapmoderibbon.xml"
+    }
+    $launchDir = $dailyInstall
+}
+
 Write-Step "Verify installed layout"
 $installPlugins = Join-Path $installDir "plugins"
 Assert-RelationshipGraphPluginLayout -PluginsRoot $installPlugins -Context "installed $installPlugins"
@@ -203,15 +240,16 @@ Write-Host ""
 Write-Host "Deploy complete" -ForegroundColor Green
 Write-Host "  Packages: $TargetDir"
 Write-Host "  Install:  $installDir"
+Write-Host "  Launch:   $launchDir"
 Write-Host "  Scheduling hub shortcut: Ctrl+Shift+D"
 Write-Host "  Draw.io: open a .drawio file from the workspace"
-Write-Host "  Launch: prefer docear.bat (uses bundled jre)"
+Write-Host "  Prefer docear.bat (uses bundled jre)"
 Write-Host ""
 
 if (-not $NoLaunch) {
     Write-Step "Launch Docear"
-    Start-DocearFromInstallDir -InstallDir $installDir | Out-Null
+    Start-DocearFromInstallDir -InstallDir $launchDir | Out-Null
 }
 else {
-    Write-Host "Skipped launch (-NoLaunch). Run: $installDir\docear.exe"
+    Write-Host "Skipped launch (-NoLaunch). Run: $launchDir\docear.exe"
 }

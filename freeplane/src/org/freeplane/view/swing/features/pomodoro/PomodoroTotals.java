@@ -33,7 +33,11 @@ public final class PomodoroTotals {
 		return sum;
 	}
 
-	/** Display suffix when enabled: {@code ⏱ 12m · Σ1h5m} (Σ omitted when equal to self). */
+	/**
+	 * Display suffix on the mind-map node chip: {@code ⏱ 12m · Σ1h5m}.
+	 * Map HTML can render ⏱; sidebar lists strip this via
+	 * {@link PomodoroTodayEntry#stripPomodoroChip(String)}.
+	 */
 	public static String formatInline(final NodeModel node, final long now) {
 		final PomodoroExtension ext = PomodoroExtension.getExtension(node);
 		if (ext == null || !ext.isEnabled()) {

@@ -59,17 +59,25 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private static final int ARC = 14;
+	private static final int PILL_ARC = 20;
 	private static final int DEFAULT_WIDTH = 300;
 	private static final int MIN_WIDTH = 220;
 	private static final int MAX_WIDTH = 520;
 	private static final int MIN_EXPANDED_HEIGHT = 220;
 	private static final int MAX_EXPANDED_HEIGHT = 560;
 	private static final int RESIZE_HANDLE = 14;
+	private static final int COLLAPSED_PAD_X = 12;
+	private static final int COLLAPSED_PAD_Y = 5;
+	private static final int COLLAPSED_GAP = 6;
 
 	/** Soft slate card — not stark white. */
 	private static final Color CARD_BG = new Color(0xF7, 0xF8, 0xFA);
 	private static final Color CARD_BORDER = new Color(0xCB, 0xD5, 0xE1);
 	private static final Color CARD_SHADOW = new Color(15, 23, 42, 28);
+	private static final Color PILL_BG = new Color(0xFF, 0xFF, 0xFF);
+	private static final Color PILL_BORDER = new Color(0x94, 0xA3, 0xB8);
+	private static final Color PILL_ACTIVE_BG = new Color(0xEF, 0xF6, 0xFF);
+	private static final Color PILL_ACTIVE_BORDER = new Color(0x3B, 0x82, 0xF6);
 	private static final Color HEADER_BG = new Color(0xEE, 0xF2, 0xF6);
 	private static final Color CHIP_AREA_BG = new Color(0xFF, 0xFF, 0xFF);
 	private static final Color MODE_ON_BG = new Color(0x1E, 0x29, 0x3B);
@@ -116,15 +124,16 @@ public class MapTagFilterPanel extends JPanel {
 		setLayout(new BorderLayout());
 
 		collapsedTitle = new JLabel("标签");
-		collapsedTitle.setFont(DocearUiTheme.font(12.5f, Font.BOLD));
-		collapsedTitle.setForeground(DocearUiTheme.TEXT);
+		collapsedTitle.setFont(DocearUiTheme.font(12f, Font.BOLD));
+		collapsedTitle.setForeground(MODE_ON_BG);
+		collapsedTitle.setBorder(null);
 
 		collapsedBadge = new JLabel();
-		collapsedBadge.setFont(DocearUiTheme.font(11f, Font.BOLD));
+		collapsedBadge.setFont(DocearUiTheme.font(10.5f, Font.BOLD));
 		collapsedBadge.setForeground(Color.WHITE);
 		collapsedBadge.setOpaque(true);
-		collapsedBadge.setBackground(MODE_ON_BG);
-		collapsedBadge.setBorder(new EmptyBorder(1, 6, 1, 6));
+		collapsedBadge.setBackground(PILL_ACTIVE_BORDER);
+		collapsedBadge.setBorder(new EmptyBorder(1, 5, 1, 5));
 		collapsedBadge.setVisible(false);
 
 		collapsedBar = buildCollapsedBar();
@@ -189,10 +198,13 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private JPanel buildCollapsedBar() {
-		final RoundedPanel bar = new RoundedPanel(ARC, CARD_BG, CARD_BORDER, true);
-		bar.setLayout(new FlowLayout(FlowLayout.LEFT, 8, 6));
+		final RoundedPanel bar = new RoundedPanel(PILL_ARC, PILL_BG, PILL_BORDER, true);
+		// Tight horizontal pack — never stretch content across a wide host.
+		bar.setLayout(new BoxLayout(bar, BoxLayout.X_AXIS));
+		bar.setBorder(new EmptyBorder(COLLAPSED_PAD_Y, COLLAPSED_PAD_X, COLLAPSED_PAD_Y + 2, COLLAPSED_PAD_X + 2));
 		bar.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
 		bar.add(collapsedTitle);
+		bar.add(Box.createHorizontalStrut(COLLAPSED_GAP));
 		bar.add(collapsedBadge);
 		bar.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
@@ -344,8 +356,14 @@ public class MapTagFilterPanel extends JPanel {
 				if (map == null) {
 					return;
 				}
-				MapTagFilterService.setMode(map, mode);
-				refreshFromCurrentMap();
+				// Update chrome first so the click feels instant; filter runs after paint.
+				MapTagFilterService.setModeStateOnly(map, mode);
+				refreshSelectionState();
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						MapTagFilterService.applyFromExtension(map);
+					}
+				});
 			}
 		});
 	}
@@ -362,8 +380,13 @@ public class MapTagFilterPanel extends JPanel {
 				if (map == null) {
 					return;
 				}
-				MapTagFilterService.clearActiveModeTags(map);
-				refreshFromCurrentMap();
+				MapTagFilterService.clearActiveModeTagsStateOnly(map);
+				refreshSelectionState();
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						MapTagFilterService.applyFromExtension(map);
+					}
+				});
 			}
 		});
 		untaggedToggle.addActionListener(new ActionListener() {
@@ -375,8 +398,15 @@ public class MapTagFilterPanel extends JPanel {
 				if (map == null) {
 					return;
 				}
-				MapTagFilterService.setShowUntagged(map, untaggedToggle.isSelected());
+				MapTagFilterService.setShowUntaggedStateOnly(map, untaggedToggle.isSelected());
 				refreshUntaggedLabel(untaggedToggle.isSelected());
+				refreshStatus(TagFilterMapExtension.get(map));
+				refreshCollapsed();
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						MapTagFilterService.applyFromExtension(map);
+					}
+				});
 			}
 		});
 		searchField.getDocument().addDocumentListener(new DocumentListener() {
@@ -488,6 +518,10 @@ public class MapTagFilterPanel extends JPanel {
 		}
 		else {
 			add(collapsedBar, BorderLayout.CENTER);
+			// Drop any expanded preferred-size sticky value before measuring the pill.
+			setPreferredSize(null);
+			setMinimumSize(null);
+			setMaximumSize(null);
 			refreshCollapsed();
 			SwingUtilities.invokeLater(new Runnable() {
 				public void run() {
@@ -509,6 +543,19 @@ public class MapTagFilterPanel extends JPanel {
 	public void refreshFromCurrentMap() {
 		final MapModel map = currentMap();
 		availableTags = MapTagFilterService.collectMapTags(map);
+		refreshSelectionState();
+		rebuildChips();
+		updateChipScrollSize();
+		revalidate();
+		repaint();
+		fireLayoutChanged();
+	}
+
+	/**
+	 * Fast path for mode / selection changes: no map-wide tag scan, no chip recreate.
+	 */
+	private void refreshSelectionState() {
+		final MapModel map = currentMap();
 		rebuilding = true;
 		try {
 			final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.getOrCreate(map) : null;
@@ -525,17 +572,36 @@ public class MapTagFilterPanel extends JPanel {
 			untaggedToggle.setSelected(showUntagged);
 			refreshUntaggedLabel(showUntagged);
 
-			rebuildChips();
+			syncChipSelection(extension);
 			refreshCollapsed();
 			refreshStatus(extension);
-			updateChipScrollSize();
 		}
 		finally {
 			rebuilding = false;
 		}
 		revalidate();
 		repaint();
-		fireLayoutChanged();
+		if (!expanded) {
+			fireLayoutChanged();
+		}
+	}
+
+	private void syncChipSelection(final TagFilterMapExtension extension) {
+		final Set selected = extension != null ? extension.getActiveTags() : java.util.Collections.EMPTY_SET;
+		final Component[] comps = chipHost.getComponents();
+		for (int i = 0; i < comps.length; i++) {
+			if (!(comps[i] instanceof JToggleButton)) {
+				continue;
+			}
+			final JToggleButton chip = (JToggleButton) comps[i];
+			final Object tagObj = chip.getClientProperty("mapTag");
+			final String tag = tagObj != null ? String.valueOf(tagObj) : chip.getText();
+			final boolean isSelected = selected.contains(tag);
+			if (chip.isSelected() != isSelected) {
+				chip.setSelected(isSelected);
+			}
+			enhanceChipLook(chip, tag, isSelected);
+		}
 	}
 
 	private void refreshUntaggedLabel(final boolean show) {
@@ -555,20 +621,35 @@ public class MapTagFilterPanel extends JPanel {
 		final MapModel map = currentMap();
 		final TagFilterMapExtension extension = map != null ? TagFilterMapExtension.get(map) : null;
 		final boolean active = extension != null && extension.hasActiveFilter();
+		final RoundedPanel pill = (RoundedPanel) collapsedBar;
 		if (active) {
 			collapsedBadge.setText(String.valueOf(extension.getActiveTagCount()));
 			collapsedBadge.setVisible(true);
 			collapsedTitle.setText(modeShortLabel(extension.getMode()));
+			collapsedTitle.setForeground(new Color(0x1E, 0x3A, 0x8A));
 			collapsedBar.setToolTipText(MapTagFilterService.summarizeActive(extension));
-			((RoundedPanel) collapsedBar).setAccent(true);
+			pill.setColors(PILL_ACTIVE_BG, PILL_ACTIVE_BORDER);
+			pill.setAccent(true);
 		}
 		else {
 			collapsedBadge.setVisible(false);
+			collapsedBadge.setText("");
 			collapsedTitle.setText("标签");
+			collapsedTitle.setForeground(MODE_ON_BG);
 			collapsedBar.setToolTipText("按节点【标签】筛选；点开展开");
-			((RoundedPanel) collapsedBar).setAccent(false);
+			pill.setColors(PILL_BG, PILL_BORDER);
+			pill.setAccent(false);
 		}
+		// Hide the strut gap when badge is gone so the pill hugs the title.
+		if (collapsedBar.getComponentCount() >= 3) {
+			collapsedBar.getComponent(1).setVisible(active);
+		}
+		collapsedBar.invalidate();
 		collapsedBar.revalidate();
+		collapsedBar.repaint();
+		if (!expanded) {
+			applyCurrentSize();
+		}
 	}
 
 	private static String modeShortLabel(final TagFilterMode mode) {
@@ -596,6 +677,7 @@ public class MapTagFilterPanel extends JPanel {
 			}
 			final boolean isSelected = selected.contains(tag);
 			final JToggleButton chip = TagChipFactory.createFilterChip(tag, tag, isSelected);
+			chip.putClientProperty("mapTag", tag);
 			enhanceChipLook(chip, tag, isSelected);
 			chip.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
@@ -603,8 +685,13 @@ public class MapTagFilterPanel extends JPanel {
 					if (current == null) {
 						return;
 					}
-					MapTagFilterService.toggleTag(current, tag);
-					refreshFromCurrentMap();
+					MapTagFilterService.toggleTagStateOnly(current, tag);
+					refreshSelectionState();
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							MapTagFilterService.applyFromExtension(current);
+						}
+					});
 				}
 			});
 			chipHost.add(chip);
@@ -662,8 +749,20 @@ public class MapTagFilterPanel extends JPanel {
 
 	private void applyCurrentSize() {
 		final Dimension pref = getPreferredSize();
-		setSize(pref);
-		setPreferredSize(pref);
+		if (!expanded) {
+			// Collapsed pill must never keep an expanded width sticky.
+			setPreferredSize(pref);
+			setMinimumSize(pref);
+			setMaximumSize(pref);
+			setSize(pref);
+			collapsedBar.setSize(pref);
+		}
+		else {
+			setMaximumSize(new Dimension(MAX_WIDTH, MAX_EXPANDED_HEIGHT));
+			setMinimumSize(new Dimension(MIN_WIDTH, MIN_EXPANDED_HEIGHT));
+			setPreferredSize(pref);
+			setSize(pref);
+		}
 	}
 
 	private void fireLayoutChanged() {
@@ -695,35 +794,46 @@ public class MapTagFilterPanel extends JPanel {
 			final int h = userSized ? userHeight : 300;
 			return new Dimension(clamp(w, MIN_WIDTH, MAX_WIDTH), clamp(h, MIN_EXPANDED_HEIGHT, MAX_EXPANDED_HEIGHT));
 		}
-		collapsedBar.doLayout();
-		final Dimension bar = collapsedBar.getPreferredSize();
-		int w = Math.max(72, bar.width + 4);
-		int h = Math.max(30, bar.height);
-		if (collapsedBadge.isVisible()) {
-			w = Math.max(w, bar.width + 2);
+		return computeCollapsedSize();
+	}
+
+	private Dimension computeCollapsedSize() {
+		final java.awt.FontMetrics fm = collapsedTitle.getFontMetrics(collapsedTitle.getFont());
+		final String title = collapsedTitle.getText() != null ? collapsedTitle.getText() : "标签";
+		int contentW = fm.stringWidth(title);
+		int contentH = Math.max(fm.getHeight(), 14);
+		if (collapsedBadge.isVisible() && collapsedBadge.getText() != null && collapsedBadge.getText().length() > 0) {
+			final java.awt.FontMetrics bfm = collapsedBadge.getFontMetrics(collapsedBadge.getFont());
+			final Insets bi = collapsedBadge.getInsets();
+			contentW += COLLAPSED_GAP + bfm.stringWidth(collapsedBadge.getText()) + bi.left + bi.right;
+			contentH = Math.max(contentH, bfm.getHeight() + bi.top + bi.bottom);
 		}
-		return new Dimension(w, h);
+		final Insets pad = collapsedBar.getInsets();
+		// +3 for soft shadow drawn outside the fill.
+		final int w = contentW + pad.left + pad.right + 3;
+		final int h = contentH + pad.top + pad.bottom + 3;
+		return new Dimension(Math.max(52, w), Math.max(28, h));
 	}
 
 	public Dimension getMinimumSize() {
 		if (expanded) {
 			return new Dimension(MIN_WIDTH, MIN_EXPANDED_HEIGHT);
 		}
-		return getPreferredSize();
+		return computeCollapsedSize();
 	}
 
 	public Dimension getMaximumSize() {
 		if (expanded) {
 			return new Dimension(MAX_WIDTH, MAX_EXPANDED_HEIGHT);
 		}
-		return getPreferredSize();
+		return computeCollapsedSize();
 	}
 
 	private static final class RoundedPanel extends JPanel {
 		private static final long serialVersionUID = 1L;
 		private final int arc;
-		private final Color fill;
-		private final Color border;
+		private Color fill;
+		private Color border;
 		private final boolean drawShadow;
 		private boolean accent;
 
@@ -734,6 +844,12 @@ public class MapTagFilterPanel extends JPanel {
 			this.drawShadow = drawShadow;
 			this.accent = false;
 			setOpaque(false);
+		}
+
+		void setColors(final Color fill, final Color border) {
+			this.fill = fill;
+			this.border = border;
+			repaint();
 		}
 
 		void setAccent(final boolean accent) {
@@ -748,12 +864,13 @@ public class MapTagFilterPanel extends JPanel {
 			final int h = getHeight();
 			if (drawShadow) {
 				g2.setColor(CARD_SHADOW);
-				g2.fillRoundRect(2, 3, w - 3, h - 3, arc, arc);
+				g2.fillRoundRect(2, 3, Math.max(1, w - 3), Math.max(1, h - 3), arc, arc);
 			}
 			g2.setColor(fill);
-			g2.fillRoundRect(0, 0, w - 3, h - 3, arc, arc);
-			g2.setColor(accent ? MODE_ON_BG : border);
-			g2.drawRoundRect(0, 0, w - 3, h - 3, arc, arc);
+			g2.fillRoundRect(0, 0, Math.max(1, w - 3), Math.max(1, h - 3), arc, arc);
+			g2.setColor(accent ? border : border);
+			g2.setStroke(new java.awt.BasicStroke(accent ? 1.6f : 1f));
+			g2.drawRoundRect(0, 0, Math.max(1, w - 3), Math.max(1, h - 3), arc, arc);
 			g2.dispose();
 			super.paintComponent(g);
 		}

@@ -1,12 +1,19 @@
 package org.freeplane.core.ui.theme;
 
+import java.awt.AWTEvent;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Container;
 import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.GradientPaint;
 import java.awt.Graphics2D;
 import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.event.AWTEventListener;
+import java.awt.event.ContainerEvent;
+import java.awt.event.HierarchyEvent;
 import java.util.Enumeration;
 
 import javax.swing.BorderFactory;
@@ -20,6 +27,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.JToolBar;
+import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
 import javax.swing.border.Border;
 import javax.swing.border.EmptyBorder;
@@ -57,6 +65,8 @@ public final class DocearUiTheme {
 	public static final String FLAT_LIGHT = "com.formdev.flatlaf.FlatLightLaf";
 	public static final String FLAT_INTELLIJ = "com.formdev.flatlaf.FlatIntelliJLaf";
 	public static final String FLAT_DARK = "com.formdev.flatlaf.FlatDarkLaf";
+
+	private static boolean globalScrollBarStylerInstalled;
 
 	private DocearUiTheme() {
 	}
@@ -207,9 +217,76 @@ public final class DocearUiTheme {
 			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(6, 8, 6, 8)));
 
 			scaleLegacyFontsIfNeeded();
+			installGlobalScrollBarStyler();
 		}
 		catch (Throwable t) {
 			LogUtils.warn("DocearUiTheme.applyAfterLookAndFeel failed", t);
+		}
+	}
+
+	/**
+	 * Apply the thin pill scrollbar to every {@link JScrollPane}/{@link JScrollBar}
+	 * that appears later. Avoids putting ScrollBarUI class names into UIManager
+	 * (OSGi classloader issues).
+	 */
+	public static synchronized void installGlobalScrollBarStyler() {
+		if (globalScrollBarStylerInstalled) {
+			return;
+		}
+		globalScrollBarStylerInstalled = true;
+		final AWTEventListener listener = new AWTEventListener() {
+			public void eventDispatched(final AWTEvent event) {
+				try {
+					if (event instanceof ContainerEvent) {
+						final ContainerEvent ce = (ContainerEvent) event;
+						if (ce.getID() == ContainerEvent.COMPONENT_ADDED) {
+							styleScrollBarsUnder(ce.getChild());
+						}
+						return;
+					}
+					if (event instanceof HierarchyEvent) {
+						final HierarchyEvent he = (HierarchyEvent) event;
+						if ((he.getChangeFlags() & HierarchyEvent.DISPLAYABILITY_CHANGED) != 0
+								&& he.getComponent().isDisplayable()) {
+							styleScrollBarsUnder(he.getComponent());
+						}
+					}
+				}
+				catch (Throwable ignore) {
+				}
+			}
+		};
+		Toolkit.getDefaultToolkit().addAWTEventListener(listener,
+				AWTEvent.CONTAINER_EVENT_MASK | AWTEvent.HIERARCHY_EVENT_MASK);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				for (final java.awt.Window w : java.awt.Window.getWindows()) {
+					styleScrollBarsUnder(w);
+				}
+			}
+		});
+	}
+
+	private static void styleScrollBarsUnder(final Component root) {
+		if (root == null) {
+			return;
+		}
+		if (root instanceof JScrollBar) {
+			styleScrollBar((JScrollBar) root);
+			return;
+		}
+		if (root instanceof JScrollPane) {
+			final JScrollPane scroll = (JScrollPane) root;
+			scroll.putClientProperty("JScrollBar.showButtons", Boolean.FALSE);
+			styleScrollBar(scroll.getVerticalScrollBar());
+			styleScrollBar(scroll.getHorizontalScrollBar());
+		}
+		if (root instanceof Container) {
+			final Container container = (Container) root;
+			final int n = container.getComponentCount();
+			for (int i = 0; i < n; i++) {
+				styleScrollBarsUnder(container.getComponent(i));
+			}
 		}
 	}
 

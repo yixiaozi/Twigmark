@@ -6,15 +6,13 @@
 				<ribbon_action action="DocearRemoveNodeLinkAction" />
 			</ribbon_band>
 		</ribbon_task>
-		<!-- Quick actions live on merged「工具与帮助」tab. -->
+		<!-- Quick actions live on merged「工具与帮助」tab (tools band, not help). -->
 		<ribbon_task name="tools_and_settings">
-			<ribbon_band name="help_misc" resize_policies="Mirror">
+			<ribbon_band name="tools_misc" resize_policies="Mirror">
 				<ribbon_action action="QuickCaptureAction" priority="top" accelerator="control shift SPACE" />
 				<ribbon_action action="QuickCommandAction" priority="top" accelerator="shift SPACE" />
 				<ribbon_action action="MapSwitcherAction" priority="top" accelerator="alt SPACE" />
 				<ribbon_action action="CalendarViewportAction" priority="top" accelerator="control shift D" />
-			</ribbon_band>
-			<ribbon_band name="tools_misc" resize_policies="Mirror">
 				<ribbon_contributor name="nodePrivacyActionContributor" />
 			</ribbon_band>
 		</ribbon_task>
