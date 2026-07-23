@@ -44,3 +44,8 @@ docear_plugin_core/resources/version.properties
 docear_framework/docear.version.properties
 Jabref_Beta_2_7_Docear/build.number
 Jabref_Beta_2_7_Docear/src/resource/build.properties
+docear_framework/docear.version.properties
+docear_plugin_core/resources/build.number
+docear_plugin_core/resources/version.properties
+Jabref_Beta_2_7_Docear/build.number
+Jabref_Beta_2_7_Docear/src/resource/build.properties
