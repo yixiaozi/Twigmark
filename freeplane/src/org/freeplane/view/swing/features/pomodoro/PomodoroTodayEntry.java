@@ -9,8 +9,11 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 
 /**
- * One focus segment for the day timeline view (completed or live).
- * Display order: time range · focus duration · title · pause (at end).
+ * One <b>focus</b> segment for the day timeline view (completed or live).
+ * <p>
+ * Sessions that contain pauses are split into contiguous focus stretches so the
+ * timeline stays continuous across nodes, e.g. A 08–11 with pause 09–10 becomes
+ * A 08–09 and A 10–11, with B 09–10 sitting in between.
  */
 final class PomodoroTodayEntry {
 	final NodeModel node;
@@ -44,7 +47,8 @@ final class PomodoroTodayEntry {
 		this.timeText = formatTimeRange(startMs, endMs, live);
 		this.durationText = PomodoroFormatter.formatDuration(focusMs);
 		this.titleText = plain(node);
-		this.pauseText = formatPauseTail(this.pauseIntervals, startMs, endMs, focusMs);
+		// Focus segments are already continuous — do not append pause tails.
+		this.pauseText = "";
 		this.label = buildPlainLabel(timeText, durationText, titleText, pauseText);
 	}
 
@@ -62,29 +66,6 @@ final class PomodoroTodayEntry {
 		final String start = formatHm(startMs);
 		final String end = live ? "进行中" : formatHm(endMs);
 		return start + " -> " + end;
-	}
-
-	private static String formatPauseTail(final List pauseIntervals, final long startMs, final long endMs,
-			final long focusMs) {
-		final long pauseMs;
-		final String ranges;
-		if (pauseIntervals != null && !pauseIntervals.isEmpty()) {
-			pauseMs = PomodoroPauseInterval.sumMs(pauseIntervals);
-			ranges = PomodoroPauseInterval.formatRanges(pauseIntervals, 2);
-		}
-		else {
-			pauseMs = Math.max(0L, endMs - startMs - focusMs);
-			ranges = "";
-		}
-		if (pauseMs < 1000L) {
-			return "";
-		}
-		final StringBuilder sb = new StringBuilder("暂停");
-		if (ranges.length() > 0) {
-			sb.append(' ').append(ranges);
-		}
-		sb.append('（').append(PomodoroFormatter.formatDuration(pauseMs)).append('）');
-		return sb.toString();
 	}
 
 	private static String formatHm(final long millis) {
@@ -139,20 +120,20 @@ final class PomodoroTodayEntry {
 			final List records = PomodoroLog.decode(ext.getLog());
 			for (int r = 0; r < records.size(); r++) {
 				final PomodoroSessionRecord rec = (PomodoroSessionRecord) records.get(r);
-				if (rec.endMs > dayStart && rec.startMs < dayEnd) {
-					final long clipStart = Math.max(rec.startMs, dayStart);
-					final long clipEnd = Math.min(rec.endMs, dayEnd);
-					out.add(new PomodoroTodayEntry(node, clipStart, clipEnd, rec.focusMs, false, r,
-							rec.pauseIntervals));
+				if (rec.endMs <= dayStart || rec.startMs >= dayEnd) {
+					continue;
 				}
+				addFocusSegments(out, node, rec.startMs, rec.endMs, rec.pauseIntervals, false, r, dayStart, dayEnd);
 			}
 			if (dayStart == todayStart) {
 				final long liveMs = ext.liveSegmentMs(now);
 				if (liveMs > 0) {
 					final long anchor = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
-					if (anchor >= dayStart && anchor < dayEnd) {
-						out.add(new PomodoroTodayEntry(node, anchor, now, liveMs, true, -1,
-								livePauseIntervals(ext, now)));
+					if (anchor > 0 && anchor < dayEnd) {
+						final boolean running = PomodoroExtension.STATE_RUNNING.equals(ext.getState());
+						final long wallEnd = running ? now : (ext.getPausedAt() > 0 ? ext.getPausedAt() : now);
+						addFocusSegments(out, node, anchor, wallEnd, livePauseIntervals(ext, now), running, -1,
+						        dayStart, dayEnd);
 					}
 				}
 			}
@@ -165,6 +146,29 @@ final class PomodoroTodayEntry {
 			}
 		});
 		return out;
+	}
+
+	/**
+	 * Emit one timeline row per focus stretch (session wall minus pauses), clipped to the day.
+	 */
+	private static void addFocusSegments(final List out, final NodeModel node, final long sessionStart,
+	        final long sessionEnd, final List pauses, final boolean liveTail, final int recordIndex,
+	        final long dayStart, final long dayEnd) {
+		final List segments = PomodoroPauseInterval.focusSegments(sessionStart, sessionEnd, pauses);
+		if (segments.isEmpty()) {
+			return;
+		}
+		for (int s = 0; s < segments.size(); s++) {
+			final PomodoroPauseInterval seg = (PomodoroPauseInterval) segments.get(s);
+			final long clipStart = Math.max(seg.startMs, dayStart);
+			final long clipEnd = Math.min(seg.endMs, dayEnd);
+			if (clipEnd - clipStart < 1000L) {
+				continue;
+			}
+			// Only the last focus stretch of a live session shows as "进行中".
+			final boolean segmentLive = liveTail && s == segments.size() - 1;
+			out.add(new PomodoroTodayEntry(node, clipStart, clipEnd, clipEnd - clipStart, segmentLive, recordIndex));
+		}
 	}
 
 	private static List livePauseIntervals(final PomodoroExtension ext, final long now) {

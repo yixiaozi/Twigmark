@@ -160,6 +160,11 @@ public interface IMapViewManager {
 		Component getViewportComponent();
 	}
 
+	/** Fired when the main scroll-pane view or a {@link ViewportOverride} changes. */
+	public interface ViewportContentListener {
+		void viewportContentChanged();
+	}
+
 	public void setViewportOverride(ViewportOverride override);
 
 	public ViewportOverride getViewportOverride();
@@ -169,4 +174,8 @@ public interface IMapViewManager {
 	 * (typically the active MapView). Call after installing/clearing an override.
 	 */
 	public void refreshViewportView(Component preferred);
+
+	public void addViewportContentListener(ViewportContentListener listener);
+
+	public void removeViewportContentListener(ViewportContentListener listener);
 }

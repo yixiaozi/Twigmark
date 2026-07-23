@@ -141,8 +141,20 @@ final class PomodoroHistoryDialog extends JDialog {
 			listModel.addElement(new PlaceholderRow("（暂无完成会话）"));
 		}
 		else {
+			// Newest session first; within a session, newest focus segment first.
+			// Pauses split the wall session into contiguous focus rows (display-only).
 			for (int i = records.size() - 1; i >= 0; i--) {
-				listModel.addElement(new HistoryRow(i, (PomodoroSessionRecord) records.get(i)));
+				final PomodoroSessionRecord raw = (PomodoroSessionRecord) records.get(i);
+				final List segments = PomodoroPauseInterval.focusSegments(raw.startMs, raw.endMs,
+				        raw.pauseIntervals);
+				if (segments.isEmpty()) {
+					listModel.addElement(new HistoryRow(i, raw, raw.startMs, raw.endMs, raw.focusMs));
+					continue;
+				}
+				for (int s = segments.size() - 1; s >= 0; s--) {
+					final PomodoroPauseInterval seg = (PomodoroPauseInterval) segments.get(s);
+					listModel.addElement(new HistoryRow(i, raw, seg.startMs, seg.endMs, seg.durationMs()));
+				}
 			}
 		}
 		updateActionButtons();
@@ -177,7 +189,7 @@ final class PomodoroHistoryDialog extends JDialog {
 			return;
 		}
 		final int confirm = JOptionPane.showConfirmDialog(this,
-		        "确定删除这条记录吗？\n" + row.record.toDisplayLine(), "删除番茄钟记录", JOptionPane.YES_NO_OPTION,
+		        "确定删除整段会话记录吗？\n" + row.record.toDisplayLine(), "删除番茄钟记录", JOptionPane.YES_NO_OPTION,
 		        JOptionPane.WARNING_MESSAGE);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
@@ -191,15 +203,28 @@ final class PomodoroHistoryDialog extends JDialog {
 
 	private static final class HistoryRow {
 		final int logIndex;
+		/** Full log record (edit/delete); may span multiple displayed focus segments. */
 		final PomodoroSessionRecord record;
+		final long displayStartMs;
+		final long displayEndMs;
+		final long displayFocusMs;
 
-		HistoryRow(final int logIndex, final PomodoroSessionRecord record) {
+		HistoryRow(final int logIndex, final PomodoroSessionRecord record, final long displayStartMs,
+		        final long displayEndMs, final long displayFocusMs) {
 			this.logIndex = logIndex;
 			this.record = record;
+			this.displayStartMs = displayStartMs;
+			this.displayEndMs = displayEndMs;
+			this.displayFocusMs = displayFocusMs;
 		}
 
 		public String toString() {
-			return record.toDisplayLine();
+			final java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm",
+			        java.util.Locale.CHINA);
+			fmt.setTimeZone(java.util.TimeZone.getDefault());
+			return fmt.format(new java.util.Date(displayStartMs)) + " -> "
+			        + fmt.format(new java.util.Date(displayEndMs)) + "  "
+			        + PomodoroFormatter.formatDuration(displayFocusMs);
 		}
 	}
 

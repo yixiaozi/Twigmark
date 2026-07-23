@@ -427,20 +427,43 @@ public final class PomodoroSessionManager {
 				if (rec.endMs <= rangeStart || rec.startMs >= rangeEnd) {
 					continue;
 				}
-				out.add(new CalendarSession(node, Math.max(rec.startMs, rangeStart), Math.min(rec.endMs, rangeEnd),
-				        rec.focusMs, false));
+				// Display-only: split wall session by pause holes so A/B/A interleave.
+				addCalendarFocusSegments(out, node, rec.startMs, rec.endMs, rec.pauseIntervals, false, rangeStart,
+				        rangeEnd);
 			}
 			final long liveMs = ext.liveSegmentMs(now);
 			if (liveMs > 0) {
 				final long anchor = ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt();
-				final long end = now;
-				if (end > rangeStart && anchor < rangeEnd) {
-					out.add(new CalendarSession(node, Math.max(anchor, rangeStart), Math.min(end, rangeEnd), liveMs,
-					        true));
+				if (anchor > 0 && now > rangeStart && anchor < rangeEnd) {
+					final List livePauses = new ArrayList(PomodoroPauseInterval.decodeList(ext.getSessionPauses()));
+					if (PomodoroExtension.STATE_PAUSED.equals(ext.getState()) && ext.getPausedAt() > 0
+					        && now > ext.getPausedAt()) {
+						livePauses.add(new PomodoroPauseInterval(ext.getPausedAt(), now));
+					}
+					addCalendarFocusSegments(out, node, anchor, now, livePauses, true, rangeStart, rangeEnd);
 				}
 			}
 		}
 		return out;
+	}
+
+	private static void addCalendarFocusSegments(final List out, final NodeModel node, final long sessionStart,
+	        final long sessionEnd, final List pauses, final boolean liveTail, final long rangeStart,
+	        final long rangeEnd) {
+		final List segments = PomodoroPauseInterval.focusSegments(sessionStart, sessionEnd, pauses);
+		for (int s = 0; s < segments.size(); s++) {
+			final PomodoroPauseInterval seg = (PomodoroPauseInterval) segments.get(s);
+			if (seg.endMs <= rangeStart || seg.startMs >= rangeEnd) {
+				continue;
+			}
+			final long clipStart = Math.max(seg.startMs, rangeStart);
+			final long clipEnd = Math.min(seg.endMs, rangeEnd);
+			if (clipEnd - clipStart < 1000L) {
+				continue;
+			}
+			final boolean live = liveTail && s == segments.size() - 1;
+			out.add(new CalendarSession(node, clipStart, clipEnd, clipEnd - clipStart, live));
+		}
 	}
 
 	/** Public DTO for calendar overlay. */

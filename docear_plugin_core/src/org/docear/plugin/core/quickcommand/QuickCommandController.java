@@ -1,7 +1,6 @@
 package org.docear.plugin.core.quickcommand;
 
 import java.awt.Desktop;
-import java.awt.EventQueue;
 import java.awt.Frame;
 import java.io.File;
 import java.net.URL;
@@ -13,6 +12,7 @@ import java.util.Map;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.features.map.LastSelectedNodeStore;
 import org.freeplane.features.map.LastSelectionMapExtension;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
@@ -33,11 +33,11 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
  *
  * <pre>
  * @教程                 → open map
- * note@教程             → add plain node under today's date tree
- * note@教程 + Shift     → add reminder task under today's date tree
+ * note@教程             → add plain node under today's date tree (silent, no map switch)
+ * note@教程 + Shift     → add reminder task under today's date tree (silent)
  * @@图标节点             → open map and select icon node
- * note@@图标节点         → add plain child under icon node
- * note@@图标节点 + Shift → add reminder child under icon node
+ * note@@图标节点         → add plain child under icon node (silent, no map switch)
+ * note@@图标节点 + Shift → add reminder child under icon node (silent)
  * #文件名               → search/open files under mindmap data roots
  * *节点文字             → search/open any node across all maps
  * chrome / notepad      → quick launch
@@ -437,11 +437,11 @@ final class QuickCommandController {
 		if (asTask) {
 			attachReminder(node);
 		}
-		LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(node.createID());
+		rememberAddedNode(map, node);
 		if (!persist(map, mapFile)) {
 			return false;
 		}
-		reveal(mapFile, node.getID());
+		announceSilentAdd(mapFile, text, asTask);
 		return true;
 	}
 
@@ -464,12 +464,36 @@ final class QuickCommandController {
 		if (asTask) {
 			attachReminder(node);
 		}
-		LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(node.createID());
+		rememberAddedNode(map, node);
 		if (!persist(map, mapFile)) {
 			return false;
 		}
-		reveal(mapFile, node.getID());
+		announceSilentAdd(mapFile, text, asTask);
 		return true;
+	}
+
+	/** Persist last-selected for that map only — do not switch the active view. */
+	private static void rememberAddedNode(final MapModel map, final NodeModel node) {
+		if (map == null || node == null) {
+			return;
+		}
+		final String id = node.createID();
+		LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(id);
+		LastSelectedNodeStore.getInstance().rememberAsync(map, id);
+	}
+
+	private static void announceSilentAdd(final File mapFile, final String text, final boolean asTask) {
+		try {
+			final String mapName = mapFile != null ? mapFile.getName() : "";
+			final String kind = asTask ? "任务" : "节点";
+			final String label = text == null ? "" : text.trim();
+			final String shortLabel = label.length() > 40 ? label.substring(0, 40) + "…" : label;
+			Controller.getCurrentController().getViewController()
+			        .out("已静默添加" + kind + "「" + shortLabel + "」→ " + mapName);
+		}
+		catch (Exception e) {
+			// ignore
+		}
 	}
 
 	private static NodeModel appendChild(final MMapController mapController, final NodeModel parent,
@@ -552,14 +576,6 @@ final class QuickCommandController {
 			LogUtils.warn("QuickCommand: save failed " + mapFile, e);
 			return false;
 		}
-	}
-
-	private static void reveal(final File mapFile, final String nodeId) {
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				openMapAndSelect(mapFile, nodeId);
-			}
-		});
 	}
 
 	private static NodeModel findOrCreateDateHierarchy(final MapModel map, final MMapController mapController) {

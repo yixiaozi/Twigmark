@@ -91,6 +91,45 @@ public final class PomodoroPauseInterval {
 		return encodeList(list);
 	}
 
+	/**
+	 * Split a session wall span into contiguous <b>focus</b> segments by removing
+	 * pause holes. Display-only: e.g. A 08:00–11:00 with pause 09:00–10:00 →
+	 * [08:00–09:00], [10:00–11:00] so the day timeline can interleave B in between.
+	 */
+	public static List focusSegments(final long sessionStart, final long sessionEnd, final List pauses) {
+		final List out = new ArrayList();
+		if (sessionStart <= 0 || sessionEnd <= sessionStart) {
+			return out;
+		}
+		final List sorted = copyOf(pauses);
+		Collections.sort(sorted, new java.util.Comparator() {
+			public int compare(final Object a, final Object b) {
+				final long sa = ((PomodoroPauseInterval) a).startMs;
+				final long sb = ((PomodoroPauseInterval) b).startMs;
+				return sa < sb ? -1 : (sa > sb ? 1 : 0);
+			}
+		});
+		long cursor = sessionStart;
+		for (int i = 0; i < sorted.size(); i++) {
+			final PomodoroPauseInterval pause = (PomodoroPauseInterval) sorted.get(i);
+			if (pause.endMs <= cursor || pause.startMs >= sessionEnd) {
+				continue;
+			}
+			final long pauseStart = Math.max(pause.startMs, sessionStart);
+			final long pauseEnd = Math.min(pause.endMs, sessionEnd);
+			if (pauseStart > cursor && pauseStart - cursor >= 1000L) {
+				out.add(new PomodoroPauseInterval(cursor, pauseStart));
+			}
+			if (pauseEnd > cursor) {
+				cursor = pauseEnd;
+			}
+		}
+		if (sessionEnd - cursor >= 1000L) {
+			out.add(new PomodoroPauseInterval(cursor, sessionEnd));
+		}
+		return out;
+	}
+
 	public static long sumMs(final List intervals) {
 		long sum = 0L;
 		if (intervals == null) {

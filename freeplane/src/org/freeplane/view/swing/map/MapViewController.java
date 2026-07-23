@@ -105,6 +105,7 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	private boolean setZoomComboBoxRun;
 	private Controller controller;
 	private IMapViewManager.ViewportOverride viewportOverride;
+	final private List viewportContentListeners = new LinkedList();
 
 	/**
 	 * Reference to the current mode as the mapView may be null.
@@ -773,10 +774,12 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 			final Component override = viewportOverride.getViewportComponent();
 			if (override != null) {
 				setViewportView(override);
+				fireViewportContentChanged();
 				return;
 			}
 		}
 		setViewportView(preferred);
+		fireViewportContentChanged();
 	}
 
 	private void setZoomByItem(final Object item) {
@@ -1056,9 +1059,46 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 
 	public void setViewportOverride(final IMapViewManager.ViewportOverride override) {
 		viewportOverride = override;
+		fireViewportContentChanged();
 	}
 
 	public IMapViewManager.ViewportOverride getViewportOverride() {
 		return viewportOverride;
+	}
+
+	public void addViewportContentListener(final IMapViewManager.ViewportContentListener listener) {
+		if (listener != null && !viewportContentListeners.contains(listener)) {
+			viewportContentListeners.add(listener);
+		}
+	}
+
+	public void removeViewportContentListener(final IMapViewManager.ViewportContentListener listener) {
+		viewportContentListeners.remove(listener);
+	}
+
+	private void fireViewportContentChanged() {
+		if (viewportContentListeners.isEmpty()) {
+			return;
+		}
+		final IMapViewManager.ViewportContentListener[] snapshot = (IMapViewManager.ViewportContentListener[]) viewportContentListeners
+		        .toArray(new IMapViewManager.ViewportContentListener[viewportContentListeners.size()]);
+		final Runnable notify = new Runnable() {
+			public void run() {
+				for (int i = 0; i < snapshot.length; i++) {
+					try {
+						snapshot[i].viewportContentChanged();
+					}
+					catch (final Exception e) {
+						// keep notifying others
+					}
+				}
+			}
+		};
+		if (EventQueue.isDispatchThread()) {
+			notify.run();
+		}
+		else {
+			EventQueue.invokeLater(notify);
+		}
 	}
 }

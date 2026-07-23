@@ -8,6 +8,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JViewport;
 
 import org.docear.plugin.core.graph.RelationshipGraphService;
+import org.docear.plugin.core.ui.MapOverlayVisibility;
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
@@ -92,6 +93,7 @@ public final class CalendarViewportService implements IExtension {
 		}
 		holdingViewport = true;
 		installViewportOverride();
+		MapOverlayVisibility.notifyCanvasMaybeChanged();
 		final Runnable swap = new Runnable() {
 			public void run() {
 				if (!holdingViewport) {
@@ -109,6 +111,7 @@ public final class CalendarViewportService implements IExtension {
 				calendar.revalidate();
 				mapViewController.getScrollPane().validate();
 				calendar.repaint();
+				MapOverlayVisibility.notifyCanvasMaybeChanged();
 			}
 		};
 		if (EventQueue.isDispatchThread()) {
@@ -134,6 +137,9 @@ public final class CalendarViewportService implements IExtension {
 				}
 				catch (Exception e) {
 					LogUtils.warn("CalendarViewport: restore map failed.", e);
+				}
+				finally {
+					MapOverlayVisibility.notifyCanvasMaybeChanged();
 				}
 			}
 		};

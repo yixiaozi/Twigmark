@@ -370,4 +370,10 @@ public class HeadlessMapViewController implements IMapViewManager {
 
 	public void refreshViewportView(final Component preferred) {
 	}
+
+	public void addViewportContentListener(final IMapViewManager.ViewportContentListener listener) {
+	}
+
+	public void removeViewportContentListener(final IMapViewManager.ViewportContentListener listener) {
+	}
 }

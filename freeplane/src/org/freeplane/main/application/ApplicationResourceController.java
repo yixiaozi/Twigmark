@@ -210,6 +210,16 @@ public class ApplicationResourceController extends ResourceController {
 			if (fileName.length() == 0) {
 				fileName = "resource.bin";
 			}
+			// Config / text resources must track jar updates. A write-once cache made
+			// mindmapmoderibbon.xml stick forever after the first launch (Ribbon edits
+			// never appeared). Only materialize binary images for the macOS ImageIcon path.
+			final String lowerName = fileName.toLowerCase();
+			final boolean cacheToDisk = lowerName.endsWith(".png") || lowerName.endsWith(".jpg")
+			        || lowerName.endsWith(".jpeg") || lowerName.endsWith(".gif") || lowerName.endsWith(".bmp")
+			        || lowerName.endsWith(".ico");
+			if (!cacheToDisk) {
+				return resource;
+			}
 			final File cacheDir = new File(Compat.getApplicationUserDirectory(), "resource-cache");
 			if (!cacheDir.exists()) {
 				cacheDir.mkdirs();

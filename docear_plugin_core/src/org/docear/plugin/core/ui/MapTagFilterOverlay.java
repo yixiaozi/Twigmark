@@ -31,7 +31,7 @@ import org.freeplane.plugin.workspace.features.mapfilter.MapTagFilterController;
  * {@link JViewport}). Putting overlays as viewport children breaks Freeplane's
  * map layout and can blank the canvas.
  */
-public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
+public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener, MapOverlayVisibility.Listener {
 
 	private static MapTagFilterOverlay instance;
 
@@ -62,6 +62,11 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener {
 		panel.setVisible(false);
 		panel.setLayoutListener(this);
 		MapTagFilterController.getInstance().setPanel(panel);
+		MapOverlayVisibility.addListener(this);
+	}
+
+	public void onMapCanvasVisibilityMaybeChanged() {
+		reposition(false);
 	}
 
 	public void onPanelLayoutChanged() {

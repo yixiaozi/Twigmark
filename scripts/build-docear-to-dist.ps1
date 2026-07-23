@@ -198,11 +198,26 @@ if ((Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
         Write-Host "Updated plugins"
     }
     Write-WorkingDirectoryFile -FilePath (Join-Path $dailyInstall "working-directory.txt") -Value $defaultWorkDir
-    $cacheDir = Join-Path $dailyInstall "workspace\data\resource-cache"
-    if (Test-Path $cacheDir) {
-        Get-ChildItem $cacheDir -Filter "*mindmapmoderibbon*" -ErrorAction SilentlyContinue |
-            Remove-Item -Force -ErrorAction SilentlyContinue
-        Write-Host "Cleared cached mindmapmoderibbon.xml"
+    # Ribbon XML was write-once-cached under resource-cache (bundle:// URL hash).
+    # Stale copies keep the old "帮助" tab even after freeplaneeditor.jar is updated.
+    $cacheDirs = @(
+        (Join-Path $dailyInstall "workspace\data\resource-cache"),
+        (Join-Path $installDir "workspace\data\resource-cache"),
+        (Join-Path $env:APPDATA "Docear\resource-cache")
+    )
+    foreach ($cacheDir in $cacheDirs) {
+        if (Test-Path $cacheDir) {
+            Get-ChildItem $cacheDir -File -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match 'mindmapmoderibbon|ribbons\.xml|workspace_ribbon|docear_core_ribbon' } |
+                ForEach-Object {
+                    Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+                    Write-Host "Cleared stale ribbon cache: $($_.FullName)"
+                }
+        }
+    }
+    $userRibbon = Join-Path $dailyInstall "workspace\data\mindmapmoderibbon.xml"
+    if (Test-Path $userRibbon) {
+        Write-Host "NOTE: user override exists (takes precedence over jar): $userRibbon"
     }
     $launchDir = $dailyInstall
 }

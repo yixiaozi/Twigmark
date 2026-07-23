@@ -21,7 +21,6 @@ package org.freeplane.features.url.mindmapmode;
 
 import java.awt.EventQueue;
 import java.io.File;
-import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.TimerTask;
 
@@ -76,12 +75,16 @@ public class DoAutomaticSave extends TimerTask {
 			/* map was recently saved. */
 			return;
 		}
+		// Use invokeLater (not invokeAndWait): blocking the timer thread on a full-map
+		// serialize freezes UI interactions that also need the EDT (node switching).
 		try {
-			Controller.getCurrentController().getViewController().invokeAndWait(new Runnable() {
-
+			EventQueue.invokeLater(new Runnable() {
 				public void run() {
 					/* Now, it is dirty, we save it. */
 					try {
+						if (model.getNumberOfChangesSinceLastSave() == 0) {
+							return;
+						}
 						final ModeController currentModeController = Controller.getCurrentModeController();
 						if(!(currentModeController instanceof MModeController))
 							return;

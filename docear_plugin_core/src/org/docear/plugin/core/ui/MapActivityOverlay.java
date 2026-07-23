@@ -30,7 +30,7 @@ import org.freeplane.plugin.workspace.features.mapactivity.MapActivityOverlayCon
  * Hosts the current-map activity panel on the frame {@link JLayeredPane}
  * at the top-LEFT (tag filter stays top-RIGHT).
  */
-public class MapActivityOverlay implements MapActivityOverlayPanel.LayoutListener {
+public class MapActivityOverlay implements MapActivityOverlayPanel.LayoutListener, MapOverlayVisibility.Listener {
 
 	private static MapActivityOverlay instance;
 
@@ -60,6 +60,11 @@ public class MapActivityOverlay implements MapActivityOverlayPanel.LayoutListene
 		panel.setVisible(false);
 		panel.setLayoutListener(this);
 		MapActivityOverlayController.getInstance().setPanel(panel);
+		MapOverlayVisibility.addListener(this);
+	}
+
+	public void onMapCanvasVisibilityMaybeChanged() {
+		reposition(false);
 	}
 
 	public void onPanelLayoutChanged() {

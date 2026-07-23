@@ -131,7 +131,7 @@ public class MMapModel extends MapModel {
 		if (configuredDelay == 0) {
 			return;
 		}
-		final int delay = Math.max(300, configuredDelay);
+		final int delay = Math.max(1000, configuredDelay);
 		final boolean useSingleBackupDirectory = ResourceController.getResourceController().getBooleanProperty(
 		    "single_backup_directory");
 		final String singleBackupDirectory = ResourceController.getResourceController()

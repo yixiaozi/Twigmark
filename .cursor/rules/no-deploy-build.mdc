@@ -1,0 +1,23 @@
+---
+description: Never run the user's Docear deploy/launch build after code changes
+alwaysApply: true
+---
+
+# 改代码后不要替用户「生成/部署」Docear
+
+用户日常在用 Docear。完整生成脚本会 **关掉正在运行的软件** 并覆盖安装目录，打断使用。
+
+## 禁止（除非用户明确要求「生成 / 部署 / 打包 / 重启 Docear」）
+
+- `build-docear.bat`
+- `scripts/build-docear-to-dist.ps1`
+- `.cursor/hooks/build-docear-last.ps1`
+- 任何会调用 `Stop-RunningDocear`、解压到 `E:\Temp\DocearDist` / `E:\SoftWare\Docear`、或启动 `docear.exe` 的命令
+
+## 允许（验证编译）
+
+- `compile-check.bat` 或 `scripts/compile-check.ps1`
+- 例：`powershell -ExecutionPolicy Bypass -File .\scripts\compile-check.ps1 -Modules freeplane`
+- 直接对单个模块跑 ant `dist`/`build` **仅写入仓库内 build/dist**，不关进程、不部署
+
+改完代码后默认只说明改了什么；需要用户自行在方便时运行 `build-docear.bat` 才会装到运行目录。

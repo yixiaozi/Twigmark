@@ -14,9 +14,11 @@ import org.freeplane.n3.nanoxml.XMLElement;
  * Reads/writes {@link LastSelectionMapExtension} as {@code last_selected_id} on the
  * {@code <map>} element so the next open can restore the selection.
  * <p>
- * When the user changes the selected node, the map is marked unsaved so the attribute is
- * written into the {@code .mm} on the next save. Open-time restore suppresses that
- * bookkeeping (and folding dirty) so simply opening a map does not prompt to save.
+ * Selection changes update the in-memory extension and a lightweight sidecar
+ * ({@link LastSelectedNodeStore}) — they must <b>not</b> mark the map dirty. Dirtying on
+ * every click used to trigger full-map autosave on the EDT and made node switching feel
+ * sticky. The attribute is still written into the {@code .mm} on the next real save.
+ * Open-time restore suppresses selection bookkeeping so opening a map does not prompt to save.
  */
 public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 	static final String MAP_TAG = "map";
@@ -164,6 +166,12 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 
 	public static String readLastSelectedId(final MapModel map) {
 		ensureLoadedFromUnknownElements(map);
+		// Prefer sidecar (updated on click without rewriting .mm).
+		final String fromSidecar = LastSelectedNodeStore.getInstance().get(map);
+		if (fromSidecar != null && fromSidecar.length() > 0) {
+			LastSelectionMapExtension.getOrCreate(map).setLastSelectedNodeId(fromSidecar);
+			return fromSidecar;
+		}
 		final LastSelectionMapExtension lastSelection = LastSelectionMapExtension.get(map);
 		if (lastSelection != null) {
 			final String id = lastSelection.getLastSelectedNodeId();
@@ -228,7 +236,14 @@ public class LastSelectionMapExtensionIO implements IExtensionAttributeWriter {
 		}
 
 		public void onSelect(final NodeModel node) {
-			rememberSelection(node, true);
+			// Never dirty the map for selection-only changes (that triggered full-map autosave).
+			rememberSelection(node, false);
+			if (node != null && node.getMap() != null) {
+				final String id = node.createID();
+				if (id != null && id.length() > 0) {
+					LastSelectedNodeStore.getInstance().rememberAsync(node.getMap(), id);
+				}
+			}
 		}
 	}
 }
