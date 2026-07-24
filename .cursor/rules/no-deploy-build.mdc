@@ -11,8 +11,13 @@ alwaysApply: true
 
 - `build-docear.bat`
 - `scripts/build-docear-to-dist.ps1`
-- `.cursor/hooks/build-docear-last.ps1`
+- `.cursor/hooks/build-docear-last.ps1`（已改为空操作；**禁止**再写回自动部署）
+- 在 `.cursor/hooks.json` 的 `stop` / `afterAgentResponse` 里挂部署脚本
 - 任何会调用 `Stop-RunningDocear`、解压到 `E:\Temp\DocearDist` / `E:\SoftWare\Docear`、或启动 `docear.exe` 的命令
+
+## 说明
+
+曾因项目 `.cursor/hooks.json` 的 `stop` 钩子在每次 Agent 结束时跑 `build-docear-last.ps1`，导致关进程并重写 `E:\Temp\DocearDist`。该钩子已清空。
 
 ## 允许（验证编译）
 

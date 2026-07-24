@@ -38,6 +38,8 @@ import org.freeplane.features.url.UrlManager;
 public class DoAutomaticSave extends TimerTask {
 	static final String AUTOSAVE_EXTENSION = "autosave";
 	private static final long EXTERNAL_CHANGE_CHECK_PAUSE_MS = 3000L;
+	/** Do not serialize while the user is still inserting/typing (idle gate). */
+	private static final long EDIT_IDLE_BEFORE_SAVE_MS = 4000L;
 	/**
 	 * This value is compared with the result of
 	 * getNumberOfChangesSinceLastSave(). If the values coincide, no further
@@ -68,6 +70,12 @@ public class DoAutomaticSave extends TimerTask {
 		}
 		/* Map is dirty enough? */
 		if (model.getNumberOfChangesSinceLastSave() == changeState) {
+			return;
+		}
+		// Stay out of the way while Insert / typing is in progress. Do not advance
+		// changeState so the next timer tick retries after the idle window.
+		final long lastChange = model.getLastContentChangeTimeMs();
+		if (lastChange > 0L && System.currentTimeMillis() - lastChange < EDIT_IDLE_BEFORE_SAVE_MS) {
 			return;
 		}
 		changeState = model.getNumberOfChangesSinceLastSave();

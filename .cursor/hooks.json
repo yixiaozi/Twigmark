@@ -1,10 +1,5 @@
 {
   "version": 1,
   "hooks": {
-    "stop": [
-      {
-        "command": "powershell -ExecutionPolicy Bypass -File .cursor/hooks/build-docear-last.ps1"
-      }
-    ]
   }
 }

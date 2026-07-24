@@ -47,6 +47,8 @@ public class MapModel {
 	 * zero, such that new models are not to be saved.
 	 */
 	protected int changesPerformedSinceLastSave = 0;
+	/** Wall-clock of last content dirtying; used to idle-gate autosave while editing. */
+	private long lastContentChangeTimeMs = 0L;
 	private final ExtensionContainer extensionContainer;
 	private Filter filter = null;
 	final private IconRegistry iconRegistry;
@@ -276,7 +278,13 @@ public class MapModel {
 		}
 		else {
 			++changesPerformedSinceLastSave;
+			lastContentChangeTimeMs = System.currentTimeMillis();
 		}
+	}
+
+	/** Millis since epoch of last dirtying edit; 0 if never dirtied in this session. */
+	public long getLastContentChangeTimeMs() {
+		return lastContentChangeTimeMs;
 	}
 
 	/**

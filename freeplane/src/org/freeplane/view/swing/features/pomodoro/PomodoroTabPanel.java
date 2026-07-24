@@ -35,6 +35,7 @@ import javax.swing.JTree;
 import javax.swing.ListCellRenderer;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
 import javax.swing.DefaultListModel;
 import org.freeplane.core.ui.components.DateTimeFieldsPanel;
@@ -86,7 +87,8 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	private boolean showAllMaps = true;
 	private boolean todayView = true;
 	private long selectedDayStart = PomodoroLog.startOfToday();
-	private boolean reloadQueued;
+	private Timer reloadTimer;
+	private static final int RELOAD_DEBOUNCE_MS = 300;
 
 	public PomodoroTabPanel(final ModeController modeController) {
 		super(new BorderLayout(8, 8));
@@ -513,7 +515,17 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 		final MapController mapController = modeController.getMapController();
 		mapController.addNodeChangeListener(new INodeChangeListener() {
 			public void nodeChanged(final NodeChangeEvent event) {
-				queueReload();
+				if (event == null || event.getNode() == null) {
+					return;
+				}
+				final Object prop = event.getProperty();
+				if (prop == PomodoroExtension.class) {
+					queueReload();
+					return;
+				}
+				if (NodeModel.NODE_TEXT.equals(prop) && PomodoroAttributes.read(event.getNode()) != null) {
+					queueReload();
+				}
 			}
 		});
 		mapController.addMapChangeListener(new IMapChangeListener() {
@@ -522,16 +534,22 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 			}
 
 			public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
-				queueReload();
+				if (child != null && PomodoroAttributes.read(child) != null) {
+					queueReload();
+				}
 			}
 
 			public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
-				queueReload();
+				if (child != null && PomodoroAttributes.read(child) != null) {
+					queueReload();
+				}
 			}
 
 			public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
 					final NodeModel child, final int newIndex) {
-				queueReload();
+				if (child != null && PomodoroAttributes.read(child) != null) {
+					queueReload();
+				}
 			}
 
 			public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
@@ -552,16 +570,15 @@ public final class PomodoroTabPanel extends JPanel implements PomodoroSessionMan
 	}
 
 	private void queueReload() {
-		if (reloadQueued) {
-			return;
+		if (reloadTimer == null) {
+			reloadTimer = new Timer(RELOAD_DEBOUNCE_MS, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					reload();
+				}
+			});
+			reloadTimer.setRepeats(false);
 		}
-		reloadQueued = true;
-		javax.swing.SwingUtilities.invokeLater(new Runnable() {
-			public void run() {
-				reloadQueued = false;
-				reload();
-			}
-		});
+		reloadTimer.restart();
 	}
 
 	public void pomodoroSessionsChanged() {

@@ -34,6 +34,7 @@ import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JPanel;
+import javax.swing.Timer;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
@@ -67,8 +68,15 @@ public class AttributePanelManager{
 
         private AttributeView attributeView;
         private JComboBox formatChooser;
+        private Timer selectDebounceTimer;
+        private NodeModel pendingSelectNode;
+        private static final int SELECT_DEBOUNCE_MS = 120;
 
         public void onDeselect(NodeModel node) {
+            pendingSelectNode = null;
+            if (selectDebounceTimer != null) {
+                selectDebounceTimer.stop();
+            }
             removeOldView();
         }
 
@@ -83,6 +91,27 @@ public class AttributePanelManager{
         }
 
         public void onSelect(NodeModel node) {
+            // Hidden attribute panel must not block Insert/select.
+            if (!tablePanel.isShowing()) {
+                return;
+            }
+            pendingSelectNode = node;
+            if (selectDebounceTimer == null) {
+                selectDebounceTimer = new Timer(SELECT_DEBOUNCE_MS, new ActionListener() {
+                    public void actionPerformed(final ActionEvent e) {
+                        final NodeModel target = pendingSelectNode;
+                        pendingSelectNode = null;
+                        if (target != null && tablePanel.isShowing()) {
+                            buildViewFor(target);
+                        }
+                    }
+                });
+                selectDebounceTimer.setRepeats(false);
+            }
+            selectDebounceTimer.restart();
+        }
+
+        private void buildViewFor(NodeModel node) {
             removeOldView();
             final NodeView nodeView = (NodeView) Controller.getCurrentController()
             		.getMapViewManager().getSelectedComponent();

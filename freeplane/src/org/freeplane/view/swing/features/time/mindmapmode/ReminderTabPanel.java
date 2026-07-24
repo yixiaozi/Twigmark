@@ -2,6 +2,8 @@ package org.freeplane.view.swing.features.time.mindmapmode;
 
 import java.awt.BorderLayout;
 import java.awt.Component;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.text.DateFormat;
@@ -21,6 +23,7 @@ import javax.swing.JScrollPane;
 import javax.swing.ListSelectionModel;
 import javax.swing.KeyStroke;
 import javax.swing.AbstractAction;
+import javax.swing.Timer;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
@@ -42,6 +45,8 @@ import org.freeplane.features.ui.IMapViewManager;
 
 public class ReminderTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
+	/** Coalesce full-map walks so add/edit stays responsive on large maps. */
+	private static final int RELOAD_DEBOUNCE_MS = 300;
 
 	private static final class ReminderItem {
 		private final NodeModel node;
@@ -59,6 +64,7 @@ public class ReminderTabPanel extends JPanel {
 	private final JList reminderList = new JList(items);
 	private final DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
 	private final ModeController modeController;
+	private Timer reloadTimer;
 
 	public ReminderTabPanel(final ModeController modeController) {
 		super(new BorderLayout());
@@ -105,24 +111,39 @@ public class ReminderTabPanel extends JPanel {
 		final MapController mapController = modeController.getMapController();
 		mapController.addNodeChangeListener(new INodeChangeListener() {
 			public void nodeChanged(NodeChangeEvent event) {
-				reloadReminders();
+				if (event == null || event.getNode() == null) {
+					return;
+				}
+				final Object prop = event.getProperty();
+				if (prop == ReminderExtension.class || prop == ReminderCycleExtension.class
+						|| prop == ReminderTaskExtension.class) {
+					scheduleReloadReminders();
+					return;
+				}
+				if (NodeModel.NODE_TEXT.equals(prop) && hasReminder(event.getNode())) {
+					scheduleReloadReminders();
+				}
 			}
 		});
 		mapController.addMapChangeListener(new IMapChangeListener() {
 			public void mapChanged(MapChangeEvent event) {
-				reloadReminders();
+				scheduleReloadReminders();
 			}
 
 			public void onNodeInserted(NodeModel parent, NodeModel child, int newIndex) {
-				reloadReminders();
+				if (child != null && hasReminder(child)) {
+					scheduleReloadReminders();
+				}
 			}
 
 			public void onNodeDeleted(NodeModel parent, NodeModel child, int index) {
-				reloadReminders();
+				scheduleReloadReminders();
 			}
 
 			public void onNodeMoved(NodeModel oldParent, int oldIndex, NodeModel newParent, NodeModel child, int newIndex) {
-				reloadReminders();
+				if (child != null && hasReminder(child)) {
+					scheduleReloadReminders();
+				}
 			}
 
 			public void onPreNodeDelete(NodeModel oldParent, NodeModel selectedNode, int index) {
@@ -140,6 +161,18 @@ public class ReminderTabPanel extends JPanel {
 				reloadReminders();
 			}
 		});
+	}
+
+	private void scheduleReloadReminders() {
+		if (reloadTimer == null) {
+			reloadTimer = new Timer(RELOAD_DEBOUNCE_MS, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					reloadReminders();
+				}
+			});
+			reloadTimer.setRepeats(false);
+		}
+		reloadTimer.restart();
 	}
 
 	private void gotoSelectedReminder() {
@@ -210,6 +243,11 @@ public class ReminderTabPanel extends JPanel {
 			items.addElement(item);
 		}
 		SideTabMetricRegistry.set(SideTabMetricKeys.RIGHT_CURRENT_REMINDERS, items.size());
+	}
+
+	private static boolean hasReminder(final NodeModel node) {
+		final ReminderExtension extension = ReminderExtension.getExtension(node);
+		return extension != null && extension.getRemindUserAt() > 0;
 	}
 
 	private void collectReminderItems(NodeModel node, List<ReminderItem> out) {

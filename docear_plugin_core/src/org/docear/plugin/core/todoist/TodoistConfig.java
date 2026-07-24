@@ -23,7 +23,8 @@ public final class TodoistConfig {
 	/** Empty until the user configures a path (or a library root provides a default). */
 	public static final String DEFAULT_IMPORT_TARGET = "";
 	public static final String DEFAULT_IMPORT_FILENAME = "todolist.mm";
-	public static final String DEFAULT_AUTO_SYNC = "true";
+	/** Off by default: auto-sync can wipe local reminders until bidirectional logic is solid. */
+	public static final String DEFAULT_AUTO_SYNC = "false";
 	public static final String DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = "5";
 	/** Node attribute linking an imported (or pushed) mind-map node to a Todoist task id. */
 	public static final String ATTR_TASK_ID = "todoist_task_id";

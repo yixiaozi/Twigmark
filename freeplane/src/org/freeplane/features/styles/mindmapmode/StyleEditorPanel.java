@@ -43,6 +43,7 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import javax.swing.plaf.basic.BasicButtonUI;
 
 import org.freeplane.core.extension.IExtension;
@@ -460,6 +461,9 @@ public class StyleEditorPanel extends JPanel {
 	}
 
 	private boolean internalChange;
+	private Timer styleRefreshTimer;
+	private NodeModel pendingStyleNode;
+	private static final int STYLE_REFRESH_DEBOUNCE_MS = 120;
 	private ColorProperty mCloudColor;
 	private ComboProperty mCloudShape;
 	private List<IPropertyControl> mControls;
@@ -865,6 +869,34 @@ public class StyleEditorPanel extends JPanel {
     }
 
 	public void setStyle( final NodeModel node) {
+		scheduleSetStyle(node);
+	}
+
+	private void scheduleSetStyle(final NodeModel node) {
+		if (node == null) {
+			return;
+		}
+		// Hidden style panel must not steal Insert/select time.
+		if (!isShowing()) {
+			return;
+		}
+		pendingStyleNode = node;
+		if (styleRefreshTimer == null) {
+			styleRefreshTimer = new Timer(STYLE_REFRESH_DEBOUNCE_MS, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					final NodeModel target = pendingStyleNode;
+					pendingStyleNode = null;
+					if (target != null && isShowing()) {
+						setStyleNow(target);
+					}
+				}
+			});
+			styleRefreshTimer.setRepeats(false);
+		}
+		styleRefreshTimer.restart();
+	}
+
+	private void setStyleNow( final NodeModel node) {
 		if (internalChange) {
 			return;
 		}

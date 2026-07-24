@@ -46,6 +46,7 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.MindMapFileIdentity;
+import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.IconNotFound;
 import org.freeplane.features.icon.IconStore;
 import org.freeplane.features.icon.MindIcon;
@@ -283,8 +284,12 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		});
 		autoRefreshTimer.start();
 
-		liveRefreshTimer = new Timer(500, new java.awt.event.ActionListener() {
+		// Idle-only: never compete with Insert / typing on the EDT hot path.
+		liveRefreshTimer = new Timer(900, new java.awt.event.ActionListener() {
 			public void actionPerformed(java.awt.event.ActionEvent e) {
+				if (!isShowing()) {
+					return;
+				}
 				refreshFromOpenMapsQuick();
 			}
 		});
@@ -313,23 +318,29 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 			final org.freeplane.features.map.MapController mapController = modeController.getMapController();
 			mapController.addNodeChangeListener(new INodeChangeListener() {
 				public void nodeChanged(final NodeChangeEvent event) {
-					if (event == null) {
+					if (event == null || event.getNode() == null) {
 						return;
 					}
 					final Object prop = event.getProperty();
-					if (NodeModel.NODE_ICON.equals(prop) || NodeModel.NODE_TEXT.equals(prop)
-							|| "hierarchical_icons".equals(prop)) {
+					if (NodeModel.NODE_ICON.equals(prop) || "hierarchical_icons".equals(prop)) {
+						scheduleLiveRefresh();
+						return;
+					}
+					// Text edits: only if this node is already in our icon set.
+					if (NodeModel.NODE_TEXT.equals(prop) && nodeHasTargetIcon(event.getNode())) {
 						scheduleLiveRefresh();
 					}
 				}
 			});
 			mapController.addMapChangeListener(new IMapChangeListener() {
 				public void mapChanged(final MapChangeEvent event) {
-					scheduleLiveRefresh();
+					// Ignore style/save noise; icon membership is driven by node events.
 				}
 
 				public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
-					scheduleLiveRefresh();
+					if (nodeHasTargetIcon(child)) {
+						scheduleLiveRefresh();
+					}
 				}
 
 				public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
@@ -338,7 +349,9 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 				public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
 						final NodeModel child, final int newIndex) {
-					scheduleLiveRefresh();
+					if (nodeHasTargetIcon(child)) {
+						scheduleLiveRefresh();
+					}
 				}
 
 				public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
@@ -365,6 +378,7 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 
 				public void onSaved(final MapModel map) {
 					invalidateCacheForMap(map);
+					// Refresh after save only when tab is visible — not during edit.
 					scheduleLiveRefresh();
 				}
 			});
@@ -375,8 +389,29 @@ public abstract class AbstractAllItemsTabPanel extends JPanel {
 		}
 	}
 
+	private boolean nodeHasTargetIcon(final NodeModel node) {
+		if (node == null) {
+			return false;
+		}
+		try {
+			final java.util.Collection icons = IconController.getController().getIcons(node);
+			if (icons == null) {
+				return false;
+			}
+			for (final Object iconObj : icons) {
+				if (iconObj instanceof MindIcon && isTargetIcon(((MindIcon) iconObj).getName())) {
+					return true;
+				}
+			}
+		}
+		catch (Exception e) {
+			return false;
+		}
+		return false;
+	}
+
 	private void scheduleLiveRefresh() {
-		// Open-map-only refresh; do not kick a full-disk scan on every keystroke.
+		// Open-map-only refresh; never block Insert / typing.
 		liveRefreshTimer.restart();
 	}
 

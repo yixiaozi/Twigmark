@@ -4,6 +4,8 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
+import javax.swing.Timer;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
@@ -47,6 +50,8 @@ import org.freeplane.features.ui.IMapViewManager;
 public class TodoTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final String TODO_ICON_NAME = "hourglass";
+	/** Coalesce full-map walks so add/edit stays responsive on large maps. */
+	private static final int RELOAD_DEBOUNCE_MS = 300;
 
 	private static final class TodoRecord {
 		private final NodeModel node;
@@ -74,6 +79,7 @@ public class TodoTabPanel extends JPanel {
 
 	private final JTree tree = new JTree(new DefaultMutableTreeNode("\u5F85\u529E"));
 	private final ModeController modeController;
+	private Timer reloadTimer;
 
 	public TodoTabPanel(final ModeController modeController) {
 		super(new BorderLayout(4, 4));
@@ -151,25 +157,39 @@ public class TodoTabPanel extends JPanel {
 		final MapController mapController = modeController.getMapController();
 		mapController.addNodeChangeListener(new INodeChangeListener() {
 			public void nodeChanged(NodeChangeEvent event) {
-				reloadTodos();
+				if (event == null || event.getNode() == null) {
+					return;
+				}
+				final Object prop = event.getProperty();
+				if (NodeModel.NODE_ICON.equals(prop) || "hierarchical_icons".equals(prop)) {
+					scheduleReloadTodos();
+					return;
+				}
+				if (NodeModel.NODE_TEXT.equals(prop) && hasHourglassIcon(event.getNode())) {
+					scheduleReloadTodos();
+				}
 			}
 		});
 		mapController.addMapChangeListener(new IMapChangeListener() {
 			public void mapChanged(MapChangeEvent event) {
-				reloadTodos();
+				scheduleReloadTodos();
 			}
 
 			public void onNodeInserted(NodeModel parent, NodeModel child, int newIndex) {
-				reloadTodos();
+				if (child != null && hasHourglassIcon(child)) {
+					scheduleReloadTodos();
+				}
 			}
 
 			public void onNodeDeleted(NodeModel parent, NodeModel child, int index) {
-				reloadTodos();
+				scheduleReloadTodos();
 			}
 
 			public void onNodeMoved(NodeModel oldParent, int oldIndex, NodeModel newParent, NodeModel child,
 					int newIndex) {
-				reloadTodos();
+				if (child != null && hasHourglassIcon(child)) {
+					scheduleReloadTodos();
+				}
 			}
 
 			public void onPreNodeDelete(NodeModel oldParent, NodeModel selectedNode, int index) {
@@ -188,6 +208,18 @@ public class TodoTabPanel extends JPanel {
 				reloadTodos();
 			}
 		});
+	}
+
+	private void scheduleReloadTodos() {
+		if (reloadTimer == null) {
+			reloadTimer = new Timer(RELOAD_DEBOUNCE_MS, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					reloadTodos();
+				}
+			});
+			reloadTimer.setRepeats(false);
+		}
+		reloadTimer.restart();
 	}
 
 	private void openSelectedTodo() {

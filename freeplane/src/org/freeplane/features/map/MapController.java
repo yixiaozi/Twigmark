@@ -20,6 +20,8 @@
 package org.freeplane.features.map;
 
 import java.awt.EventQueue;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.Writer;
@@ -28,6 +30,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.Iterator;
@@ -37,6 +40,7 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.swing.Action;
+import javax.swing.Timer;
 
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.io.IAttributeHandler;
@@ -72,6 +76,59 @@ public class MapController extends SelectionController implements IExtension{
 	/** When true, folding changes must not mark the map unsaved (open-time selection restore). */
 	private static final ThreadLocal<Boolean> SUPPRESS_FOLDING_DIRTY = new ThreadLocal<Boolean>();
 
+	/** Coalesce dozens of ribbon enable/select refreshes off the Insert/select hot path. */
+	private static final int ACTION_STATE_COALESCE_MS = 80;
+	private static final LinkedHashSet pendingEnableActions = new LinkedHashSet();
+	private static final LinkedHashSet pendingSelectActions = new LinkedHashSet();
+	private static Timer actionStateTimer;
+
+	private static void scheduleActionEnabled(final AFreeplaneAction action) {
+		if (action == null) {
+			return;
+		}
+		pendingEnableActions.add(action);
+		ensureActionStateTimer();
+		actionStateTimer.restart();
+	}
+
+	private static void scheduleActionSelected(final AFreeplaneAction action) {
+		if (action == null) {
+			return;
+		}
+		pendingSelectActions.add(action);
+		ensureActionStateTimer();
+		actionStateTimer.restart();
+	}
+
+	private static void ensureActionStateTimer() {
+		if (actionStateTimer != null) {
+			return;
+		}
+		actionStateTimer = new Timer(ACTION_STATE_COALESCE_MS, new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				flushPendingActionStates();
+			}
+		});
+		actionStateTimer.setRepeats(false);
+	}
+
+	private static void flushPendingActionStates() {
+		final ArrayList enables = new ArrayList(pendingEnableActions);
+		pendingEnableActions.clear();
+		final ArrayList selects = new ArrayList(pendingSelectActions);
+		pendingSelectActions.clear();
+		final IMapSelection selection = Controller.getCurrentController().getSelection();
+		final boolean hasSelection = selection != null && selection.getSelected() != null;
+		for (int i = 0; i < enables.size(); i++) {
+			((AFreeplaneAction) enables.get(i)).setEnabled();
+		}
+		if (hasSelection) {
+			for (int i = 0; i < selects.size(); i++) {
+				((AFreeplaneAction) selects.get(i)).setSelected();
+			}
+		}
+	}
+
 	public static void setSuppressFoldingDirty(final boolean suppress) {
 		if (suppress) {
 			SUPPRESS_FOLDING_DIRTY.set(Boolean.TRUE);
@@ -98,32 +155,32 @@ public class MapController extends SelectionController implements IExtension{
 		}
 
 		public void nodeChanged(final NodeChangeEvent event) {
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 
 		public void onDeselect(final NodeModel node) {
 		}
 
 		public void onSelect(final NodeModel node) {
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 
 		public void mapChanged(MapChangeEvent event) {
-			action.setEnabled();	
+			scheduleActionEnabled(action);
 		}
 
 		public void onNodeDeleted(NodeModel parent, NodeModel child, int index) {
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 
 		public void onNodeInserted(NodeModel parent, NodeModel child,
 				int newIndex) {
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 
 		public void onNodeMoved(NodeModel oldParent, int oldIndex,
 				NodeModel newParent, NodeModel child, int newIndex) {
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 
 		public void onPreNodeMoved(NodeModel oldParent, int oldIndex,
@@ -132,15 +189,7 @@ public class MapController extends SelectionController implements IExtension{
 
 		public void onPreNodeDelete(NodeModel oldParent,
 				NodeModel selectedNode, int index) {
-			setActionEnabled();
-		}
-
-		private void setActionEnabled() {
-			final IMapSelection selection = Controller.getCurrentController().getSelection();
-			if (selection == null || selection.getSelected() == null) {
-				return;
-			}
-			action.setEnabled();
+			scheduleActionEnabled(action);
 		}
 	}
 
@@ -161,48 +210,40 @@ public class MapController extends SelectionController implements IExtension{
 			if (NodeChangeType.REFRESH.equals(event.getProperty())) {
 				return;
 			}
-			setActionSelected();
-		}
-
-		private void setActionSelected() {
-			final IMapSelection selection = Controller.getCurrentController().getSelection();
-			if (selection == null || selection.getSelected() == null) {
-				return;
-			}
-			action.setSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onDeselect(final NodeModel node) {
 		}
 
 		public void onSelect(final NodeModel node) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void mapChanged(final MapChangeEvent event) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onNodeDeleted(final NodeModel parent, final NodeModel child, final int index) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
 		                        final NodeModel child, final int newIndex) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onPreNodeDelete(final NodeModel oldParent, final NodeModel selectedNode, final int index) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 
 		public void onPreNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
 		                           final NodeModel child, final int newIndex) {
-			setActionSelected();
+			scheduleActionSelected(action);
 		}
 	}
 	

@@ -28,6 +28,8 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
 import java.awt.RenderingHints;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.awt.image.BufferedImage;
 import java.awt.image.RenderedImage;
 import java.io.File;
@@ -48,6 +50,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.event.ListDataEvent;
 import javax.swing.event.ListDataListener;
 
@@ -1028,6 +1031,8 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 			changeAntialias(newValue);
 		}
 	}
+	private Timer mapListUpdateTimer;
+
 	public void setTitle() {
 		final ModeController modeController = Controller.getCurrentModeController();
 		if (modeController == null) {
@@ -1049,7 +1054,31 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 			}
 		}
 		controller.getViewController().setTitle(title);
-		modeController.getUserInputListenerFactory().updateMapList();
+		// Rebuilding the mindmaps menu must not block Insert / first-dirty.
+		scheduleUpdateMapList(modeController);
+	}
+
+	private void scheduleUpdateMapList(final ModeController modeController) {
+		if (modeController == null) {
+			return;
+		}
+		if (mapListUpdateTimer == null) {
+			mapListUpdateTimer = new Timer(200, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					try {
+						final ModeController current = Controller.getCurrentModeController();
+						if (current != null) {
+							current.getUserInputListenerFactory().updateMapList();
+						}
+					}
+					catch (Exception ex) {
+						// ignore — menu refresh is best-effort
+					}
+				}
+			});
+			mapListUpdateTimer.setRepeats(false);
+		}
+		mapListUpdateTimer.restart();
 	}
 
 	public void setScrollbarsVisible(boolean areScrollbarsVisible) {
