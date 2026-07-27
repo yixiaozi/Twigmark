@@ -45,6 +45,8 @@ public class DocearAiConfig {
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED = "ai.workspace_snapshot_export_enabled";
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DIR = "ai.workspace_snapshot_directory";
     private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS = "ai.workspace_snapshot_debounce_ms";
+    private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_MIN_INTERVAL_MS = "ai.workspace_snapshot_min_interval_ms";
+    private static final String PROPERTY_AI_WORKSPACE_SNAPSHOT_TREE_INTERVAL_MS = "ai.workspace_snapshot_tree_interval_ms";
     private static final String PROPERTY_AI_MCP_ENABLED = "ai.mcp.enabled";
     private static final String PROPERTY_AI_MCP_URL = "ai.mcp.url";
     private static final String DEFAULT_MCP_URL = "http://127.0.0.1:7720/mcp";
@@ -298,10 +300,32 @@ public class DocearAiConfig {
     public int getWorkspaceSnapshotDebounceMs() {
         try {
             int ms = Integer.parseInt(ResourceController.getResourceController().getProperty(
-                    PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS, "8000"));
-            return ms < 2000 ? 8000 : ms;
+                    PROPERTY_AI_WORKSPACE_SNAPSHOT_DEBOUNCE_MS, "30000"));
+            return ms < 5000 ? 30000 : ms;
         } catch (NumberFormatException e) {
-            return 8000;
+            return 30000;
+        }
+    }
+
+    /** 两次自动导出之间的最小间隔，避免编辑/保存时连续扫盘。 */
+    public long getWorkspaceSnapshotMinIntervalMs() {
+        try {
+            long ms = Long.parseLong(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_WORKSPACE_SNAPSHOT_MIN_INTERVAL_MS, "180000"));
+            return ms < 30000L ? 180000L : ms;
+        } catch (NumberFormatException e) {
+            return 180000L;
+        }
+    }
+
+    /** 完整文件目录树导出的最小间隔（比条目快照更重）。 */
+    public long getWorkspaceSnapshotTreeIntervalMs() {
+        try {
+            long ms = Long.parseLong(ResourceController.getResourceController().getProperty(
+                    PROPERTY_AI_WORKSPACE_SNAPSHOT_TREE_INTERVAL_MS, "900000"));
+            return ms < 60000L ? 900000L : ms;
+        } catch (NumberFormatException e) {
+            return 900000L;
         }
     }
 

@@ -27,18 +27,18 @@ show_help() {
     echo "  --no-applications   Do not copy Docear.app into /Applications"
     echo ""
     echo "System Requirements:"
-    echo "  - Java Development Kit (JDK) 8 (prefer Temurin 8 in /Library/Java/JavaVirtualMachines)"
+    echo "  - Java Development Kit (JDK) 8 (Apple Silicon 优先 Azul Zulu 8 aarch64)"
     echo "  - Ant 1.10.14 (included in project)"
     echo ""
-    echo "How to install JDK 8 on macOS:"
-    echo "  1. Download Eclipse Temurin 8 from: https://adoptium.net/temurin/releases/?version=8"
-    echo "  2. Install the .pkg file"
-    echo "  3. Verify installation: /usr/libexec/java_home -V"
-    echo "  4. Set JAVA_HOME to Temurin (avoid JavaAppletPlugin):"
-    echo "     export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+    echo "How to install JDK 8 on macOS (Apple Silicon):"
+    echo "  1. Download Azul Zulu 8 aarch64 JDK:"
+    echo "     https://www.azul.com/downloads/?version=java-8-lts&os=macos&architecture=arm-64-bit&package=jdk"
+    echo "  2. Install, or unpack into ~/Library/Java/JavaVirtualMachines/zulu-8.jdk"
+    echo "  3. Verify: file \$(/usr/libexec/java_home -v 1.8)/bin/java   # should say arm64"
+    echo ""
+    echo "Intel Mac / fallback: Eclipse Temurin 8 x86_64 is still supported (Rosetta on Apple Silicon)."
     echo ""
     echo "Typical rebuild + install:"
-    echo "  export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
     echo "  ./build_docear_mac.sh"
     echo "  # Result: docear_framework/build4mac/Docear.app and /Applications/Docear.app"
     echo ""
@@ -47,129 +47,15 @@ show_help() {
 # 修复 Docear.app
 fix_docear_app() {
     local app_path="$1"
+    local launcher_src="$PROJECT_DIR/docear_framework/build4mac/Docear.app/Contents/MacOS/Docear"
     echo -e "${YELLOW}正在修复 $app_path ...${NC}"
     
-    # 1. 创建启动脚本：优先完整 JDK 8，跳过浏览器插件 JRE；避免 ImageIcon Dock 图标 NPE
-    cat > "$app_path/Contents/MacOS/Docear" << 'EOF'
-#!/bin/bash
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CONTENTS_DIR="$(dirname "$SCRIPT_DIR")"
-JAVA_DIR="$CONTENTS_DIR/Resources/Java"
-LOG_DIR="${HOME}/Library/Logs/Docear"
-LOG_FILE="${LOG_DIR}/launch.log"
-mkdir -p "$LOG_DIR"
-exec >>"$LOG_FILE" 2>&1
-echo "========== $(date) =========="
-echo "Launching Docear from: $0"
-
-show_error() {
-    osascript -e "display alert \"Docear 无法启动\" message \"$1\" as critical" 2>/dev/null || true
-    echo "ERROR: $1"
-    exit 1
-}
-
-find_java() {
-    local candidate home
-
-    # 1) 优先：/Library/Java/JavaVirtualMachines 下的完整 JDK 8（Temurin/Zulu 等）
-    for home in /Library/Java/JavaVirtualMachines/*/Contents/Home; do
-        [ -x "${home}/bin/java" ] || continue
-        case "$home" in
-            *"JavaAppletPlugin"*) continue ;;
-        esac
-        if "${home}/bin/java" -version 2>&1 | grep -qE 'version "1\.8'; then
-            echo "$home"
-            return 0
-        fi
-    done
-
-    # 2) 其次：java_home，但排除浏览器插件目录
-    if [ -x "/usr/libexec/java_home" ]; then
-        while IFS= read -r home; do
-            [ -n "$home" ] || continue
-            case "$home" in
-                *"JavaAppletPlugin"*|*"Internet Plug-Ins"*) continue ;;
-            esac
-            if [ -x "${home}/bin/java" ]; then
-                echo "$home"
-                return 0
-            fi
-        done < <(/usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
+    # 1. 使用仓库内维护的启动脚本：Apple Silicon 优先 arm64 JDK 8，避免 Rosetta
+    if [ ! -f "$launcher_src" ]; then
+        echo -e "${RED}找不到启动器模板: $launcher_src${NC}"
+        exit 1
     fi
-
-    # 3) 最后：PATH 或 /usr/bin/java
-    candidate="$(command -v java 2>/dev/null || true)"
-    [ -z "$candidate" ] && [ -x /usr/bin/java ] && candidate="/usr/bin/java"
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-        if "$candidate" -version 2>&1 | grep -qE 'version "1\.8'; then
-            dirname "$(dirname "$candidate")"
-            return 0
-        fi
-    fi
-
-    return 1
-}
-
-JAVA_HOME="$(find_java)" || show_error "未找到 Java 8。请安装 Eclipse Temurin 8：\nhttps://adoptium.net/temurin/releases/?version=8"
-export JAVA_HOME
-JAVACMD="${JAVA_HOME}/bin/java"
-[ -x "$JAVACMD" ] || JAVACMD="$(command -v java)"
-[ -x "$JAVACMD" ] || show_error "Java 可执行文件不存在：${JAVA_HOME}/bin/java"
-
-echo "Using JAVA_HOME=$JAVA_HOME"
-echo "Using JAVACMD=$JAVACMD"
-"$JAVACMD" -version 2>&1 || show_error "Java 版本检查失败，请确认已安装 JDK 8。"
-
-cd "$JAVA_DIR" || show_error "找不到应用资源目录：$JAVA_DIR"
-FREEDIR="$(pwd)"
-
-# Dock：名称 + PNG 图标。直接 exec java 时进程是 JVM，Info.plist 的 .icns
-# 不会进 Dock；-Xdock:icon 必须用 PNG（.icns 在 Java 8 上会 NPE）。
-DOCK_ICON=""
-for candidate in \
-    "${CONTENTS_DIR}/Resources/Java/docear.png" \
-    "${FREEDIR}/docear.png" \
-    "${CONTENTS_DIR}/Resources/docear.png"
-do
-    if [ -f "$candidate" ]; then
-        DOCK_ICON="$candidate"
-        break
-    fi
-done
-JAVA_ARGS=(
-    -Xmx1024m
-    -Xdock:name=Docear
-)
-if [ -n "$DOCK_ICON" ]; then
-    JAVA_ARGS+=("-Xdock:icon=${DOCK_ICON}")
-    echo "Using Dock icon: $DOCK_ICON"
-fi
-JAVA_ARGS+=(
-    -Dapple.laf.useScreenMenuBar=true
-    -Dcom.apple.macos.useScreenMenuBar=true
-    -Dsun.java2d.opengl=false
-    -Dorg.freeplane.param1="$1"
-    -Dorg.freeplane.param2="$2"
-    -Dorg.freeplane.param3="$3"
-    -Dorg.freeplane.param4="$4"
-    -Dorg.knopflerfish.framework.bundlestorage=memory
-    -Dorg.freeplane.globalresourcedir="${FREEDIR}/resources"
-    -Dorg.knopflerfish.gosg.jars=reference:file:"${FREEDIR}/core/"
-    -jar "${FREEDIR}/framework.jar"
-    -xargs "${FREEDIR}/props.xargs"
-    -xargs "${FREEDIR}/init.xargs"
-)
-
-# Apple Silicon 上若 JVM 为 x86_64，通过 Rosetta 启动更稳定
-if [ "$(uname -m)" = "arm64" ] && file "$JAVACMD" 2>/dev/null | grep -q "x86_64"; then
-    echo "Running x86_64 JVM under Rosetta: $JAVACMD"
-    exec arch -x86_64 "$JAVACMD" "${JAVA_ARGS[@]}"
-fi
-
-exec "$JAVACMD" "${JAVA_ARGS[@]}"
-EOF
+    cp "$launcher_src" "$app_path/Contents/MacOS/Docear"
     
     # 2. 设置执行权限
     chmod +x "$app_path/Contents/MacOS/Docear"

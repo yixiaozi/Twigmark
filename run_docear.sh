@@ -9,36 +9,71 @@ LOG_DIR="${HOME}/Library/Logs/Docear"
 LOG_FILE="${LOG_DIR}/launch.log"
 mkdir -p "$LOG_DIR"
 
-find_java() {
-    local candidate home
+java_cpu_arch() {
+    local info
+    info="$(file "$1" 2>/dev/null || true)"
+    case "$info" in
+        *arm64*|*aarch64*) echo "arm64" ;;
+        *x86_64*) echo "x86_64" ;;
+        *) echo "unknown" ;;
+    esac
+}
 
-    # 1) 优先：完整 JDK 8（Temurin/Zulu 等），跳过浏览器插件
-    for home in /Library/Java/JavaVirtualMachines/*/Contents/Home; do
-        [ -x "${home}/bin/java" ] || continue
-        case "$home" in
-            *"JavaAppletPlugin"*) continue ;;
-        esac
-        if "${home}/bin/java" -version 2>&1 | grep -qE 'version "1\.8'; then
-            echo "$home"
-            return 0
-        fi
+is_jdk8_home() {
+    local home="$1"
+    [ -x "${home}/bin/java" ] || return 1
+    case "$home" in
+        *"JavaAppletPlugin"*|*"Internet Plug-Ins"*) return 1 ;;
+    esac
+    "${home}/bin/java" -version 2>&1 | grep -qE 'version "1\.8'
+}
+
+find_java() {
+    local home candidate prefer=""
+    local -a matches=()
+
+    if [ "$(uname -m)" = "arm64" ]; then
+        prefer="arm64"
+    fi
+
+    for home in \
+        /Library/Java/JavaVirtualMachines/*/Contents/Home \
+        "${HOME}/Library/Java/JavaVirtualMachines/"*/Contents/Home
+    do
+        is_jdk8_home "$home" || continue
+        matches+=("$home")
     done
 
-    # 2) java_home，排除浏览器插件
-    if [ -x "/usr/libexec/java_home" ]; then
-        while IFS= read -r home; do
-            [ -n "$home" ] || continue
-            case "$home" in
-                *"JavaAppletPlugin"*|*"Internet Plug-Ins"*) continue ;;
-            esac
-            if [ -x "${home}/bin/java" ]; then
+    if [ -n "$prefer" ]; then
+        for home in "${matches[@]}"; do
+            if [ "$(java_cpu_arch "${home}/bin/java")" = "$prefer" ]; then
                 echo "$home"
                 return 0
             fi
+        done
+    fi
+
+    if [ "${#matches[@]}" -gt 0 ]; then
+        echo "${matches[0]}"
+        return 0
+    fi
+
+    if [ -x "/usr/libexec/java_home" ]; then
+        while IFS= read -r home; do
+            is_jdk8_home "$home" || continue
+            if [ -n "$prefer" ] && [ "$(java_cpu_arch "${home}/bin/java")" != "$prefer" ]; then
+                continue
+            fi
+            echo "$home"
+            return 0
+        done < <(/usr/libexec/java_home -v 1.8 -a arm64 2>/dev/null; /usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
+        while IFS= read -r home; do
+            is_jdk8_home "$home" || continue
+            echo "$home"
+            return 0
         done < <(/usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
     fi
 
-    # 3) PATH /usr/bin/java
     candidate="$(command -v java 2>/dev/null || true)"
     [ -z "$candidate" ] && [ -x /usr/bin/java ] && candidate="/usr/bin/java"
     if [ -n "$candidate" ] && [ -x "$candidate" ]; then
@@ -52,14 +87,14 @@ find_java() {
 }
 
 JAVA_HOME="$(find_java)" || {
-    echo "未找到 Java 8。请安装 Eclipse Temurin 8：https://adoptium.net/temurin/releases/?version=8" >&2
+    echo "未找到 Java 8。Apple Silicon 请安装 Azul Zulu 8 aarch64，或放到 ~/Library/Java/JavaVirtualMachines/" >&2
     exit 1
 }
 export JAVA_HOME
 JAVACMD="${JAVA_HOME}/bin/java"
 [ -x "$JAVACMD" ] || JAVACMD="$(command -v java)"
 
-echo "使用 JAVA_HOME: $JAVA_HOME"
+echo "使用 JAVA_HOME: $JAVA_HOME ($(java_cpu_arch "$JAVACMD"))"
 echo "运行目录: $DOCEAR_DIR"
 cd "$DOCEAR_DIR" || exit 1
 FREEDIR="$(pwd)"
@@ -67,11 +102,11 @@ FREEDIR="$(pwd)"
 echo "正在启动 Docear..."
 {
     echo "========== $(date) =========="
-    echo "run_docear.sh JAVA_HOME=$JAVA_HOME"
+    echo "run_docear.sh JAVA_HOME=$JAVA_HOME arch=$(java_cpu_arch "$JAVACMD")"
 } >>"$LOG_FILE"
 
 JAVA_ARGS=(
-    -Xmx1024m
+    -Xmx1536m
     -Xdock:name=Docear
     -Dapple.laf.useScreenMenuBar=true
     -Dcom.apple.macos.useScreenMenuBar=true
@@ -88,7 +123,7 @@ JAVA_ARGS=(
     -xargs "${FREEDIR}/init.xargs"
 )
 
-if [ "$(uname -m)" = "arm64" ] && file "$JAVACMD" 2>/dev/null | grep -q "x86_64"; then
+if [ "$(uname -m)" = "arm64" ] && [ "$(java_cpu_arch "$JAVACMD")" = "x86_64" ]; then
     echo "Running x86_64 JVM under Rosetta: $JAVACMD"
     exec arch -x86_64 "$JAVACMD" "${JAVA_ARGS[@]}"
 fi

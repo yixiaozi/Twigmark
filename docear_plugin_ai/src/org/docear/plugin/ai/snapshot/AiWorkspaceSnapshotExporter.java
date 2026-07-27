@@ -39,9 +39,10 @@ import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
  */
 public final class AiWorkspaceSnapshotExporter {
 
-    private static final int RECENTLY_MODIFIED_LIMIT = 1000;
+    private static final int RECENTLY_MODIFIED_LIMIT = 200;
     private static final DateFormat DATE_TIME = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
     private static final DateFormat RECENT_DISPLAY = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.CHINA);
+    private static final String TREE_STAMP_FILE = ".tree-export-stamp";
 
     private final DocearAiConfig config;
     private final File outputDir;
@@ -63,23 +64,37 @@ public final class AiWorkspaceSnapshotExporter {
         }
         final long started = System.currentTimeMillis();
         final WorkspaceSideTabSnapshot snapshot = WorkspaceSideTabSnapshotRegistry.getSnapshot();
+        // Prefer side-tab cache; only fall back to full-library scans when the cache is still empty.
+        final boolean allowDiskFallback = !snapshot.hasAnyItems();
 
         final List reminders = !snapshot.getOneTimeReminders().isEmpty()
                 ? snapshot.getOneTimeReminders()
-                : toReminderEntries(MindMapWorkspaceContextScanner.scanOneTimeReminders(), false);
+                : (allowDiskFallback
+                        ? toReminderEntries(MindMapWorkspaceContextScanner.scanOneTimeReminders(), false)
+                        : Collections.EMPTY_LIST);
         final List recurring = !snapshot.getRecurringReminders().isEmpty()
                 ? snapshot.getRecurringReminders()
-                : toReminderEntries(MindMapWorkspaceContextScanner.scanRecurringReminders(), true);
+                : (allowDiskFallback
+                        ? toReminderEntries(MindMapWorkspaceContextScanner.scanRecurringReminders(), true)
+                        : Collections.EMPTY_LIST);
         final List todos = !snapshot.getTodos().isEmpty()
                 ? snapshot.getTodos()
-                : toTodoEntries(MindMapWorkspaceContextScanner.scanAllTodos());
+                : (allowDiskFallback ? toTodoEntries(MindMapWorkspaceContextScanner.scanAllTodos())
+                        : Collections.EMPTY_LIST);
         final List pinned = !snapshot.getPinnedEntries().isEmpty()
                 ? snapshot.getPinnedEntries()
-                : scanPinnedEntries();
+                : (allowDiskFallback ? scanPinnedEntries() : Collections.EMPTY_LIST);
         final List published = !snapshot.getPublishedEntries().isEmpty()
                 ? snapshot.getPublishedEntries()
-                : toItemEntries(MindMapWorkspaceContextScanner.scanPublishedItems());
-        final List recent = toModifiedEntries(MindMapWorkspaceContextScanner.scanRecentlyModified(RECENTLY_MODIFIED_LIMIT));
+                : (allowDiskFallback
+                        ? toItemEntries(MindMapWorkspaceContextScanner.scanPublishedItems())
+                        : Collections.EMPTY_LIST);
+        final List recent = !snapshot.getRecentlyModifiedEntries().isEmpty()
+                ? snapshot.getRecentlyModifiedEntries()
+                : (allowDiskFallback
+                        ? toModifiedEntries(
+                                MindMapWorkspaceContextScanner.scanRecentlyModified(RECENTLY_MODIFIED_LIMIT))
+                        : Collections.EMPTY_LIST);
         final List favorites = loadFavorites();
 
         writeReminders(new File(outputDir, "01-\u5168\u90e8\u63d0\u9192.md"), reminders, "\u5168\u90e8\u63d0\u9192",
@@ -93,7 +108,7 @@ public final class AiWorkspaceSnapshotExporter {
                 "\u8282\u70b9\u5e26 internet\uff08\u53d1\u5e03\uff09\u56fe\u6807\u7684\u9879\u3002");
         writeRecentlyModified(new File(outputDir, "06-\u6700\u8fd1\u4fee\u6539.md"), recent);
         writeFavorites(new File(outputDir, "07-\u6536\u85cf.md"), favorites);
-        writeTreeFile();
+        maybeWriteTreeFile();
         LogUtils.info("AI workspace snapshot exported to " + outputDir.getAbsolutePath() + " in "
                 + (System.currentTimeMillis() - started) + " ms");
     }
@@ -288,8 +303,8 @@ public final class AiWorkspaceSnapshotExporter {
         BufferedWriter writer = null;
         try {
             writer = openWriter(file);
-            writeHeader(writer, "\u6700\u8fd1\u4fee\u6539\uff08\u524d1000\u6761\uff09", items.size(),
-                    "\u6309\u8282\u70b9 MODIFIED \u65f6\u95f4\u6233\u964d\u5e8f\u6392\u5217\uff0c\u53d6\u524d1000\u6761\uff08\u4e0d\u9650\u5929\u6570\uff09\u3002");
+            writeHeader(writer, "\u6700\u8fd1\u4fee\u6539\uff08\u524d200\u6761\uff09", items.size(),
+                    "\u6309\u8282\u70b9 MODIFIED \u65f6\u95f4\u6233\u964d\u5e8f\u6392\u5217\uff0c\u53d6\u524d200\u6761\uff08\u4e0d\u9650\u5929\u6570\uff09\u3002");
             String currentGroup = null;
             for (int i = 0; i < items.size(); i++) {
                 ModifiedEntry item = (ModifiedEntry) items.get(i);
@@ -350,6 +365,28 @@ public final class AiWorkspaceSnapshotExporter {
         }
         finally {
             closeWriter(writer);
+        }
+    }
+
+    private void maybeWriteTreeFile() {
+        final File stamp = new File(outputDir, TREE_STAMP_FILE);
+        final long interval = config.getWorkspaceSnapshotTreeIntervalMs();
+        if (stamp.isFile() && System.currentTimeMillis() - stamp.lastModified() < interval) {
+            return;
+        }
+        writeTreeFile();
+        try {
+            final BufferedWriter stampWriter = openWriter(stamp);
+            try {
+                stampWriter.write(Long.toString(System.currentTimeMillis()));
+                stampWriter.write('\n');
+            }
+            finally {
+                closeWriter(stampWriter);
+            }
+        }
+        catch (final Exception e) {
+            // stamp is best-effort
         }
     }
 
