@@ -106,21 +106,66 @@ public final class MindMapDataRootResolver {
 		emptyDirectorySeeder = seeder;
 	}
 
-	/** True when {@code working-directory.txt} (or env/sys override) already points at a directory. */
+	/** True when {@code working-directory.txt} (or env/sys override) already points at a usable directory. */
 	public static boolean isWorkingDirectoryConfigured() {
-		if (directoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY)) != null) {
+		if (usableDirectoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY)) != null) {
 			return true;
 		}
-		if (directoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY)) != null) {
+		if (usableDirectoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY)) != null) {
 			return true;
 		}
-		if (directoryFromPath(System.getenv(WORKING_DIRECTORY_ENV)) != null) {
+		if (usableDirectoryFromPath(System.getenv(WORKING_DIRECTORY_ENV)) != null) {
 			return true;
 		}
-		if (directoryFromPath(System.getenv(DATA_ROOT_ENV)) != null) {
+		if (usableDirectoryFromPath(System.getenv(DATA_ROOT_ENV)) != null) {
 			return true;
 		}
 		return readWorkingDirectoryFile() != null;
+	}
+
+	/**
+	 * Paths that are absolute on another OS (e.g. {@code E:\yixiaozi} on macOS) must not be used:
+	 * Java treats them as relative and creates a literal folder under the install directory.
+	 */
+	public static boolean isUsableWorkingDirectoryPath(final String path) {
+		if (path == null) {
+			return false;
+		}
+		final String trimmed = path.trim();
+		if (trimmed.length() == 0 || trimmed.startsWith("#")) {
+			return false;
+		}
+		if (!Compat.isWindowsOS()) {
+			if (looksLikeWindowsAbsolutePath(trimmed)) {
+				return false;
+			}
+			// After absolutizing on Unix, "E:\yixiaozi" becomes ".../E:\yixiaozi" — reject that name.
+			final String name = new File(trimmed).getName();
+			if (looksLikeWindowsAbsolutePath(name)) {
+				return false;
+			}
+			return true;
+		}
+		if (looksLikeUnixAbsolutePath(trimmed) && trimmed.startsWith("/") && !trimmed.startsWith("//")) {
+			return false;
+		}
+		return true;
+	}
+
+	public static boolean looksLikeWindowsAbsolutePath(final String path) {
+		if (path == null || path.length() < 2) {
+			return false;
+		}
+		final char c0 = path.charAt(0);
+		final char c1 = path.charAt(1);
+		if (((c0 >= 'A' && c0 <= 'Z') || (c0 >= 'a' && c0 <= 'z')) && c1 == ':') {
+			return true;
+		}
+		return path.startsWith("\\\\") || path.startsWith("//");
+	}
+
+	public static boolean looksLikeUnixAbsolutePath(final String path) {
+		return path != null && path.startsWith("/") && !looksLikeWindowsAbsolutePath(path);
 	}
 
 	public static boolean isEffectivelyEmptyWorkingDirectory(final File directory) {
@@ -224,6 +269,10 @@ public final class MindMapDataRootResolver {
 			return;
 		}
 		final File absolute = workingDirectory.getAbsoluteFile();
+		if (!isUsableWorkingDirectoryPath(absolute.getAbsolutePath())) {
+			throw new IllegalArgumentException(
+			        "Working directory path is not valid on this operating system: " + absolute.getAbsolutePath());
+		}
 		ensureDirectory(absolute);
 		writeWorkingDirectoryFile(absolute);
 		synchronized (MindMapDataRootResolver.class) {
@@ -247,7 +296,13 @@ public final class MindMapDataRootResolver {
 	public static final String SETUP_COMPLETED_MARKER = "setup.completed";
 
 	public static File getWorkingDirectoryMarkerFile() {
-		return new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		final File[] markers = workingDirectoryMarkerCandidates();
+		for (int i = 0; i < markers.length; i++) {
+			if (markers[i] != null && markers[i].isFile()) {
+				return markers[i];
+			}
+		}
+		return resolveWritableWorkingDirectoryMarker();
 	}
 
 	public static boolean needsFirstRunSetup() {
@@ -410,19 +465,19 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static File resolveWorkingDirectory() {
-		final File fromSystem = directoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY));
+		final File fromSystem = usableDirectoryFromPath(System.getProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY));
 		if (fromSystem != null) {
 			return fromSystem.getAbsoluteFile();
 		}
-		final File fromLegacySystem = directoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY));
+		final File fromLegacySystem = usableDirectoryFromPath(System.getProperty(DATA_ROOT_SYSTEM_PROPERTY));
 		if (fromLegacySystem != null) {
 			return fromLegacySystem.getAbsoluteFile();
 		}
-		final File fromEnv = directoryFromPath(System.getenv(WORKING_DIRECTORY_ENV));
+		final File fromEnv = usableDirectoryFromPath(System.getenv(WORKING_DIRECTORY_ENV));
 		if (fromEnv != null) {
 			return fromEnv.getAbsoluteFile();
 		}
-		final File fromLegacyEnv = directoryFromPath(System.getenv(DATA_ROOT_ENV));
+		final File fromLegacyEnv = usableDirectoryFromPath(System.getenv(DATA_ROOT_ENV));
 		if (fromLegacyEnv != null) {
 			return fromLegacyEnv.getAbsoluteFile();
 		}
@@ -440,14 +495,14 @@ public final class MindMapDataRootResolver {
 	 */
 	private static File configureWorkingDirectoryInteractively() {
 		if (configuringInteractively) {
-			final File fallback = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME).getAbsoluteFile();
+			final File fallback = defaultSuggestedWorkingDirectory();
 			ensureDirectory(fallback);
 			return fallback;
 		}
 		configuringInteractively = true;
 		try {
-			final File suggested = new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME).getAbsoluteFile();
-			LogUtils.info("No " + WORKING_DIRECTORY_FILE_NAME + " — prompting for working directory");
+			final File suggested = defaultSuggestedWorkingDirectory();
+			LogUtils.info("No usable " + WORKING_DIRECTORY_FILE_NAME + " — prompting for working directory");
 			final File chosen = WorkingDirectoryChooser.choose(suggested);
 			if (chosen == null) {
 				LogUtils.warn("Working directory selection cancelled — exiting");
@@ -473,6 +528,14 @@ public final class MindMapDataRootResolver {
 		finally {
 			configuringInteractively = false;
 		}
+	}
+
+	/** Prefer a user-owned folder on macOS; under the install root elsewhere. */
+	private static File defaultSuggestedWorkingDirectory() {
+		if (Compat.isMacOsX()) {
+			return new File(System.getProperty("user.home", "."), "Docear").getAbsoluteFile();
+		}
+		return new File(getApplicationRoot(), DEFAULT_WORKING_DIR_NAME).getAbsoluteFile();
 	}
 
 	private static void runEmptyDirectorySeeder(final File workingDirectory) {
@@ -537,10 +600,21 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static File readWorkingDirectoryFile() {
-		final File marker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
-		if (!marker.isFile()) {
-			return null;
+		final File[] markers = workingDirectoryMarkerCandidates();
+		for (int i = 0; i < markers.length; i++) {
+			final File marker = markers[i];
+			if (marker == null || !marker.isFile()) {
+				continue;
+			}
+			final File parsed = parseWorkingDirectoryMarker(marker);
+			if (parsed != null) {
+				return parsed;
+			}
 		}
+		return null;
+	}
+
+	private static File parseWorkingDirectoryMarker(final File marker) {
 		BufferedReader reader = null;
 		try {
 			reader = new BufferedReader(new InputStreamReader(new FileInputStream(marker), "UTF-8"));
@@ -552,6 +626,11 @@ public final class MindMapDataRootResolver {
 					line = line.substring(1).trim();
 				}
 				if (line.length() == 0 || line.startsWith("#")) {
+					continue;
+				}
+				if (!isUsableWorkingDirectoryPath(line)) {
+					LogUtils.warn("Ignoring unusable working directory in " + marker.getAbsolutePath()
+					        + ": " + line + " (not valid on this OS — please choose a local folder)");
 					continue;
 				}
 				File dir = new File(line);
@@ -570,31 +649,110 @@ public final class MindMapDataRootResolver {
 		return null;
 	}
 
+	/**
+	 * Preferred marker next to the install root; on macOS / Linux also
+	 * {@code ~/Library/Application Support/Docear/working-directory.txt}
+	 * (or {@code ~/.config/Docear/}) when the .app bundle is not writable.
+	 */
+	private static File[] workingDirectoryMarkerCandidates() {
+		final File appMarker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		final File supportMarker = getUserSupportWorkingDirectoryMarker();
+		if (supportMarker == null) {
+			return new File[] { appMarker };
+		}
+		return new File[] { appMarker, supportMarker };
+	}
+
+	private static File getUserSupportWorkingDirectoryMarker() {
+		if (Compat.isWindowsOS()) {
+			return null;
+		}
+		final File home = new File(System.getProperty("user.home", "."));
+		if (Compat.isMacOsX()) {
+			return new File(new File(new File(home, "Library"), "Application Support"),
+			        "Docear" + File.separator + WORKING_DIRECTORY_FILE_NAME);
+		}
+		final String xdg = System.getenv("XDG_CONFIG_HOME");
+		final File configHome = (xdg != null && xdg.trim().length() > 0) ? new File(xdg.trim())
+		        : new File(home, ".config");
+		return new File(new File(configHome, "Docear"), WORKING_DIRECTORY_FILE_NAME);
+	}
+
 	private static void writeWorkingDirectoryFile(final File workingDirectory) {
-		final File marker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		final File appRoot = getApplicationRoot();
+		String value = workingDirectory.getAbsolutePath();
+		try {
+			final String appPath = appRoot.getCanonicalPath();
+			final String workPath = workingDirectory.getCanonicalPath();
+			if (workPath.equals(appPath + File.separator + DEFAULT_WORKING_DIR_NAME)
+			        || workPath.equals(new File(appRoot, DEFAULT_WORKING_DIR_NAME).getCanonicalPath())) {
+				value = DEFAULT_WORKING_DIR_NAME;
+			}
+		}
+		catch (final Exception e) {
+			// keep absolute
+		}
+		final File preferred = resolveWritableWorkingDirectoryMarker();
+		if (writeWorkingDirectoryMarker(preferred, value)) {
+			return;
+		}
+		final File support = getUserSupportWorkingDirectoryMarker();
+		if (support != null && !support.equals(preferred) && writeWorkingDirectoryMarker(support, value)) {
+			LogUtils.info("Working directory saved to user support path: " + support.getAbsolutePath());
+			return;
+		}
+		LogUtils.warn("Could not persist working directory path");
+	}
+
+	private static File resolveWritableWorkingDirectoryMarker() {
+		final File appMarker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		if (canWriteMarker(appMarker)) {
+			return appMarker;
+		}
+		final File support = getUserSupportWorkingDirectoryMarker();
+		if (support != null) {
+			return support;
+		}
+		return appMarker;
+	}
+
+	private static boolean canWriteMarker(final File marker) {
+		if (marker == null) {
+			return false;
+		}
+		final File parent = marker.getParentFile();
+		if (parent == null) {
+			return false;
+		}
+		if (marker.isFile() && marker.canWrite()) {
+			return true;
+		}
+		if (parent.isDirectory()) {
+			return parent.canWrite();
+		}
+		// Parent may not exist yet (user support dir) — treat as writable if we can create it later.
+		return !Compat.isWindowsOS();
+	}
+
+	private static boolean writeWorkingDirectoryMarker(final File marker, final String value) {
+		if (marker == null) {
+			return false;
+		}
 		BufferedWriter writer = null;
 		try {
-			final File appRoot = getApplicationRoot();
-			String value = workingDirectory.getAbsolutePath();
-			try {
-				final String appPath = appRoot.getCanonicalPath();
-				final String workPath = workingDirectory.getCanonicalPath();
-				if (workPath.equals(appPath + File.separator + DEFAULT_WORKING_DIR_NAME)
-				        || workPath.equals(new File(appRoot, DEFAULT_WORKING_DIR_NAME).getCanonicalPath())) {
-					value = DEFAULT_WORKING_DIR_NAME;
-				}
-			}
-			catch (final Exception e) {
-				// keep absolute
-			}
+			ensureDirectory(marker.getParentFile());
 			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(marker), "UTF-8"));
 			writer.write("# Docear working directory (mind maps). Config lives in <this>/data/");
 			writer.newLine();
+			writer.write("# Use a path valid on this OS. On macOS choose via Docear Settings.");
+			writer.newLine();
 			writer.write(value);
 			writer.newLine();
+			return true;
 		}
 		catch (final Exception e) {
 			LogUtils.warn("Could not write " + marker.getAbsolutePath() + ": " + e.getMessage());
+			return false;
 		}
 		finally {
 			FileUtils.silentlyClose(writer);
@@ -675,6 +833,16 @@ public final class MindMapDataRootResolver {
 			return null;
 		}
 		return new File(path.trim());
+	}
+
+	private static File usableDirectoryFromPath(final String path) {
+		if (!isUsableWorkingDirectoryPath(path)) {
+			if (path != null && path.trim().length() > 0) {
+				LogUtils.warn("Ignoring unusable working directory override: " + path.trim());
+			}
+			return null;
+		}
+		return directoryFromPath(path);
 	}
 
 	private static void addCanonicalRoot(final Set roots, final File root) {

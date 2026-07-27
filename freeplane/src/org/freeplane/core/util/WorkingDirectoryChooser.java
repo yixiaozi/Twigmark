@@ -12,7 +12,6 @@ import java.io.File;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JDialog;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -21,7 +20,7 @@ import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 
 /**
- * First-launch chooser when {@code working-directory.txt} is missing.
+ * First-launch chooser when {@code working-directory.txt} is missing or unusable on this OS.
  * Shown before preferences load; keeps UI bilingual and dependency-free.
  */
 final class WorkingDirectoryChooser {
@@ -51,7 +50,7 @@ final class WorkingDirectoryChooser {
 	}
 
 	private static File showDialog(final File suggestedDirectory) {
-		final JDialog dialog = new JDialog((Window) null, "Docear — 选择工作目录 / Choose working directory");
+		final JDialog dialog = new JDialog((Window) null, "Docear — 选择主目录 / Choose home directory");
 		dialog.setModal(true);
 		dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
 
@@ -59,10 +58,12 @@ final class WorkingDirectoryChooser {
 		root.setBorder(BorderFactory.createEmptyBorder(16, 18, 12, 18));
 		final JLabel hint = new JLabel(
 		        "<html><body style='width:420px'>"
-		                + "请选择存放思维导图的工作目录。<br>"
-		                + "若目录为空，将复制默认示例文件；若已有文件则全部保留、不会删除。<br><br>"
-		                + "Choose a folder for your mind maps.<br>"
-		                + "If empty, default sample files are copied; existing files are never deleted."
+		                + "请选择存放思维导图的主目录（工作目录）。<br>"
+		                + "若目录为空，将复制默认示例文件；若已有文件则全部保留、不会删除。<br>"
+		                + "路径会保存在软件中，之后可在「Docear 设置」里修改。<br><br>"
+		                + "Choose a home folder for your mind maps.<br>"
+		                + "If empty, default sample files are copied; existing files are never deleted.<br>"
+		                + "The path is saved and can be changed later in Docear Settings."
 		                + "</body></html>");
 		hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 13f));
 		root.add(hint, BorderLayout.NORTH);
@@ -76,21 +77,18 @@ final class WorkingDirectoryChooser {
 		final JButton browse = new JButton("浏览… / Browse…");
 		browse.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
-				final JFileChooser chooser = new JFileChooser();
-				chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
-				chooser.setDialogTitle("工作目录 / Working directory");
+				File start = null;
 				final String current = field.getText();
-				if (current != null && current.trim().length() > 0) {
-					final File start = new File(current.trim());
-					chooser.setCurrentDirectory(start.isDirectory() ? start
-					        : (start.getParentFile() != null ? start.getParentFile() : suggestedDirectory));
+				if (current != null && current.trim().length() > 0
+				        && MindMapDataRootResolver.isUsableWorkingDirectoryPath(current.trim())) {
+					start = new File(current.trim());
 				}
 				else if (suggestedDirectory != null) {
-					chooser.setCurrentDirectory(suggestedDirectory.getParentFile() != null
-					        ? suggestedDirectory.getParentFile() : suggestedDirectory);
+					start = suggestedDirectory;
 				}
-				if (chooser.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION) {
-					field.setText(chooser.getSelectedFile().getAbsolutePath());
+				final File chosen = DirectoryPicker.choose(dialog, "主目录 / Home directory", start, true);
+				if (chosen != null) {
+					field.setText(chosen.getAbsolutePath());
 				}
 			}
 		});
@@ -113,6 +111,13 @@ final class WorkingDirectoryChooser {
 				final String text = field.getText() == null ? "" : field.getText().trim();
 				if (text.length() == 0) {
 					JOptionPane.showMessageDialog(dialog, "请选择一个目录。\nPlease choose a directory.",
+					        dialog.getTitle(), JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+				if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(text)) {
+					JOptionPane.showMessageDialog(dialog,
+					        "请选择本机有效路径（macOS/Linux 不要使用 E:\\… 这类 Windows 路径）。\n"
+					                + "Please choose a path valid on this OS (not a Windows drive like E:\\…).",
 					        dialog.getTitle(), JOptionPane.WARNING_MESSAGE);
 					return;
 				}

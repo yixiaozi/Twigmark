@@ -14,7 +14,6 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JDialog;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -344,6 +343,11 @@ public final class ProductSettingsDialog extends JDialog {
 			        getTitle(), JOptionPane.WARNING_MESSAGE);
 			return false;
 		}
+		if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(working)) {
+			JOptionPane.showMessageDialog(this, TextUtils.getText("ProductSettingsAction.working_dir_invalid_os"),
+			        getTitle(), JOptionPane.WARNING_MESSAGE);
+			return false;
+		}
 		final File workingDir = new File(working);
 		final File previous = MindMapDataRootResolver.getWorkingDirectory();
 		final boolean workingChanged = !samePath(previous, workingDir);
@@ -398,22 +402,31 @@ public final class ProductSettingsDialog extends JDialog {
 		final JButton button = DocearUiTheme.softButton(TextUtils.getText("browse"));
 		button.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				final JFileChooser chooser = new JFileChooser();
-				chooser.setFileSelectionMode(directoriesOnly ? JFileChooser.DIRECTORIES_ONLY
-				        : JFileChooser.FILES_ONLY);
+				File start = null;
 				final String current = field.getText();
 				if (current != null && current.trim().length() > 0) {
-					final File start = new File(current.trim());
-					chooser.setCurrentDirectory(start.isDirectory() ? start : start.getParentFile());
-					if (start.exists()) {
-						chooser.setSelectedFile(start);
+					final File candidate = new File(current.trim());
+					if (directoriesOnly && !MindMapDataRootResolver.isUsableWorkingDirectoryPath(current.trim())) {
+						start = null;
+					}
+					else {
+						start = candidate;
 					}
 				}
-				else {
-					chooser.setCurrentDirectory(MindMapDataRootResolver.getWorkingDirectory());
+				if (start == null) {
+					try {
+						start = MindMapDataRootResolver.getWorkingDirectory();
+					}
+					catch (Exception ignored) {
+						start = new File(System.getProperty("user.home", "."));
+					}
 				}
-				if (chooser.showOpenDialog(ProductSettingsDialog.this) == JFileChooser.APPROVE_OPTION) {
-					field.setText(chooser.getSelectedFile().getAbsolutePath());
+				final String title = directoriesOnly ? TextUtils.getText("ProductSettingsAction.working_dir")
+				        : TextUtils.getText("browse");
+				final File selected = org.freeplane.core.util.DirectoryPicker.choose(ProductSettingsDialog.this,
+				        title, start, directoriesOnly);
+				if (selected != null) {
+					field.setText(selected.getAbsolutePath());
 				}
 			}
 		});

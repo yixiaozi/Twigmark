@@ -48,6 +48,7 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
@@ -507,7 +508,74 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		catch (final IOException e) {
 			// ignore
 		}
+		final File remapped = remapForeignOsPathUnderWorkingDirectory(path);
+		if (remapped != null) {
+			return remapped;
+		}
 		return findByFileName(new File(path).getName());
+	}
+
+	/**
+	 * Windows history entries like {@code E:\yixiaozi\a\b.mm} or
+	 * {@code D:\Dropbox\yixiaozi\a\b.mm} are not files on macOS/Linux. Map them
+	 * onto the current working directory when the relative suffix matches.
+	 */
+	private static File remapForeignOsPathUnderWorkingDirectory(final String path) {
+		if (path == null || path.length() == 0) {
+			return null;
+		}
+		if (!Compat.isWindowsOS() && !MindMapDataRootResolver.looksLikeWindowsAbsolutePath(path)) {
+			return null;
+		}
+		if (Compat.isWindowsOS() && MindMapDataRootResolver.looksLikeUnixAbsolutePath(path)) {
+			// keep going — may still remap onto working dir name
+		}
+		File workingDirectory;
+		try {
+			workingDirectory = MindMapDataRootResolver.getWorkingDirectory();
+		}
+		catch (final Exception e) {
+			return null;
+		}
+		if (workingDirectory == null) {
+			return null;
+		}
+		final String workName = workingDirectory.getName();
+		if (workName == null || workName.length() == 0) {
+			return null;
+		}
+		final String normalized = path.replace('\\', '/');
+		final String marker = "/" + workName + "/";
+		final String lower = normalized.toLowerCase();
+		final String markerLower = marker.toLowerCase();
+		int idx = lower.indexOf(markerLower);
+		if (idx < 0) {
+			final String endMarker = "/" + workName;
+			if (lower.endsWith(endMarker.toLowerCase()) || lower.equals(workName.toLowerCase())) {
+				return workingDirectory.isDirectory() ? workingDirectory : null;
+			}
+			return null;
+		}
+		final String relative = normalized.substring(idx + marker.length());
+		if (relative.length() == 0) {
+			return workingDirectory.isDirectory() ? workingDirectory : null;
+		}
+		final File remapped = new File(workingDirectory, relative);
+		if (remapped.isFile()) {
+			LogUtils.info("Remapped foreign-OS map path to working directory: " + path + " -> "
+			        + remapped.getAbsolutePath());
+			return remapped;
+		}
+		try {
+			final File canonical = remapped.getCanonicalFile();
+			if (canonical.isFile()) {
+				return canonical;
+			}
+		}
+		catch (final IOException e) {
+			// ignore
+		}
+		return null;
 	}
 
 	private static File findByFileName(final String fileName) {

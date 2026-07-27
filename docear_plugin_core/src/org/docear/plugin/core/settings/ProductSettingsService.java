@@ -39,6 +39,10 @@ public final class ProductSettingsService {
 				if (newValue == null || newValue.trim().length() == 0) {
 					return;
 				}
+				if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(newValue)) {
+					LogUtils.warn("Ignoring unusable working directory from preferences: " + newValue);
+					return;
+				}
 				final File dir = new File(newValue.trim());
 				final File current = MindMapDataRootResolver.getWorkingDirectory();
 				try {

@@ -56,11 +56,22 @@ public class PathProperty extends PropertyBean implements IPropertyControl {
 	private class SelectFileAction implements ActionListener {
 		public void actionPerformed(final ActionEvent e) {
 			final Object source = e.getSource();
-			if (source == selectButton) {
-				final JFileChooser chooser = createFileChooser();
-				int result = chooser.showOpenDialog(chooser);
-				if (result == JFileChooser.APPROVE_OPTION)
-					setValue(chooser.getSelectedFile().getAbsolutePath());
+			if (source != selectButton) {
+				return;
+			}
+			final File start = path != null && path.length() > 0 ? new File(path) : null;
+			if (isDir) {
+				final File selected = org.freeplane.core.util.DirectoryPicker.choose(selectButton,
+				        TextUtils.getText("browse"), start, true);
+				if (selected != null) {
+					setValue(selected.getAbsolutePath());
+				}
+				return;
+			}
+			final JFileChooser chooser = createFileChooser();
+			final int result = chooser.showOpenDialog(chooser);
+			if (result == JFileChooser.APPROVE_OPTION) {
+				setValue(chooser.getSelectedFile().getAbsolutePath());
 			}
 		}
 	}
