@@ -110,12 +110,13 @@ final class PomodoroWindow extends JFrame {
 		setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
 		setResizable(false);
 		leftScroll = new JScrollPane(historyList);
-		pulseTimer = new Timer(50, new ActionListener() {
+		pulseTimer = new Timer(250, new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				if (!wasRunning) {
 					return;
 				}
-				pulsePhase += 0.05;
+				// ~same visual period as the old 50ms / +0.05 step.
+				pulsePhase += 0.25;
 				final Color c = pulseClockColor(pulsePhase);
 				clockLabel.setForeground(c);
 				collapsedClock.setForeground(c);

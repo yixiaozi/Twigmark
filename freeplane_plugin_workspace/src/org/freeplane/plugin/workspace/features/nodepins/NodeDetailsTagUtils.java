@@ -53,8 +53,27 @@ public final class NodeDetailsTagUtils {
 		if (nodeText.indexOf(BRACKET_OPEN) >= 0) {
 			return true;
 		}
-		final String lower = nodeText.toLowerCase();
-		return lower.indexOf(BRACKET_OPEN_HEX_ENTITY) >= 0 || lower.indexOf(BRACKET_OPEN_DEC_ENTITY) >= 0;
+		// Most nodes have no '&' entities — avoid scanning / allocating a lowercased copy.
+		if (nodeText.indexOf('&') < 0) {
+			return false;
+		}
+		return containsIgnoreCase(nodeText, BRACKET_OPEN_HEX_ENTITY)
+		        || containsIgnoreCase(nodeText, BRACKET_OPEN_DEC_ENTITY);
+	}
+
+	/** ASCII-oriented search without allocating {@code toLowerCase()} of large HTML bodies. */
+	private static boolean containsIgnoreCase(final String haystack, final String needle) {
+		if (haystack == null || needle == null || needle.length() == 0) {
+			return false;
+		}
+		final int n = needle.length();
+		final int limit = haystack.length() - n;
+		for (int i = 0; i <= limit; i++) {
+			if (haystack.regionMatches(true, i, needle, 0, n)) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static String fixMixedEncoding(String text) {

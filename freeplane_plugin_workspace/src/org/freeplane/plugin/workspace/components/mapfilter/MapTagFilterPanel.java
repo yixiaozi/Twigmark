@@ -121,6 +121,7 @@ public class MapTagFilterPanel extends JPanel {
 	private boolean userSized;
 	private boolean positionDirty;
 	private boolean homeRequested;
+	private Dimension lastHostedSize;
 
 	private Point dragStartOnScreen;
 	private Point dragStartLocation;
@@ -643,13 +644,19 @@ public class MapTagFilterPanel extends JPanel {
 		final MapModel map = currentMap();
 		tagCounts = MapTagFilterService.collectMapTagCounts(map);
 		availableTags = new ArrayList(tagCounts.keySet());
-		refreshSelectionState();
-		rebuildChips();
-		rebuildViewNodes();
-		updateChipScrollSize();
+		if (expanded) {
+			refreshSelectionState();
+			rebuildChips();
+			rebuildViewNodes();
+			updateChipScrollSize();
+		}
+		else {
+			// Collapsed pill only needs counts / active badge — skip chip + node-list rebuild.
+			refreshCollapsed();
+		}
 		revalidate();
 		repaint();
-		fireLayoutChanged();
+		fireLayoutChangedIfSizeChanged();
 	}
 
 	/**
@@ -1019,6 +1026,7 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private void fireLayoutChanged() {
+		lastHostedSize = new Dimension(getPreferredSize());
 		if (layoutListener != null) {
 			layoutListener.onPanelLayoutChanged();
 		}
@@ -1026,6 +1034,16 @@ public class MapTagFilterPanel extends JPanel {
 		if (parent != null) {
 			parent.repaint();
 		}
+	}
+
+	private void fireLayoutChangedIfSizeChanged() {
+		final Dimension next = getPreferredSize();
+		if (lastHostedSize != null && lastHostedSize.width == next.width && lastHostedSize.height == next.height
+		        && !positionDirty && !homeRequested) {
+			repaint();
+			return;
+		}
+		fireLayoutChanged();
 	}
 
 	private MapModel currentMap() {

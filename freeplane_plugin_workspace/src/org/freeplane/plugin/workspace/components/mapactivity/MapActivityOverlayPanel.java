@@ -131,6 +131,10 @@ public class MapActivityOverlayPanel extends JPanel {
 	private boolean sectionReminderOpen = true;
 	private boolean sectionTodoOpen = true;
 	private boolean sectionPomodoroOpen = true;
+	/** Last preferred size we asked the overlay host to apply — avoid layered-pane repaint spam. */
+	private Dimension lastHostedSize;
+	private static final String LIVE_META_PROP = "docear.livePomodoroMeta";
+	private static final String LIVE_NODE_PROP = "docear.livePomodoroNode";
 
 	public MapActivityOverlayPanel() {
 		setOpaque(false);
@@ -238,7 +242,50 @@ public class MapActivityOverlayPanel extends JPanel {
 		if (!expanded) {
 			applyCurrentSize();
 		}
-		fireLayoutChanged();
+		fireLayoutChangedIfSizeChanged();
+	}
+
+	/**
+	 * 1s tick while a pomodoro is running: update live meta labels only.
+	 * Collapsed pill does not show elapsed time, so it is a no-op.
+	 */
+	public void refreshLiveClock() {
+		if (!expanded || snapshot == null || !snapshot.hasRunningPomodoro()) {
+			return;
+		}
+		updateLiveMetaLabels(sectionsHost);
+	}
+
+	private void updateLiveMetaLabels(final java.awt.Container host) {
+		if (host == null) {
+			return;
+		}
+		final Component[] comps = host.getComponents();
+		for (int i = 0; i < comps.length; i++) {
+			final Component c = comps[i];
+			if (c instanceof JLabel) {
+				final JLabel label = (JLabel) c;
+				if (!Boolean.TRUE.equals(label.getClientProperty(LIVE_META_PROP))) {
+					continue;
+				}
+				final Object nodeObj = label.getClientProperty(LIVE_NODE_PROP);
+				if (!(nodeObj instanceof NodeModel)) {
+					continue;
+				}
+				final String meta = MapActivityCollector.formatLivePomodoroMeta((NodeModel) nodeObj, pomodoroRange);
+				if (meta == null || meta.length() == 0) {
+					continue;
+				}
+				final String html = "<html><body style='width:" + (META_W - 8) + "px'>" + escapeHtml(meta)
+				        + "</body></html>";
+				if (!html.equals(label.getText())) {
+					label.setText(html);
+				}
+			}
+			else if (c instanceof java.awt.Container) {
+				updateLiveMetaLabels((java.awt.Container) c);
+			}
+		}
 	}
 
 	public void setExpanded(final boolean value) {
@@ -728,6 +775,10 @@ public class MapActivityOverlayPanel extends JPanel {
 			meta.setFont(DocearUiTheme.font(11f));
 			meta.setForeground(item.overdue ? DANGER : (item.live ? WARN : DocearUiTheme.TEXT_MUTED));
 			meta.setPreferredSize(new Dimension(META_W, ROW_H));
+			if (item.live && item.kind == MapActivityItem.Kind.POMODORO) {
+				meta.putClientProperty(LIVE_META_PROP, Boolean.TRUE);
+				meta.putClientProperty(LIVE_NODE_PROP, item.node);
+			}
 			row.add(meta, BorderLayout.WEST);
 		}
 
@@ -916,6 +967,7 @@ public class MapActivityOverlayPanel extends JPanel {
 	}
 
 	private void fireLayoutChanged() {
+		lastHostedSize = new Dimension(getPreferredSize());
 		if (layoutListener != null) {
 			layoutListener.onPanelLayoutChanged();
 		}
@@ -923,6 +975,17 @@ public class MapActivityOverlayPanel extends JPanel {
 		if (parent != null) {
 			parent.repaint();
 		}
+	}
+
+	/** Skip host reposition/repaint when preferred size did not change (common on data refresh). */
+	private void fireLayoutChangedIfSizeChanged() {
+		final Dimension next = getPreferredSize();
+		if (lastHostedSize != null && lastHostedSize.width == next.width && lastHostedSize.height == next.height
+		        && !positionDirty && !homeRequested) {
+			repaint();
+			return;
+		}
+		fireLayoutChanged();
 	}
 
 	public Dimension getPreferredSize() {
