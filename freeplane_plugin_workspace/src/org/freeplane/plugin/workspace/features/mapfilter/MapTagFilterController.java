@@ -1,8 +1,11 @@
 package org.freeplane.plugin.workspace.features.mapfilter;
 
 import java.awt.Component;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 
 import org.freeplane.features.map.IMapLifeCycleListener;
 import org.freeplane.features.map.INodeChangeListener;
@@ -19,9 +22,14 @@ import org.freeplane.plugin.workspace.components.mapfilter.MapTagFilterPanel;
  */
 public final class MapTagFilterController {
 
+	private static final int REFRESH_DEBOUNCE_MS = 280;
+
 	private static MapTagFilterController instance;
 	private MapTagFilterPanel panel;
 	private boolean applying;
+	private Timer debounceTimer;
+	private MapModel pendingRefreshMap;
+	private boolean pendingApplyFilter;
 
 	private MapTagFilterController() {
 	}
@@ -82,18 +90,7 @@ public final class MapTagFilterController {
 				if (!isCurrentMap(map)) {
 					return;
 				}
-				SwingUtilities.invokeLater(new Runnable() {
-					public void run() {
-						if (applying) {
-							return;
-						}
-						final TagFilterMapExtension extension = TagFilterMapExtension.get(map);
-						if (extension != null && extension.hasActiveFilter()) {
-							applyMapFilter(map);
-						}
-						refreshUi();
-					}
-				});
+				scheduleNodeTextRefresh(map);
 			}
 		});
 		Controller.getCurrentController().getMapViewManager().addMapViewChangeListener(new IMapViewChangeListener() {
@@ -115,6 +112,51 @@ public final class MapTagFilterController {
 			public void beforeViewChange(final Component oldView, final Component newView) {
 			}
 		});
+	}
+
+	/**
+	 * Coalesce rapid typing into one tag scan / filter apply — the hot edit path.
+	 */
+	private void scheduleNodeTextRefresh(final MapModel map) {
+		if (!SwingUtilities.isEventDispatchThread()) {
+			SwingUtilities.invokeLater(new Runnable() {
+				public void run() {
+					scheduleNodeTextRefresh(map);
+				}
+			});
+			return;
+		}
+		pendingRefreshMap = map;
+		final TagFilterMapExtension extension = TagFilterMapExtension.get(map);
+		if (extension != null && extension.hasActiveFilter()) {
+			pendingApplyFilter = true;
+		}
+		if (debounceTimer == null) {
+			debounceTimer = new Timer(REFRESH_DEBOUNCE_MS, new ActionListener() {
+				public void actionPerformed(final ActionEvent e) {
+					flushPendingNodeTextRefresh();
+				}
+			});
+			debounceTimer.setRepeats(false);
+		}
+		debounceTimer.restart();
+	}
+
+	private void flushPendingNodeTextRefresh() {
+		if (applying) {
+			return;
+		}
+		final MapModel map = pendingRefreshMap;
+		final boolean applyFilter = pendingApplyFilter;
+		pendingRefreshMap = null;
+		pendingApplyFilter = false;
+		if (map == null || !isCurrentMap(map)) {
+			return;
+		}
+		if (applyFilter) {
+			applyMapFilter(map);
+		}
+		refreshUi();
 	}
 
 	public void applyCurrentMapFilter() {

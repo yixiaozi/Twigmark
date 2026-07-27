@@ -186,9 +186,12 @@ public final class MapActivityOverlayController {
 		}
 		if (needTick) {
 			if (liveTickTimer == null) {
+				// Light tick: update running clock text only — never re-walk the whole map every second.
 				liveTickTimer = new Timer(1000, new ActionListener() {
 					public void actionPerformed(final ActionEvent e) {
-						refreshUi();
+						if (panel != null) {
+							panel.refreshLiveClock();
+						}
 						ensureLiveTick();
 					}
 				});

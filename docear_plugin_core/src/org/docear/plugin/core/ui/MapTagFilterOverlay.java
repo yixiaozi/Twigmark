@@ -244,17 +244,17 @@ public class MapTagFilterOverlay implements MapTagFilterPanel.LayoutListener, Ma
 
 			final Rectangle bounds = new Rectangle(x, y, width, height);
 			final Rectangle old = panel.getBounds();
-			// Always apply when forceSize, or when size shrank (collapse), or position changed.
 			final boolean sizeChanged = old.width != width || old.height != height;
-			if (forceSize || sizeChanged || old.x != x || old.y != y) {
+			final boolean posChanged = old.x != x || old.y != y;
+			if (sizeChanged || posChanged) {
 				panel.setBounds(bounds);
+				panel.revalidate();
+				layeredPane.repaint(bounds.union(old));
 			}
 			lastLocation = new Point(x, y);
 			if (!panel.isVisible()) {
 				panel.setVisible(true);
 			}
-			panel.revalidate();
-			layeredPane.repaint();
 		}
 		catch (final Exception e) {
 			// Component may not be displayable yet during startup.

@@ -159,26 +159,52 @@ public final class MapActivityCollector {
 				continue;
 			}
 			final String state = ext.getState();
-			final long[] window = bestTimeWindow(ext, now, since, live);
 			final long displayMs = range == PomodoroRange.ALL ? ext.liveTotalMs(now) : rangeFocus;
-			String meta = formatTimeWindow(window[0], window[1], now);
-			if (meta.length() == 0) {
-				meta = PomodoroFormatter.formatDuration(displayMs);
-			}
-			else {
-				meta = meta + " · " + PomodoroFormatter.formatDuration(displayMs);
-			}
-			if (live || PomodoroExtension.STATE_RUNNING.equals(state)) {
-				meta = "进行中 " + meta;
-			}
-			else if (PomodoroExtension.STATE_PAUSED.equals(state)) {
-				meta = "暂停 " + meta;
-			}
+			final String meta = formatPomodoroMeta(ext, now, since, live, range, rangeFocus);
 			final long sort = live ? 0L : (PomodoroExtension.STATE_PAUSED.equals(state) ? 1L : (Long.MAX_VALUE - displayMs));
 			result.add(new MapActivityItem(MapActivityItem.Kind.POMODORO, node, title, meta, live, false, sort));
 		}
 		Collections.sort(result, BY_SORT_KEY_ASC);
 		return result;
+	}
+
+	/**
+	 * Format live/paused pomodoro meta without walking the map — used by the 1s overlay clock tick.
+	 */
+	public static String formatLivePomodoroMeta(final NodeModel node, final PomodoroRange range) {
+		if (node == null) {
+			return "";
+		}
+		final PomodoroExtension ext = PomodoroAttributes.read(node);
+		if (ext == null || !ext.isEnabled()) {
+			return "";
+		}
+		final long now = System.currentTimeMillis();
+		final PomodoroRange effective = range != null ? range : PomodoroRange.TODAY;
+		final long since = effective.sinceMs(now);
+		final long rangeFocus = focusInRange(ext, now, since);
+		return formatPomodoroMeta(ext, now, since, true, effective, rangeFocus);
+	}
+
+	private static String formatPomodoroMeta(final PomodoroExtension ext, final long now, final long since,
+	        final boolean live, final PomodoroRange range, final long rangeFocus) {
+		final String state = ext.getState();
+		final long[] window = bestTimeWindow(ext, now, since, live);
+		final long displayMs = range == PomodoroRange.ALL ? ext.liveTotalMs(now) : rangeFocus;
+		String meta = formatTimeWindow(window[0], window[1], now);
+		if (meta.length() == 0) {
+			meta = PomodoroFormatter.formatDuration(displayMs);
+		}
+		else {
+			meta = meta + " · " + PomodoroFormatter.formatDuration(displayMs);
+		}
+		if (live || PomodoroExtension.STATE_RUNNING.equals(state)) {
+			meta = "进行中 " + meta;
+		}
+		else if (PomodoroExtension.STATE_PAUSED.equals(state)) {
+			meta = "暂停 " + meta;
+		}
+		return meta;
 	}
 
 	private static long[] bestTimeWindow(final PomodoroExtension ext, final long now, final long since,
