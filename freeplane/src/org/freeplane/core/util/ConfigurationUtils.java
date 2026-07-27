@@ -15,6 +15,19 @@ public class ConfigurationUtils {
     public static List<String> decodeListValue(final String value, boolean requireTwo) {
         if (value.length() == 0)
             return Collections.emptyList();
+		// Cross-OS: Windows persists lists with ";;", macOS/Linux with "::".
+		// Prefer the separator that actually appears so a library copied from the
+		// other OS still restores recent maps.
+		if (requireTwo) {
+			final boolean hasWindowsSep = value.indexOf(";;") >= 0;
+			final boolean hasUnixSep = value.indexOf("::") >= 0;
+			if (hasWindowsSep && !hasUnixSep) {
+				return Arrays.asList(value.split("\\s*;;\\s*"));
+			}
+			if (hasUnixSep && !hasWindowsSep) {
+				return Arrays.asList(value.split("\\s*::\\s*"));
+			}
+		}
         final String sep = requireTwo ? CONFIG_LIST_VALUE_SEPARATOR_STRICT : CONFIG_LIST_VALUE_SEPARATOR_ONE_OR_MORE;
         return Arrays.asList(value.split("\\s*" + sep + "\\s*"));
     }

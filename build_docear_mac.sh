@@ -125,11 +125,28 @@ echo "Using JAVACMD=$JAVACMD"
 cd "$JAVA_DIR" || show_error "找不到应用资源目录：$JAVA_DIR"
 FREEDIR="$(pwd)"
 
-# 仅设置 Dock 名称；不使用 -Xdock:icon（Java 8 会触发 Uncaught error fetching image NPE）
-# 应用图标由 Info.plist 的 CFBundleIconFile (docear.icns) 提供
+# Dock：名称 + PNG 图标。直接 exec java 时进程是 JVM，Info.plist 的 .icns
+# 不会进 Dock；-Xdock:icon 必须用 PNG（.icns 在 Java 8 上会 NPE）。
+DOCK_ICON=""
+for candidate in \
+    "${CONTENTS_DIR}/Resources/Java/docear.png" \
+    "${FREEDIR}/docear.png" \
+    "${CONTENTS_DIR}/Resources/docear.png"
+do
+    if [ -f "$candidate" ]; then
+        DOCK_ICON="$candidate"
+        break
+    fi
+done
 JAVA_ARGS=(
     -Xmx1024m
     -Xdock:name=Docear
+)
+if [ -n "$DOCK_ICON" ]; then
+    JAVA_ARGS+=("-Xdock:icon=${DOCK_ICON}")
+    echo "Using Dock icon: $DOCK_ICON"
+fi
+JAVA_ARGS+=(
     -Dapple.laf.useScreenMenuBar=true
     -Dcom.apple.macos.useScreenMenuBar=true
     -Dsun.java2d.opengl=false

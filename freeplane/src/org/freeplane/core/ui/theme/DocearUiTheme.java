@@ -341,13 +341,24 @@ public final class DocearUiTheme {
 	}
 
 	public static Font font(final float size, final int style) {
-		final String[] prefer = new String[] { "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
-				"Noto Sans CJK SC", "Source Han Sans SC", "Segoe UI", "SansSerif" };
+		final String os = System.getProperty("os.name", "").toLowerCase();
+		final String[] prefer;
+		if (os.indexOf("mac") >= 0) {
+			// Microsoft YaHei (often from Office) canDisplay CJK but drops Latin glyphs
+			// (o/r/s/…) under Java 8 on macOS — prefer system CJK fonts first.
+			prefer = new String[] { "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Helvetica Neue",
+					"Lucida Grande", "SansSerif" };
+		}
+		else if (os.indexOf("win") >= 0) {
+			prefer = new String[] { "Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI", "SansSerif" };
+		}
+		else {
+			prefer = new String[] { "Noto Sans CJK SC", "Source Han Sans SC", "SansSerif" };
+		}
 		for (int i = 0; i < prefer.length; i++) {
 			try {
 				final Font font = new Font(prefer[i], style, Math.round(size));
-				// canDisplay may trigger macOS font manager stderr noise; keep probing quiet.
-				if (font.canDisplay('导') && font.canDisplay('图')) {
+				if (isUsableUiFont(font)) {
 					return font.deriveFont(style, size);
 				}
 			}
@@ -355,6 +366,24 @@ public final class DocearUiTheme {
 			}
 		}
 		return new Font("SansSerif", style, Math.round(size));
+	}
+
+	/** CJK + Latin sample must both render; YaHei-on-Mac often fails the Latin half. */
+	private static boolean isUsableUiFont(final Font font) {
+		if (font == null) {
+			return false;
+		}
+		if (!font.canDisplay('导') || !font.canDisplay('图')) {
+			return false;
+		}
+		final String latin = "Docear Users/folder maps";
+		for (int i = 0; i < latin.length(); i++) {
+			final char c = latin.charAt(i);
+			if (c >= 'A' && c <= 'z' && !font.canDisplay(c)) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	public static void styleCanvas(final JComponent panel) {

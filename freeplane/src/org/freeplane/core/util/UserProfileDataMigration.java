@@ -5,6 +5,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
 
@@ -29,37 +30,126 @@ public final class UserProfileDataMigration {
 		if (resourceController == null) {
 			return;
 		}
-		if (!needsSessionRestore(resourceController)) {
-			return;
+		if (needsSessionRestore(resourceController)) {
+			final Properties legacy = loadBestLegacyAutoProperties();
+			if (legacy != null) {
+				boolean changed = false;
+				if (isEmptyProperty(resourceController, OPENED_NOW) && !isEmptyProperty(legacy, OPENED_NOW)) {
+					resourceController.setProperty(OPENED_NOW, legacy.getProperty(OPENED_NOW));
+					changed = true;
+				}
+				if (shouldRestoreLastOpened(resourceController, legacy)) {
+					resourceController.setProperty(LAST_OPENED, legacy.getProperty(LAST_OPENED));
+					changed = true;
+				}
+				if (!resourceController.getBooleanProperty(LastOpenedList.LOAD_LAST_MAPS)) {
+					resourceController.setProperty(LastOpenedList.LOAD_LAST_MAPS, "true");
+					changed = true;
+				}
+				if (!resourceController.getBooleanProperty(LastOpenedList.LOAD_LAST_MAP)) {
+					resourceController.setProperty(LastOpenedList.LOAD_LAST_MAP, "true");
+					changed = true;
+				}
+				if (!resourceController.getBooleanProperty("always_load_last_maps")) {
+					resourceController.setProperty("always_load_last_maps", "true");
+					changed = true;
+				}
+				if (changed) {
+					LogUtils.info("UserProfileDataMigration: restored last session map list from legacy profile");
+				}
+			}
 		}
-		final Properties legacy = loadBestLegacyAutoProperties();
-		if (legacy == null) {
+		remapForeignOsRecentMapsIfNeeded(resourceController);
+	}
+
+	/**
+	 * After copying a library from Windows, {@code lastOpened_*} still points at
+	 * {@code E:\yixiaozi\...}. Rewrite entries that exist under the current working directory
+	 * into the scoped recent-map key for this root path.
+	 */
+	public static void remapForeignOsRecentMapsIfNeeded(final ResourceController resourceController) {
+		if (resourceController == null) {
 			return;
 		}
 		boolean changed = false;
-		if (isEmptyProperty(resourceController, OPENED_NOW) && !isEmptyProperty(legacy, OPENED_NOW)) {
-			resourceController.setProperty(OPENED_NOW, legacy.getProperty(OPENED_NOW));
-			changed = true;
-		}
-		if (shouldRestoreLastOpened(resourceController, legacy)) {
-			resourceController.setProperty(LAST_OPENED, legacy.getProperty(LAST_OPENED));
-			changed = true;
-		}
-		if (!resourceController.getBooleanProperty(LastOpenedList.LOAD_LAST_MAPS)) {
-			resourceController.setProperty(LastOpenedList.LOAD_LAST_MAPS, "true");
-			changed = true;
-		}
-		if (!resourceController.getBooleanProperty(LastOpenedList.LOAD_LAST_MAP)) {
-			resourceController.setProperty(LastOpenedList.LOAD_LAST_MAP, "true");
-			changed = true;
-		}
-		if (!resourceController.getBooleanProperty("always_load_last_maps")) {
-			resourceController.setProperty("always_load_last_maps", "true");
-			changed = true;
-		}
+		changed |= remapForeignOsListProperty(resourceController, LAST_OPENED);
+		changed |= remapForeignOsListProperty(resourceController, OPENED_NOW);
 		if (changed) {
-			LogUtils.info("UserProfileDataMigration: restored last session map list from legacy profile");
+			LogUtils.info("UserProfileDataMigration: remapped foreign-OS recent map paths to working directory");
 		}
+	}
+
+	private static boolean remapForeignOsListProperty(final ResourceController resourceController, final String baseKey) {
+		final String scopedKey = WorkingDirectoryMapPaths.propertyKey(baseKey);
+		final String rawScoped = resourceController.getProperty(scopedKey, null);
+		final String rawLegacy = scopedKey.equals(baseKey) ? null : resourceController.getProperty(baseKey, null);
+		final String raw = (rawScoped != null && rawScoped.trim().length() > 0) ? rawScoped : rawLegacy;
+		if (raw == null || raw.trim().length() == 0) {
+			return false;
+		}
+		final List values = ConfigurationUtils.decodeListValue(raw, true);
+		if (values == null || values.isEmpty()) {
+			return false;
+		}
+		boolean changed = false;
+		final List remapped = new ArrayList();
+		final LinkedHashSet seen = new LinkedHashSet();
+		for (int i = 0; i < values.size(); i++) {
+			final String entry = String.valueOf(values.get(i));
+			final String next = remapRestoreableEntry(entry);
+			if (next == null) {
+				changed = true;
+				continue;
+			}
+			if (!next.equals(entry)) {
+				changed = true;
+			}
+			if (seen.add(next)) {
+				remapped.add(next);
+			}
+			else {
+				changed = true;
+			}
+		}
+		if (!changed && scopedKey.equals(baseKey)) {
+			return false;
+		}
+		if (!changed && rawScoped != null && rawScoped.trim().length() > 0) {
+			return false;
+		}
+		resourceController.setProperty(scopedKey, ConfigurationUtils.encodeListValue(remapped, true));
+		return true;
+	}
+
+	/** @return remapped restoreable, same entry, or {@code null} to drop */
+	private static String remapRestoreableEntry(final String restoreable) {
+		if (restoreable == null || restoreable.length() == 0) {
+			return null;
+		}
+		final String lower = restoreable.toLowerCase();
+		if (lower.indexOf("doceardist") >= 0 || lower.indexOf("freeplaneapplications.mm") >= 0
+		        || lower.indexOf("freeplanetutorial.mm") >= 0) {
+			return null;
+		}
+		final File resolved = WorkingDirectoryMapPaths.resolveStoredFile(restoreable);
+		if (resolved != null && resolved.isFile()) {
+			if (!WorkingDirectoryMapPaths.belongsToCurrentWorkingDirectory(resolved.getAbsolutePath())) {
+				return null;
+			}
+			return WorkingDirectoryMapPaths.toMindMapRestoreable(resolved);
+		}
+		final int sep = restoreable.indexOf(':');
+		if (sep <= 0 || sep >= restoreable.length() - 1) {
+			return restoreable;
+		}
+		final String path = restoreable.substring(sep + 1);
+		if (MindMapDataRootResolver.looksLikeWindowsAbsolutePath(path) && !Compat.isWindowsOS()) {
+			return null;
+		}
+		if (MindMapDataRootResolver.looksLikeUnixAbsolutePath(path) && Compat.isWindowsOS()) {
+			return null;
+		}
+		return restoreable;
 	}
 
 	public static File findBestFavoritesBackup(final String projectId) {

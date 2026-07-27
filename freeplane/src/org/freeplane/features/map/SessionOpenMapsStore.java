@@ -13,6 +13,7 @@ import java.util.Properties;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.WorkingDirectoryMapPaths;
 
 /**
  * Crash-safe session of currently open mind maps.
@@ -68,17 +69,17 @@ public final class SessionOpenMapsStore {
 		}
 		ensureLoaded();
 		final List<String> cleaned = cleanList(restoreables);
-		final String last = lastRestoreable != null && lastRestoreable.trim().length() > 0
-				? lastRestoreable.trim() : null;
+		final List<String> stored = toStorageRestoreables(cleaned);
+		final String last = toStorageRestoreable(lastRestoreable);
 
 		boolean dirty = false;
 		final int oldCount = parseCount(properties.getProperty(KEY_OPEN_COUNT));
-		if (oldCount != cleaned.size()) {
+		if (oldCount != stored.size()) {
 			dirty = true;
 		}
 		else {
-			for (int i = 0; i < cleaned.size(); i++) {
-				if (!cleaned.get(i).equals(properties.getProperty(PREFIX_OPEN + i))) {
+			for (int i = 0; i < stored.size(); i++) {
+				if (!stored.get(i).equals(properties.getProperty(PREFIX_OPEN + i))) {
 					dirty = true;
 					break;
 				}
@@ -93,9 +94,9 @@ public final class SessionOpenMapsStore {
 		}
 
 		clearOpenEntries();
-		properties.setProperty(KEY_OPEN_COUNT, Integer.toString(cleaned.size()));
-		for (int i = 0; i < cleaned.size(); i++) {
-			properties.setProperty(PREFIX_OPEN + i, cleaned.get(i));
+		properties.setProperty(KEY_OPEN_COUNT, Integer.toString(stored.size()));
+		for (int i = 0; i < stored.size(); i++) {
+			properties.setProperty(PREFIX_OPEN + i, stored.get(i));
 		}
 		if (last != null) {
 			properties.setProperty(KEY_LAST_MAP, last);
@@ -165,6 +166,33 @@ public final class SessionOpenMapsStore {
 			}
 		}
 		return cleaned;
+	}
+
+	private static List<String> toStorageRestoreables(final List<String> restoreables) {
+		final List<String> stored = new ArrayList<String>();
+		final LinkedHashSet<String> seen = new LinkedHashSet<String>();
+		for (int i = 0; i < restoreables.size(); i++) {
+			final String value = toStorageRestoreable(restoreables.get(i));
+			if (value != null && seen.add(value)) {
+				stored.add(value);
+			}
+		}
+		return stored;
+	}
+
+	private static String toStorageRestoreable(final String restoreable) {
+		if (restoreable == null || restoreable.trim().length() == 0) {
+			return null;
+		}
+		final String trimmed = restoreable.trim();
+		final File resolved = WorkingDirectoryMapPaths.resolveStoredFile(trimmed);
+		if (resolved != null && resolved.isFile()) {
+			final String relative = WorkingDirectoryMapPaths.toMindMapRestoreable(resolved);
+			if (relative != null) {
+				return relative;
+			}
+		}
+		return trimmed;
 	}
 
 	private static int parseCount(final String value) {

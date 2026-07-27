@@ -48,8 +48,8 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.LogUtils;
-import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.core.util.WorkingDirectoryMapPaths;
 import org.freeplane.features.map.IMapChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.MapModel;
@@ -130,6 +130,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		if (file == null) {
 			return null;
 		}
+		if (!PORTABLE_APP || !USER_DRIVE.endsWith(":")) {
+			return WorkingDirectoryMapPaths.toMindMapRestoreable(file);
+		}
 		String absolutePath = file.getAbsolutePath();
 		try {
 			final File canonical = file.getCanonicalFile();
@@ -140,12 +143,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		catch (final IOException e) {
 			// keep absolute path
 		}
-		if (!PORTABLE_APP || !USER_DRIVE.endsWith(":")) {
-			return "MindMap:" + absolutePath;
-		}
 		final String diskName = absolutePath.substring(0, 2);
 		if (!diskName.equals(USER_DRIVE)) {
-			return "MindMap:" + absolutePath;
+			return WorkingDirectoryMapPaths.toMindMapRestoreable(file);
 		}
 		return "MindMap::" + absolutePath.substring(2);
 	}
@@ -311,10 +311,52 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	private void restoreList(final String key, final List<String> list) {
-		final String restored = ResourceController.getResourceController().getProperty(key, null);
+		final ResourceController resourceController = ResourceController.getResourceController();
+		final String scopedKey = WorkingDirectoryMapPaths.propertyKey(key);
+		String restored = resourceController.getProperty(scopedKey, null);
+		if ((restored == null || restored.equals("")) && !scopedKey.equals(key)) {
+			restored = migrateLegacyRecentList(resourceController, key, scopedKey);
+		}
 		if (restored != null && !restored.equals("")) {
 			list.addAll(ConfigurationUtils.decodeListValue(restored, true));
 		}
+	}
+
+	/**
+	 * Copy entries that belong to the current working directory from the legacy
+	 * unscoped {@code lastOpened_*} / {@code openedNow_*} keys into the scoped key.
+	 */
+	private static String migrateLegacyRecentList(final ResourceController resourceController, final String legacyKey,
+	        final String scopedKey) {
+		final String legacy = resourceController.getProperty(legacyKey, null);
+		if (legacy == null || legacy.equals("")) {
+			return null;
+		}
+		final List<String> legacyEntries = ConfigurationUtils.decodeListValue(legacy, true);
+		final List<String> migrated = new LinkedList<String>();
+		final Set<String> seen = new LinkedHashSet<String>();
+		for (int i = 0; i < legacyEntries.size(); i++) {
+			final String entry = legacyEntries.get(i);
+			final File resolved = WorkingDirectoryMapPaths.resolveStoredFile(decodeRestoreable(entry));
+			if (resolved == null || !resolved.isFile()) {
+				continue;
+			}
+			if (!WorkingDirectoryMapPaths.belongsToCurrentWorkingDirectory(entry)
+			        && !WorkingDirectoryMapPaths.belongsToCurrentWorkingDirectory(resolved.getAbsolutePath())) {
+				continue;
+			}
+			final String relative = WorkingDirectoryMapPaths.toMindMapRestoreable(resolved);
+			if (relative != null && seen.add(relative)) {
+				migrated.add(relative);
+			}
+		}
+		if (migrated.isEmpty()) {
+			return null;
+		}
+		final String encoded = ConfigurationUtils.encodeListValue(migrated, true);
+		resourceController.setProperty(scopedKey, encoded);
+		LogUtils.info("Migrated " + migrated.size() + " recent map(s) into " + scopedKey);
+		return encoded;
 	}
 
 	void safeOpen(final List<String> maps) {
@@ -366,7 +408,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			persistOpenedNowNow();
 			SessionOpenMapsStore.getInstance().freeze();
 		}
-		ResourceController.getResourceController().setProperty(LAST_OPENED,
+		ResourceController.getResourceController().setProperty(WorkingDirectoryMapPaths.propertyKey(LAST_OPENED),
 		    ConfigurationUtils.encodeListValue(lastOpenedList, true));
 	}
 
@@ -395,7 +437,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			return;
 		}
 		final String encoded = ConfigurationUtils.encodeListValue(currenlyOpenedList, true);
-		ResourceController.getResourceController().setProperty(OPENED_NOW, encoded);
+		ResourceController.getResourceController().setProperty(WorkingDirectoryMapPaths.propertyKey(OPENED_NOW), encoded);
 
 		String lastRestoreable = null;
 		try {
@@ -495,6 +537,10 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		if (path == null || path.length() == 0) {
 			return null;
 		}
+		final File resolved = WorkingDirectoryMapPaths.resolveStoredFile(path);
+		if (resolved != null && resolved.isFile()) {
+			return resolved;
+		}
 		File file = new File(path);
 		if (file.isFile()) {
 			return file;
@@ -508,74 +554,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		catch (final IOException e) {
 			// ignore
 		}
-		final File remapped = remapForeignOsPathUnderWorkingDirectory(path);
-		if (remapped != null) {
-			return remapped;
-		}
 		return findByFileName(new File(path).getName());
-	}
-
-	/**
-	 * Windows history entries like {@code E:\yixiaozi\a\b.mm} or
-	 * {@code D:\Dropbox\yixiaozi\a\b.mm} are not files on macOS/Linux. Map them
-	 * onto the current working directory when the relative suffix matches.
-	 */
-	private static File remapForeignOsPathUnderWorkingDirectory(final String path) {
-		if (path == null || path.length() == 0) {
-			return null;
-		}
-		if (!Compat.isWindowsOS() && !MindMapDataRootResolver.looksLikeWindowsAbsolutePath(path)) {
-			return null;
-		}
-		if (Compat.isWindowsOS() && MindMapDataRootResolver.looksLikeUnixAbsolutePath(path)) {
-			// keep going — may still remap onto working dir name
-		}
-		File workingDirectory;
-		try {
-			workingDirectory = MindMapDataRootResolver.getWorkingDirectory();
-		}
-		catch (final Exception e) {
-			return null;
-		}
-		if (workingDirectory == null) {
-			return null;
-		}
-		final String workName = workingDirectory.getName();
-		if (workName == null || workName.length() == 0) {
-			return null;
-		}
-		final String normalized = path.replace('\\', '/');
-		final String marker = "/" + workName + "/";
-		final String lower = normalized.toLowerCase();
-		final String markerLower = marker.toLowerCase();
-		int idx = lower.indexOf(markerLower);
-		if (idx < 0) {
-			final String endMarker = "/" + workName;
-			if (lower.endsWith(endMarker.toLowerCase()) || lower.equals(workName.toLowerCase())) {
-				return workingDirectory.isDirectory() ? workingDirectory : null;
-			}
-			return null;
-		}
-		final String relative = normalized.substring(idx + marker.length());
-		if (relative.length() == 0) {
-			return workingDirectory.isDirectory() ? workingDirectory : null;
-		}
-		final File remapped = new File(workingDirectory, relative);
-		if (remapped.isFile()) {
-			LogUtils.info("Remapped foreign-OS map path to working directory: " + path + " -> "
-			        + remapped.getAbsolutePath());
-			return remapped;
-		}
-		try {
-			final File canonical = remapped.getCanonicalFile();
-			if (canonical.isFile()) {
-				return canonical;
-			}
-		}
-		catch (final IOException e) {
-			// ignore
-		}
-		return null;
 	}
 
 	private static File findByFileName(final String fileName) {
@@ -583,7 +562,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			return null;
 		}
 		final ResourceController resourceController = ResourceController.getResourceController();
-		final String lastOpened = resourceController.getProperty(LAST_OPENED, null);
+		final String lastOpened = resourceController.getProperty(WorkingDirectoryMapPaths.propertyKey(LAST_OPENED), null);
 		if (lastOpened == null || lastOpened.length() == 0) {
 			return null;
 		}
