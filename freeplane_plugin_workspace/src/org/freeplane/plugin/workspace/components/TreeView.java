@@ -40,6 +40,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.features.favorites.FavoritesAndTagsStore;
+import org.freeplane.plugin.workspace.features.colors.WorkspaceItemColorStore;
 import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.WorkspaceTransferHandler;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
@@ -113,6 +114,17 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.setCellRenderer(new WorkspaceNodeRenderer());
 		mTree.setCellEditor(new WorkspaceCellEditor(mTree, (DefaultTreeCellRenderer) mTree.getCellRenderer()));
 		FavoritesAndTagsStore.getInstance().addChangeListener(new Runnable() {
+			public void run() {
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						if (mTree != null) {
+							mTree.repaint();
+						}
+					}
+				});
+			}
+		});
+		WorkspaceItemColorStore.getInstance().addChangeListener(new Runnable() {
 			public void run() {
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
@@ -323,16 +335,20 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 	}
 
 	private void restoreExpandedState() {
-		try {
-			TreeModel treeModel = mTree.getModel();
-			Object root = treeModel != null ? treeModel.getRoot() : null;
-			if (root instanceof AWorkspaceTreeNode) {
-				getExpandedStateHandler().setExpandedStates(((AWorkspaceTreeNode) root).getModel(), true);
-			}
-		}
-		catch (Exception e) {
-			LogUtils.warn(e);
-		}
+		getExpandedStateHandler().restoreExpandedStates();
+	}
+
+	public Object getModelRoot() {
+		final TreeModel treeModel = mTree.getModel();
+		return treeModel != null ? treeModel.getRoot() : null;
+	}
+
+	public void beginExpandedStateUpdate() {
+		getExpandedStateHandler().beginStructuralUpdate();
+	}
+
+	public void endExpandedStateUpdate() {
+		getExpandedStateHandler().endStructuralUpdate();
 	}
 
 	private void expandVisiblePaths() {
@@ -737,6 +753,10 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		}
 	}
 
+	public boolean isPathExpanded(final TreePath treePath) {
+		return treePath != null && mTree.isExpanded(treePath);
+	}
+
 	public void collapsePath(TreePath treePath) {
 		mTree.collapsePath(treePath);		
 	}
@@ -747,6 +767,9 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.treeDidChange();
 		if (hasSearchFilter()) {
 			expandVisiblePaths();
+		}
+		else {
+			getExpandedStateHandler().restoreExpandedStatesDeferred();
 		}
 		repaint();
 	}

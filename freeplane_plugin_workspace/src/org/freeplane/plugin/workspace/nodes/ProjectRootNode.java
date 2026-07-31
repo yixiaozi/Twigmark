@@ -132,6 +132,12 @@ public class ProjectRootNode extends AFolderNode implements IMutableLinkNode, IW
 					"workspace.action.node.rename",
 					WorkspaceRemoveProjectAction.KEY,
 					WorkspacePopupMenuBuilder.SEPARATOR,
+					WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+					"workspace.action.node.set.text.color",
+					"workspace.action.node.set.folder.color",
+					"workspace.action.node.reset.color",
+					WorkspacePopupMenuBuilder.endSubMenu(),
+					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"	
 			});
 		}

@@ -19,6 +19,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
@@ -73,6 +74,12 @@ public class LinkTypeFileNode extends ALinkNode implements IWorkspaceNodeActionL
 					ToggleFavoriteAction.KEY,
 					EditFavoriteTagsAction.KEY,
 					MindMapOpenLocationAction.KEY,
+					WorkspacePopupMenuBuilder.SEPARATOR,
+					WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+					"workspace.action.node.set.text.color",
+					"workspace.action.node.set.folder.color",
+					"workspace.action.node.reset.color",
+					WorkspacePopupMenuBuilder.endSubMenu(),
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"
 			});

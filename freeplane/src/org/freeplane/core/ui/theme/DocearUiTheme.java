@@ -136,9 +136,12 @@ public final class DocearUiTheme {
 
 			UIManager.put("PopupMenu.background", SURFACE);
 			UIManager.put("PopupMenu.border", BorderFactory.createCompoundBorder(
-			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(4, 4, 4, 4)));
+			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(3, 2, 3, 4)));
 			UIManager.put("MenuItem.selectionBackground", ACCENT_WASH);
 			UIManager.put("MenuItem.selectionForeground", TEXT);
+			UIManager.put("MenuItem.margin", new Insets(2, 4, 2, 8));
+			UIManager.put("Menu.margin", new Insets(2, 4, 2, 8));
+			UIManager.put("MenuItem.iconTextGap", Integer.valueOf(4));
 			UIManager.put("CheckBoxMenuItem.selectionBackground", ACCENT_WASH);
 			UIManager.put("CheckBoxMenuItem.selectionForeground", TEXT);
 			UIManager.put("RadioButtonMenuItem.selectionBackground", ACCENT_WASH);
@@ -169,6 +172,13 @@ public final class DocearUiTheme {
 			// IMPORTANT: never put ScrollBarUI class name into UIManager — OSGi / system L&F
 			// classloaders often cannot load org.freeplane.* and the first JScrollBar then aborts startup.
 			if (isFlatLafActive()) {
+				// Collapse empty icon columns in popup menus (workspace context menus have almost no icons).
+				UIManager.put("MenuItem.minimumIconSize", new java.awt.Dimension(0, 0));
+				UIManager.put("Menu.minimumIconSize", new java.awt.Dimension(0, 0));
+				UIManager.put("CheckBoxMenuItem.minimumIconSize", new java.awt.Dimension(0, 0));
+				UIManager.put("RadioButtonMenuItem.minimumIconSize", new java.awt.Dimension(0, 0));
+				UIManager.put("MenuItem.iconTextGap", Integer.valueOf(2));
+				UIManager.put("Menu.iconTextGap", Integer.valueOf(2));
 				UIManager.put("TabbedPane.underlineColor", ACCENT);
 				UIManager.put("TabbedPane.focusColor", ACCENT);
 				UIManager.put("TabbedPane.hoverColor", SURFACE_SOFT);

@@ -8,6 +8,7 @@ import javax.swing.JTree;
 
 import org.freeplane.plugin.workspace.WorkspaceController;
 import org.freeplane.plugin.workspace.components.IWorkspaceView;
+import org.freeplane.plugin.workspace.components.TreeView;
 import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenu;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
 
@@ -21,30 +22,42 @@ public class NodeRefreshAction extends AWorkspaceAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
-		final AWorkspaceTreeNode blankRoot = resolveBlankAreaRoot(e);
-		if (blankRoot != null) {
-			blankRoot.refresh();
+		final IWorkspaceView view = WorkspaceController.getCurrentModeExtension().getView();
+		final TreeView treeView = view instanceof TreeView ? (TreeView) view : null;
+		if (treeView != null) {
+			// Prevent model-reload collapses from wiping remembered expanded folders.
+			treeView.beginExpandedStateUpdate();
 		}
-		else {
-			final AWorkspaceTreeNode[] targetNodes = getSelectedNodes(e);
-			if (targetNodes == null || targetNodes.length == 0) {
-				final AWorkspaceTreeNode root = WorkspaceController.getCurrentModel().getRoot();
-				if (root != null) {
-					root.refresh();
-				}
+		try {
+			final AWorkspaceTreeNode blankRoot = resolveBlankAreaRoot(e);
+			if (blankRoot != null) {
+				blankRoot.refresh();
 			}
 			else {
-				for (AWorkspaceTreeNode targetNode : targetNodes) {
-					if (targetNode == null) {
-						targetNode = WorkspaceController.getCurrentModel().getRoot();
+				final AWorkspaceTreeNode[] targetNodes = getSelectedNodes(e);
+				if (targetNodes == null || targetNodes.length == 0) {
+					final AWorkspaceTreeNode root = WorkspaceController.getCurrentModel().getRoot();
+					if (root != null) {
+						root.refresh();
 					}
-					if (targetNode != null) {
-						targetNode.refresh();
+				}
+				else {
+					for (AWorkspaceTreeNode targetNode : targetNodes) {
+						if (targetNode == null) {
+							targetNode = WorkspaceController.getCurrentModel().getRoot();
+						}
+						if (targetNode != null) {
+							targetNode.refresh();
+						}
 					}
 				}
 			}
 		}
-		final IWorkspaceView view = WorkspaceController.getCurrentModeExtension().getView();
+		finally {
+			if (treeView != null) {
+				treeView.endExpandedStateUpdate();
+			}
+		}
 		if (view != null) {
 			view.refreshView();
 		}

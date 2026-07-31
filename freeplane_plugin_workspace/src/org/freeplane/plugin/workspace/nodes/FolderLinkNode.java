@@ -102,6 +102,12 @@ public class FolderLinkNode extends AFolderNode implements IWorkspaceNodeActionL
 						WorkspacePopupMenuBuilder.SEPARATOR,
 						"workspace.action.node.physical.sort",
 						WorkspacePopupMenuBuilder.SEPARATOR,
+						WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+						"workspace.action.node.set.text.color",
+						"workspace.action.node.set.folder.color",
+						"workspace.action.node.reset.color",
+						WorkspacePopupMenuBuilder.endSubMenu(),
+						WorkspacePopupMenuBuilder.SEPARATOR,
 						"workspace.action.node.refresh"		
 				});
 			}

@@ -111,11 +111,13 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 	}
 	
 	public void initializePopup() {
-		if (popupMenu == null) {
-					
-			if (popupMenu == null) {			
-				popupMenu = new WorkspacePopupMenu();
-				WorkspacePopupMenuBuilder.addActions(popupMenu, new String[] {
+		if (popupMenu == null || popupMenu.getClientProperty("docear.menuChrome") == null
+		        || !Integer.valueOf(WorkspacePopupMenuBuilder.MENU_CHROME_VERSION).equals(
+		                popupMenu.getClientProperty("docear.menuChrome"))) {
+			popupMenu = new WorkspacePopupMenu();
+			popupMenu.putClientProperty("docear.menuChrome",
+			        Integer.valueOf(WorkspacePopupMenuBuilder.MENU_CHROME_VERSION));
+			WorkspacePopupMenuBuilder.addActions(popupMenu, new String[] {
 						WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.new.label")),
 						"workspace.action.node.new.folder",
 						"workspace.action.file.new.mindmap",
@@ -130,9 +132,14 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 						"workspace.action.node.rename",
 						"workspace.action.file.delete",
 						WorkspacePopupMenuBuilder.SEPARATOR,
+						WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+						"workspace.action.node.set.text.color",
+						"workspace.action.node.set.folder.color",
+						"workspace.action.node.reset.color",
+						WorkspacePopupMenuBuilder.endSubMenu(),
+						WorkspacePopupMenuBuilder.SEPARATOR,
 						"workspace.action.node.refresh"		
 				});
-			}
 		}
 	}
 	

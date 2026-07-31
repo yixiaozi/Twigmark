@@ -13,6 +13,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.IWorspaceClipboardOwner;
+import org.freeplane.plugin.workspace.features.colors.WorkspaceItemColorStore;
 import org.freeplane.plugin.workspace.features.favorites.FavoriteTagsDisplayUtils;
 import org.freeplane.plugin.workspace.io.IFileSystemRepresentation;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
@@ -45,8 +46,19 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 					label.setBorder(BorderFactory.createLineBorder(label.getForeground(), 1));
 				}
 			}
-			label.setText(formatNodeDisplayText(node, sel));
+			final String colorKey = WorkspaceItemColorStore.keyFor(node);
+			final WorkspaceItemColorStore colorStore = WorkspaceItemColorStore.getInstance();
+			final Color textColor = colorStore.getTextColor(colorKey);
+			final Color folderColor = colorStore.getFolderColor(colorKey);
+			label.setText(formatNodeDisplayText(node, sel, textColor));
 			label.setIcon(null);
+			if (folderColor != null && !sel) {
+				label.setOpaque(true);
+				label.setBackground(WorkspaceItemColorStore.washBackground(folderColor));
+			}
+			if (textColor != null && !sel && !usesHtmlColor(label.getText())) {
+				label.setForeground(textColor);
+			}
 			if(isCut(node)) {
 				//WORKSPACE - ToDo: make the item transparent (including the icon?)
 				int alpha = new Double(255 * 0.5).intValue();
@@ -95,20 +107,38 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 		this.highlightQuery = query == null ? "" : query.trim().toLowerCase();
 	}
 
-	private String formatNodeDisplayText(final AWorkspaceTreeNode node, final boolean selected) {
+	private String formatNodeDisplayText(final AWorkspaceTreeNode node, final boolean selected, final Color textColor) {
 		final String name = node.getName() != null ? node.getName() : "";
 		final String tagsSuffix = FavoriteTagsDisplayUtils.formatTagsSuffixHtml(node, selected);
+		final String coloredName = applyTextColor(formatHighlightedText(name), textColor, selected);
 		if (tagsSuffix.length() == 0) {
-			return formatHighlightedText(name);
+			return coloredName;
 		}
-		final String namePart = formatHighlightedText(name);
-		if (namePart.startsWith("<html>")) {
-			final int end = namePart.lastIndexOf("</html>");
+		if (coloredName.startsWith("<html>")) {
+			final int end = coloredName.lastIndexOf("</html>");
 			if (end > 0) {
-				return namePart.substring(0, end) + tagsSuffix + "</html>";
+				return coloredName.substring(0, end) + tagsSuffix + "</html>";
 			}
 		}
 		return "<html>" + escapeHtml(name) + tagsSuffix + "</html>";
+	}
+
+	private String applyTextColor(final String text, final Color textColor, final boolean selected) {
+		if (textColor == null || selected || text == null || text.length() == 0) {
+			return text;
+		}
+		final String hex = WorkspaceItemColorStore.toHex(textColor);
+		if (text.startsWith("<html>")) {
+			final int end = text.lastIndexOf("</html>");
+			if (end > 0) {
+				return "<html><font color='" + hex + "'>" + text.substring(6, end) + "</font></html>";
+			}
+		}
+		return "<html><font color='" + hex + "'>" + escapeHtml(text) + "</font></html>";
+	}
+
+	private boolean usesHtmlColor(final String text) {
+		return text != null && text.indexOf("<font color=") >= 0;
 	}
 
 	private String formatHighlightedText(String original) {

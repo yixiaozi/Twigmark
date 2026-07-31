@@ -52,6 +52,12 @@ public class FolderVirtualNode extends AFolderNode implements IWorkspaceNodeActi
 					"workspace.action.node.rename",
 					"workspace.action.node.remove",
 					WorkspacePopupMenuBuilder.SEPARATOR,
+					WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+					"workspace.action.node.set.text.color",
+					"workspace.action.node.set.folder.color",
+					"workspace.action.node.reset.color",
+					WorkspacePopupMenuBuilder.endSubMenu(),
+					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"		
 			});
 		}

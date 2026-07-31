@@ -97,6 +97,9 @@ import org.freeplane.plugin.workspace.actions.NodePasteAction;
 import org.freeplane.plugin.workspace.actions.NodeRefreshAction;
 import org.freeplane.plugin.workspace.actions.NodeRemoveAction;
 import org.freeplane.plugin.workspace.actions.NodeRenameAction;
+import org.freeplane.plugin.workspace.actions.NodeResetColorsAction;
+import org.freeplane.plugin.workspace.actions.NodeSetFolderColorAction;
+import org.freeplane.plugin.workspace.actions.NodeSetTextColorAction;
 import org.freeplane.plugin.workspace.actions.PhysicalFolderSortOrderAction;
 import org.freeplane.plugin.workspace.actions.ProjectOpenLocationAction;
 import org.freeplane.plugin.workspace.actions.ProjectRenameAction;
@@ -637,6 +640,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		WorkspaceController.addAction(new NodeRenameAction());
 		WorkspaceController.addAction(new NodeRemoveAction());
 		WorkspaceController.addAction(new NodeRefreshAction());
+		WorkspaceController.addAction(new NodeSetTextColorAction());
+		WorkspaceController.addAction(new NodeSetFolderColorAction());
+		WorkspaceController.addAction(new NodeResetColorsAction());
 		WorkspaceController.addAction(new WorkspaceRemoveProjectAction());
 		WorkspaceController.addAction(new ProjectOpenLocationAction());
 		WorkspaceController.addAction(new ProjectRenameAction());
@@ -1650,8 +1656,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			getModel().removeProject(project);
 		}
 		loadFixedDataRootProject();
-		getView().setPaintingEnabled(true);
+		// Restore expansion while painting is still off so collapse events cannot
+		// erase paths loaded from workspace-expanded.properties.
 		getView().refreshView();
+		getView().setPaintingEnabled(true);
 		if (getModel().getRoot() != null) {
 			getView().expandPath(getModel().getRoot().getTreePath());
 		}

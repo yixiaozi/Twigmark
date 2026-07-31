@@ -17,6 +17,7 @@ import javax.swing.tree.DefaultTreeCellRenderer;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mapio.MapIO;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.plugin.workspace.actions.EditFavoriteTagsAction;
@@ -206,8 +207,12 @@ public class DefaultFileNode extends AWorkspaceTreeNode implements IWorkspaceNod
 	}
 
 	public void initializePopup() {
-		if (popupMenu == null) {			
+		if (popupMenu == null || popupMenu.getClientProperty("docear.menuChrome") == null
+		        || !Integer.valueOf(WorkspacePopupMenuBuilder.MENU_CHROME_VERSION).equals(
+		                popupMenu.getClientProperty("docear.menuChrome"))) {
 			popupMenu = new WorkspacePopupMenu();
+			popupMenu.putClientProperty("docear.menuChrome",
+			        Integer.valueOf(WorkspacePopupMenuBuilder.MENU_CHROME_VERSION));
 			WorkspacePopupMenuBuilder.addActions(popupMenu, new String[] {
 					"workspace.action.node.cut",
 					"workspace.action.node.copy",
@@ -219,6 +224,12 @@ public class DefaultFileNode extends AWorkspaceTreeNode implements IWorkspaceNod
 					ToggleFavoriteAction.KEY,
 					EditFavoriteTagsAction.KEY,
 					MindMapOpenLocationAction.KEY,
+					WorkspacePopupMenuBuilder.SEPARATOR,
+					WorkspacePopupMenuBuilder.createSubMenu(TextUtils.getRawText("workspace.action.node.color.label")),
+					"workspace.action.node.set.text.color",
+					"workspace.action.node.set.folder.color",
+					"workspace.action.node.reset.color",
+					WorkspacePopupMenuBuilder.endSubMenu(),
 					WorkspacePopupMenuBuilder.SEPARATOR,
 					"workspace.action.node.refresh"
 			});
