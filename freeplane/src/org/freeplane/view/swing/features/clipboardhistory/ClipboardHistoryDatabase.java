@@ -253,6 +253,9 @@ final class ClipboardHistoryDatabase {
 
 	private void pruneIfNeeded(final Connection connection) throws SQLException {
 		final int max = ClipboardHistoryConfig.getMaxRows();
+		if (max <= 0) {
+			return;
+		}
 		Statement countStatement = null;
 		PreparedStatement delete = null;
 		ResultSet rs = null;

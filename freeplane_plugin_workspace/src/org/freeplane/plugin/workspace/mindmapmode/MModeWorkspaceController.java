@@ -154,6 +154,7 @@ import org.freeplane.view.swing.features.git.GitTabPanel;
 import org.freeplane.view.swing.features.finance.FinanceTabPanel;
 import org.freeplane.view.swing.features.reports.ReportsTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.EnhancedAllFlagsTabPanel;
+import org.freeplane.view.swing.features.time.mindmapmode.RemindersSideTabPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.ActivityAnalysisPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.AllFileSearchPanel;
 import org.freeplane.view.swing.features.time.mindmapmode.GlobalSearchTabPanel;
@@ -173,16 +174,17 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 	private static final String TAB_REPORTS = "reports";
 	private static final String TAB_FINANCE = "finance";
 	private static final String TAB_CLIPBOARD = "clipboard";
+	private static final String TAB_REMINDERS = "reminders";
 	private static final String TAB_GRAPH = "relationship_graph";
 	private static final String TAB_NEXT_ACTIONS = "next_actions";
 	private static final int SIDE_TAB_PRELOAD_DELAY_MS = 5000;
 	private static final int SIDE_TAB_PRELOAD_STAGGER_MS = 800;
 	private static final String[] BACKGROUND_PRELOAD_TAB_IDS = {
-			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT, TAB_NEXT_ACTIONS
+			TAB_SEARCH, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_ACTIVITY, TAB_GIT, TAB_REMINDERS, TAB_NEXT_ACTIONS
 	};
 	private static final String[] DEFAULT_SIDE_TAB_ORDER = {
 			TAB_WORKSPACE, TAB_FAVORITES, TAB_FILE_SEARCH, TAB_ALL_FILE_SEARCH, TAB_SEARCH, TAB_ACTIVITY, TAB_GRAPH,
-			TAB_GIT, TAB_REPORTS, TAB_FINANCE, TAB_CLIPBOARD, TAB_NEXT_ACTIONS
+			TAB_GIT, TAB_REPORTS, TAB_FINANCE, TAB_CLIPBOARD, TAB_REMINDERS, TAB_NEXT_ACTIONS
 	};
 
 	abstract class ResizerEventAdapter implements ResizerListener, ComponentCollapseListener {
@@ -749,6 +751,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		normalizeReportsTabOrder();
 		normalizeFinanceTabOrder();
 		normalizeClipboardTabOrder();
+		normalizeRemindersTabOrder();
 		normalizeNextActionsTabOrder();
 	}
 
@@ -878,9 +881,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		saveSideTabOrder();
 	}
 
-	/** Keep「红旗」immediately to the right of 剪贴板 (else 财务 / 报表 / Git). */
-	private void normalizeNextActionsTabOrder() {
-		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+	/** Keep「提醒」immediately to the right of 剪贴板 (else 财务 / 报表 / Git). */
+	private void normalizeRemindersTabOrder() {
+		if (!sideTabOrder.contains(TAB_REMINDERS)) {
 			return;
 		}
 		final int clipboardIndex = sideTabOrder.indexOf(TAB_CLIPBOARD);
@@ -889,6 +892,46 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
 		final int anchorIndex = clipboardIndex >= 0 ? clipboardIndex
 		        : (financeIndex >= 0 ? financeIndex : (reportsIndex >= 0 ? reportsIndex : gitIndex));
+		final int currentIndex = sideTabOrder.indexOf(TAB_REMINDERS);
+		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
+			return;
+		}
+		if (anchorIndex < 0 && currentIndex == sideTabOrder.size() - 1) {
+			return;
+		}
+		sideTabOrder.remove(TAB_REMINDERS);
+		if (anchorIndex >= 0) {
+			int refreshedAnchor = sideTabOrder.indexOf(TAB_CLIPBOARD);
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
+			}
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_REPORTS);
+			}
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_GIT);
+			}
+			sideTabOrder.add(refreshedAnchor + 1, TAB_REMINDERS);
+		}
+		else {
+			sideTabOrder.add(TAB_REMINDERS);
+		}
+		saveSideTabOrder();
+	}
+
+	/** Keep「红旗」immediately to the right of 提醒 (else 剪贴板 / 财务 / 报表 / Git). */
+	private void normalizeNextActionsTabOrder() {
+		if (!sideTabOrder.contains(TAB_NEXT_ACTIONS)) {
+			return;
+		}
+		final int remindersIndex = sideTabOrder.indexOf(TAB_REMINDERS);
+		final int clipboardIndex = sideTabOrder.indexOf(TAB_CLIPBOARD);
+		final int financeIndex = sideTabOrder.indexOf(TAB_FINANCE);
+		final int reportsIndex = sideTabOrder.indexOf(TAB_REPORTS);
+		final int gitIndex = sideTabOrder.indexOf(TAB_GIT);
+		final int anchorIndex = remindersIndex >= 0 ? remindersIndex
+		        : (clipboardIndex >= 0 ? clipboardIndex
+		                : (financeIndex >= 0 ? financeIndex : (reportsIndex >= 0 ? reportsIndex : gitIndex)));
 		final int currentIndex = sideTabOrder.indexOf(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0 && currentIndex == anchorIndex + 1) {
 			return;
@@ -898,7 +941,10 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		sideTabOrder.remove(TAB_NEXT_ACTIONS);
 		if (anchorIndex >= 0) {
-			int refreshedAnchor = sideTabOrder.indexOf(TAB_CLIPBOARD);
+			int refreshedAnchor = sideTabOrder.indexOf(TAB_REMINDERS);
+			if (refreshedAnchor < 0) {
+				refreshedAnchor = sideTabOrder.indexOf(TAB_CLIPBOARD);
+			}
 			if (refreshedAnchor < 0) {
 				refreshedAnchor = sideTabOrder.indexOf(TAB_FINANCE);
 			}
@@ -1154,6 +1200,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		if (TAB_CLIPBOARD.equals(tabId)) {
 			return "\u526a\u8d34\u677f";
 		}
+		if (TAB_REMINDERS.equals(tabId)) {
+			return "\u63d0\u9192";
+		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return "\u7ea2\u65d7";
 		}
@@ -1193,6 +1242,9 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		}
 		if (TAB_CLIPBOARD.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_CLIPBOARD;
+		}
+		if (TAB_REMINDERS.equals(tabId)) {
+			return SideTabMetricKeys.LEFT_REMINDERS;
 		}
 		if (TAB_NEXT_ACTIONS.equals(tabId)) {
 			return SideTabMetricKeys.LEFT_NEXT_ACTIONS;
@@ -1402,6 +1454,22 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 				fallback.setBorder(DocearUiTheme.pageBorder());
 				final JLabel err = DocearUiTheme.mutedLabel(
 				        "<html>剪贴板面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>");
+				err.setForeground(DocearUiTheme.DANGER);
+				fallback.add(err, BorderLayout.CENTER);
+				panel = fallback;
+			}
+		}
+		else if (TAB_REMINDERS.equals(tabId)) {
+			try {
+				panel = new RemindersSideTabPanel();
+			}
+			catch (final Throwable t) {
+				LogUtils.warn("RemindersSideTabPanel failed to load", t);
+				final JPanel fallback = new JPanel(new BorderLayout());
+				DocearUiTheme.styleCanvas(fallback);
+				fallback.setBorder(DocearUiTheme.pageBorder());
+				final JLabel err = DocearUiTheme.mutedLabel(
+				        "<html>提醒面板加载失败<br>" + String.valueOf(t.getMessage()) + "</html>");
 				err.setForeground(DocearUiTheme.DANGER);
 				fallback.add(err, BorderLayout.CENTER);
 				panel = fallback;

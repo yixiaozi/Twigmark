@@ -31,9 +31,10 @@ import org.freeplane.view.swing.map.MapView;
  * reusing {@link TagGroupStore} + {@link TagGroupCascadeBar}.
  * <p>
  * Assignment keys are normalized map file paths persisted in
- * {@code {dataRoot}/_data/map-tab-groups.properties}. Default filter is 「全部」.
- * Activating a map outside the active group expands the filter to 「全部」 so the
- * tab strip never carries “forced” out-of-group tabs (which broke map/view switches).
+ * {@code {dataRoot}/_data/map-tab-groups.properties}. 「全部」remains available
+ * for manual browsing. Activating a map outside the active group switches the
+ * cascade to that map’s <b>first-level</b> group (or 「未分组」), not 「全部」, so
+ * the tab strip stays aligned with the map’s assignment.
  * <p>
  * Active group and per-parent subcategory memory are restored on restart via
  * {@link TagGroupCascadeBar} properties ({@code workspace.maptabs.group.active} etc.).
@@ -80,11 +81,11 @@ public final class MapTabGroupIntegration {
 		});
 		MapViewTabOrder.setTabOutsideFilterHandler(new MapViewTabOrder.TabOutsideFilterHandler() {
 			public boolean revealTab(final Component tabKey) {
-				return expandFilterToAll();
+				return expandFilterToMapGroup(tabKey);
 			}
 
 			public boolean revealAll() {
-				return expandFilterToAll();
+				return expandFilterForCurrentMapOrAll();
 			}
 		});
 		MapViewTabOrder.setTabsChangedListener(new MapViewTabOrder.TabsChangedListener() {
@@ -111,6 +112,53 @@ public final class MapTabGroupIntegration {
 		cascade.rebuild();
 		applyFilter();
 		installed = true;
+	}
+
+	/**
+	 * Empty visible strip fallback: prefer the current map’s first-level group;
+	 * only use 「全部」 when there is no current map to anchor on.
+	 */
+	private static boolean expandFilterForCurrentMapOrAll() {
+		try {
+			final Component current = Controller.getCurrentController().getMapViewManager()
+					.getMapViewComponent();
+			if (current != null) {
+				return expandFilterToMapGroup(current);
+			}
+		}
+		catch (Exception e) {
+		}
+		return expandFilterToAll();
+	}
+
+	/**
+	 * Switch cascade to the map’s top-level group (subtree), or 「未分组」.
+	 * Does not restore remembered subcategories — those could still hide the map.
+	 */
+	private static boolean expandFilterToMapGroup(final Component tabKey) {
+		if (cascade == null) {
+			return false;
+		}
+		// During quit, never rewrite the remembered group.
+		if (org.freeplane.view.swing.map.MapViewController.isClosingAllMaps()) {
+			return isTabVisibleInActiveGroup(tabKey);
+		}
+		final String mapKey = resolveAssignmentKey(tabKey);
+		final String scopeKey = mapKey != null ? mapKey : "";
+		if (!cascade.isAllScope() && cascade.tagMatchesActiveScope(scopeKey)) {
+			return true;
+		}
+		final TagGroupStore store = TagGroupStore.getInstance(STORE_FILE);
+		final String firstLevel = store.getRootAncestorId(store.getTagGroupId(scopeKey));
+		final boolean wasApplying = applyingFilter;
+		applyingFilter = false;
+		try {
+			cascade.selectGroupExact(firstLevel, false);
+		}
+		finally {
+			applyingFilter = wasApplying;
+		}
+		return cascade.tagMatchesActiveScope(scopeKey);
 	}
 
 	private static boolean expandFilterToAll() {

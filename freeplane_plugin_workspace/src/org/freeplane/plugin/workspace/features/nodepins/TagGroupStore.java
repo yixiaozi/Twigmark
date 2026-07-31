@@ -135,6 +135,26 @@ public final class TagGroupStore {
 		}
 	}
 
+	/**
+	 * Walks up to the top-level group (depth 0). Ungrouped / unknown → {@link #UNGROUPED_ID}.
+	 */
+	public String getRootAncestorId(final String groupId) {
+		ensureLoaded();
+		if (groupId == null || UNGROUPED_ID.equals(groupId) || !containsGroup(groupId)) {
+			return UNGROUPED_ID;
+		}
+		String current = groupId;
+		final Set seen = new HashSet();
+		while (current != null && seen.add(current)) {
+			final String parent = getParentId(current);
+			if (parent == null) {
+				return current;
+			}
+			current = parent;
+		}
+		return UNGROUPED_ID;
+	}
+
 	public int getDepth(final String groupId) {
 		ensureLoaded();
 		if (groupId == null || UNGROUPED_ID.equals(groupId)) {

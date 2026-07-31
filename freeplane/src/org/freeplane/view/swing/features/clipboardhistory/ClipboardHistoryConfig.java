@@ -18,15 +18,21 @@ public final class ClipboardHistoryConfig {
 		return getBoolean("enabled", true);
 	}
 
+	/**
+	 * Max unique rows to keep. {@code 0} (default) means unlimited — never prune.
+	 * Positive values still prune oldest by {@code last_ts}.
+	 */
 	public static int getMaxRows() {
-		final int n = getInt("maxRows", 1000);
-		if (n < 50) {
-			return 50;
-		}
-		if (n > 20000) {
-			return 20000;
+		final int n = getInt("maxRows", 0);
+		if (n <= 0) {
+			return 0;
 		}
 		return n;
+	}
+
+	/** {@code true} when history is never pruned by row count. */
+	public static boolean isUnlimitedRows() {
+		return getMaxRows() <= 0;
 	}
 
 	public static int getMaxTextLength() {

@@ -8,6 +8,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.swing.SwingUtilities;
+
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
@@ -235,12 +237,18 @@ public final class ClipboardHistoryService implements Runnable {
 
 	private void notifyChanged() {
 		final Runnable listener = changeListener;
-		if (listener != null) {
-			try {
-				listener.run();
-			}
-			catch (Exception e) {
-			}
+		if (listener == null) {
+			return;
 		}
+		// Always hop to EDT; listeners must stay cheap (debounce / soft-update only).
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					listener.run();
+				}
+				catch (Exception e) {
+				}
+			}
+		});
 	}
 }

@@ -105,7 +105,8 @@ class MapViewTabs implements IMapViewChangeListener {
 
 	/**
 	 * Adjusts the active group when a map outside the current filter must become visible
-	 * (e.g. switch cascade to 「全部」). Return true if the filter was changed to include the tab.
+	 * (e.g. switch cascade to that map’s first-level group). Return true if the filter
+	 * was changed to include the tab.
 	 */
 	interface TabOutsideFilterHandler {
 		boolean revealTab(Component tabKey);

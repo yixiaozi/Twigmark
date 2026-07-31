@@ -469,6 +469,18 @@ public class TagGroupCascadeBar extends JPanel {
 		fireSelectionChanged();
 	}
 
+	/**
+	 * Select a group without restoring the remembered subcategory path.
+	 * Used when revealing a map: jump to its first-level group (whole subtree),
+	 * not a sibling subcategory that would still hide the map.
+	 */
+	public void selectGroupExact(final String groupId, final boolean direct) {
+		applyActiveSelection(groupId, direct);
+		rememberSelectionAlongPath(activeGroupId, directOnly);
+		rebuild();
+		fireSelectionChanged();
+	}
+
 	private void applyActiveSelection(final String groupId, final boolean direct) {
 		if (ALL_SCOPE_ID.equals(groupId)) {
 			activeGroupId = ALL_SCOPE_ID;

@@ -6,6 +6,10 @@ import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.FlavorEvent;
 import java.awt.datatransfer.FlavorListener;
 import java.awt.datatransfer.Transferable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.swing.SwingUtilities;
 import javax.swing.Timer;
@@ -14,18 +18,30 @@ import org.freeplane.core.util.LogUtils;
 
 /**
  * Watches the system clipboard for plain text. Uses FlavorListener when available,
- * with a Timer poll fallback. Never writes to the clipboard (avoids echo loops).
+ * with a Timer poll fallback. Capture always runs off the EDT so large pastes
+ * never stall the UI. Never writes to the clipboard from the monitor path
+ * (avoids echo loops).
  */
 public final class ClipboardHistoryMonitor implements FlavorListener {
 	private static ClipboardHistoryMonitor instance;
 
 	private final ClipboardHistoryService service;
+	private final ExecutorService captureExecutor;
+	private final AtomicBoolean captureQueued = new AtomicBoolean(false);
 	private Timer pollTimer;
 	private volatile boolean ignoringOwnReads;
+	private volatile boolean allowSameOnNextCapture;
 	private String lastSeen = "";
 
 	private ClipboardHistoryMonitor(final ClipboardHistoryService service) {
 		this.service = service;
+		this.captureExecutor = Executors.newSingleThreadExecutor(new ThreadFactory() {
+			public Thread newThread(final Runnable r) {
+				final Thread t = new Thread(r, "docear-clipboard-capture");
+				t.setDaemon(true);
+				return t;
+			}
+		});
 	}
 
 	public static synchronized void start() {
@@ -61,16 +77,12 @@ public final class ClipboardHistoryMonitor implements FlavorListener {
 		pollTimer = new Timer(ClipboardHistoryConfig.getPollMs(), new java.awt.event.ActionListener() {
 			public void actionPerformed(final java.awt.event.ActionEvent e) {
 				// Poll only picks up new text; same content would otherwise spam hits.
-				capture(false);
+				scheduleCapture(false);
 			}
 		});
 		pollTimer.setRepeats(true);
 		pollTimer.start();
-		SwingUtilities.invokeLater(new Runnable() {
-			public void run() {
-				capture(true);
-			}
-		});
+		scheduleCapture(true);
 		LogUtils.info("Clipboard history monitor started");
 	}
 
@@ -84,14 +96,27 @@ public final class ClipboardHistoryMonitor implements FlavorListener {
 		}
 		catch (Throwable t) {
 		}
+		captureExecutor.shutdownNow();
 	}
 
 	public void flavorsChanged(final FlavorEvent e) {
-		// Debounce onto EDT; FlavorListener can fire off-EDT.
-		// Same text re-copied should still bump last_ts / hit_count.
-		SwingUtilities.invokeLater(new Runnable() {
+		// Off-EDT: FlavorListener may fire on any thread; never read clipboard on EDT.
+		scheduleCapture(true);
+	}
+
+	private void scheduleCapture(final boolean allowSameContent) {
+		if (allowSameContent) {
+			allowSameOnNextCapture = true;
+		}
+		if (!captureQueued.compareAndSet(false, true)) {
+			return;
+		}
+		captureExecutor.execute(new Runnable() {
 			public void run() {
-				capture(true);
+				captureQueued.set(false);
+				final boolean allowSame = allowSameOnNextCapture;
+				allowSameOnNextCapture = false;
+				capture(allowSame);
 			}
 		});
 	}

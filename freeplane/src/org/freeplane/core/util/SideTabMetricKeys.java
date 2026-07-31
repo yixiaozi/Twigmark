@@ -12,6 +12,7 @@ public final class SideTabMetricKeys {
 	public static final String LEFT_REPORTS = "left.reports";
 	public static final String LEFT_FINANCE = "left.finance";
 	public static final String LEFT_CLIPBOARD = "left.clipboard";
+	public static final String LEFT_REMINDERS = "left.reminders";
 	public static final String LEFT_NEXT_ACTIONS = "left.next_actions";
 
 	public static final String RIGHT_CURRENT_REMINDERS = "right.current_reminders";
