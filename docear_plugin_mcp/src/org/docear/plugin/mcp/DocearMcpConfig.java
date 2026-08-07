@@ -39,6 +39,63 @@ public final class DocearMcpConfig {
 		return getBoolean("readonly", false);
 	}
 
+	public static boolean isAuthEnabled() {
+		return getBoolean("auth.enabled", false);
+	}
+
+	public static String getApiKey() {
+		return getString("auth.apiKey", "");
+	}
+
+	/** True when bind address is not loopback (0.0.0.0, ::, LAN IP, hostname). */
+	public static boolean isPublicBind() {
+		final String host = getHost();
+		if (host == null || host.length() == 0) {
+			return false;
+		}
+		final String h = host.trim().toLowerCase();
+		if ("127.0.0.1".equals(h) || "localhost".equals(h) || "::1".equals(h)) {
+			return false;
+		}
+		return true;
+	}
+
+	public static boolean isWebEnabled() {
+		return getBoolean("web.enabled", true);
+	}
+
+	public static String getWebLlmBaseUrl() {
+		final String url = getString("web.llm.baseUrl", "https://api.openai.com/v1");
+		if (url.endsWith("/")) {
+			return url.substring(0, url.length() - 1);
+		}
+		return url;
+	}
+
+	public static String getWebLlmApiKey() {
+		return getString("web.llm.apiKey", "");
+	}
+
+	public static String getWebLlmModel() {
+		return getString("web.llm.model", "gpt-4o-mini");
+	}
+
+	public static int getWebLlmMaxToolRounds() {
+		final int rounds = getInt("web.llm.maxToolRounds", 8);
+		if (rounds < 1) {
+			return 1;
+		}
+		if (rounds > 24) {
+			return 24;
+		}
+		return rounds;
+	}
+
+	public static boolean isWebLlmConfigured() {
+		final String key = getWebLlmApiKey();
+		return key != null && key.trim().length() > 0;
+	}
+
 	public static boolean isAuditEnabled() {
 		return getBoolean("audit.enabled", true);
 	}
@@ -225,6 +282,32 @@ public final class DocearMcpConfig {
 
 	public static void setReadOnly(final boolean readOnly) {
 		setProperty("readonly", readOnly ? "true" : "false");
+	}
+
+	public static void setAuthEnabled(final boolean enabled) {
+		setProperty("auth.enabled", enabled ? "true" : "false");
+	}
+
+	public static void setApiKey(final String apiKey) {
+		setProperty("auth.apiKey", apiKey == null ? "" : apiKey.trim());
+	}
+
+	public static void setWebEnabled(final boolean enabled) {
+		setProperty("web.enabled", enabled ? "true" : "false");
+	}
+
+	public static void setWebLlmBaseUrl(final String baseUrl) {
+		setProperty("web.llm.baseUrl",
+				baseUrl == null || baseUrl.trim().length() == 0 ? "https://api.openai.com/v1" : baseUrl.trim());
+	}
+
+	public static void setWebLlmApiKey(final String apiKey) {
+		setProperty("web.llm.apiKey", apiKey == null ? "" : apiKey.trim());
+	}
+
+	public static void setWebLlmModel(final String model) {
+		setProperty("web.llm.model",
+				model == null || model.trim().length() == 0 ? "gpt-4o-mini" : model.trim());
 	}
 
 	public static void setCursorPluginSyncEnabled(final boolean enabled) {

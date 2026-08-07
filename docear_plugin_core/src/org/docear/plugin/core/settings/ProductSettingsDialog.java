@@ -1,6 +1,7 @@
 package org.docear.plugin.core.settings;
 
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Frame;
 import java.awt.GridBagConstraints;
@@ -9,6 +10,7 @@ import java.awt.Insets;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.security.SecureRandom;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -17,6 +19,8 @@ import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextField;
@@ -47,11 +51,18 @@ public final class ProductSettingsDialog extends JDialog {
 	private final JTextField mcpHostField = new JTextField(16);
 	private final JSpinner mcpPortSpinner = new JSpinner(new SpinnerNumberModel(7720, 1, 65535, 1));
 	private final JCheckBox mcpReadOnly = new JCheckBox();
+	private final JCheckBox mcpAuthEnabled = new JCheckBox();
+	private final JPasswordField mcpApiKeyField = new JPasswordField(28);
+	private final JCheckBox mcpWebEnabled = new JCheckBox();
+	private final JTextField mcpLlmBaseUrlField = new JTextField(28);
+	private final JPasswordField mcpLlmApiKeyField = new JPasswordField(28);
+	private final JTextField mcpLlmModelField = new JTextField(20);
 	private final JCheckBox mcpCursorSync = new JCheckBox();
 	private final JCheckBox mcpAuditEnabled = new JCheckBox();
 	private final JLabel mcpStatusBadge = DocearUiTheme.titleLabel(" ");
 	private final JLabel mcpStatusLabel = DocearUiTheme.mutedLabel(" ");
 	private final JLabel mcpAuditLabel = DocearUiTheme.mutedLabel(" ");
+	private final JLabel mcpWebUrlLabel = DocearUiTheme.mutedLabel(" ");
 	private final JTextField gitRepoField = new JTextField(36);
 	private final JTextField financeMapField = new JTextField(36);
 	private final JTextField inboxDirField = new JTextField(36);
@@ -163,23 +174,89 @@ public final class ProductSettingsDialog extends JDialog {
 		final GridBagConstraints c = baseConstraints();
 		mcpEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.enabled"));
 		mcpReadOnly.setText(TextUtils.getText("ProductSettingsAction.mcp.readonly"));
+		mcpAuthEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.auth_enabled"));
+		mcpWebEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.web_enabled"));
 		mcpCursorSync.setText(TextUtils.getText("ProductSettingsAction.mcp.cursor_sync"));
 		mcpAuditEnabled.setText(TextUtils.getText("ProductSettingsAction.mcp.audit_enabled"));
-		addCheck(panel, c, 0, mcpEnabled);
-		addLabel(panel, c, 1, TextUtils.getText("ProductSettingsAction.mcp.host"));
+		int row = 0;
+		addCheck(panel, c, row++, mcpEnabled);
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.host"));
 		c.gridx = 1;
 		c.weightx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		panel.add(mcpHostField, c);
-		addLabel(panel, c, 2, TextUtils.getText("ProductSettingsAction.mcp.port"));
+		row++;
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.port"));
 		c.gridx = 1;
 		panel.add(mcpPortSpinner, c);
-		addCheck(panel, c, 3, mcpReadOnly);
-		addCheck(panel, c, 4, mcpCursorSync);
-		addCheck(panel, c, 5, mcpAuditEnabled);
+		row++;
+		addCheck(panel, c, row++, mcpReadOnly);
+		addCheck(panel, c, row++, mcpAuthEnabled);
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.api_key"));
+		c.gridx = 1;
+		c.weightx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(mcpApiKeyField, c);
+		row++;
+		c.gridx = 1;
+		c.gridy = row;
+		c.fill = GridBagConstraints.NONE;
+		c.weightx = 0;
+		final JPanel keyActions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+		keyActions.setOpaque(false);
+		final JButton generateKey = DocearUiTheme.softButton(TextUtils.getText("ProductSettingsAction.mcp.generate_key"));
+		final JButton bindPublic = DocearUiTheme.softButton(TextUtils.getText("ProductSettingsAction.mcp.bind_public"));
+		generateKey.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				mcpApiKeyField.setText(generateMcpApiKey());
+				mcpAuthEnabled.setSelected(true);
+			}
+		});
+		bindPublic.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				mcpHostField.setText("0.0.0.0");
+				mcpAuthEnabled.setSelected(true);
+				if (passwordValue(mcpApiKeyField).length() == 0) {
+					mcpApiKeyField.setText(generateMcpApiKey());
+				}
+			}
+		});
+		keyActions.add(generateKey);
+		keyActions.add(bindPublic);
+		panel.add(keyActions, c);
+		row++;
+		c.gridx = 0;
+		c.gridy = row;
+		c.gridwidth = 2;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("ProductSettingsAction.mcp.auth_hint")), c);
+		row++;
+		addCheck(panel, c, row++, mcpWebEnabled);
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.llm_base_url"));
+		c.gridx = 1;
+		c.weightx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(mcpLlmBaseUrlField, c);
+		row++;
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.llm_api_key"));
+		c.gridx = 1;
+		panel.add(mcpLlmApiKeyField, c);
+		row++;
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.llm_model"));
+		c.gridx = 1;
+		panel.add(mcpLlmModelField, c);
+		row++;
+		c.gridx = 0;
+		c.gridy = row;
+		c.gridwidth = 2;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(mcpWebUrlLabel, c);
+		row++;
+		addCheck(panel, c, row++, mcpCursorSync);
+		addCheck(panel, c, row++, mcpAuditEnabled);
 
 		c.gridx = 0;
-		c.gridy = 6;
+		c.gridy = row;
 		c.gridwidth = 2;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		final JPanel statusCard = new JPanel(new BorderLayout(6, 4));
@@ -213,6 +290,9 @@ public final class ProductSettingsDialog extends JDialog {
 		});
 		restart.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
+				if (!validateMcpSettings()) {
+					return;
+				}
 				applyMcpRuntimeProperties();
 				final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
 				if (backend != null) {
@@ -239,7 +319,16 @@ public final class ProductSettingsDialog extends JDialog {
 		statusActions.add(openAudit);
 		statusCard.add(statusActions, BorderLayout.SOUTH);
 		panel.add(statusCard, c);
-		return panel;
+
+		final JScrollPane scroll = new JScrollPane(panel);
+		scroll.setBorder(BorderFactory.createEmptyBorder());
+		scroll.setOpaque(false);
+		scroll.getViewport().setOpaque(false);
+		scroll.setPreferredSize(new Dimension(560, 420));
+		final JPanel wrap = new JPanel(new BorderLayout());
+		wrap.setOpaque(false);
+		wrap.add(scroll, BorderLayout.CENTER);
+		return wrap;
 	}
 
 	private JPanel buildGitTab() {
@@ -317,6 +406,12 @@ public final class ProductSettingsDialog extends JDialog {
 			mcpPortSpinner.setValue(Integer.valueOf(7720));
 		}
 		mcpReadOnly.setSelected(isTrue(rc.getProperty("mcp.readonly", "false")));
+		mcpAuthEnabled.setSelected(isTrue(rc.getProperty("mcp.auth.enabled", "false")));
+		mcpApiKeyField.setText(rc.getProperty("mcp.auth.apiKey", ""));
+		mcpWebEnabled.setSelected(isTrue(rc.getProperty("mcp.web.enabled", "true")));
+		mcpLlmBaseUrlField.setText(rc.getProperty("mcp.web.llm.baseUrl", "https://api.openai.com/v1"));
+		mcpLlmApiKeyField.setText(rc.getProperty("mcp.web.llm.apiKey", ""));
+		mcpLlmModelField.setText(rc.getProperty("mcp.web.llm.model", "gpt-4o-mini"));
 		mcpCursorSync.setSelected(isTrue(rc.getProperty("mcp.cursorPlugin.sync.enabled", "true")));
 		mcpAuditEnabled.setSelected(isTrue(rc.getProperty("mcp.audit.enabled", "true")));
 		refreshMcpStatus();
@@ -362,15 +457,10 @@ public final class ProductSettingsDialog extends JDialog {
 			return false;
 		}
 
-		final ResourceController rc = ResourceController.getResourceController();
-		rc.setProperty("mcp.enabled", mcpEnabled.isSelected() ? "true" : "false");
-		final String host = mcpHostField.getText() == null || mcpHostField.getText().trim().length() == 0
-		        ? "127.0.0.1" : mcpHostField.getText().trim();
-		rc.setProperty("mcp.host", host);
-		rc.setProperty("mcp.port", String.valueOf(((Number) mcpPortSpinner.getValue()).intValue()));
-		rc.setProperty("mcp.readonly", mcpReadOnly.isSelected() ? "true" : "false");
-		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
-		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
+		if (!validateMcpSettings()) {
+			return false;
+		}
+		applyMcpRuntimeProperties();
 		final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
 		if (backend != null) {
 			backend.restartServer();
@@ -378,6 +468,7 @@ public final class ProductSettingsDialog extends JDialog {
 
 		GitConfig.setRepositoryPath(gitRepoField.getText());
 
+		final ResourceController rc = ResourceController.getResourceController();
 		rc.setProperty(FinanceLedgerService.PROP_MAP_PATH,
 		        financeMapField.getText() == null ? "" : financeMapField.getText().trim());
 		rc.setProperty(PROP_INBOX_DIRECTORY, inboxDirField.getText() == null ? "" : inboxDirField.getText().trim());
@@ -482,8 +573,34 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty("mcp.host", host);
 		rc.setProperty("mcp.port", String.valueOf(((Number) mcpPortSpinner.getValue()).intValue()));
 		rc.setProperty("mcp.readonly", mcpReadOnly.isSelected() ? "true" : "false");
+		rc.setProperty("mcp.auth.enabled", mcpAuthEnabled.isSelected() ? "true" : "false");
+		rc.setProperty("mcp.auth.apiKey", passwordValue(mcpApiKeyField));
+		rc.setProperty("mcp.web.enabled", mcpWebEnabled.isSelected() ? "true" : "false");
+		final String baseUrl = mcpLlmBaseUrlField.getText() == null || mcpLlmBaseUrlField.getText().trim().length() == 0
+		        ? "https://api.openai.com/v1" : mcpLlmBaseUrlField.getText().trim();
+		rc.setProperty("mcp.web.llm.baseUrl", baseUrl);
+		rc.setProperty("mcp.web.llm.apiKey", passwordValue(mcpLlmApiKeyField));
+		final String model = mcpLlmModelField.getText() == null || mcpLlmModelField.getText().trim().length() == 0
+		        ? "gpt-4o-mini" : mcpLlmModelField.getText().trim();
+		rc.setProperty("mcp.web.llm.model", model);
 		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
+	}
+
+	private boolean validateMcpSettings() {
+		final String host = mcpHostField.getText() == null || mcpHostField.getText().trim().length() == 0
+		        ? "127.0.0.1" : mcpHostField.getText().trim();
+		final boolean publicBind = isPublicMcpHost(host);
+		final String apiKey = passwordValue(mcpApiKeyField);
+		if ((publicBind || mcpAuthEnabled.isSelected()) && apiKey.length() == 0) {
+			JOptionPane.showMessageDialog(this, TextUtils.getText("ProductSettingsAction.mcp.api_key_required"),
+			        getTitle(), JOptionPane.WARNING_MESSAGE);
+			return false;
+		}
+		if (publicBind && !mcpAuthEnabled.isSelected()) {
+			mcpAuthEnabled.setSelected(true);
+		}
+		return true;
 	}
 
 	private void refreshMcpStatus() {
@@ -492,6 +609,8 @@ public final class ProductSettingsDialog extends JDialog {
 		        ? rc.getProperty("mcp.host", "127.0.0.1") : mcpHostField.getText().trim();
 		final String port = String.valueOf(((Number) mcpPortSpinner.getValue()).intValue());
 		mcpStatusLabel.setText(TextUtils.format("ProductSettingsAction.mcp.status", host, port));
+		mcpWebUrlLabel.setText(TextUtils.format("ProductSettingsAction.mcp.web_url",
+		        isPublicMcpHost(host) ? "127.0.0.1" : host, port));
 
 		final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
 		if (backend == null) {
@@ -520,13 +639,47 @@ public final class ProductSettingsDialog extends JDialog {
 		}
 		final String err = backend.getLastError();
 		if (err != null && err.length() > 0) {
-			mcpStatusLabel.setText(mcpStatusLabel.getText() + "  ·  " + err);
+			mcpStatusLabel.setText(mcpStatusLabel.getText() + "  |  " + err);
 		}
 		mcpAuditLabel.setText(TextUtils.format("ProductSettingsAction.mcp.audit_status",
 		        backend.isAuditEnabled() ? TextUtils.getText("ProductSettingsAction.mcp.audit_on")
 		                : TextUtils.getText("ProductSettingsAction.mcp.audit_off"),
 		        Integer.valueOf(backend.getAuditEventCount()), Integer.valueOf(backend.getAuditPendingCount()),
 		        backend.getAuditDbPath()));
+	}
+
+	private static String passwordValue(final JPasswordField field) {
+		if (field == null) {
+			return "";
+		}
+		final char[] chars = field.getPassword();
+		if (chars == null || chars.length == 0) {
+			return "";
+		}
+		return new String(chars).trim();
+	}
+
+	private static boolean isPublicMcpHost(final String host) {
+		if (host == null || host.length() == 0) {
+			return false;
+		}
+		final String h = host.trim().toLowerCase();
+		return !("127.0.0.1".equals(h) || "localhost".equals(h) || "::1".equals(h));
+	}
+
+	private static String generateMcpApiKey() {
+		final SecureRandom random = new SecureRandom();
+		final byte[] bytes = new byte[24];
+		random.nextBytes(bytes);
+		final StringBuilder sb = new StringBuilder("tm_");
+		for (int i = 0; i < bytes.length; i++) {
+			final int v = bytes[i] & 0xff;
+			if (v < 16) {
+				sb.append('0');
+			}
+			sb.append(Integer.toHexString(v));
+		}
+		return sb.toString();
 	}
 
 	private static boolean isTrue(final String value) {

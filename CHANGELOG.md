@@ -4,6 +4,12 @@
 
 ## [1.2.0] — 2026-08-07
 
+### MCP
+
+- API Key 生成与认证（`Authorization: Bearer` / `X-Api-Key`）；公网绑定（非 loopback）强制要求 Key
+- 网页版 `/web/`：浏览器对话，服务端持有大模型 Key，进程内调用 MCP 工具操作导图
+- 产品设置 MCP 页：认证、公网一键绑定、Web LLM（OpenAI 兼容 Base URL / Key / 模型）
+
 ### 国际化
 
 - 主要功能界面（报表/剪切板/日历/财务/Git/番茄/快捷键/导图切换/快速命令/工作区侧栏）硬编码中文改为 EN/zh_CN 资源键

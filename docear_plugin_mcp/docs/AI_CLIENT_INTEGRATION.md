@@ -30,3 +30,7 @@ Docear 启动约 12 秒后，`CursorAiClientSync` 会将 bundled 目录复制到
 ## Copilot CLI
 
 Docear 内置 AI 面板的 Copilot 通过 `docear_plugin_ai` 连接同一 MCP URL；提示词中的 MCP 说明在 `AiPromptBuilder.buildMcpToolInstructions()`，随 AI 插件编译更新。
+
+## API Key / 公网 / 网页版
+
+见 [MCP_AUTH_AND_WEB.md](MCP_AUTH_AND_WEB.md)。启用认证或公网绑定后，客户端需发送 `Authorization: Bearer <mcp-api-key>`。
