@@ -456,6 +456,7 @@ public final class WebchatService {
 		final ShareSettings settings = parseShareSettings(shareOptions, false);
 		if (shareOptions != null && shareOptions.containsKey("expireDays")) {
 			settings.expireDays = intOption(shareOptions, "expireDays", 0);
+			settings.computedExpiresAt = computeExpiresAt(settings.expireDays, System.currentTimeMillis());
 		}
 		else {
 			final long oldExpires = ((Long) share.get("expiresAt")).longValue();
