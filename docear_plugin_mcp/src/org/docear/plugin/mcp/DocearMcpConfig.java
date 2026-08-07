@@ -65,7 +65,7 @@ public final class DocearMcpConfig {
 	}
 
 	public static String getWebLlmBaseUrl() {
-		final String url = getString("web.llm.baseUrl", "https://api.openai.com/v1");
+		final String url = getString("web.llm.baseUrl", "https://openrouter.ai/api/v1");
 		if (url.endsWith("/")) {
 			return url.substring(0, url.length() - 1);
 		}
@@ -77,7 +77,7 @@ public final class DocearMcpConfig {
 	}
 
 	public static String getWebLlmModel() {
-		return getString("web.llm.model", "gpt-4o-mini");
+		return getString("web.llm.model", "openai/gpt-4o-mini");
 	}
 
 	public static int getWebLlmMaxToolRounds() {
@@ -359,7 +359,7 @@ public final class DocearMcpConfig {
 
 	public static void setWebLlmBaseUrl(final String baseUrl) {
 		setProperty("web.llm.baseUrl",
-				baseUrl == null || baseUrl.trim().length() == 0 ? "https://api.openai.com/v1" : baseUrl.trim());
+				baseUrl == null || baseUrl.trim().length() == 0 ? "https://openrouter.ai/api/v1" : baseUrl.trim());
 	}
 
 	public static void setWebLlmApiKey(final String apiKey) {
@@ -368,7 +368,7 @@ public final class DocearMcpConfig {
 
 	public static void setWebLlmModel(final String model) {
 		setProperty("web.llm.model",
-				model == null || model.trim().length() == 0 ? "gpt-4o-mini" : model.trim());
+				model == null || model.trim().length() == 0 ? "openai/gpt-4o-mini" : model.trim());
 	}
 
 	public static void setCursorPluginSyncEnabled(final boolean enabled) {

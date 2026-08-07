@@ -15,6 +15,7 @@ import org.docear.plugin.mcp.DocearMcpConfig;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.webchat.WebchatSystemPrompt;
 import org.freeplane.core.util.LogUtils;
 
 /**
@@ -189,6 +190,11 @@ public final class McpWebAgent {
 			connection.setDoOutput(true);
 			connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
 			connection.setRequestProperty("Authorization", "Bearer " + apiKey);
+			// OpenRouter (OpenAI-compatible) recommends these headers.
+			if (isOpenRouterBase(baseUrl)) {
+				connection.setRequestProperty("HTTP-Referer", "https://yixiaozi.github.io/Twigmark/");
+				connection.setRequestProperty("X-Title", "Twigmark Web");
+			}
 			final byte[] bytes = payload.getBytes(UTF8);
 			connection.setFixedLengthStreamingMode(bytes.length);
 			final OutputStream out = connection.getOutputStream();
@@ -262,10 +268,15 @@ public final class McpWebAgent {
 	}
 
 	private static String systemPrompt() {
-		return "You are Twigmark Web Assistant, helping the user operate local mind maps via MCP tools. "
-				+ "Before writing, call get_selection_context (or search_nodes) to know the active map and node. "
-				+ "Prefer add_nodes for batch writes. Keep answers concise in the user's language. "
-				+ "Never invent node IDs or file paths.";
+		return WebchatSystemPrompt.build();
+	}
+
+	private static boolean isOpenRouterBase(final String baseUrl) {
+		if (baseUrl == null) {
+			return false;
+		}
+		final String u = baseUrl.toLowerCase();
+		return u.indexOf("openrouter.ai") >= 0;
 	}
 
 	private static String readStream(final InputStream stream) throws Exception {

@@ -35,8 +35,12 @@ public final class WebchatApi {
 		map.put("authConfigured", JsonValue.ofBoolean(McpAuth.hasConfiguredApiKey()));
 		map.put("webEnabled", JsonValue.ofBoolean(DocearMcpConfig.isWebEnabled()));
 		map.put("accountRequired", JsonValue.ofBoolean(true));
-		map.put("hasUsers", JsonValue.ofBoolean(WebchatService.anyUserExists()));
+		final boolean hasUsers = WebchatService.anyUserExists();
+		map.put("hasUsers", JsonValue.ofBoolean(hasUsers));
+		map.put("registrationOpen", JsonValue.ofBoolean(!hasUsers));
 		map.put("llmConfigured", JsonValue.ofBoolean(DocearMcpConfig.isWebLlmConfigured()));
+		map.put("openRouterBaseUrl", JsonValue.ofString("https://openrouter.ai/api/v1"));
+		map.put("openRouterDefaultModel", JsonValue.ofString("openai/gpt-4o-mini"));
 		map.put("llmModel", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
 		map.put("publicBind", JsonValue.ofBoolean(DocearMcpConfig.isPublicBind()));
 		map.put("readonly", JsonValue.ofBoolean(DocearMcpConfig.isReadOnly()));

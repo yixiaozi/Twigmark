@@ -409,9 +409,9 @@ public final class ProductSettingsDialog extends JDialog {
 		mcpAuthEnabled.setSelected(isTrue(rc.getProperty("mcp.auth.enabled", "false")));
 		mcpApiKeyField.setText(rc.getProperty("mcp.auth.apiKey", ""));
 		mcpWebEnabled.setSelected(isTrue(rc.getProperty("mcp.web.enabled", "true")));
-		mcpLlmBaseUrlField.setText(rc.getProperty("mcp.web.llm.baseUrl", "https://api.openai.com/v1"));
+		mcpLlmBaseUrlField.setText(rc.getProperty("mcp.web.llm.baseUrl", "https://openrouter.ai/api/v1"));
 		mcpLlmApiKeyField.setText(rc.getProperty("mcp.web.llm.apiKey", ""));
-		mcpLlmModelField.setText(rc.getProperty("mcp.web.llm.model", "gpt-4o-mini"));
+		mcpLlmModelField.setText(rc.getProperty("mcp.web.llm.model", "openai/gpt-4o-mini"));
 		mcpCursorSync.setSelected(isTrue(rc.getProperty("mcp.cursorPlugin.sync.enabled", "true")));
 		mcpAuditEnabled.setSelected(isTrue(rc.getProperty("mcp.audit.enabled", "true")));
 		refreshMcpStatus();
@@ -577,11 +577,11 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty("mcp.auth.apiKey", passwordValue(mcpApiKeyField));
 		rc.setProperty("mcp.web.enabled", mcpWebEnabled.isSelected() ? "true" : "false");
 		final String baseUrl = mcpLlmBaseUrlField.getText() == null || mcpLlmBaseUrlField.getText().trim().length() == 0
-		        ? "https://api.openai.com/v1" : mcpLlmBaseUrlField.getText().trim();
+		        ? "https://openrouter.ai/api/v1" : mcpLlmBaseUrlField.getText().trim();
 		rc.setProperty("mcp.web.llm.baseUrl", baseUrl);
 		rc.setProperty("mcp.web.llm.apiKey", passwordValue(mcpLlmApiKeyField));
 		final String model = mcpLlmModelField.getText() == null || mcpLlmModelField.getText().trim().length() == 0
-		        ? "gpt-4o-mini" : mcpLlmModelField.getText().trim();
+		        ? "openai/gpt-4o-mini" : mcpLlmModelField.getText().trim();
 		rc.setProperty("mcp.web.llm.model", model);
 		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
