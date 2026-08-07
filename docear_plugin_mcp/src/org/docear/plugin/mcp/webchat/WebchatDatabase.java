@@ -21,7 +21,9 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 1;
+	private static final int SCHEMA_VERSION = 2;
+	public static final String SOURCE_WEB = "web";
+	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
 
 	private final File dbFile;
@@ -127,6 +129,21 @@ public final class WebchatDatabase {
 			ps.setString(3, salt);
 			ps.setLong(4, System.currentTimeMillis());
 			ps.setString(5, McpAuditMachineId.getMachineId());
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void deleteUser(final String username) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("DELETE FROM users WHERE username = ?");
+			ps.setString(1, username);
 			ps.executeUpdate();
 		}
 		finally {
@@ -326,12 +343,18 @@ public final class WebchatDatabase {
 
 	public void upsertConversation(final String id, final String username, final String title, final long createdAt,
 			final long updatedAt) throws SQLException {
+		upsertConversation(id, username, title, createdAt, updatedAt, SOURCE_WEB, "");
+	}
+
+	public void upsertConversation(final String id, final String username, final String title, final long createdAt,
+			final long updatedAt, final String source, final String mapKey) throws SQLException {
 		Connection c = null;
 		PreparedStatement ps = null;
 		try {
 			c = openConnection();
 			ps = c.prepareStatement("INSERT OR REPLACE INTO conversations"
-					+ "(id, username, title, created_at, updated_at, machine_id, machine_name) VALUES(?,?,?,?,?,?,?)");
+					+ "(id, username, title, created_at, updated_at, machine_id, machine_name, source, map_key)"
+					+ " VALUES(?,?,?,?,?,?,?,?,?)");
 			ps.setString(1, id);
 			ps.setString(2, username);
 			ps.setString(3, title == null ? "" : title);
@@ -339,10 +362,123 @@ public final class WebchatDatabase {
 			ps.setLong(5, updatedAt);
 			ps.setString(6, McpAuditMachineId.getMachineId());
 			ps.setString(7, McpAuditMachineId.getMachineName());
+			ps.setString(8, source == null || source.length() == 0 ? SOURCE_WEB : source);
+			ps.setString(9, mapKey == null ? "" : mapKey);
 			ps.executeUpdate();
 		}
 		finally {
 			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public Map<String, Object> findConversationByMapKey(final String username, final String mapKey)
+			throws SQLException {
+		if (mapKey == null || mapKey.length() == 0) {
+			return null;
+		}
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT id, username, title, created_at, updated_at, machine_id, machine_name, source, map_key"
+							+ " FROM conversations WHERE username = ? AND source = ? AND map_key = ?"
+							+ " ORDER BY updated_at DESC LIMIT 1");
+			ps.setString(1, username);
+			ps.setString(2, SOURCE_DESKTOP);
+			ps.setString(3, mapKey);
+			rs = ps.executeQuery();
+			if (!rs.next()) {
+				return null;
+			}
+			return readConversation(rs);
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void deleteConversationMessages(final String conversationId) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("DELETE FROM messages WHERE conversation_id = ?");
+			ps.setString(1, conversationId);
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void deleteConversation(final String conversationId) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("DELETE FROM conversations WHERE id = ?");
+			ps.setString(1, conversationId);
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void reassignUsername(final String fromUsername, final String toUsername) throws SQLException {
+		if (fromUsername == null || toUsername == null || fromUsername.equals(toUsername)) {
+			return;
+		}
+		Connection c = null;
+		PreparedStatement ps1 = null;
+		PreparedStatement ps2 = null;
+		PreparedStatement ps3 = null;
+		try {
+			c = openConnection();
+			ps1 = c.prepareStatement("UPDATE llm_profiles SET username = ? WHERE username = ?");
+			ps1.setString(1, toUsername);
+			ps1.setString(2, fromUsername);
+			ps1.executeUpdate();
+			ps2 = c.prepareStatement("UPDATE conversations SET username = ? WHERE username = ?");
+			ps2.setString(1, toUsername);
+			ps2.setString(2, fromUsername);
+			ps2.executeUpdate();
+			ps3 = c.prepareStatement("UPDATE sessions SET username = ? WHERE username = ?");
+			ps3.setString(1, toUsername);
+			ps3.setString(2, fromUsername);
+			ps3.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps1);
+			closeQuietly(ps2);
+			closeQuietly(ps3);
+			closeQuietly(c);
+		}
+	}
+
+	public String findAnyUsername() throws SQLException {
+		Connection c = null;
+		Statement st = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			st = c.createStatement();
+			rs = st.executeQuery("SELECT username FROM users ORDER BY created_at ASC LIMIT 1");
+			if (!rs.next()) {
+				return null;
+			}
+			return rs.getString("username");
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(st);
 			closeQuietly(c);
 		}
 	}
@@ -371,7 +507,8 @@ public final class WebchatDatabase {
 		try {
 			c = openConnection();
 			ps = c.prepareStatement(
-					"SELECT id, username, title, created_at, updated_at, machine_id, machine_name FROM conversations WHERE id = ?");
+					"SELECT id, username, title, created_at, updated_at, machine_id, machine_name, source, map_key"
+							+ " FROM conversations WHERE id = ?");
 			ps.setString(1, id);
 			rs = ps.executeQuery();
 			if (!rs.next()) {
@@ -393,8 +530,8 @@ public final class WebchatDatabase {
 		try {
 			c = openConnection();
 			ps = c.prepareStatement(
-					"SELECT id, username, title, created_at, updated_at, machine_id, machine_name FROM conversations"
-							+ " WHERE username = ? ORDER BY updated_at DESC LIMIT ?");
+					"SELECT id, username, title, created_at, updated_at, machine_id, machine_name, source, map_key"
+							+ " FROM conversations WHERE username = ? ORDER BY updated_at DESC LIMIT ?");
 			ps.setString(1, username);
 			ps.setInt(2, limit < 1 ? 100 : limit);
 			rs = ps.executeQuery();
@@ -479,6 +616,18 @@ public final class WebchatDatabase {
 		row.put("updatedAt", Long.valueOf(rs.getLong("updated_at")));
 		row.put("machineId", nullToEmpty(rs.getString("machine_id")));
 		row.put("machineName", nullToEmpty(rs.getString("machine_name")));
+		try {
+			row.put("source", nullToEmpty(rs.getString("source")));
+		}
+		catch (SQLException e) {
+			row.put("source", SOURCE_WEB);
+		}
+		try {
+			row.put("mapKey", nullToEmpty(rs.getString("map_key")));
+		}
+		catch (SQLException e) {
+			row.put("mapKey", "");
+		}
 		return row;
 	}
 
@@ -523,7 +672,9 @@ public final class WebchatDatabase {
 					+ "created_at INTEGER NOT NULL,"
 					+ "updated_at INTEGER NOT NULL,"
 					+ "machine_id TEXT NOT NULL DEFAULT '',"
-					+ "machine_name TEXT NOT NULL DEFAULT ''"
+					+ "machine_name TEXT NOT NULL DEFAULT '',"
+					+ "source TEXT NOT NULL DEFAULT 'web',"
+					+ "map_key TEXT NOT NULL DEFAULT ''"
 					+ ")");
 			st.execute("CREATE TABLE IF NOT EXISTS messages ("
 					+ "id TEXT PRIMARY KEY,"
@@ -535,9 +686,12 @@ public final class WebchatDatabase {
 					+ "created_at INTEGER NOT NULL,"
 					+ "machine_id TEXT NOT NULL DEFAULT ''"
 					+ ")");
+			ensureColumn(st, "conversations", "source", "TEXT NOT NULL DEFAULT 'web'");
+			ensureColumn(st, "conversations", "map_key", "TEXT NOT NULL DEFAULT ''");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_user ON conversations(username, updated_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_msg_conv ON messages(conversation_id, created_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_profile_user ON llm_profiles(username, is_default)");
+			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_map ON conversations(username, source, map_key)");
 			st.execute("INSERT OR REPLACE INTO webchat_meta(key, value) VALUES('schema_version', '"
 					+ SCHEMA_VERSION + "')");
 		}
@@ -547,6 +701,16 @@ public final class WebchatDatabase {
 		finally {
 			closeQuietly(st);
 			closeQuietly(c);
+		}
+	}
+
+	private static void ensureColumn(final Statement st, final String table, final String column,
+			final String typeDecl) {
+		try {
+			st.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + typeDecl);
+		}
+		catch (Exception ignored) {
+			// Column already exists on upgraded DBs.
 		}
 	}
 

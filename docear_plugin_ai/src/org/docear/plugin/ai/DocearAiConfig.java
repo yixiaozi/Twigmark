@@ -13,8 +13,9 @@ import org.freeplane.core.util.Compat;
 public class DocearAiConfig {
 
     private static final String PROPERTY_AI_ENABLED = "ai.enabled";
-    private static final String PROPERTY_AI_BACKEND = "ai.backend"; // copilot_cli, openai, ollama
+    private static final String PROPERTY_AI_BACKEND = "ai.backend"; // openrouter, copilot_cli, openai
     private static final String PROPERTY_AI_MODEL = "ai.model";
+    private static final String PROPERTY_AI_LLM_PROFILE_ID = "ai.llm.profileId";
     private static final String PROPERTY_AI_TEMPERATURE = "ai.temperature";
     private static final String PROPERTY_AI_PROMPT_TEMPLATE_FILE = "ai.prompt_template_file";
     private static final String PROPERTY_AI_INTERACTION_LOG_DIR = "ai.interaction_log_dir";
@@ -60,11 +61,37 @@ public class DocearAiConfig {
     }
 
     public String getBackendType() {
-        return ResourceController.getResourceController().getProperty(PROPERTY_AI_BACKEND, "copilot_cli");
+        final String configured = ResourceController.getResourceController().getProperty(PROPERTY_AI_BACKEND, "");
+        if (configured != null && configured.trim().length() > 0) {
+            return configured.trim();
+        }
+        // Prefer shared OpenRouter / webchat LLM when available.
+        try {
+            if (org.docear.plugin.core.settings.McpRuntimeFacade.safeIsLlmConfigured()) {
+                return "openrouter";
+            }
+        }
+        catch (Exception ignored) {
+        }
+        return "copilot_cli";
+    }
+
+    public void setBackendType(final String backendType) {
+        ResourceController.getResourceController().setProperty(PROPERTY_AI_BACKEND,
+                backendType == null ? "" : backendType.trim());
     }
 
     public String getModel() {
-        return ResourceController.getResourceController().getProperty(PROPERTY_AI_MODEL, "default");
+        return ResourceController.getResourceController().getProperty(PROPERTY_AI_MODEL, "openai/gpt-4o-mini");
+    }
+
+    public String getLlmProfileId() {
+        return ResourceController.getResourceController().getProperty(PROPERTY_AI_LLM_PROFILE_ID, "");
+    }
+
+    public void setLlmProfileId(final String profileId) {
+        ResourceController.getResourceController().setProperty(PROPERTY_AI_LLM_PROFILE_ID,
+                profileId == null ? "" : profileId.trim());
     }
 
     public double getTemperature() {
@@ -340,5 +367,13 @@ public class DocearAiConfig {
         return ResourceController.getResourceController().getProperty(PROPERTY_AI_MCP_URL, DEFAULT_MCP_URL);
     }
 
-    // TODO: 未来在这里添加 OpenAI API Key、Base URL 等配置读取方法
+    /** True when OpenRouter / OpenAI-compatible shared profile is usable. */
+    public boolean isOpenRouterAvailable() {
+        try {
+            return org.docear.plugin.core.settings.McpRuntimeFacade.safeIsLlmConfigured();
+        }
+        catch (Exception e) {
+            return false;
+        }
+    }
 }

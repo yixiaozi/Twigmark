@@ -10,6 +10,7 @@ import org.docear.plugin.ai.actions.OpenAiPromptTemplateAction;
 import org.docear.plugin.ai.backend.AiBackend;
 import org.docear.plugin.ai.backend.AiChatStreamListener;
 import org.docear.plugin.ai.backend.CopilotCliBackend;
+import org.docear.plugin.ai.backend.OpenAiCompatibleBackend;
 import org.docear.plugin.ai.chat.AiChatHistoryExtensionIO;
 import org.docear.plugin.ai.chat.AiChatMessage;
 import org.docear.plugin.ai.chat.AiChatSession;
@@ -46,7 +47,7 @@ public class DocearAiController {
 
     private static DocearAiController instance;
     private final ModeController modeController;
-    private final AiBackend backend;
+    private AiBackend backend;
     private final AiChatSidebar chatSidebar;
     private final AiPromptBuilder promptBuilder;
     private final AiInteractionLogger interactionLogger;
@@ -90,10 +91,26 @@ public class DocearAiController {
     private AiBackend createBackend() {
         DocearAiConfig config = new DocearAiConfig();
         String backendType = config.getBackendType();
+        if ("openrouter".equalsIgnoreCase(backendType) || "openai".equalsIgnoreCase(backendType)
+                || "openai_compatible".equalsIgnoreCase(backendType)) {
+            return new OpenAiCompatibleBackend();
+        }
         if ("copilot_cli".equalsIgnoreCase(backendType)) {
             return new CopilotCliBackend();
         }
+        if (config.isOpenRouterAvailable()) {
+            return new OpenAiCompatibleBackend();
+        }
         return new CopilotCliBackend();
+    }
+
+    /** Recreate backend after user switches provider / profile in the sidebar. */
+    public void reloadBackend() {
+        this.backend = createBackend();
+    }
+
+    public boolean isOpenRouterBackend() {
+        return backend instanceof OpenAiCompatibleBackend;
     }
 
     public static void install(ModeController modeController) {
@@ -178,9 +195,17 @@ public class DocearAiController {
 
         if (progress != null) {
             final DocearAiConfig aiConfig = new DocearAiConfig();
-            progress.onStep(6, 6, aiConfig.isMcpEnabled()
-                    ? "\u8c03\u7528 Copilot CLI + Docear MCP\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09..."
-                    : "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
+            if (backend instanceof OpenAiCompatibleBackend) {
+                final String model = ((OpenAiCompatibleBackend) backend).getSelectedModelLabel();
+                progress.onStep(6, 6, "\u8c03\u7528 OpenRouter"
+                        + (model.length() > 0 ? (" · " + model) : "")
+                        + "\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
+            }
+            else {
+                progress.onStep(6, 6, aiConfig.isMcpEnabled()
+                        ? "\u8c03\u7528 Copilot CLI + Docear MCP\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09..."
+                        : "\u8c03\u7528 Copilot CLI\uff08\u53ef\u80fd\u9700\u7b49\u51e0\u5341\u79d2\uff09...");
+            }
         }
 
         backend.chatStreaming(prompt, new AiChatStreamListener() {
