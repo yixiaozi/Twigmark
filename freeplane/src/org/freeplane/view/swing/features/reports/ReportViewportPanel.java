@@ -1,7 +1,7 @@
 package org.freeplane.view.swing.features.reports;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
+import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -17,16 +17,22 @@ import javax.swing.JButton;
 import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
+import javax.swing.SwingConstants;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
 
 /**
  * Center viewport: KPI strip + charts + details. Product copy explains decision + data.
+ * Opens immediately with a loading card; data fills in when generation finishes.
  */
 public final class ReportViewportPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
+
+	private static final String CARD_CONTENT = "content";
+	private static final String CARD_LOADING = "loading";
 
 	private final JLabel titleLabel = new JLabel("报表");
 	private final JLabel subtitleLabel = new JLabel(" ");
@@ -38,10 +44,15 @@ public final class ReportViewportPanel extends JPanel {
 	private final JList detailList = new JList(detailModel);
 	private final JButton closeButton = DocearUiTheme.softButton("返回导图");
 	private final JButton writeButton = DocearUiTheme.primaryButton("写入选中节点");
+	private final CardLayout bodyCards = new CardLayout();
+	private final JPanel bodyHost = new JPanel(bodyCards);
+	private final JProgressBar progressBar = new JProgressBar();
+	private final JLabel loadingStatusLabel = new JLabel("正在生成报表…", SwingConstants.CENTER);
 	private ReportViewModel current;
 	private ReportNodeSpec currentTree;
 	private Runnable onClose;
 	private Runnable onWrite;
+	private boolean loading;
 
 	public ReportViewportPanel() {
 		super(new BorderLayout(8, 8));
@@ -76,7 +87,73 @@ public final class ReportViewportPanel extends JPanel {
 		return current;
 	}
 
+	public boolean isLoading() {
+		return loading;
+	}
+
+	/**
+	 * Open the shell immediately (title / decision / data source) while data is still generating.
+	 */
+	public void showLoading(final String title, final String subtitle, final String decision,
+	        final String dataSource) {
+		loading = true;
+		current = null;
+		currentTree = null;
+		titleLabel.setText(title == null || title.length() == 0 ? "报表" : title);
+		subtitleLabel.setText(subtitle == null ? "" : subtitle);
+		decisionLabel.setText(decision == null || decision.length() == 0 ? "" : "作用：" + decision);
+		dataLabel.setText(dataSource == null || dataSource.length() == 0 ? "" : "数据：" + dataSource);
+		kpiHost.removeAll();
+		kpiHost.add(hintLabel("数据加载中…"));
+		detailModel.clear();
+		detailModel.addElement("图表与明细生成完成后会显示在这里");
+		writeButton.setEnabled(false);
+		setLoadProgress("正在打开报表并汇总数据…", -1);
+		bodyCards.show(bodyHost, CARD_LOADING);
+		revalidate();
+		repaint();
+	}
+
+	/**
+	 * @param percent 0–100 for determinate progress; negative keeps/sets indeterminate
+	 */
+	public void setLoadProgress(final String message, final int percent) {
+		if (message != null && message.length() > 0) {
+			loadingStatusLabel.setText(message);
+		}
+		if (percent < 0) {
+			progressBar.setIndeterminate(true);
+			progressBar.setString("生成中");
+		}
+		else {
+			final int clamped = Math.max(0, Math.min(100, percent));
+			progressBar.setIndeterminate(false);
+			progressBar.setValue(clamped);
+			progressBar.setString(clamped + "%");
+		}
+	}
+
+	public void showError(final String title, final String message) {
+		loading = false;
+		current = null;
+		currentTree = null;
+		titleLabel.setText(title == null || title.length() == 0 ? "报表" : title);
+		subtitleLabel.setText(message == null ? "生成失败" : message);
+		decisionLabel.setText("");
+		dataLabel.setText("");
+		kpiHost.removeAll();
+		chartsHost.removeAll();
+		chartsHost.setLayout(new BorderLayout());
+		chartsHost.add(hintLabel(message == null ? "生成失败" : message), BorderLayout.CENTER);
+		detailModel.clear();
+		writeButton.setEnabled(false);
+		bodyCards.show(bodyHost, CARD_CONTENT);
+		revalidate();
+		repaint();
+	}
+
 	public void showModel(final ReportViewModel model, final ReportNodeSpec tree) {
+		loading = false;
 		this.current = model;
 		this.currentTree = tree;
 		titleLabel.setText(model == null ? "报表" : model.title);
@@ -122,6 +199,7 @@ public final class ReportViewportPanel extends JPanel {
 			}
 		}
 		writeButton.setEnabled(currentTree != null);
+		bodyCards.show(bodyHost, CARD_CONTENT);
 		revalidate();
 		repaint();
 	}
@@ -221,7 +299,34 @@ public final class ReportViewportPanel extends JPanel {
 		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartScroll, detailScroll);
 		split.setResizeWeight(0.58);
 		split.setBorder(null);
-		add(split, BorderLayout.CENTER);
+
+		final JPanel loadingCard = new JPanel(new BorderLayout());
+		loadingCard.setOpaque(false);
+		loadingCard.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "加载中"));
+		final JPanel loadingCenter = new JPanel();
+		loadingCenter.setOpaque(false);
+		loadingCenter.setLayout(new BoxLayout(loadingCenter, BoxLayout.Y_AXIS));
+		loadingStatusLabel.setAlignmentX(CENTER_ALIGNMENT);
+		loadingStatusLabel.setFont(DocearUiTheme.font(13f));
+		loadingStatusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		progressBar.setAlignmentX(CENTER_ALIGNMENT);
+		progressBar.setIndeterminate(true);
+		progressBar.setStringPainted(true);
+		progressBar.setString("生成中");
+		progressBar.setMaximumSize(new Dimension(420, 22));
+		progressBar.setPreferredSize(new Dimension(360, 22));
+		loadingCenter.add(Box.createVerticalGlue());
+		loadingCenter.add(loadingStatusLabel);
+		loadingCenter.add(Box.createVerticalStrut(12));
+		loadingCenter.add(progressBar);
+		loadingCenter.add(Box.createVerticalGlue());
+		loadingCard.add(loadingCenter, BorderLayout.CENTER);
+
+		bodyHost.setOpaque(false);
+		bodyHost.add(split, CARD_CONTENT);
+		bodyHost.add(loadingCard, CARD_LOADING);
+		bodyCards.show(bodyHost, CARD_CONTENT);
+		add(bodyHost, BorderLayout.CENTER);
 
 		closeButton.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {

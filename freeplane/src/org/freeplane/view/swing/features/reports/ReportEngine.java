@@ -50,7 +50,16 @@ public final class ReportEngine {
 	 * Primary entry for the viewport: KPIs + structured charts + actionable details.
 	 */
 	public static ReportViewModel generateView(final ReportDefinition def, final ReportQuery query) {
+		return generateView(def, query, null);
+	}
+
+	/**
+	 * Same as {@link #generateView(ReportDefinition, ReportQuery)} with optional coarse progress.
+	 */
+	public static ReportViewModel generateView(final ReportDefinition def, final ReportQuery query,
+	        final ReportProgress progress) {
 		if (def == null) {
+			notifyProgress(progress, 100, "未知报表类型");
 			final ReportViewModel empty = new ReportViewModel("（未知报表）", "");
 			empty.addDetail("未知报表类型");
 			empty.emptyHint = "请从左侧重新选择一种报表";
@@ -58,72 +67,106 @@ public final class ReportEngine {
 		}
 		final ReportQuery q = query == null ? new ReportQuery(null, "", "") : query;
 		try {
+			notifyProgress(progress, 8, "正在识别报表「" + def.title + "」…");
 			final ReportViewModel view;
 			if (ReportCatalog.ID_TODAY.equals(def.id)) {
+				notifyProgress(progress, 20, "正在汇总今日安排与逾期…");
 				view = viewToday(q);
 			}
 			else if (ReportCatalog.ID_PLAN_VS_ACTUAL.equals(def.id)) {
+				notifyProgress(progress, 20, "正在对比计划与实际…");
 				view = viewPlanVsActual(q);
 			}
 			else if (ReportCatalog.ID_USE_TIME.equals(def.id)) {
+				notifyProgress(progress, 20, "正在统计使用时长…");
 				view = viewUseTime(q);
 			}
 			else if (ReportCatalog.ID_TIME_BLOCK.equals(def.id)) {
+				notifyProgress(progress, 20, "正在划分时间块…");
 				view = viewTimeBlock(q);
 			}
 			else if (ReportCatalog.ID_TREND.equals(def.id)) {
+				notifyProgress(progress, 20, "正在计算趋势…");
 				view = viewTrend(q);
 			}
 			else if (ReportCatalog.ID_MAP_LOAD.equals(def.id)) {
+				notifyProgress(progress, 20, "正在统计导图负载…");
 				view = viewMapLoad(q);
 			}
 			else if (ReportCatalog.ID_OVERDUE.equals(def.id)) {
+				notifyProgress(progress, 20, "正在扫描逾期事项…");
 				view = viewOverdue(q);
 			}
 			else if (ReportCatalog.ID_URGENT.equals(def.id)) {
+				notifyProgress(progress, 20, "正在扫描紧急事项…");
 				view = viewUrgent(q);
 			}
 			else if (ReportCatalog.ID_TODOS.equals(def.id)) {
+				notifyProgress(progress, 20, "正在扫描待办…");
 				view = viewTodos(q);
 			}
 			else if (ReportCatalog.ID_FLAGS.equals(def.id)) {
+				notifyProgress(progress, 20, "正在汇总旗标…");
 				view = viewFlags(q);
 			}
 			else if (ReportCatalog.ID_POMODORO.equals(def.id)) {
+				notifyProgress(progress, 20, "正在汇总番茄钟…");
 				view = viewPomodoro(q);
 			}
 			else if (ReportCatalog.ID_DURATION.equals(def.id)) {
+				notifyProgress(progress, 20, "正在统计时长…");
 				view = viewDuration(q);
 			}
 			else if (ReportCatalog.ID_TARGET.equals(def.id)) {
+				notifyProgress(progress, 20, "正在汇总目标…");
 				view = viewTarget(q);
 			}
 			else if (ReportCatalog.ID_MIND_PULSE.equals(def.id)) {
+				notifyProgress(progress, 20, "正在计算思维脉搏…");
 				view = viewMindPulse(q);
 			}
 			else if (ReportCatalog.ID_KEYBOARD.equals(def.id)) {
+				notifyProgress(progress, 20, "正在统计键盘热度…");
 				view = viewKeyboard(q);
 			}
 			else if (ReportCatalog.ID_RECURRING.equals(def.id)) {
+				notifyProgress(progress, 20, "正在扫描周期事项…");
 				view = viewRecurring(q);
 			}
 			else if (ReportCatalog.ID_PUBLISHED.equals(def.id)) {
+				notifyProgress(progress, 20, "正在扫描已发布项…");
 				view = viewPublished(q);
 			}
 			else {
+				notifyProgress(progress, 40, "报表类型未实现");
 				view = new ReportViewModel(def.title, def.description);
 				view.addDetail("未实现：" + def.title);
 			}
+			notifyProgress(progress, 85, "正在整理图表与明细…");
 			view.decision = def.decision == null ? "" : def.decision;
 			view.dataSource = def.dataSource == null ? "" : def.dataSource;
+			notifyProgress(progress, 95, "数据汇总完成");
 			return view;
 		}
 		catch (Exception e) {
 			LogUtils.warn("ReportEngine.generateView failed: " + def.id, e);
+			notifyProgress(progress, 100, "生成失败");
 			final ReportViewModel fail = new ReportViewModel("报表生成失败", def.title);
 			fail.addDetail(String.valueOf(e.getMessage()));
 			fail.emptyHint = "请检查数据源后重试";
 			return fail;
+		}
+	}
+
+	private static void notifyProgress(final ReportProgress progress, final int percent, final String message) {
+		if (progress == null) {
+			return;
+		}
+		try {
+			progress.update(percent, message);
+		}
+		catch (Exception e) {
+			// Progress UI must never break report generation.
 		}
 	}
 
