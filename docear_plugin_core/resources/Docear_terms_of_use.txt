@@ -15,4 +15,4 @@ Twigmark is desktop software maintained by Mantou (yixiaozi), based on Freeplane
    Freeplane and historical Docear code remain under their original GPL terms. JabRef integration retains its GPL licensing.
 
 5. Contact
-   Project page: https://github.com/yixiaozi/docear-desktop
+   Project page: https://github.com/yixiaozi/Twigmark

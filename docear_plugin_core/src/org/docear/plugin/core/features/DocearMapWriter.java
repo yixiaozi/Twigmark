@@ -28,7 +28,7 @@ import org.freeplane.features.map.NodeModel;
  * 
  */
 public class DocearMapWriter extends MapWriter {
-	protected static final String USAGE_COMMENT = "<!--To view this file, download Twigmark (based on Freeplane/Docear) from https://github.com/yixiaozi/docear-desktop -->"
+	protected static final String USAGE_COMMENT = "<!--To view this file, download Twigmark (based on Freeplane/Docear) from https://github.com/yixiaozi/Twigmark -->"
 			+ System.getProperty("line.separator");
 
 	private final WriteManager writeManager;

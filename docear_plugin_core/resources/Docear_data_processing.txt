@@ -6,5 +6,5 @@ Twigmark processes documents and mind maps locally on your device to provide edi
 - You are responsible for backups and for any external tools you connect (MCP clients, Git remotes, etc.).
 - Legal basis for any personal data you store in maps is your own use of the software on your machine.
 
-Project: https://github.com/yixiaozi/docear-desktop
+Project: https://github.com/yixiaozi/Twigmark
 Maintainer: Mantou (yixiaozi)

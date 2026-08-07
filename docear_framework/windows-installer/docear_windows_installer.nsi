@@ -7,7 +7,7 @@ Name Twigmark
 !define REGKEY "SOFTWARE\$(^Name)"
 #!define VERSION "Beta 1"
 !define COMPANY Mantou
-!define URL https://github.com/yixiaozi/docear-desktop
+!define URL https://github.com/yixiaozi/Twigmark
 
 # MUI Symbol Definitions
 !define MUI_ICON "icon-windows_all_sizes_combined.ico"
@@ -117,7 +117,7 @@ Section -Main SEC0000
     ${EndIf}
     SetOutPath $SMPROGRAMS\$StartMenuGroup
     CreateShortcut $SMPROGRAMS\$StartMenuGroup\Twigmark.lnk $INSTDIR\docear.exe    
-    !insertmacro "CreateURLShortCut" "$SMPROGRAMS\$StartMenuGroup\Twigmark on GitHub" "https://github.com/yixiaozi/docear-desktop" "Project page"    
+    !insertmacro "CreateURLShortCut" "$SMPROGRAMS\$StartMenuGroup\Twigmark on GitHub" "https://github.com/yixiaozi/Twigmark" "Project page"    
     WriteRegStr HKLM "${REGKEY}\Components" Main 1
     ${If} "$R9" == 1
         ${registerExtension} "$INSTDIR\docear.exe" ".mm" "Twigmark Mindmap"    

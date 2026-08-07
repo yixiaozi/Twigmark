@@ -36,7 +36,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 			public void actionPerformed(ActionEvent e) {
 				if ("open_url".equals(e.getActionCommand())) {
 					try {
-						Controller.getCurrentController().getViewController().openDocument(new URI("https://github.com/yixiaozi/docear-desktop/issues"));
+						Controller.getCurrentController().getViewController().openDocument(new URI("https://github.com/yixiaozi/Twigmark/issues"));
 					}
 					catch (Exception ex) {
 						LogUtils.warn("LinkTypeChangedPage.LinkTypeChangedPage().new ActionListener() {...}.actionPerformed(): " + ex.getMessage());
@@ -52,7 +52,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 				FormFactory.DEFAULT_ROWSPEC,}));
 		add(warning, "1, 1, left, top");
 		
-		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "https://github.com/yixiaozi/docear-desktop/issues");
+		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "https://github.com/yixiaozi/Twigmark/issues");
 		add(hyperlink, "1, 3");
 	}
 

@@ -15,7 +15,7 @@
 
 ## 如何获取
 
-- 源码：https://github.com/yixiaozi/docear-desktop  
+- 源码：https://github.com/yixiaozi/Twigmark  
 - 自行打包：`powershell -ExecutionPolicy Bypass -File .\scripts\package-twigmark.ps1`  
 
 ## 运行要求
