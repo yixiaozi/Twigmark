@@ -34,7 +34,7 @@
       <node TEXT="维护者：Mantou（馒头）· yixiaozi" ID="ID_TWIG_A2" CREATED="1723000000022" MODIFIED="1723000000022"/>
       <node TEXT="上游：Freeplane + Docear（GPL）" ID="ID_TWIG_A3" CREATED="1723000000023" MODIFIED="1723000000023"/>
       <node TEXT="本地优先：不依赖 docear.org 云服务" ID="ID_TWIG_A4" CREATED="1723000000024" MODIFIED="1723000000024"/>
-      <node TEXT="源码与反馈：github.com/yixiaozi/docear-desktop" ID="ID_TWIG_A5" CREATED="1723000000025" MODIFIED="1723000000025"/>
+      <node TEXT="源码与反馈：github.com/yixiaozi/Twigmark" ID="ID_TWIG_A5" CREATED="1723000000025" MODIFIED="1723000000025"/>
     </node>
     <node TEXT="Welcome (EN)" POSITION="left" ID="ID_TWIG_EN" CREATED="1723000000030" MODIFIED="1723000000030">
       <font SIZE="12" BOLD="true"/>

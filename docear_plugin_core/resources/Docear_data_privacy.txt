@@ -12,4 +12,4 @@ Twigmark is designed to keep your data on your computer.
    There is no Mantou registration or analytics server built into Twigmark for this release.
 
 4. Contact
-   https://github.com/yixiaozi/docear-desktop
+   https://github.com/yixiaozi/Twigmark
