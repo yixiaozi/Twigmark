@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Locale;
 import java.util.Map;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Pure finance rules (no Swing / Freeplane UI). Used by ledger, reports, UI, MCP.
@@ -234,18 +235,22 @@ public final class FinanceRules {
 		if (cycle == null || cycle.trim().length() == 0) {
 			return "monthly";
 		}
-		final String c = cycle.trim().toLowerCase(Locale.ENGLISH);
-		if ("weekly".equals(c) || "week".equals(c) || "周".equals(c) || "每周".equals(cycle.trim())) {
+		final String raw = cycle.trim();
+		final String c = raw.toLowerCase(Locale.ENGLISH);
+		if ("weekly".equals(c) || "week".equals(c) || "周".equals(c) || "每周".equals(raw)
+				|| TextUtils.getText("finance.cycle.weekly").equals(raw)) {
 			return "weekly";
 		}
 		if ("yearly".equals(c) || "year".equals(c) || "annual".equals(c) || "年".equals(c)
-				|| "每年".equals(cycle.trim())) {
+				|| "每年".equals(raw) || TextUtils.getText("finance.cycle.yearly").equals(raw)) {
 			return "yearly";
 		}
-		if ("daily".equals(c) || "day".equals(c) || "日".equals(c) || "每天".equals(cycle.trim())) {
+		if ("daily".equals(c) || "day".equals(c) || "日".equals(c) || "每天".equals(raw)
+				|| TextUtils.getText("finance.cycle.daily").equals(raw)) {
 			return "daily";
 		}
-		if ("monthly".equals(c) || "month".equals(c) || "月".equals(c) || "每月".equals(cycle.trim())) {
+		if ("monthly".equals(c) || "month".equals(c) || "月".equals(c) || "每月".equals(raw)
+				|| TextUtils.getText("finance.cycle.monthly").equals(raw)) {
 			return "monthly";
 		}
 		return "monthly";
@@ -254,15 +259,15 @@ public final class FinanceRules {
 	public static String cycleLabelZh(final String cycle) {
 		final String c = normalizeCycle(cycle);
 		if ("weekly".equals(c)) {
-			return "每周";
+			return TextUtils.getText("finance.cycle.weekly");
 		}
 		if ("yearly".equals(c)) {
-			return "每年";
+			return TextUtils.getText("finance.cycle.yearly");
 		}
 		if ("daily".equals(c)) {
-			return "每天";
+			return TextUtils.getText("finance.cycle.daily");
 		}
-		return "每月";
+		return TextUtils.getText("finance.cycle.monthly");
 	}
 
 	/** Active subscriptions count toward fixed daily spend (paused/cancelled excluded). */
@@ -345,21 +350,21 @@ public final class FinanceRules {
 
 	public static String flowLabelZh(final String flow) {
 		if (isPnlIncome(flow)) {
-			return "收入";
+			return TextUtils.getText("finance.flow.income");
 		}
 		if (isTransfer(flow)) {
-			return "转账";
+			return TextUtils.getText("finance.flow.transfer");
 		}
 		if (isBorrow(flow)) {
-			return "借入";
+			return TextUtils.getText("finance.flow.borrow");
 		}
 		if (isLend(flow)) {
-			return "借出";
+			return TextUtils.getText("finance.flow.lend");
 		}
 		if (isCredit(flow)) {
-			return "信用卡";
+			return TextUtils.getText("finance.flow.credit");
 		}
-		return "支出";
+		return TextUtils.getText("finance.flow.expense");
 	}
 
 	public static boolean isValidAmountCents(final long cents) {

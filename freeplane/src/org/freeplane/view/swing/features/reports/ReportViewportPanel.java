@@ -23,6 +23,7 @@ import javax.swing.JSplitPane;
 import javax.swing.SwingConstants;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Center viewport: KPI strip + charts + details. Product copy explains decision + data.
@@ -34,7 +35,7 @@ public final class ReportViewportPanel extends JPanel {
 	private static final String CARD_CONTENT = "content";
 	private static final String CARD_LOADING = "loading";
 
-	private final JLabel titleLabel = new JLabel("报表");
+	private final JLabel titleLabel = new JLabel();
 	private final JLabel subtitleLabel = new JLabel(" ");
 	private final JLabel decisionLabel = new JLabel(" ");
 	private final JLabel dataLabel = new JLabel(" ");
@@ -42,12 +43,12 @@ public final class ReportViewportPanel extends JPanel {
 	private final JPanel chartsHost = new JPanel();
 	private final DefaultListModel detailModel = new DefaultListModel();
 	private final JList detailList = new JList(detailModel);
-	private final JButton closeButton = DocearUiTheme.softButton("返回导图");
-	private final JButton writeButton = DocearUiTheme.primaryButton("写入选中节点");
+	private final JButton closeButton;
+	private final JButton writeButton;
 	private final CardLayout bodyCards = new CardLayout();
 	private final JPanel bodyHost = new JPanel(bodyCards);
 	private final JProgressBar progressBar = new JProgressBar();
-	private final JLabel loadingStatusLabel = new JLabel("正在生成报表…", SwingConstants.CENTER);
+	private final JLabel loadingStatusLabel;
 	private ReportViewModel current;
 	private ReportNodeSpec currentTree;
 	private Runnable onClose;
@@ -58,6 +59,10 @@ public final class ReportViewportPanel extends JPanel {
 		super(new BorderLayout(8, 8));
 		DocearUiTheme.styleCanvas(this);
 		setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+		titleLabel.setText(TextUtils.getText("ReportViewport.title.default"));
+		closeButton = DocearUiTheme.softButton(TextUtils.getText("ReportViewport.button.backToMap"));
+		writeButton = DocearUiTheme.primaryButton(TextUtils.getText("ReportViewport.button.writeToNode"));
+		loadingStatusLabel = new JLabel(TextUtils.getText("ReportViewport.loading.status"), SwingConstants.CENTER);
 		titleLabel.setFont(DocearUiTheme.font(18f, Font.BOLD));
 		titleLabel.setForeground(DocearUiTheme.TEXT);
 		subtitleLabel.setFont(DocearUiTheme.font(12f));
@@ -99,16 +104,19 @@ public final class ReportViewportPanel extends JPanel {
 		loading = true;
 		current = null;
 		currentTree = null;
-		titleLabel.setText(title == null || title.length() == 0 ? "报表" : title);
+		titleLabel.setText(title == null || title.length() == 0 ? TextUtils.getText("ReportViewport.title.default")
+		        : title);
 		subtitleLabel.setText(subtitle == null ? "" : subtitle);
-		decisionLabel.setText(decision == null || decision.length() == 0 ? "" : "作用：" + decision);
-		dataLabel.setText(dataSource == null || dataSource.length() == 0 ? "" : "数据：" + dataSource);
+		decisionLabel.setText(decision == null || decision.length() == 0 ? ""
+		        : TextUtils.format("ReportViewport.decision.prefix", decision));
+		dataLabel.setText(dataSource == null || dataSource.length() == 0 ? ""
+		        : TextUtils.format("ReportViewport.data.prefix", dataSource));
 		kpiHost.removeAll();
-		kpiHost.add(hintLabel("数据加载中…"));
+		kpiHost.add(hintLabel(TextUtils.getText("ReportViewport.loading.dataHint")));
 		detailModel.clear();
-		detailModel.addElement("图表与明细生成完成后会显示在这里");
+		detailModel.addElement(TextUtils.getText("ReportViewport.loading.detailPlaceholder"));
 		writeButton.setEnabled(false);
-		setLoadProgress("正在扫描数据源…", -1);
+		setLoadProgress(TextUtils.getText("ReportViewport.loading.scanning"), -1);
 		bodyCards.show(bodyHost, CARD_LOADING);
 		revalidate();
 		repaint();
@@ -123,7 +131,7 @@ public final class ReportViewportPanel extends JPanel {
 		}
 		if (percent < 0) {
 			progressBar.setIndeterminate(true);
-			progressBar.setString("生成中");
+			progressBar.setString(TextUtils.getText("ReportViewport.progress.generating"));
 		}
 		else {
 			final int clamped = Math.max(0, Math.min(100, percent));
@@ -137,14 +145,16 @@ public final class ReportViewportPanel extends JPanel {
 		loading = false;
 		current = null;
 		currentTree = null;
-		titleLabel.setText(title == null || title.length() == 0 ? "报表" : title);
-		subtitleLabel.setText(message == null ? "生成失败" : message);
+		titleLabel.setText(title == null || title.length() == 0 ? TextUtils.getText("ReportViewport.title.default")
+		        : title);
+		subtitleLabel.setText(message == null ? TextUtils.getText("ReportViewport.error.generateFailed") : message);
 		decisionLabel.setText("");
 		dataLabel.setText("");
 		kpiHost.removeAll();
 		chartsHost.removeAll();
 		chartsHost.setLayout(new BorderLayout());
-		chartsHost.add(hintLabel(message == null ? "生成失败" : message), BorderLayout.CENTER);
+		chartsHost.add(hintLabel(message == null ? TextUtils.getText("ReportViewport.error.generateFailed") : message),
+		        BorderLayout.CENTER);
 		detailModel.clear();
 		writeButton.setEnabled(false);
 		bodyCards.show(bodyHost, CARD_CONTENT);
@@ -156,10 +166,12 @@ public final class ReportViewportPanel extends JPanel {
 		loading = false;
 		this.current = model;
 		this.currentTree = tree;
-		titleLabel.setText(model == null ? "报表" : model.title);
+		titleLabel.setText(model == null ? TextUtils.getText("ReportViewport.title.default") : model.title);
 		subtitleLabel.setText(model == null ? "" : model.subtitle);
-		decisionLabel.setText(model == null || model.decision.length() == 0 ? "" : "作用：" + model.decision);
-		dataLabel.setText(model == null || model.dataSource.length() == 0 ? "" : "数据：" + model.dataSource);
+		decisionLabel.setText(model == null || model.decision.length() == 0 ? ""
+		        : TextUtils.format("ReportViewport.decision.prefix", model.decision));
+		dataLabel.setText(model == null || model.dataSource.length() == 0 ? ""
+		        : TextUtils.format("ReportViewport.data.prefix", model.dataSource));
 
 		kpiHost.removeAll();
 		chartsHost.removeAll();
@@ -170,13 +182,14 @@ public final class ReportViewportPanel extends JPanel {
 				kpiHost.add(kpiCard((ReportKpi) model.kpis.get(i)));
 			}
 			if (model.kpis.isEmpty()) {
-				kpiHost.add(hintLabel("无 KPI"));
+				kpiHost.add(hintLabel(TextUtils.getText("ReportViewport.kpi.none")));
 			}
 
 			final int chartCount = model.charts.size();
 			if (chartCount == 0) {
 				chartsHost.setLayout(new BorderLayout());
-				final String hint = model.emptyHint.length() > 0 ? model.emptyHint : "暂无足够数值可画图；下方为明细。";
+				final String hint = model.emptyHint.length() > 0 ? model.emptyHint
+				        : TextUtils.getText("ReportViewport.charts.emptyHint");
 				chartsHost.add(hintLabel(hint), BorderLayout.CENTER);
 			}
 			else if (chartCount == 1) {
@@ -272,8 +285,8 @@ public final class ReportViewportPanel extends JPanel {
 
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 		buttons.setOpaque(false);
-		writeButton.setToolTipText("把当前报表写入导图选中节点（可选）");
-		closeButton.setToolTipText("关闭报表，回到思维导图");
+		writeButton.setToolTipText(TextUtils.getText("ReportViewport.write.tooltip"));
+		closeButton.setToolTipText(TextUtils.getText("ReportViewport.close.tooltip"));
 		buttons.add(writeButton);
 		buttons.add(closeButton);
 		north.add(buttons, BorderLayout.EAST);
@@ -288,13 +301,15 @@ public final class ReportViewportPanel extends JPanel {
 		chartsHost.setOpaque(false);
 		chartsHost.setPreferredSize(new Dimension(640, 280));
 		final JScrollPane chartScroll = new JScrollPane(chartsHost);
-		chartScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "图表"));
+		chartScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+		        TextUtils.getText("ReportViewport.charts.border")));
 		chartScroll.getVerticalScrollBar().setUnitIncrement(16);
 
 		detailList.setFont(detailList.getFont().deriveFont(12f));
 		detailList.setVisibleRowCount(12);
 		final JScrollPane detailScroll = new JScrollPane(detailList);
-		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "明细（可执行清单）"));
+		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+		        TextUtils.getText("ReportViewport.details.border")));
 
 		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, chartScroll, detailScroll);
 		split.setResizeWeight(0.58);
@@ -302,7 +317,8 @@ public final class ReportViewportPanel extends JPanel {
 
 		final JPanel loadingCard = new JPanel(new BorderLayout());
 		loadingCard.setOpaque(false);
-		loadingCard.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "加载中"));
+		loadingCard.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+		        TextUtils.getText("ReportViewport.loading.border")));
 		final JPanel loadingCenter = new JPanel();
 		loadingCenter.setOpaque(false);
 		loadingCenter.setLayout(new BoxLayout(loadingCenter, BoxLayout.Y_AXIS));
@@ -312,7 +328,7 @@ public final class ReportViewportPanel extends JPanel {
 		progressBar.setAlignmentX(CENTER_ALIGNMENT);
 		progressBar.setIndeterminate(true);
 		progressBar.setStringPainted(true);
-		progressBar.setString("生成中");
+		progressBar.setString(TextUtils.getText("ReportViewport.progress.generating"));
 		progressBar.setMaximumSize(new Dimension(420, 22));
 		progressBar.setPreferredSize(new Dimension(360, 22));
 		loadingCenter.add(Box.createVerticalGlue());

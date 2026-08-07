@@ -28,6 +28,7 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Edit one completed pomodoro log record (start, end, focus duration).
@@ -57,7 +58,7 @@ final class PomodoroSessionEditDialog extends JDialog {
 
 	private PomodoroSessionEditDialog(final Frame owner, final NodeModel node, final int logIndex,
 	        final PomodoroSessionRecord record) {
-		super(owner, "修改番茄钟记录", true);
+		super(owner, TextUtils.getText("pomodoro.session_edit.title"), true);
 		this.node = node;
 		this.logIndex = logIndex;
 		this.originalPauses = PomodoroPauseInterval.copyOf(record.pauseIntervals);
@@ -65,7 +66,7 @@ final class PomodoroSessionEditDialog extends JDialog {
 
 		final JPanel root = new JPanel(new BorderLayout(8, 8));
 		root.setBorder(new EmptyBorder(10, 12, 10, 12));
-		root.add(new JLabel("<html><b>" + escape(plain(node)) + "</b><br>调整开始/结束时间与有效专注时长</html>"),
+		root.add(new JLabel(TextUtils.format("pomodoro.session_edit.header", escape(plain(node)))),
 		        BorderLayout.NORTH);
 
 		startEditor = new DateTimeFieldsPanel(true, new Date(record.startMs));
@@ -75,11 +76,11 @@ final class PomodoroSessionEditDialog extends JDialog {
 
 		final JPanel form = new JPanel();
 		form.setLayout(new javax.swing.BoxLayout(form, javax.swing.BoxLayout.Y_AXIS));
-		form.add(labeledRow("开始", startEditor));
+		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.start"), startEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
-		form.add(labeledRow("结束", endEditor));
+		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.end"), endEditor));
 		form.add(javax.swing.Box.createVerticalStrut(8));
-		form.add(labeledRow("有效时长（分钟）", focusSpinner));
+		form.add(labeledRow(TextUtils.getText("pomodoro.session_edit.focus_min"), focusSpinner));
 		form.add(javax.swing.Box.createVerticalStrut(8));
 		previewLabel = new JLabel();
 		previewLabel.setBorder(BorderFactory.createEmptyBorder(4, 0, 0, 0));
@@ -101,12 +102,12 @@ final class PomodoroSessionEditDialog extends JDialog {
 		refreshPreview();
 
 		final JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-		south.add(btn("取消", new ActionListener() {
+		south.add(btn(TextUtils.getText("pomodoro.session_edit.cancel"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				dispose();
 			}
 		}));
-		south.add(btn("保存", new ActionListener() {
+		south.add(btn(TextUtils.getText("pomodoro.session_edit.save"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				apply();
 			}
@@ -138,21 +139,21 @@ final class PomodoroSessionEditDialog extends JDialog {
 		final long endMs = endEditor.getTimeMillis();
 		final int focusMinutes = ((Number) focusSpinner.getValue()).intValue();
 		if (endMs <= startMs) {
-			previewLabel.setText("结束时间必须晚于开始时间");
+			previewLabel.setText(TextUtils.getText("pomodoro.session_edit.end_before_start"));
 			return;
 		}
 		final long spanMs = endMs - startMs;
 		final long focusMs = focusMinutes * 60L * 1000L;
 		if (focusMs > spanMs) {
-			previewLabel.setText("有效时长不能超过 " + PomodoroFormatter.formatDuration(spanMs));
+			previewLabel.setText(TextUtils.format("pomodoro.session_edit.focus_too_long", PomodoroFormatter.formatDuration(spanMs)));
 			return;
 		}
 		final long pauseMs = spanMs - focusMs;
 		final String ranges = PomodoroPauseInterval.formatRanges(originalPauses);
-		previewLabel.setText("有效 " + PomodoroFormatter.formatDuration(focusMs)
-		        + (pauseMs > 0
-		                ? " · 暂停" + (ranges.length() > 0 ? " " + ranges : "") + "（"
-		                        + PomodoroFormatter.formatDuration(pauseMs) + "）"
+		previewLabel.setText(TextUtils.format("pomodoro.session_edit.preview", PomodoroFormatter.formatDuration(focusMs),
+		                pauseMs > 0
+		                ? TextUtils.format("pomodoro.session_edit.pause_part", ranges.length() > 0 ? " " + ranges : "",
+		                        PomodoroFormatter.formatDuration(pauseMs))
 		                : ""));
 	}
 
@@ -161,18 +162,18 @@ final class PomodoroSessionEditDialog extends JDialog {
 		final long endMs = endEditor.getTimeMillis();
 		final int focusMinutes = ((Number) focusSpinner.getValue()).intValue();
 		if (startMs <= 0 || endMs <= startMs) {
-			JOptionPane.showMessageDialog(this, "结束时间必须晚于开始时间", "修改番茄钟记录", JOptionPane.WARNING_MESSAGE);
+			JOptionPane.showMessageDialog(this, TextUtils.getText("pomodoro.session_edit.end_before_start"), TextUtils.getText("pomodoro.session_edit.title"), JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		final long spanMs = endMs - startMs;
 		final long focusMs = focusMinutes * 60L * 1000L;
 		if (focusMs <= 0 || focusMs > spanMs) {
-			JOptionPane.showMessageDialog(this, "有效时长必须在 1 分钟到区间长度之间", "修改番茄钟记录",
+			JOptionPane.showMessageDialog(this, TextUtils.getText("pomodoro.session_edit.focus_range"), TextUtils.getText("pomodoro.session_edit.title"),
 			        JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		if (endMs > System.currentTimeMillis() + 60L * 1000L) {
-			JOptionPane.showMessageDialog(this, "结束时间不能是未来", "修改番茄钟记录", JOptionPane.WARNING_MESSAGE);
+			JOptionPane.showMessageDialog(this, TextUtils.getText("pomodoro.session_edit.end_future"), TextUtils.getText("pomodoro.session_edit.title"), JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();

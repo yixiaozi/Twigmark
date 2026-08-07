@@ -20,12 +20,23 @@ import java.util.Locale;
 
 import javax.swing.JPanel;
 
+import org.freeplane.core.util.TextUtils;
+
 /**
  * Month grid inspired by DocearReminder {@code System.Windows.Forms.Calendar.MonthView}.
  */
 final class MonthViewPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String[] WEEK_HEADERS = { "一", "二", "三", "四", "五", "六", "日" };
+	private static String[] weekHeaders() {
+		return new String[] {
+		        TextUtils.getText("CalendarViewport.weekday.mon"),
+		        TextUtils.getText("CalendarViewport.weekday.tue"),
+		        TextUtils.getText("CalendarViewport.weekday.wed"),
+		        TextUtils.getText("CalendarViewport.weekday.thu"),
+		        TextUtils.getText("CalendarViewport.weekday.fri"),
+		        TextUtils.getText("CalendarViewport.weekday.sat"),
+		        TextUtils.getText("CalendarViewport.weekday.sun") };
+	}
 
 	interface DayHandler {
 		void onDaySelected(Date dayStart);
@@ -41,7 +52,7 @@ final class MonthViewPanel extends JPanel {
 		void onAppointmentPopup(CalendarAppointment appt, int x, int y);
 	}
 
-	private final SimpleDateFormat dayNumFormat = new SimpleDateFormat("d", Locale.CHINA);
+	private final SimpleDateFormat dayNumFormat = new SimpleDateFormat("d", Locale.getDefault());
 	private Date monthStart = firstOfMonth(new Date());
 	private Date selectedDay = DayViewPanel.startOfDay(new Date());
 	private List appointments = Collections.EMPTY_LIST;
@@ -195,7 +206,7 @@ final class MonthViewPanel extends JPanel {
 		for (int i = 0; i < 7; i++) {
 			final int x = pad + i * cellW;
 			g2.setColor(CalendarTheme.TEXT_MUTED);
-			final String label = WEEK_HEADERS[i];
+			final String label = weekHeaders()[i];
 			g2.drawString(label, x + (cellW - hfm.stringWidth(label)) / 2, pad + 18);
 		}
 

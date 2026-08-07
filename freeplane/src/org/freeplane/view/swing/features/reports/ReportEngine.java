@@ -16,6 +16,7 @@ import java.util.TreeMap;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapWorkspaceContextScanner;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.usagestats.MapUsageSummary;
 import org.freeplane.features.usagestats.UsageRecord;
@@ -27,6 +28,11 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge
  * Builds report trees from workspace reminder / todo / pomodoro / usage data.
  */
 public final class ReportEngine {
+	private static String tr(final String key) {
+		return TextUtils.getText(key);
+	}
+
+
 	private static final SimpleDateFormat TIME = new SimpleDateFormat("M/d HH:mm", Locale.CHINA);
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 	/** Bound for the duration of {@link #generateView} so nested scanners can emit stage text. */
@@ -63,102 +69,103 @@ public final class ReportEngine {
 	public static ReportViewModel generateView(final ReportDefinition def, final ReportQuery query,
 	        final ReportProgress progress) {
 		if (def == null) {
-			notifyProgress(progress, 100, "未知报表类型");
-			final ReportViewModel empty = new ReportViewModel("（未知报表）", "");
-			empty.addDetail("未知报表类型");
-			empty.emptyHint = "请从左侧重新选择一种报表";
+			notifyProgress(progress, 100, TextUtils.getText("ReportEngine.unknownType"));
+			final ReportViewModel empty = new ReportViewModel(TextUtils.getText("ReportEngine.unknownTitle"), "");
+			empty.addDetail(TextUtils.getText("ReportEngine.unknownType"));
+			empty.emptyHint = TextUtils.getText("ReportEngine.unknownHint");
 			return empty;
 		}
 		final ReportQuery q = query == null ? new ReportQuery(null, "", "") : query;
 		PROGRESS.set(progress);
 		try {
-			notifyProgress(progress, -1, "正在准备「" + def.title + "」…");
+			notifyProgress(progress, -1, TextUtils.format("ReportEngine.preparing", def.title));
 			final ReportViewModel view;
 			if (ReportCatalog.ID_TODAY.equals(def.id)) {
-				notifyProgress(progress, -1, "正在汇总今日安排与逾期…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.today"));
 				view = viewToday(q);
 			}
 			else if (ReportCatalog.ID_PLAN_VS_ACTUAL.equals(def.id)) {
-				notifyProgress(progress, -1, "正在对比计划与实际…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.planVsActual"));
 				view = viewPlanVsActual(q);
 			}
 			else if (ReportCatalog.ID_USE_TIME.equals(def.id)) {
-				notifyProgress(progress, -1, "正在统计使用时长…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.useTime"));
 				view = viewUseTime(q);
 			}
 			else if (ReportCatalog.ID_TIME_BLOCK.equals(def.id)) {
-				notifyProgress(progress, -1, "正在划分时间块…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.timeBlock"));
 				view = viewTimeBlock(q);
 			}
 			else if (ReportCatalog.ID_TREND.equals(def.id)) {
-				notifyProgress(progress, -1, "正在计算趋势…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.trend"));
 				view = viewTrend(q);
 			}
 			else if (ReportCatalog.ID_MAP_LOAD.equals(def.id)) {
-				notifyProgress(progress, -1, "正在统计导图负载…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.mapLoad"));
 				view = viewMapLoad(q);
 			}
 			else if (ReportCatalog.ID_OVERDUE.equals(def.id)) {
-				notifyProgress(progress, -1, "正在扫描逾期事项…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.overdue"));
 				view = viewOverdue(q);
 			}
 			else if (ReportCatalog.ID_URGENT.equals(def.id)) {
-				notifyProgress(progress, -1, "正在扫描紧急事项…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.urgent"));
 				view = viewUrgent(q);
 			}
 			else if (ReportCatalog.ID_TODOS.equals(def.id)) {
-				notifyProgress(progress, -1, "正在扫描待办…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.todos"));
 				view = viewTodos(q);
 			}
 			else if (ReportCatalog.ID_FLAGS.equals(def.id)) {
-				notifyProgress(progress, -1, "正在汇总旗标…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.flags"));
 				view = viewFlags(q);
 			}
 			else if (ReportCatalog.ID_POMODORO.equals(def.id)) {
-				notifyProgress(progress, -1, "正在汇总番茄钟…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.pomodoro"));
 				view = viewPomodoro(q);
 			}
 			else if (ReportCatalog.ID_DURATION.equals(def.id)) {
-				notifyProgress(progress, -1, "正在统计时长…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.duration"));
 				view = viewDuration(q);
 			}
 			else if (ReportCatalog.ID_TARGET.equals(def.id)) {
-				notifyProgress(progress, -1, "正在汇总目标…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.target"));
 				view = viewTarget(q);
 			}
 			else if (ReportCatalog.ID_MIND_PULSE.equals(def.id)) {
-				notifyProgress(progress, -1, "正在计算思维脉搏…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.mindPulse"));
 				view = viewMindPulse(q);
 			}
 			else if (ReportCatalog.ID_KEYBOARD.equals(def.id)) {
-				notifyProgress(progress, -1, "正在统计键盘热度…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.keyboard"));
 				view = viewKeyboard(q);
 			}
 			else if (ReportCatalog.ID_RECURRING.equals(def.id)) {
-				notifyProgress(progress, -1, "正在扫描周期事项…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.recurring"));
 				view = viewRecurring(q);
 			}
 			else if (ReportCatalog.ID_PUBLISHED.equals(def.id)) {
-				notifyProgress(progress, -1, "正在扫描已发布项…");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.progress.published"));
 				view = viewPublished(q);
 			}
 			else {
-				notifyProgress(progress, -1, "报表类型未实现");
+				notifyProgress(progress, -1, TextUtils.getText("ReportEngine.unimplemented"));
 				view = new ReportViewModel(def.title, def.description);
-				view.addDetail("未实现：" + def.title);
+				view.addDetail(TextUtils.format("ReportEngine.unimplementedDetail", def.title));
 			}
-			notifyProgress(progress, 90, "正在整理图表与明细…");
+			notifyProgress(progress, 90, TextUtils.getText("ReportEngine.organizing"));
 			view.decision = def.decision == null ? "" : def.decision;
 			view.dataSource = def.dataSource == null ? "" : def.dataSource;
-			notifyProgress(progress, 96, "数据汇总完成");
+			notifyProgress(progress, 96, TextUtils.getText("ReportEngine.summaryDone"));
 			return view;
 		}
 		catch (Exception e) {
 			LogUtils.warn("ReportEngine.generateView failed: " + def.id, e);
-			notifyProgress(progress, 100, "生成失败");
-			final ReportViewModel fail = new ReportViewModel("报表生成失败", def.title);
+			notifyProgress(progress, 100, TextUtils.getText("ReportEngine.generateFailed"));
+			final ReportViewModel fail = new ReportViewModel(TextUtils.getText("ReportEngine.generateFailedTitle"),
+			        def.title);
 			fail.addDetail(String.valueOf(e.getMessage()));
-			fail.emptyHint = "请检查数据源后重试";
+			fail.emptyHint = TextUtils.getText("ReportEngine.retryHint");
 			return fail;
 		}
 		finally {
@@ -184,14 +191,14 @@ public final class ReportEngine {
 
 	private static ReportNodeSpec treeFromView(final ReportViewModel view) {
 		if (view == null) {
-			return new ReportNodeSpec("（空报表）", "messagebox_warning");
+			return new ReportNodeSpec(tr("ReportEngine.content.0001"), "messagebox_warning");
 		}
 		final ReportNodeSpec root = new ReportNodeSpec(view.title, "idea");
 		if (view.decision.length() > 0) {
 			root.add(view.decision, "info");
 		}
 		if (view.dataSource.length() > 0) {
-			root.add("数据：" + view.dataSource, "attach");
+			root.add(tr("ReportEngine.content.0002") + view.dataSource, "attach");
 		}
 		for (int i = 0; i < view.kpis.size(); i++) {
 			final ReportKpi kpi = (ReportKpi) view.kpis.get(i);
@@ -204,12 +211,12 @@ public final class ReportEngine {
 				chartNode.add(series.labelAt(j) + " · " + formatChartNumber(series.valueAt(j)), "full-3");
 			}
 		}
-		final ReportNodeSpec details = root.add("明细", "list");
+		final ReportNodeSpec details = root.add(tr("ReportEngine.content.0003"), "list");
 		for (int i = 0; i < view.details.size(); i++) {
 			details.add((String) view.details.get(i), "list");
 		}
 		if (view.details.isEmpty() && view.charts.isEmpty()) {
-			root.add(view.emptyHint.length() == 0 ? "暂无数据" : view.emptyHint, "smiley-neutral");
+			root.add(view.emptyHint.length() == 0 ? tr("ReportEngine.content.0004") : view.emptyHint, "smiley-neutral");
 		}
 		return root;
 	}
@@ -232,7 +239,7 @@ public final class ReportEngine {
 			}
 			sub.append(q.range.label);
 		}
-		final ReportViewModel view = new ReportViewModel("报表 · " + def.title, sub.toString());
+		final ReportViewModel view = new ReportViewModel(tr("ReportEngine.content.0005") + def.title, sub.toString());
 		view.decision = def.decision;
 		view.dataSource = def.dataSource;
 		return view;
@@ -249,16 +256,16 @@ public final class ReportEngine {
 		final long pomoMs = sumPomodoroMs(today.startMs, today.endMs);
 		final List todos = MindMapWorkspaceContextScanner.scanAllTodos();
 
-		view.addKpi("逾期", String.valueOf(overdue.size()), "先清债");
-		view.addKpi("今日安排", String.valueOf(occ.size()), formatHours(planned));
-		view.addKpi("待办库存", String.valueOf(todos.size()), "全局");
-		view.addKpi("今日番茄", formatDurationMs(pomoMs), "专注");
+		view.addKpi(tr("ReportEngine.content.0006"), String.valueOf(overdue.size()), tr("ReportEngine.content.0007"));
+		view.addKpi(tr("ReportEngine.content.0008"), String.valueOf(occ.size()), formatHours(planned));
+		view.addKpi(tr("ReportEngine.content.0009"), String.valueOf(todos.size()), tr("ReportEngine.content.0010"));
+		view.addKpi(tr("ReportEngine.content.0011"), formatDurationMs(pomoMs), tr("ReportEngine.content.0012"));
 
-		final ReportChartSeries load = new ReportChartSeries("今日负荷对比", ReportChartSeries.TYPE_BAR);
-		load.add("逾期", overdue.size());
-		load.add("今日安排", occ.size());
-		load.add("待办", Math.min(todos.size(), 200));
-		load.add("番茄(刻度=10分钟)", Math.round(pomoMs / 600000.0));
+		final ReportChartSeries load = new ReportChartSeries(tr("ReportEngine.content.0013"), ReportChartSeries.TYPE_BAR);
+		load.add(tr("ReportEngine.content.0006"), overdue.size());
+		load.add(tr("ReportEngine.content.0008"), occ.size());
+		load.add(tr("ReportEngine.content.0014"), Math.min(todos.size(), 200));
+		load.add(tr("ReportEngine.content.0015"), Math.round(pomoMs / 600000.0));
 		view.addChart(load);
 
 		final Map byHour = new TreeMap();
@@ -270,7 +277,7 @@ public final class ReportEngine {
 			Long sum = (Long) byHour.get(hour);
 			byHour.put(hour, Long.valueOf((sum == null ? 0L : sum.longValue()) + Math.max(0, ref.taskTimeMinutes)));
 		}
-		final ReportChartSeries hourChart = new ReportChartSeries("今日计划工时（按时段）", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries hourChart = new ReportChartSeries(tr("ReportEngine.content.0016"), ReportChartSeries.TYPE_LINE);
 		final Iterator hit = byHour.entrySet().iterator();
 		while (hit.hasNext()) {
 			final Map.Entry e = (Map.Entry) hit.next();
@@ -278,12 +285,12 @@ public final class ReportEngine {
 		}
 		view.addChart(hourChart);
 
-		view.addDetail("—— 逾期（最多 15 条，建议先处理）——");
+		view.addDetail(tr("ReportEngine.content.0017"));
 		appendReminderDetails(view, overdue, 15, true);
-		view.addDetail("—— 今日安排 ——");
+		view.addDetail(tr("ReportEngine.content.0018"));
 		appendOccDetails(view, occ, 40);
 		if (overdue.isEmpty() && occ.isEmpty()) {
-			view.emptyHint = "今天很干净：无逾期、无安排。可以主动挑一张导图推进。";
+			view.emptyHint = tr("ReportEngine.content.0019");
 		}
 		return view;
 	}
@@ -300,7 +307,7 @@ public final class ReportEngine {
 			plannedByDay.put(day, Long.valueOf((sum == null ? 0L : sum.longValue()) + Math.max(0, ref.taskTimeMinutes)));
 		}
 		final Map usageByDay = new TreeMap();
-		stage("正在读取活动历史…");
+		stage(TextUtils.getText("ReportEngine.stage.readingActivity"));
 		final List records = UsageStatsManager.getInstance().loadAllRecords();
 		for (int i = 0; i < records.size(); i++) {
 			final UsageRecord rec = (UsageRecord) records.get(i);
@@ -328,24 +335,24 @@ public final class ReportEngine {
 		final long plannedMin = sumMapLong(plannedByDay);
 		final long usageMs = sumMapLong(usageByDay);
 		final long pomoMs = sumMapLong(pomoByDay);
-		view.addKpi("计划工时", formatHours(plannedMin), "日历安排");
-		view.addKpi("实际使用", formatDurationMs(usageMs), "有效会话");
-		view.addKpi("番茄专注", formatDurationMs(pomoMs), "深度工作");
+		view.addKpi(tr("ReportEngine.content.0020"), formatHours(plannedMin), tr("ReportEngine.content.0021"));
+		view.addKpi(tr("ReportEngine.content.0022"), formatDurationMs(usageMs), tr("ReportEngine.content.0023"));
+		view.addKpi(tr("ReportEngine.content.0024"), formatDurationMs(pomoMs), tr("ReportEngine.content.0025"));
 		final double planHours = plannedMin / 60.0;
 		final double useHours = usageMs / 3600000.0;
 		final int fill = planHours <= 0 ? 0 : (int) Math.round(Math.min(999, useHours * 100.0 / planHours));
-		view.addKpi("兑现率", fill + "%", "使用÷计划");
+		view.addKpi(tr("ReportEngine.content.0026"), fill + "%", tr("ReportEngine.content.0027"));
 
-		final ReportChartSeries compare = new ReportChartSeries("计划 vs 使用 vs 番茄（小时）", ReportChartSeries.TYPE_BAR);
-		compare.add("计划", planHours);
-		compare.add("使用", useHours);
-		compare.add("番茄", pomoMs / 3600000.0);
+		final ReportChartSeries compare = new ReportChartSeries(tr("ReportEngine.content.0028"), ReportChartSeries.TYPE_BAR);
+		compare.add(tr("ReportEngine.content.0029"), planHours);
+		compare.add(tr("ReportEngine.content.0030"), useHours);
+		compare.add(tr("ReportEngine.content.0031"), pomoMs / 3600000.0);
 		view.addChart(compare);
 
-		final ReportChartSeries dailyPlan = new ReportChartSeries("每日计划工时（分钟）", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries dailyPlan = new ReportChartSeries(tr("ReportEngine.content.0032"), ReportChartSeries.TYPE_LINE);
 		fillLongSeries(dailyPlan, plannedByDay);
 		view.addChart(dailyPlan);
-		final ReportChartSeries dailyUse = new ReportChartSeries("每日有效使用（分钟）", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries dailyUse = new ReportChartSeries(tr("ReportEngine.content.0033"), ReportChartSeries.TYPE_LINE);
 		final Iterator uit = usageByDay.entrySet().iterator();
 		while (uit.hasNext()) {
 			final Map.Entry e = (Map.Entry) uit.next();
@@ -354,15 +361,15 @@ public final class ReportEngine {
 		view.addChart(dailyUse);
 
 		if (plannedMin == 0 && usageMs == 0) {
-			view.emptyHint = "该时段既无计划也无使用记录。先在日历里排几块时间，或打开导图产生使用记录。";
+			view.emptyHint = tr("ReportEngine.content.0034");
 		}
 		else if (plannedMin > 0 && usageMs < plannedMin * 30000L) {
-			view.addDetail("洞察：计划远高于实际使用 → 可能「排了但没做」，建议砍计划或设保护时段。");
+			view.addDetail(tr("ReportEngine.content.0035"));
 		}
 		else if (usageMs > plannedMin * 90000L && plannedMin > 0) {
-			view.addDetail("洞察：实际使用远超计划 → 大量临时工作，建议把常做的事写进安排。");
+			view.addDetail(tr("ReportEngine.content.0036"));
 		}
-		view.addDetail("计划条目 · " + occ.size() + " · 使用会话已计入显著会话");
+		view.addDetail(tr("ReportEngine.content.0037") + occ.size() + tr("ReportEngine.content.0038"));
 		return view;
 	}
 
@@ -384,7 +391,7 @@ public final class ReportEngine {
 	private static ReportViewModel viewUseTime(final ReportQuery q) {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_USE_TIME);
 		final ReportViewModel view = baseView(def, q);
-		stage("正在读取活动历史…");
+		stage(TextUtils.getText("ReportEngine.stage.readingActivity"));
 		final List records = UsageStatsManager.getInstance().loadAllRecords();
 		final Map byHour = new TreeMap();
 		final Map byMap = new HashMap();
@@ -399,7 +406,7 @@ public final class ReportEngine {
 				continue;
 			}
 			final String path = rec.getMapPath() == null ? "" : rec.getMapPath();
-			final String mapName = path.length() == 0 ? "（未知）" : new File(path).getName();
+			final String mapName = path.length() == 0 ? tr("ReportEngine.content.0039") : new File(path).getName();
 			if (!q.matches(mapName, path, "")) {
 				continue;
 			}
@@ -418,9 +425,9 @@ public final class ReportEngine {
 			}
 			summary.addRecord(rec);
 		}
-		view.addKpi("显著会话", String.valueOf(sessionCount), "过滤噪音");
-		view.addKpi("有效时长", formatDurationMs(totalEffective), "真正在用");
-		final ReportChartSeries hourChart = new ReportChartSeries("注意力按时段（分钟）", ReportChartSeries.TYPE_LINE);
+		view.addKpi(tr("ReportEngine.content.0040"), String.valueOf(sessionCount), tr("ReportEngine.content.0041"));
+		view.addKpi(tr("ReportEngine.content.0042"), formatDurationMs(totalEffective), tr("ReportEngine.content.0043"));
+		final ReportChartSeries hourChart = new ReportChartSeries(tr("ReportEngine.content.0044"), ReportChartSeries.TYPE_LINE);
 		final Iterator hourIt = byHour.entrySet().iterator();
 		while (hourIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) hourIt.next();
@@ -435,17 +442,17 @@ public final class ReportEngine {
 				return la < lb ? 1 : (la > lb ? -1 : 0);
 			}
 		});
-		final ReportChartSeries mapChart = new ReportChartSeries("注意力按导图（分钟）", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries mapChart = new ReportChartSeries(tr("ReportEngine.content.0045"), ReportChartSeries.TYPE_PIE);
 		final int limit = Math.min(12, mapRows.size());
 		for (int i = 0; i < limit; i++) {
 			final MapUsageSummary s = (MapUsageSummary) mapRows.get(i);
 			mapChart.add(trimLabel(s.getDisplayName(), 16), s.getEffectiveDurationMs() / 60000.0);
 			view.addDetail(s.getDisplayName() + " · " + formatDurationMs(s.getEffectiveDurationMs()) + " · "
-			        + s.getSessionCount() + " 次");
+			        + s.getSessionCount() + tr("ReportEngine.content.0046"));
 		}
 		view.addChart(mapChart);
 		if (sessionCount == 0) {
-			view.emptyHint = "该时段无使用记录。打开导图并实际编辑一段时间后会自动累计。";
+			view.emptyHint = tr("ReportEngine.content.0047");
 		}
 		return view;
 	}
@@ -455,7 +462,7 @@ public final class ReportEngine {
 		final ReportViewModel view = baseView(def, q);
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		long total = sumPlannedMinutes(occ);
-		view.addKpi("计划合计", formatHours(total), occ.size() + " 条安排");
+		view.addKpi(tr("ReportEngine.content.0048"), formatHours(total), occ.size() + tr("ReportEngine.content.0049"));
 		final Map byCat = new HashMap();
 		for (int i = 0; i < occ.size(); i++) {
 			final ReminderCalendarBridge.OccurrenceRef ref = (ReminderCalendarBridge.OccurrenceRef) occ.get(i);
@@ -469,8 +476,8 @@ public final class ReportEngine {
 			row[1]++;
 		}
 		final List rows = sortedLongPairs(byCat, 0);
-		final ReportChartSeries pie = new ReportChartSeries("计划工时构成（分钟）", ReportChartSeries.TYPE_PIE);
-		final ReportChartSeries bar = new ReportChartSeries("分类计划工时（分钟）", ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0050"), ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries bar = new ReportChartSeries(tr("ReportEngine.content.0051"), ReportChartSeries.TYPE_BAR);
 		for (int i = 0; i < rows.size(); i++) {
 			final Object[] row = (Object[]) rows.get(i);
 			final String cat = (String) row[0];
@@ -479,12 +486,12 @@ public final class ReportEngine {
 			final int pct = total <= 0 ? 0 : (int) Math.round(mins * 100.0 / total);
 			pie.add(trimLabel(cat, 14), mins);
 			bar.add(trimLabel(cat, 10), mins);
-			view.addDetail(cat + " · " + formatHours(mins) + " · " + pct + "% · " + count + " 条");
+			view.addDetail(cat + " · " + formatHours(mins) + " · " + pct + "% · " + count + tr("ReportEngine.content.0052"));
 		}
 		view.addChart(pie);
 		view.addChart(bar);
 		if (occ.isEmpty()) {
-			view.emptyHint = "该时段无安排。在提醒/日历里给任务填上计划工时后，这里会出现构成图。";
+			view.emptyHint = tr("ReportEngine.content.0053");
 		}
 		return view;
 	}
@@ -514,13 +521,13 @@ public final class ReportEngine {
 		final long spanDays = Math.max(1L, (q.range.endMs - q.range.startMs) / (24L * 60L * 60L * 1000L));
 		final long plannedTotal = sumMapLong(plannedByDay);
 		final long pomoTotal = sumMapLong(pomoByDay);
-		view.addKpi("计划合计", formatHours(plannedTotal), "日均 " + formatHours(plannedTotal / spanDays));
-		view.addKpi("有记录天数", String.valueOf(plannedByDay.size()), "非空日");
-		view.addKpi("番茄合计", formatDurationMs(pomoTotal), "专注");
-		final ReportChartSeries planLine = new ReportChartSeries("每日计划（分钟）", ReportChartSeries.TYPE_LINE);
+		view.addKpi(tr("ReportEngine.content.0048"), formatHours(plannedTotal), tr("ReportEngine.content.0054") + formatHours(plannedTotal / spanDays));
+		view.addKpi(tr("ReportEngine.content.0055"), String.valueOf(plannedByDay.size()), tr("ReportEngine.content.0056"));
+		view.addKpi(tr("ReportEngine.content.0057"), formatDurationMs(pomoTotal), tr("ReportEngine.content.0012"));
+		final ReportChartSeries planLine = new ReportChartSeries(tr("ReportEngine.content.0058"), ReportChartSeries.TYPE_LINE);
 		fillLongSeries(planLine, plannedByDay);
 		view.addChart(planLine);
-		final ReportChartSeries pomoLine = new ReportChartSeries("每日番茄（分钟）", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries pomoLine = new ReportChartSeries(tr("ReportEngine.content.0059"), ReportChartSeries.TYPE_LINE);
 		final Iterator pit = pomoByDay.entrySet().iterator();
 		while (pit.hasNext()) {
 			final Map.Entry e = (Map.Entry) pit.next();
@@ -528,7 +535,7 @@ public final class ReportEngine {
 		}
 		view.addChart(pomoLine);
 		if (plannedByDay.isEmpty() && pomoByDay.isEmpty()) {
-			view.emptyHint = "该时段无趋势数据。有安排或番茄后，这里会画出节奏曲线。";
+			view.emptyHint = tr("ReportEngine.content.0060");
 		}
 		return view;
 	}
@@ -561,7 +568,7 @@ public final class ReportEngine {
 			}
 			row[1]++;
 		}
-		view.addKpi("涉及导图", String.valueOf(load.size()), "有安排或待办");
+		view.addKpi(tr("ReportEngine.content.0061"), String.valueOf(load.size()), tr("ReportEngine.content.0062"));
 		final List rows = new ArrayList();
 		final Iterator it = load.entrySet().iterator();
 		while (it.hasNext()) {
@@ -577,21 +584,21 @@ public final class ReportEngine {
 				return ma < mb ? 1 : (ma > mb ? -1 : 0);
 			}
 		});
-		final ReportChartSeries hours = new ReportChartSeries("导图计划工时（分钟）", ReportChartSeries.TYPE_BAR);
-		final ReportChartSeries todos = new ReportChartSeries("导图待办数", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries hours = new ReportChartSeries(tr("ReportEngine.content.0063"), ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries todos = new ReportChartSeries(tr("ReportEngine.content.0064"), ReportChartSeries.TYPE_PIE);
 		final int limit = Math.min(14, rows.size());
 		for (int i = 0; i < limit; i++) {
 			final Object[] row = (Object[]) rows.get(i);
 			final String name = trimLabel((String) row[0], 14);
 			hours.add(name, ((Integer) row[3]).doubleValue());
 			todos.add(name, ((Integer) row[2]).doubleValue());
-			view.addDetail(row[0] + " · 安排" + row[1] + " · 待办" + row[2] + " · 计划"
+			view.addDetail(row[0] + tr("ReportEngine.content.0065") + row[1] + tr("ReportEngine.content.0066") + row[2] + tr("ReportEngine.content.0067")
 			        + formatHours(((Integer) row[3]).intValue()));
 		}
 		view.addChart(hours);
 		view.addChart(todos);
 		if (rows.isEmpty()) {
-			view.emptyHint = "没有导图负荷数据。给提醒加计划工时、或在图里放 hourglass 待办后再看。";
+			view.emptyHint = tr("ReportEngine.content.0068");
 		}
 		return view;
 	}
@@ -601,7 +608,7 @@ public final class ReportEngine {
 		final ReportViewModel view = baseView(def, q);
 		final long now = System.currentTimeMillis();
 		final List items = filterOneTimeBefore(now);
-		view.addKpi("逾期", String.valueOf(items.size()), "一次性提醒");
+		view.addKpi(tr("ReportEngine.content.0006"), String.valueOf(items.size()), tr("ReportEngine.content.0069"));
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.ReminderItem item = (MindMapWorkspaceContextScanner.ReminderItem) items
@@ -614,7 +621,7 @@ public final class ReportEngine {
 			}
 			list.add(item);
 		}
-		final ReportChartSeries pie = new ReportChartSeries("逾期按导图", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0070"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byMap.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
@@ -624,7 +631,7 @@ public final class ReportEngine {
 		view.addChart(pie);
 		appendReminderDetails(view, items, 80, true);
 		if (items.isEmpty()) {
-			view.emptyHint = "太好了，暂无逾期。保持这个状态。";
+			view.emptyHint = tr("ReportEngine.content.0071");
 		}
 		return view;
 	}
@@ -640,7 +647,7 @@ public final class ReportEngine {
 				urgent.add(ref);
 			}
 		}
-		view.addKpi("紧急安排", String.valueOf(urgent.size()), "jinji≥1");
+		view.addKpi(tr("ReportEngine.content.0072"), String.valueOf(urgent.size()), "jinji≥1");
 		final Map byJinji = new TreeMap(Collections.reverseOrder());
 		for (int i = 0; i < urgent.size(); i++) {
 			final ReminderCalendarBridge.OccurrenceRef ref = (ReminderCalendarBridge.OccurrenceRef) urgent.get(i);
@@ -652,18 +659,18 @@ public final class ReportEngine {
 			}
 			list.add(ref);
 		}
-		final ReportChartSeries bar = new ReportChartSeries("按紧急度分层", ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries bar = new ReportChartSeries(tr("ReportEngine.content.0073"), ReportChartSeries.TYPE_BAR);
 		final Iterator it = byJinji.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
 			final List list = (List) entry.getValue();
-			bar.add("紧急度 " + entry.getKey(), list.size());
-			view.addDetail("—— 紧急度 " + entry.getKey() + " · " + list.size() + " 条 ——");
+			bar.add(tr("ReportEngine.content.0074") + entry.getKey(), list.size());
+			view.addDetail(tr("ReportEngine.content.0075") + entry.getKey() + " · " + list.size() + tr("ReportEngine.content.0076"));
 			appendOccDetails(view, list, 40);
 		}
 		view.addChart(bar);
 		if (urgent.isEmpty()) {
-			view.emptyHint = "该时段无紧急安排。若需要分层，给提醒设置紧急度（jinji）。";
+			view.emptyHint = tr("ReportEngine.content.0077");
 		}
 		return view;
 	}
@@ -672,7 +679,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_TODOS);
 		final ReportViewModel view = baseView(def, q);
 		final List todos = MindMapWorkspaceContextScanner.scanAllTodos();
-		view.addKpi("待办总数", String.valueOf(todos.size()), "hourglass");
+		view.addKpi(tr("ReportEngine.content.0078"), String.valueOf(todos.size()), "hourglass");
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < todos.size(); i++) {
 			final MindMapWorkspaceContextScanner.TodoItem item = (MindMapWorkspaceContextScanner.TodoItem) todos.get(i);
@@ -687,7 +694,7 @@ public final class ReportEngine {
 			}
 			list.add(item);
 		}
-		final ReportChartSeries pie = new ReportChartSeries("待办库存按导图", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0079"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byMap.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
@@ -702,7 +709,7 @@ public final class ReportEngine {
 		}
 		view.addChart(pie);
 		if (todos.isEmpty()) {
-			view.emptyHint = "无待办。需要追踪时，给节点加 hourglass 图标。";
+			view.emptyHint = tr("ReportEngine.content.0080");
 		}
 		return view;
 	}
@@ -711,7 +718,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_FLAGS);
 		final ReportViewModel view = baseView(def, q);
 		final List flags = MindMapWorkspaceContextScanner.scanFlagItems();
-		view.addKpi("红旗", String.valueOf(flags.size()), "行动钉");
+		view.addKpi(tr("ReportEngine.content.0081"), String.valueOf(flags.size()), tr("ReportEngine.content.0082"));
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < flags.size(); i++) {
 			final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) flags.get(i);
@@ -726,7 +733,7 @@ public final class ReportEngine {
 			}
 			list.add(item);
 		}
-		final ReportChartSeries pie = new ReportChartSeries("红旗按导图", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0083"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byMap.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
@@ -741,7 +748,7 @@ public final class ReportEngine {
 		}
 		view.addChart(pie);
 		if (flags.isEmpty()) {
-			view.emptyHint = "无红旗。把「下一步必须推进」的节点钉上 flag。";
+			view.emptyHint = tr("ReportEngine.content.0084");
 		}
 		return view;
 	}
@@ -751,7 +758,7 @@ public final class ReportEngine {
 		final ReportViewModel view = baseView(def, q);
 		final PomodoroSessionManager mgr = PomodoroSessionManager.getInstance();
 		if (mgr == null) {
-			view.emptyHint = "番茄钟未初始化。";
+			view.emptyHint = tr("ReportEngine.content.0085");
 			return view;
 		}
 		final List sessions = mgr.collectSessionsInRange(q.range.startMs, q.range.endMs);
@@ -768,9 +775,9 @@ public final class ReportEngine {
 			Long nodeSum = (Long) byNode.get(nodeKey);
 			byNode.put(nodeKey, Long.valueOf((nodeSum == null ? 0L : nodeSum.longValue()) + s.focusMs));
 		}
-		view.addKpi("会话段", String.valueOf(sessions.size()), "番茄段");
-		view.addKpi("专注合计", formatDurationMs(total), "深度工作");
-		final ReportChartSeries dayLine = new ReportChartSeries("每日专注（分钟）", ReportChartSeries.TYPE_LINE);
+		view.addKpi(tr("ReportEngine.content.0086"), String.valueOf(sessions.size()), tr("ReportEngine.content.0087"));
+		view.addKpi(tr("ReportEngine.content.0088"), formatDurationMs(total), tr("ReportEngine.content.0025"));
+		final ReportChartSeries dayLine = new ReportChartSeries(tr("ReportEngine.content.0089"), ReportChartSeries.TYPE_LINE);
 		final Iterator dayIt = byDay.entrySet().iterator();
 		while (dayIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) dayIt.next();
@@ -790,7 +797,7 @@ public final class ReportEngine {
 				return la < lb ? 1 : (la > lb ? -1 : 0);
 			}
 		});
-		final ReportChartSeries nodePie = new ReportChartSeries("专注按节点（分钟）", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries nodePie = new ReportChartSeries(tr("ReportEngine.content.0090"), ReportChartSeries.TYPE_PIE);
 		final int limit = Math.min(12, nodeRows.size());
 		for (int i = 0; i < limit; i++) {
 			final Object[] row = (Object[]) nodeRows.get(i);
@@ -799,7 +806,7 @@ public final class ReportEngine {
 		}
 		view.addChart(nodePie);
 		if (sessions.isEmpty()) {
-			view.emptyHint = "该时段无番茄记录。在节点上开番茄钟后会出现在这里。";
+			view.emptyHint = tr("ReportEngine.content.0091");
 		}
 		return view;
 	}
@@ -809,7 +816,7 @@ public final class ReportEngine {
 		final ReportViewModel view = baseView(def, q);
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		final int[] buckets = new int[6];
-		final String[] labels = { "未设时长", "≤15分", "16–30分", "31–60分", "61–120分", ">120分" };
+		final String[] labels = { tr("ReportEngine.content.0092"), tr("ReportEngine.content.0093"), tr("ReportEngine.content.0094"), tr("ReportEngine.content.0095"), tr("ReportEngine.content.0096"), tr("ReportEngine.content.0097") };
 		for (int i = 0; i < occ.size(); i++) {
 			final ReminderCalendarBridge.OccurrenceRef ref = (ReminderCalendarBridge.OccurrenceRef) occ.get(i);
 			final int m = ref.taskTimeMinutes;
@@ -832,22 +839,22 @@ public final class ReportEngine {
 				buckets[5]++;
 			}
 		}
-		view.addKpi("样本", String.valueOf(occ.size()), "安排条数");
-		view.addKpi("未估时长", String.valueOf(buckets[0]), "建议补填");
-		final ReportChartSeries pie = new ReportChartSeries("时长切片习惯", ReportChartSeries.TYPE_PIE);
-		final ReportChartSeries bar = new ReportChartSeries("分桶数量", ReportChartSeries.TYPE_BAR);
+		view.addKpi(tr("ReportEngine.content.0098"), String.valueOf(occ.size()), tr("ReportEngine.content.0099"));
+		view.addKpi(tr("ReportEngine.content.0100"), String.valueOf(buckets[0]), tr("ReportEngine.content.0101"));
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0102"), ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries bar = new ReportChartSeries(tr("ReportEngine.content.0103"), ReportChartSeries.TYPE_BAR);
 		for (int i = 0; i < buckets.length; i++) {
 			pie.add(labels[i], buckets[i]);
 			bar.add(labels[i], buckets[i]);
-			view.addDetail(labels[i] + " · " + buckets[i] + " 条");
+			view.addDetail(labels[i] + " · " + buckets[i] + tr("ReportEngine.content.0052"));
 		}
 		view.addChart(pie);
 		view.addChart(bar);
 		if (buckets[0] > occ.size() / 2 && occ.size() > 0) {
-			view.addDetail("洞察：超过一半安排没填时长 → 计划对照会失真，建议养成填 taskTime 的习惯。");
+			view.addDetail(tr("ReportEngine.content.0104"));
 		}
 		if (occ.isEmpty()) {
-			view.emptyHint = "无安排样本。";
+			view.emptyHint = tr("ReportEngine.content.0105");
 		}
 		return view;
 	}
@@ -856,14 +863,14 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_TARGET);
 		final ReportViewModel view = baseView(def, q);
 		final List goals = discoverGoalNames();
-		view.addKpi("目标数", String.valueOf(goals.size()), "「目标」子项");
+		view.addKpi(tr("ReportEngine.content.0106"), String.valueOf(goals.size()), tr("ReportEngine.content.0107"));
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		if (goals.isEmpty()) {
-			view.emptyHint = "未找到「目标」节点。在导图建父节点「目标」，下面挂子目标名称。";
-			view.addDetail("回退提示：先看「计划构成」了解时间预算分布。");
+			view.emptyHint = tr("ReportEngine.content.0108");
+			view.addDetail(tr("ReportEngine.content.0109"));
 			return view;
 		}
-		final ReportChartSeries pie = new ReportChartSeries("目标相关计划工时（分钟）", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0110"), ReportChartSeries.TYPE_PIE);
 		long matchedMinutes = 0L;
 		for (int g = 0; g < goals.size(); g++) {
 			final String goal = (String) goals.get(g);
@@ -883,9 +890,9 @@ public final class ReportEngine {
 			}
 			matchedMinutes += mins;
 			pie.add(trimLabel(goal, 14), mins);
-			view.addDetail(goal + " · " + formatHours(mins) + " · " + count + " 条");
+			view.addDetail(goal + " · " + formatHours(mins) + " · " + count + tr("ReportEngine.content.0052"));
 		}
-		view.addKpi("目标工时", formatHours(matchedMinutes), "已匹配安排");
+		view.addKpi(tr("ReportEngine.content.0111"), formatHours(matchedMinutes), tr("ReportEngine.content.0112"));
 		view.addChart(pie);
 		return view;
 	}
@@ -906,7 +913,7 @@ public final class ReportEngine {
 			}
 			filtered.add(item);
 		}
-		view.addKpi("变更节点", String.valueOf(filtered.size()), "思考痕迹");
+		view.addKpi(tr("ReportEngine.content.0113"), String.valueOf(filtered.size()), tr("ReportEngine.content.0114"));
 		final Map byDay = new TreeMap();
 		final Map byHour = new TreeMap();
 		final Map byMap = new TreeMap();
@@ -922,21 +929,21 @@ public final class ReportEngine {
 			final String map = mapLabel(item.mapFile);
 			byMap.put(map, Integer.valueOf(intVal(byMap.get(map)) + 1));
 		}
-		final ReportChartSeries dayLine = new ReportChartSeries("按日修改次数", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries dayLine = new ReportChartSeries(tr("ReportEngine.content.0115"), ReportChartSeries.TYPE_LINE);
 		final Iterator dit = byDay.entrySet().iterator();
 		while (dit.hasNext()) {
 			final Map.Entry e = (Map.Entry) dit.next();
 			dayLine.add(shortDay((String) e.getKey()), ((Integer) e.getValue()).doubleValue());
 		}
 		view.addChart(dayLine);
-		final ReportChartSeries hourLine = new ReportChartSeries("按时段修改次数", ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries hourLine = new ReportChartSeries(tr("ReportEngine.content.0116"), ReportChartSeries.TYPE_BAR);
 		final Iterator hit = byHour.entrySet().iterator();
 		while (hit.hasNext()) {
 			final Map.Entry e = (Map.Entry) hit.next();
 			hourLine.add((String) e.getKey(), ((Integer) e.getValue()).doubleValue());
 		}
 		view.addChart(hourLine);
-		final ReportChartSeries mapPie = new ReportChartSeries("按导图修改占比", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries mapPie = new ReportChartSeries(tr("ReportEngine.content.0117"), ReportChartSeries.TYPE_PIE);
 		final Iterator mit = byMap.entrySet().iterator();
 		while (mit.hasNext()) {
 			final Map.Entry e = (Map.Entry) mit.next();
@@ -951,7 +958,7 @@ public final class ReportEngine {
 			        + mapLabel(item.mapFile) + "〕");
 		}
 		if (filtered.isEmpty()) {
-			view.emptyHint = "该时段无节点变更。";
+			view.emptyHint = tr("ReportEngine.content.0118");
 		}
 		return view;
 	}
@@ -961,8 +968,8 @@ public final class ReportEngine {
 		final ReportViewModel view = baseView(def, q);
 		final List keyFiles = findKeyLogFiles();
 		if (keyFiles.isEmpty()) {
-			view.emptyHint = "未找到 key.txt。把 DocearReminder 的击键日志放到用户目录或工作区后重试。";
-			view.addDetail("可放置位置：用户 Freeplane/Docear 目录、项目 _data、工作区扫描根。");
+			view.emptyHint = tr("ReportEngine.content.0119");
+			view.addDetail(tr("ReportEngine.content.0120"));
 			return view;
 		}
 		final Map byDay = new TreeMap();
@@ -970,7 +977,7 @@ public final class ReportEngine {
 		long totalKeys = 0L;
 		for (int f = 0; f < keyFiles.size(); f++) {
 			final File file = (File) keyFiles.get(f);
-			view.addDetail("日志 · " + file.getAbsolutePath());
+			view.addDetail(tr("ReportEngine.content.0121") + file.getAbsolutePath());
 			try {
 				final java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
 				        new java.io.FileInputStream(file), "UTF-8"));
@@ -1013,14 +1020,14 @@ public final class ReportEngine {
 				reader.close();
 			}
 			catch (Exception e) {
-				view.addDetail("读取失败：" + e.getMessage());
+				view.addDetail(tr("ReportEngine.content.0122") + e.getMessage());
 			}
 		}
-		view.addKpi("击键", String.valueOf(totalKeys), "合计");
-		final ReportChartSeries dayLine = new ReportChartSeries("按日击键", ReportChartSeries.TYPE_LINE);
+		view.addKpi(tr("ReportEngine.content.0123"), String.valueOf(totalKeys), tr("ReportEngine.content.0124"));
+		final ReportChartSeries dayLine = new ReportChartSeries(tr("ReportEngine.content.0125"), ReportChartSeries.TYPE_LINE);
 		fillLongSeries(dayLine, byDay);
 		view.addChart(dayLine);
-		final ReportChartSeries hourBar = new ReportChartSeries("按时段击键", ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries hourBar = new ReportChartSeries(tr("ReportEngine.content.0126"), ReportChartSeries.TYPE_BAR);
 		final Iterator hit = byHour.entrySet().iterator();
 		while (hit.hasNext()) {
 			final Map.Entry e = (Map.Entry) hit.next();
@@ -1034,7 +1041,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_RECURRING);
 		final ReportViewModel view = baseView(def, q);
 		final List items = MindMapWorkspaceContextScanner.scanRecurringReminders();
-		view.addKpi("周期提醒", String.valueOf(items.size()), "例行事务");
+		view.addKpi(tr("ReportEngine.content.0127"), String.valueOf(items.size()), tr("ReportEngine.content.0128"));
 		final Map byType = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.ReminderItem item = (MindMapWorkspaceContextScanner.ReminderItem) items
@@ -1042,7 +1049,7 @@ public final class ReportEngine {
 			if (!q.matches(item.nodeText, mapLabel(item.mapFile), item.remindType)) {
 				continue;
 			}
-			final String type = item.remindType == null || item.remindType.length() == 0 ? "周期" : item.remindType;
+			final String type = item.remindType == null || item.remindType.length() == 0 ? tr("ReportEngine.content.0129") : item.remindType;
 			List list = (List) byType.get(type);
 			if (list == null) {
 				list = new ArrayList();
@@ -1050,7 +1057,7 @@ public final class ReportEngine {
 			}
 			list.add(item);
 		}
-		final ReportChartSeries pie = new ReportChartSeries("周期类型分布", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0130"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byType.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
@@ -1061,7 +1068,7 @@ public final class ReportEngine {
 		}
 		view.addChart(pie);
 		if (items.isEmpty()) {
-			view.emptyHint = "无周期提醒。";
+			view.emptyHint = tr("ReportEngine.content.0131");
 		}
 		return view;
 	}
@@ -1070,7 +1077,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_PUBLISHED);
 		final ReportViewModel view = baseView(def, q);
 		final List items = MindMapWorkspaceContextScanner.scanPublishedItems();
-		view.addKpi("发布项", String.valueOf(items.size()), "internet 图标");
+		view.addKpi(tr("ReportEngine.content.0132"), String.valueOf(items.size()), tr("ReportEngine.content.0133"));
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) items.get(i);
@@ -1085,7 +1092,7 @@ public final class ReportEngine {
 			}
 			list.add(item);
 		}
-		final ReportChartSeries pie = new ReportChartSeries("发布项按导图", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(tr("ReportEngine.content.0134"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byMap.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
@@ -1100,7 +1107,7 @@ public final class ReportEngine {
 		}
 		view.addChart(pie);
 		if (items.isEmpty()) {
-			view.emptyHint = "无发布项。对外输出的节点可加 internet 图标。";
+			view.emptyHint = tr("ReportEngine.content.0135");
 		}
 		return view;
 	}
@@ -1140,15 +1147,15 @@ public final class ReportEngine {
 	}
 
 	private static ReportNodeSpec root(final ReportDefinition def, final ReportQuery q, final String icon) {
-		final StringBuilder title = new StringBuilder("报表 · ").append(def.title);
+		final StringBuilder title = new StringBuilder(tr("ReportEngine.content.0005")).append(def.title);
 		if (def.usesTimeRange && q != null && q.range != null) {
 			title.append(" · ").append(q.range.label);
 		}
 		if (q != null && q.includeKeyword.length() > 0) {
-			title.append(" · 含「").append(q.includeKeyword).append("」");
+			title.append(tr("ReportEngine.content.0136")).append(q.includeKeyword).append("」");
 		}
 		if (q != null && q.excludeKeyword.length() > 0) {
-			title.append(" · 除「").append(q.excludeKeyword).append("」");
+			title.append(tr("ReportEngine.content.0137")).append(q.excludeKeyword).append("」");
 		}
 		return new ReportNodeSpec(title.toString(), icon);
 	}
@@ -1163,7 +1170,7 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "clock");
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		long total = sumPlannedMinutes(occ);
-		root.add("合计计划工时 · " + formatHours(total) + " · " + occ.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0138") + formatHours(total) + " · " + occ.size() + tr("ReportEngine.content.0052"), "info");
 
 		final Map byCat = new HashMap();
 		for (int i = 0; i < occ.size(); i++) {
@@ -1178,14 +1185,14 @@ public final class ReportEngine {
 			row[1]++;
 		}
 		final List rows = sortedLongPairs(byCat, 0);
-		final ReportNodeSpec pie = root.add("分类占比（类时间块饼图）", "full-7");
+		final ReportNodeSpec pie = root.add(tr("ReportEngine.content.0139"), "full-7");
 		for (int i = 0; i < rows.size(); i++) {
 			final Object[] row = (Object[]) rows.get(i);
 			final String cat = (String) row[0];
 			final long mins = ((long[]) row[1])[0];
 			final long count = ((long[]) row[1])[1];
 			final int pct = total <= 0 ? 0 : (int) Math.round(mins * 100.0 / total);
-			final ReportNodeSpec catNode = pie.add(cat + " · " + formatHours(mins) + " · " + pct + "% · " + count + "条",
+			final ReportNodeSpec catNode = pie.add(cat + " · " + formatHours(mins) + " · " + pct + "% · " + count + tr("ReportEngine.content.0140"),
 			        "full-" + Math.min(9, Math.max(1, pct / 10)));
 			final List catOcc = new ArrayList();
 			for (int j = 0; j < occ.size(); j++) {
@@ -1197,7 +1204,7 @@ public final class ReportEngine {
 			addOccurrences(catNode, catOcc, 25);
 		}
 		if (occ.isEmpty()) {
-			root.add("该时段无安排（原版统计 mindmap=TimeBlock；此处用全部提醒计划工时）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0141"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1220,7 +1227,7 @@ public final class ReportEngine {
 				continue;
 			}
 			final String path = rec.getMapPath() == null ? "" : rec.getMapPath();
-			final String mapName = path.length() == 0 ? "（未知）" : new File(path).getName();
+			final String mapName = path.length() == 0 ? tr("ReportEngine.content.0039") : new File(path).getName();
 			if (!q.matches(mapName, path, "")) {
 				continue;
 			}
@@ -1239,11 +1246,11 @@ public final class ReportEngine {
 			}
 			summary.addRecord(rec);
 		}
-		final ReportNodeSpec summaryNode = root.add("汇总", "info");
-		summaryNode.add("会话 · " + sessionCount, "list");
-		summaryNode.add("有效时长 · " + formatDurationMs(totalEffective), "wizard");
+		final ReportNodeSpec summaryNode = root.add(tr("ReportEngine.content.0142"), "info");
+		summaryNode.add(tr("ReportEngine.content.0143") + sessionCount, "list");
+		summaryNode.add(tr("ReportEngine.content.0144") + formatDurationMs(totalEffective), "wizard");
 
-		final ReportNodeSpec hourNode = root.add("按时段（类使用记录柱状）", "clock");
+		final ReportNodeSpec hourNode = root.add(tr("ReportEngine.content.0145"), "clock");
 		final Iterator hourIt = byHour.entrySet().iterator();
 		while (hourIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) hourIt.next();
@@ -1258,15 +1265,15 @@ public final class ReportEngine {
 				return la < lb ? 1 : (la > lb ? -1 : 0);
 			}
 		});
-		final ReportNodeSpec maps = root.add("按导图/窗体", "folder");
+		final ReportNodeSpec maps = root.add(tr("ReportEngine.content.0146"), "folder");
 		final int limit = Math.min(40, mapRows.size());
 		for (int i = 0; i < limit; i++) {
 			final MapUsageSummary s = (MapUsageSummary) mapRows.get(i);
 			maps.add(s.getDisplayName() + " · " + formatDurationMs(s.getEffectiveDurationMs()) + " · "
-			        + s.getSessionCount() + " 次", "folder");
+			        + s.getSessionCount() + tr("ReportEngine.content.0046"), "folder");
 		}
 		if (sessionCount == 0) {
-			root.add("该时段无使用记录（对应原版 UsedTimer）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0147"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1277,8 +1284,8 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "pencil");
 		final List keyFiles = findKeyLogFiles();
 		if (keyFiles.isEmpty()) {
-			root.add("未找到 key.txt（原版键盘分析数据源）", "messagebox_warning");
-			root.add("可将 DocearReminder 的 key.txt 放到用户目录或工作区后重试", "info");
+			root.add(tr("ReportEngine.content.0148"), "messagebox_warning");
+			root.add(tr("ReportEngine.content.0149"), "info");
 			return root;
 		}
 		final Map byDay = new TreeMap();
@@ -1286,7 +1293,7 @@ public final class ReportEngine {
 		long totalKeys = 0L;
 		for (int f = 0; f < keyFiles.size(); f++) {
 			final File file = (File) keyFiles.get(f);
-			root.add("日志 · " + file.getAbsolutePath(), "attach");
+			root.add(tr("ReportEngine.content.0121") + file.getAbsolutePath(), "attach");
 			try {
 				final java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
 				        new java.io.FileInputStream(file), "UTF-8"));
@@ -1329,21 +1336,21 @@ public final class ReportEngine {
 				reader.close();
 			}
 			catch (Exception e) {
-				root.add("读取失败：" + e.getMessage(), "messagebox_warning");
+				root.add(tr("ReportEngine.content.0122") + e.getMessage(), "messagebox_warning");
 			}
 		}
-		root.add("击键合计 · " + totalKeys, "info");
-		final ReportNodeSpec dayNode = root.add("按日", "calendar");
+		root.add(tr("ReportEngine.content.0150") + totalKeys, "info");
+		final ReportNodeSpec dayNode = root.add(tr("ReportEngine.content.0151"), "calendar");
 		final Iterator dayIt = byDay.entrySet().iterator();
 		while (dayIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) dayIt.next();
-			dayNode.add(e.getKey() + " · " + e.getValue() + " 次", "pencil");
+			dayNode.add(e.getKey() + " · " + e.getValue() + tr("ReportEngine.content.0046"), "pencil");
 		}
-		final ReportNodeSpec hourNode = root.add("按时段", "clock");
+		final ReportNodeSpec hourNode = root.add(tr("ReportEngine.content.0152"), "clock");
 		final Iterator hourIt = byHour.entrySet().iterator();
 		while (hourIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) hourIt.next();
-			hourNode.add(String.format("%02d:00", ((Integer) e.getKey()).intValue()) + " · " + e.getValue() + " 次",
+			hourNode.add(String.format("%02d:00", ((Integer) e.getKey()).intValue()) + " · " + e.getValue() + tr("ReportEngine.content.0046"),
 			        "full-1");
 		}
 		return root;
@@ -1376,27 +1383,27 @@ public final class ReportEngine {
 		final long spanDays = Math.max(1L, (q.range.endMs - q.range.startMs) / (24L * 60L * 60L * 1000L));
 		final long plannedTotal = sumMapLong(plannedByDay);
 		final long pomoTotal = sumMapLong(pomoByDay);
-		final ReportNodeSpec summary = root.add("汇总", "info");
-		summary.add("总计划工时 · " + formatHours(plannedTotal), "clock");
-		summary.add("平均每天（总天数 " + spanDays + "）· " + formatHours(plannedTotal / spanDays), "full-3");
-		summary.add("有记录天数 · " + plannedByDay.size() + " · 日均 "
+		final ReportNodeSpec summary = root.add(tr("ReportEngine.content.0142"), "info");
+		summary.add(tr("ReportEngine.content.0153") + formatHours(plannedTotal), "clock");
+		summary.add(tr("ReportEngine.content.0154") + spanDays + "）· " + formatHours(plannedTotal / spanDays), "full-3");
+		summary.add(tr("ReportEngine.content.0155") + plannedByDay.size() + tr("ReportEngine.content.0156")
 		        + formatHours(plannedByDay.isEmpty() ? 0 : plannedTotal / plannedByDay.size()), "full-5");
-		summary.add("番茄合计 · " + formatDurationMs(pomoTotal), "clock2");
+		summary.add(tr("ReportEngine.content.0157") + formatDurationMs(pomoTotal), "clock2");
 
-		final ReportNodeSpec planned = root.add("每日计划工时", "calendar");
+		final ReportNodeSpec planned = root.add(tr("ReportEngine.content.0158"), "calendar");
 		final Iterator it = plannedByDay.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry e = (Map.Entry) it.next();
 			planned.add(e.getKey() + " · " + formatHours(((Long) e.getValue()).longValue()), "up");
 		}
-		final ReportNodeSpec pomo = root.add("每日番茄", "clock2");
+		final ReportNodeSpec pomo = root.add(tr("ReportEngine.content.0159"), "clock2");
 		final Iterator pit = pomoByDay.entrySet().iterator();
 		while (pit.hasNext()) {
 			final Map.Entry e = (Map.Entry) pit.next();
 			pomo.add(e.getKey() + " · " + formatDurationMs(((Long) e.getValue()).longValue()), "up");
 		}
 		if (plannedByDay.isEmpty() && pomoByDay.isEmpty()) {
-			root.add("该时段无趋势数据", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0160"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1406,11 +1413,11 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_TARGET);
 		final ReportNodeSpec root = root(def, q, "launch");
 		final List goals = discoverGoalNames();
-		root.add("发现目标 · " + goals.size() + " 个（扫描含「目标」的父节点子项）", "info");
+		root.add(tr("ReportEngine.content.0161") + goals.size() + tr("ReportEngine.content.0162"), "info");
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		if (goals.isEmpty()) {
-			root.add("未找到「目标」节点；请在导图中建「目标」父节点并添加子目标", "messagebox_warning");
-			root.add("回退：按导图分类展示计划工时", "info");
+			root.add(tr("ReportEngine.content.0163"), "messagebox_warning");
+			root.add(tr("ReportEngine.content.0164"), "info");
 			return timeBlockReport(q);
 		}
 		long matchedMinutes = 0L;
@@ -1433,10 +1440,10 @@ public final class ReportEngine {
 				}
 			}
 			matchedMinutes += mins;
-			final ReportNodeSpec goalNode = root.add(goal + " · " + formatHours(mins) + " · " + count + " 条", "launch");
+			final ReportNodeSpec goalNode = root.add(goal + " · " + formatHours(mins) + " · " + count + tr("ReportEngine.content.0052"), "launch");
 			addOccurrences(goalNode, matched, 20);
 		}
-		root.add("目标相关计划工时合计 · " + formatHours(matchedMinutes), "clock");
+		root.add(tr("ReportEngine.content.0165") + formatHours(matchedMinutes), "clock");
 		return root;
 	}
 
@@ -1457,13 +1464,13 @@ public final class ReportEngine {
 			}
 			filtered.add(item);
 		}
-		root.add("变更节点 · " + filtered.size(), "info");
+		root.add(tr("ReportEngine.content.0166") + filtered.size(), "info");
 
 		final Map byDay = new TreeMap();
 		final Map byHour = new TreeMap();
 		final Map byWeekday = new TreeMap();
 		final Map byMap = new TreeMap();
-		final String[] weekNames = { "周日", "周一", "周二", "周三", "周四", "周五", "周六" };
+		final String[] weekNames = { tr("ReportEngine.content.0167"), tr("ReportEngine.content.0168"), tr("ReportEngine.content.0169"), tr("ReportEngine.content.0170"), tr("ReportEngine.content.0171"), tr("ReportEngine.content.0172"), tr("ReportEngine.content.0173") };
 		for (int i = 0; i < filtered.size(); i++) {
 			final MindMapWorkspaceContextScanner.ModifiedItem item = (MindMapWorkspaceContextScanner.ModifiedItem) filtered
 			        .get(i);
@@ -1479,18 +1486,18 @@ public final class ReportEngine {
 			byMap.put(map, Integer.valueOf(intVal(byMap.get(map)) + 1));
 		}
 
-		final ReportNodeSpec dayNode = root.add("按日（柱状）", "calendar");
+		final ReportNodeSpec dayNode = root.add(tr("ReportEngine.content.0174"), "calendar");
 		addIntMap(dayNode, byDay, "full-4");
-		final ReportNodeSpec hourNode = root.add("按时段", "clock");
+		final ReportNodeSpec hourNode = root.add(tr("ReportEngine.content.0152"), "clock");
 		final Iterator hit = byHour.entrySet().iterator();
 		while (hit.hasNext()) {
 			final Map.Entry e = (Map.Entry) hit.next();
-			hourNode.add(String.format("%02d:00", ((Integer) e.getKey()).intValue()) + " · " + e.getValue() + " 次",
+			hourNode.add(String.format("%02d:00", ((Integer) e.getKey()).intValue()) + " · " + e.getValue() + tr("ReportEngine.content.0046"),
 			        "full-2");
 		}
-		final ReportNodeSpec weekNode = root.add("按星期", "prepare");
+		final ReportNodeSpec weekNode = root.add(tr("ReportEngine.content.0175"), "prepare");
 		addIntMap(weekNode, byWeekday, "full-3");
-		final ReportNodeSpec mapNode = root.add("按导图（饼图式）", "folder");
+		final ReportNodeSpec mapNode = root.add(tr("ReportEngine.content.0176"), "folder");
 		final List mapRows = new ArrayList();
 		final Iterator mit = byMap.entrySet().iterator();
 		while (mit.hasNext()) {
@@ -1509,10 +1516,10 @@ public final class ReportEngine {
 			final Object[] row = (Object[]) mapRows.get(i);
 			final int c = ((Integer) row[1]).intValue();
 			final int pct = total <= 0 ? 0 : (int) Math.round(c * 100.0 / total);
-			mapNode.add(row[0] + " · " + c + " 次 · " + pct + "%", "folder");
+			mapNode.add(row[0] + " · " + c + tr("ReportEngine.content.0177") + pct + "%", "folder");
 		}
 		if (filtered.isEmpty()) {
-			root.add("该时段无节点变更", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0178"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1521,7 +1528,7 @@ public final class ReportEngine {
 		final Iterator it = map.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry e = (Map.Entry) it.next();
-			parent.add(e.getKey() + " · " + e.getValue() + " 次", icon);
+			parent.add(e.getKey() + " · " + e.getValue() + tr("ReportEngine.content.0046"), icon);
 		}
 	}
 
@@ -1557,7 +1564,7 @@ public final class ReportEngine {
 
 	private static String categoryOf(final ReminderCalendarBridge.OccurrenceRef ref) {
 		if (ref == null || ref.file == null) {
-			return "（未分类）";
+			return tr("ReportEngine.content.0179");
 		}
 		final File parent = ref.file.getParentFile();
 		if (parent != null && parent.getName() != null && parent.getName().length() > 0) {
@@ -1619,8 +1626,8 @@ public final class ReportEngine {
 			text = "";
 		}
 		text = text.replaceAll("\\s+", " ").trim();
-		final boolean isGoalParent = text.equals("目标") || text.startsWith("目标");
-		if (underGoal && text.length() > 0 && !text.equals("目标") && !seen.contains(text)) {
+		final boolean isGoalParent = text.equals(tr("ReportEngine.content.0180")) || text.startsWith(tr("ReportEngine.content.0180"));
+		if (underGoal && text.length() > 0 && !text.equals(tr("ReportEngine.content.0180")) && !seen.contains(text)) {
 			seen.add(text);
 			goals.add(text);
 		}
@@ -1692,16 +1699,16 @@ public final class ReportEngine {
 		final long pomoMs = sumPomodoroMs(today.startMs, today.endMs);
 		final List todos = MindMapWorkspaceContextScanner.scanAllTodos();
 
-		final ReportNodeSpec summary = root.add("汇总", "info");
-		summary.add("逾期提醒 · " + overdue.size() + " 条", "messagebox_warning");
-		summary.add("今日安排 · " + occ.size() + " 条 · 计划 " + formatHours(planned), "calendar");
-		summary.add("待办总数 · " + todos.size() + " 条", "hourglass");
-		summary.add("今日番茄 · " + formatDurationMs(pomoMs), "clock2");
+		final ReportNodeSpec summary = root.add(tr("ReportEngine.content.0142"), "info");
+		summary.add(tr("ReportEngine.content.0181") + overdue.size() + tr("ReportEngine.content.0052"), "messagebox_warning");
+		summary.add(tr("ReportEngine.content.0182") + occ.size() + tr("ReportEngine.content.0183") + formatHours(planned), "calendar");
+		summary.add(tr("ReportEngine.content.0184") + todos.size() + tr("ReportEngine.content.0052"), "hourglass");
+		summary.add(tr("ReportEngine.content.0185") + formatDurationMs(pomoMs), "clock2");
 
-		final ReportNodeSpec overdueNode = root.add("逾期（最多 12 条）", "messagebox_warning");
+		final ReportNodeSpec overdueNode = root.add(tr("ReportEngine.content.0186"), "messagebox_warning");
 		addReminderItems(overdueNode, overdue, 12, true);
 
-		final ReportNodeSpec todayNode = root.add("今日安排", "calendar");
+		final ReportNodeSpec todayNode = root.add(tr("ReportEngine.content.0008"), "calendar");
 		addOccurrences(todayNode, occ, 40);
 
 		return root;
@@ -1712,26 +1719,26 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "clock");
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		final long totalMin = sumPlannedMinutes(occ);
-		final ReportNodeSpec summary = root.add("汇总", "info");
-		summary.add("安排条数 · " + occ.size(), "list");
-		summary.add("计划工时合计 · " + formatHours(totalMin), "clock");
-		summary.add("有工时条目 · " + countWithMinutes(occ), "full-3");
+		final ReportNodeSpec summary = root.add(tr("ReportEngine.content.0142"), "info");
+		summary.add(tr("ReportEngine.content.0187") + occ.size(), "list");
+		summary.add(tr("ReportEngine.content.0188") + formatHours(totalMin), "clock");
+		summary.add(tr("ReportEngine.content.0189") + countWithMinutes(occ), "full-3");
 
 		final Map byDay = groupOccByDay(occ);
-		final ReportNodeSpec byDayNode = root.add("按日", "calendar");
+		final ReportNodeSpec byDayNode = root.add(tr("ReportEngine.content.0151"), "calendar");
 		final List dayKeys = new ArrayList(byDay.keySet());
 		Collections.sort(dayKeys);
 		for (int i = 0; i < dayKeys.size(); i++) {
 			final String day = (String) dayKeys.get(i);
 			final List dayList = (List) byDay.get(day);
 			final long mins = sumPlannedMinutes(dayList);
-			final ReportNodeSpec dayNode = byDayNode.add(day + " · " + formatHours(mins) + " · " + dayList.size() + " 条",
+			final ReportNodeSpec dayNode = byDayNode.add(day + " · " + formatHours(mins) + " · " + dayList.size() + tr("ReportEngine.content.0052"),
 			        "full-" + Math.min(9, Math.max(1, (int) (mins / 60) + 1)));
 			addOccurrences(dayNode, dayList, 30);
 		}
 
 		final Map byMap = groupOccByMap(occ);
-		final ReportNodeSpec byMapNode = root.add("按导图", "folder");
+		final ReportNodeSpec byMapNode = root.add(tr("ReportEngine.content.0190"), "folder");
 		final List mapEntries = sortedMapEntriesByMinutes(byMap);
 		for (int i = 0; i < mapEntries.size(); i++) {
 			final Object[] row = (Object[]) mapEntries.get(i);
@@ -1739,11 +1746,11 @@ public final class ReportEngine {
 			final List mapList = (List) row[1];
 			final long mins = ((Long) row[2]).longValue();
 			final ReportNodeSpec mapNode = byMapNode.add(mapName + " · " + formatHours(mins) + " · " + mapList.size()
-			        + " 条", "folder");
+			        + tr("ReportEngine.content.0052"), "folder");
 			addOccurrences(mapNode, mapList, 40);
 		}
 		if (occ.isEmpty()) {
-			root.add("（该时段无安排）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0191"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1752,18 +1759,18 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_SCHEDULE);
 		final ReportNodeSpec root = root(def, q, "calendar");
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
-		root.add("共 " + occ.size() + " 条发生", "info");
+		root.add(tr("ReportEngine.content.0192") + occ.size() + tr("ReportEngine.content.0193"), "info");
 		final Map byDay = groupOccByDay(occ);
 		final List dayKeys = new ArrayList(byDay.keySet());
 		Collections.sort(dayKeys);
 		for (int i = 0; i < dayKeys.size(); i++) {
 			final String day = (String) dayKeys.get(i);
 			final List dayList = (List) byDay.get(day);
-			final ReportNodeSpec dayNode = root.add(day + " · " + dayList.size() + " 条", "calendar");
+			final ReportNodeSpec dayNode = root.add(day + " · " + dayList.size() + tr("ReportEngine.content.0052"), "calendar");
 			addOccurrences(dayNode, dayList, 80);
 		}
 		if (occ.isEmpty()) {
-			root.add("（该时段无安排）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0191"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1773,7 +1780,7 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "messagebox_warning");
 		final long now = System.currentTimeMillis();
 		final List items = filterOneTimeBefore(now);
-		root.add("逾期 " + items.size() + " 条 · 截止 " + TIME.format(new Date(now)), "info");
+		root.add(tr("ReportEngine.content.0194") + items.size() + tr("ReportEngine.content.0195") + TIME.format(new Date(now)), "info");
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.ReminderItem item = (MindMapWorkspaceContextScanner.ReminderItem) items
@@ -1789,12 +1796,12 @@ public final class ReportEngine {
 		final Iterator it = byMap.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
-			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + ((List) entry.getValue()).size() + " 条",
+			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + ((List) entry.getValue()).size() + tr("ReportEngine.content.0052"),
 			        "folder");
 			addReminderItems(mapNode, (List) entry.getValue(), 100, true);
 		}
 		if (items.isEmpty()) {
-			root.add("太好了，暂无逾期", "button_ok");
+			root.add(tr("ReportEngine.content.0196"), "button_ok");
 		}
 		return root;
 	}
@@ -1810,7 +1817,7 @@ public final class ReportEngine {
 				urgent.add(ref);
 			}
 		}
-		root.add("紧急安排 " + urgent.size() + " 条（jinji≥1）", "info");
+		root.add(tr("ReportEngine.content.0197") + urgent.size() + tr("ReportEngine.content.0198"), "info");
 		Collections.sort(urgent, occComparator());
 		final Map byJinji = new TreeMap(Collections.reverseOrder());
 		for (int i = 0; i < urgent.size(); i++) {
@@ -1826,12 +1833,12 @@ public final class ReportEngine {
 		final Iterator it = byJinji.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
-			final ReportNodeSpec level = root.add("紧急度 " + entry.getKey() + " · " + ((List) entry.getValue()).size()
-			        + " 条", "flag");
+			final ReportNodeSpec level = root.add(tr("ReportEngine.content.0074") + entry.getKey() + " · " + ((List) entry.getValue()).size()
+			        + tr("ReportEngine.content.0052"), "flag");
 			addOccurrences(level, (List) entry.getValue(), 60);
 		}
 		if (urgent.isEmpty()) {
-			root.add("该时段无紧急安排", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0199"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1840,12 +1847,12 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_RECURRING);
 		final ReportNodeSpec root = root(def, q, "prepare");
 		final List items = MindMapWorkspaceContextScanner.scanRecurringReminders();
-		root.add("周期提醒 " + items.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0200") + items.size() + tr("ReportEngine.content.0052"), "info");
 		final Map byType = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.ReminderItem item = (MindMapWorkspaceContextScanner.ReminderItem) items
 			        .get(i);
-			final String type = item.remindType == null || item.remindType.length() == 0 ? "周期" : item.remindType;
+			final String type = item.remindType == null || item.remindType.length() == 0 ? tr("ReportEngine.content.0129") : item.remindType;
 			List list = (List) byType.get(type);
 			if (list == null) {
 				list = new ArrayList();
@@ -1856,12 +1863,12 @@ public final class ReportEngine {
 		final Iterator it = byType.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
-			final ReportNodeSpec typeNode = root.add(entry.getKey() + " · " + ((List) entry.getValue()).size() + " 条",
+			final ReportNodeSpec typeNode = root.add(entry.getKey() + " · " + ((List) entry.getValue()).size() + tr("ReportEngine.content.0052"),
 			        "prepare");
 			addReminderItems(typeNode, (List) entry.getValue(), 80, false);
 		}
 		if (items.isEmpty()) {
-			root.add("（无周期提醒）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0201"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1870,7 +1877,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_TODOS);
 		final ReportNodeSpec root = root(def, q, "hourglass");
 		final List todos = MindMapWorkspaceContextScanner.scanAllTodos();
-		root.add("待办 " + todos.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0202") + todos.size() + tr("ReportEngine.content.0052"), "info");
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < todos.size(); i++) {
 			final MindMapWorkspaceContextScanner.TodoItem item = (MindMapWorkspaceContextScanner.TodoItem) todos.get(i);
@@ -1886,7 +1893,7 @@ public final class ReportEngine {
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
 			final List list = (List) entry.getValue();
-			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + " 条", "folder");
+			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + tr("ReportEngine.content.0052"), "folder");
 			for (int i = 0; i < list.size(); i++) {
 				final MindMapWorkspaceContextScanner.TodoItem item = (MindMapWorkspaceContextScanner.TodoItem) list
 				        .get(i);
@@ -1894,7 +1901,7 @@ public final class ReportEngine {
 			}
 		}
 		if (todos.isEmpty()) {
-			root.add("（无待办）", "button_ok");
+			root.add(tr("ReportEngine.content.0203"), "button_ok");
 		}
 		return root;
 	}
@@ -1903,7 +1910,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_FLAGS);
 		final ReportNodeSpec root = root(def, q, "flag");
 		final List flags = MindMapWorkspaceContextScanner.scanFlagItems();
-		root.add("红旗 " + flags.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0204") + flags.size() + tr("ReportEngine.content.0052"), "info");
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < flags.size(); i++) {
 			final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) flags.get(i);
@@ -1919,7 +1926,7 @@ public final class ReportEngine {
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
 			final List list = (List) entry.getValue();
-			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + " 条", "folder");
+			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + tr("ReportEngine.content.0052"), "folder");
 			for (int i = 0; i < list.size(); i++) {
 				final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) list
 				        .get(i);
@@ -1927,7 +1934,7 @@ public final class ReportEngine {
 			}
 		}
 		if (flags.isEmpty()) {
-			root.add("（无红旗节点）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0205"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -1937,7 +1944,7 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "clock2");
 		final PomodoroSessionManager mgr = PomodoroSessionManager.getInstance();
 		if (mgr == null) {
-			root.add("番茄钟未初始化", "messagebox_warning");
+			root.add(tr("ReportEngine.content.0206"), "messagebox_warning");
 			return root;
 		}
 		final List sessions = mgr.collectSessionsInRange(q.range.startMs, q.range.endMs);
@@ -1954,11 +1961,11 @@ public final class ReportEngine {
 			Long nodeSum = (Long) byNode.get(nodeKey);
 			byNode.put(nodeKey, Long.valueOf((nodeSum == null ? 0L : nodeSum.longValue()) + s.focusMs));
 		}
-		final ReportNodeSpec summary = root.add("汇总", "info");
-		summary.add("会话段数 · " + sessions.size(), "list");
-		summary.add("专注合计 · " + formatDurationMs(total), "clock2");
+		final ReportNodeSpec summary = root.add(tr("ReportEngine.content.0142"), "info");
+		summary.add(tr("ReportEngine.content.0207") + sessions.size(), "list");
+		summary.add(tr("ReportEngine.content.0208") + formatDurationMs(total), "clock2");
 
-		final ReportNodeSpec dayNode = root.add("按日", "calendar");
+		final ReportNodeSpec dayNode = root.add(tr("ReportEngine.content.0151"), "calendar");
 		final Iterator dayIt = byDay.entrySet().iterator();
 		while (dayIt.hasNext()) {
 			final Map.Entry e = (Map.Entry) dayIt.next();
@@ -1978,14 +1985,14 @@ public final class ReportEngine {
 				return la < lb ? 1 : (la > lb ? -1 : 0);
 			}
 		});
-		final ReportNodeSpec nodeRoot = root.add("按节点（开图内）", "group");
+		final ReportNodeSpec nodeRoot = root.add(tr("ReportEngine.content.0209"), "group");
 		final int limit = Math.min(40, nodeRows.size());
 		for (int i = 0; i < limit; i++) {
 			final Object[] row = (Object[]) nodeRows.get(i);
 			nodeRoot.add(row[0] + " · " + formatDurationMs(((Long) row[1]).longValue()), "clock2");
 		}
 		if (sessions.isEmpty()) {
-			root.add("该时段无番茄记录（需打开含番茄节点的导图）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0210"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -2018,7 +2025,7 @@ public final class ReportEngine {
 			}
 			row[1]++;
 		}
-		root.add("导图数 · " + load.size(), "info");
+		root.add(tr("ReportEngine.content.0211") + load.size(), "info");
 		final List rows = new ArrayList();
 		final Iterator it = load.entrySet().iterator();
 		while (it.hasNext()) {
@@ -2036,11 +2043,11 @@ public final class ReportEngine {
 		});
 		for (int i = 0; i < rows.size(); i++) {
 			final Object[] row = (Object[]) rows.get(i);
-			root.add(row[0] + " · 安排" + row[1] + " · 待办" + row[2] + " · 计划" + formatHours(((Integer) row[3]).intValue()),
+			root.add(row[0] + tr("ReportEngine.content.0065") + row[1] + tr("ReportEngine.content.0066") + row[2] + tr("ReportEngine.content.0067") + formatHours(((Integer) row[3]).intValue()),
 			        "folder");
 		}
 		if (rows.isEmpty()) {
-			root.add("（无数据）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0212"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -2050,7 +2057,7 @@ public final class ReportEngine {
 		final ReportNodeSpec root = root(def, q, "full-5");
 		final List occ = filterOcc(loadOccurrences(q.range.startMs, q.range.endMs), q);
 		final int[] buckets = new int[6];
-		final String[] labels = { "未设时长", "≤15分", "16–30分", "31–60分", "61–120分", ">120分" };
+		final String[] labels = { tr("ReportEngine.content.0092"), tr("ReportEngine.content.0093"), tr("ReportEngine.content.0094"), tr("ReportEngine.content.0095"), tr("ReportEngine.content.0096"), tr("ReportEngine.content.0097") };
 		final String[] icons = { "full-0", "full-1", "full-3", "full-5", "full-7", "full-9" };
 		for (int i = 0; i < occ.size(); i++) {
 			final ReminderCalendarBridge.OccurrenceRef ref = (ReminderCalendarBridge.OccurrenceRef) occ.get(i);
@@ -2074,9 +2081,9 @@ public final class ReportEngine {
 				buckets[5]++;
 			}
 		}
-		root.add("样本 " + occ.size() + " 条安排", "info");
+		root.add(tr("ReportEngine.content.0213") + occ.size() + tr("ReportEngine.content.0049"), "info");
 		for (int i = 0; i < buckets.length; i++) {
-			root.add(labels[i] + " · " + buckets[i] + " 条", icons[i]);
+			root.add(labels[i] + " · " + buckets[i] + tr("ReportEngine.content.0052"), icons[i]);
 		}
 		return root;
 	}
@@ -2086,7 +2093,7 @@ public final class ReportEngine {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_PUBLISHED);
 		final ReportNodeSpec root = root(def, q, "internet");
 		final List items = MindMapWorkspaceContextScanner.scanPublishedItems();
-		root.add("发布项 " + items.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0214") + items.size() + tr("ReportEngine.content.0052"), "info");
 		final Map byMap = new TreeMap();
 		for (int i = 0; i < items.size(); i++) {
 			final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) items.get(i);
@@ -2102,7 +2109,7 @@ public final class ReportEngine {
 		while (it.hasNext()) {
 			final Map.Entry entry = (Map.Entry) it.next();
 			final List list = (List) entry.getValue();
-			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + " 条", "folder");
+			final ReportNodeSpec mapNode = root.add(entry.getKey() + " · " + list.size() + tr("ReportEngine.content.0052"), "folder");
 			for (int i = 0; i < list.size(); i++) {
 				final MindMapWorkspaceContextScanner.IconItem item = (MindMapWorkspaceContextScanner.IconItem) list
 				        .get(i);
@@ -2110,7 +2117,7 @@ public final class ReportEngine {
 			}
 		}
 		if (items.isEmpty()) {
-			root.add("（无发布项）", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0215"), "smiley-neutral");
 		}
 		return root;
 	}
@@ -2127,7 +2134,7 @@ public final class ReportEngine {
 				filtered.add(item);
 			}
 		}
-		root.add("变更节点 " + filtered.size() + " 条", "info");
+		root.add(tr("ReportEngine.content.0216") + filtered.size() + tr("ReportEngine.content.0052"), "info");
 		final int limit = Math.min(80, filtered.size());
 		for (int i = 0; i < limit; i++) {
 			final MindMapWorkspaceContextScanner.ModifiedItem item = (MindMapWorkspaceContextScanner.ModifiedItem) filtered
@@ -2136,17 +2143,17 @@ public final class ReportEngine {
 			        + "〕", "up");
 		}
 		if (filtered.isEmpty()) {
-			root.add("该时段无节点变更", "smiley-neutral");
+			root.add(tr("ReportEngine.content.0178"), "smiley-neutral");
 		}
 		return root;
 	}
 
 	private static List loadOccurrences(final long start, final long end) {
-		stage("正在加载日程发生…");
+		stage(TextUtils.getText("ReportEngine.stage.loadingOccurrences"));
 		final ReminderCalendarBridge.LoadBundle bundle = ReminderCalendarBridge.loadBundle(start, end, start, end);
 		final List list = new ArrayList(bundle.occurrences);
 		Collections.sort(list, occComparator());
-		stage("日程发生已加载（" + list.size() + "）");
+		stage(TextUtils.format("ReportEngine.stage.occurrencesLoaded", Integer.valueOf(list.size())));
 		return list;
 	}
 
@@ -2161,7 +2168,7 @@ public final class ReportEngine {
 	}
 
 	private static List filterOneTimeBefore(final long now) {
-		stage("正在扫描一次性提醒…");
+		stage(TextUtils.getText("ReportEngine.stage.scanningOneTime"));
 		final List all = MindMapWorkspaceContextScanner.scanOneTimeReminders();
 		final List out = new ArrayList();
 		for (int i = 0; i < all.size(); i++) {
@@ -2260,13 +2267,13 @@ public final class ReportEngine {
 			final StringBuilder sb = new StringBuilder();
 			sb.append(TIME.format(new Date(ref.occurrenceAt)));
 			if (ref.taskTimeMinutes > 0) {
-				sb.append(" · ").append(ref.taskTimeMinutes).append("分");
+				sb.append(" · ").append(ref.taskTimeMinutes).append(tr("ReportEngine.content.0217"));
 			}
 			if (ref.jinji > 0) {
-				sb.append(" · 急").append(ref.jinji);
+				sb.append(tr("ReportEngine.content.0218")).append(ref.jinji);
 			}
 			if (ref.recurring) {
-				sb.append(" · 周期");
+				sb.append(tr("ReportEngine.content.0219"));
 			}
 			sb.append("  ").append(ref.nodeText == null ? "" : ref.nodeText);
 			sb.append("  〔").append(mapLabel(ref.file)).append("〕");
@@ -2274,7 +2281,7 @@ public final class ReportEngine {
 			parent.add(sb.toString(), icon);
 		}
 		if (occ.size() > limit) {
-			parent.add("…另有 " + (occ.size() - limit) + " 条", "list");
+			parent.add(tr("ReportEngine.content.0220") + (occ.size() - limit) + tr("ReportEngine.content.0052"), "list");
 		}
 	}
 
@@ -2289,7 +2296,7 @@ public final class ReportEngine {
 			sb.append(TIME.format(new Date(item.remindAt)));
 			if (showOverdueAge && item.remindAt < now) {
 				final long days = Math.max(0L, (now - item.remindAt) / (24L * 60L * 60L * 1000L));
-				sb.append(" · 逾期").append(days).append("天");
+				sb.append(tr("ReportEngine.content.0221")).append(days).append(tr("ReportEngine.content.0222"));
 			}
 			if (item.remindType != null && item.remindType.length() > 0) {
 				sb.append(" · ").append(item.remindType);
@@ -2299,13 +2306,13 @@ public final class ReportEngine {
 			parent.add(sb.toString(), item.recurring ? "prepare" : "messagebox_warning");
 		}
 		if (items.size() > limit) {
-			parent.add("…另有 " + (items.size() - limit) + " 条", "list");
+			parent.add(tr("ReportEngine.content.0220") + (items.size() - limit) + tr("ReportEngine.content.0052"), "list");
 		}
 	}
 
 	private static String mapLabel(final File file) {
 		if (file == null) {
-			return "（未命名导图）";
+			return tr("ReportEngine.content.0223");
 		}
 		final String name = file.getName();
 		return name == null || name.length() == 0 ? file.getAbsolutePath() : name;
@@ -2313,7 +2320,7 @@ public final class ReportEngine {
 
 	private static String nodeLabel(final NodeModel node) {
 		if (node == null) {
-			return "（节点）";
+			return tr("ReportEngine.content.0224");
 		}
 		try {
 			final String text = org.freeplane.features.text.TextController.getController().getPlainTextContent(node);
@@ -2323,27 +2330,27 @@ public final class ReportEngine {
 		}
 		catch (Exception e) {
 		}
-		return node.getText() == null ? "（节点）" : node.getText();
+		return node.getText() == null ? tr("ReportEngine.content.0224") : node.getText();
 	}
 
 	private static String formatHours(final long minutes) {
 		if (minutes <= 0) {
-			return "0分";
+			return tr("ReportEngine.content.0225");
 		}
 		final long h = minutes / 60;
 		final long m = minutes % 60;
 		if (h <= 0) {
-			return m + "分";
+			return m + tr("ReportEngine.content.0217");
 		}
 		if (m == 0) {
-			return h + "小时";
+			return h + tr("ReportEngine.content.0226");
 		}
-		return h + "小时" + m + "分";
+		return h + tr("ReportEngine.content.0226") + m + tr("ReportEngine.content.0217");
 	}
 
 	private static String formatDurationMs(final long ms) {
 		if (ms <= 0) {
-			return "0分";
+			return tr("ReportEngine.content.0225");
 		}
 		final long minutes = Math.round(ms / 60000.0);
 		return formatHours(minutes);

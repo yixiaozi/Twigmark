@@ -332,7 +332,7 @@ public class TagGroupCascadeBar extends JPanel {
 		// Empty groups stay visible but are not selectable (unless already current / on path).
 		if (tagCount <= 0 && !exactSelected && !onPath) {
 			tab.setEnabled(false);
-			tab.setToolTipText("暂无内容");
+			tab.setToolTipText(TextUtils.getText("workspace.nodepins.group.empty_tip"));
 		}
 		tab.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {

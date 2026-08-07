@@ -753,18 +753,30 @@ public class CoreConfiguration extends ALanguageController {
 		for (Enumeration<?> i = bundles.getKeys(); i.hasMoreElements();) {
 			String key = i.nextElement().toString();
 			String value = bundles.getResourceString(key);
-			if (value.matches(".*[Ff][Rr][Ee][Ee][Pp][Ll][Aa][Nn][Ee].*")) {
-				value = value.replaceAll("[Ff][Rr][Ee][Ee][Pp][Ll][Aa][Nn][Ee]", DOCEAR);
-				bundles.putResourceString(key, value);
-				if (key.matches(".*[.text]")) {
-					key = key.replace(".text", "");
-					AFreeplaneAction action = controller.getAction(key);
-					if (action != null) {
-						MenuBuilder.setLabelAndMnemonic(action, value);
-					}
+			if (value == null) {
+				continue;
+			}
+			final String lower = value.toLowerCase();
+			if (lower.indexOf("freeplane") < 0) {
+				continue;
+			}
+			// Skip URLs, paths, and placeholders like <freeplaneuserdir>
+			if (value.matches("(?i).*(https?://|www\\.|[\\\\/]|<[^>]*freeplane[^>]*>).*")) {
+				continue;
+			}
+			String replaced = value.replaceAll("(?i)freeplane", DOCEAR);
+			if (replaced.equals(value)) {
+				continue;
+			}
+			bundles.putResourceString(key, replaced);
+			if (key.endsWith(".text")) {
+				String actionKey = key.substring(0, key.length() - ".text".length());
+				AFreeplaneAction action = controller.getAction(actionKey);
+				if (action != null) {
+					MenuBuilder.setLabelAndMnemonic(action, replaced);
 				}
 			}
-		}		
+		}
 	}
 
 	private void addPluginDefaults(Controller controller) {

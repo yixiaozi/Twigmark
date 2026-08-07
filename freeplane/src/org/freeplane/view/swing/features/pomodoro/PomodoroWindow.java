@@ -47,6 +47,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Compact always-on-top pomodoro dock. Quiet chrome; optional left history
@@ -78,8 +79,8 @@ final class PomodoroWindow extends JFrame {
 	private final JLabel clockLabel = new JLabel("00:00", SwingConstants.CENTER);
 	private final JLabel titleLabel = new JLabel(" ", SwingConstants.CENTER);
 	private final JLabel collapsedClock = new JLabel("00:00", SwingConstants.CENTER);
-	private final JLabel brand = new JLabel("番茄钟");
-	private final JLabel leftTitle = new JLabel("今日记录");
+	private final JLabel brand = new JLabel(TextUtils.getText("pomodoro.title"));
+	private final JLabel leftTitle = new JLabel(TextUtils.getText("pomodoro.window.today_list"));
 	private final DefaultListModel historyModel = new DefaultListModel();
 	private final JList historyList = new JList(historyModel);
 	private final JScrollPane leftScroll;
@@ -102,7 +103,7 @@ final class PomodoroWindow extends JFrame {
 	private boolean wasRunning;
 
 	PomodoroWindow(final PomodoroSessionManager manager) {
-		super("番茄钟");
+		super(TextUtils.getText("pomodoro.title"));
 		this.manager = manager;
 		setAlwaysOnTop(true);
 		setUndecorated(true);
@@ -124,7 +125,7 @@ final class PomodoroWindow extends JFrame {
 		});
 		pulseTimer.setRepeats(true);
 
-		startBtn = iconChip("▶", "开始 / 继续", new ActionListener() {
+		startBtn = iconChip("▶", TextUtils.getText("pomodoro.window.start"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -132,7 +133,7 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		pauseBtn = iconChip("❚❚", "暂停", new ActionListener() {
+		pauseBtn = iconChip("❚❚", TextUtils.getText("pomodoro.window.pause"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -140,7 +141,7 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		stopBtn = iconChip("■", "结束并关闭", new ActionListener() {
+		stopBtn = iconChip("■", TextUtils.getText("pomodoro.window.stop"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final NodeModel node = resolveTarget();
 				if (node != null) {
@@ -148,13 +149,13 @@ final class PomodoroWindow extends JFrame {
 				}
 			}
 		});
-		historyToggle = linkLabel("记录");
+		historyToggle = linkLabel(TextUtils.getText("pomodoro.window.records"));
 		historyToggle.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				setHistoryExpanded(!historyExpanded);
 			}
 		});
-		skinToggle = linkLabel("皮肤");
+		skinToggle = linkLabel(TextUtils.getText("pomodoro.window.skin"));
 		skinToggle.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				PomodoroTheme.setSkin(PomodoroTheme.nextSkin(theme.name));
@@ -163,7 +164,7 @@ final class PomodoroWindow extends JFrame {
 			}
 		});
 		minimizeLbl = linkLabel("▾");
-		minimizeLbl.setToolTipText("最小化");
+		minimizeLbl.setToolTipText(TextUtils.getText("pomodoro.window.minimize"));
 		minimizeLbl.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				setBarCollapsed(true);
@@ -255,7 +256,7 @@ final class PomodoroWindow extends JFrame {
 
 		leftResizeStrip.setPreferredSize(new Dimension(5, 1));
 		leftResizeStrip.setCursor(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR));
-		leftResizeStrip.setToolTipText("向左拖动加宽记录区");
+		leftResizeStrip.setToolTipText(TextUtils.getText("pomodoro.window.resize_tip"));
 		final MouseAdapter leftResize = new MouseAdapter() {
 			private Point press;
 			private int startHistory;
@@ -360,7 +361,7 @@ final class PomodoroWindow extends JFrame {
 		historyExpanded = expanded;
 		leftPanel.setVisible(expanded);
 		leftWrap.setVisible(expanded);
-		historyToggle.setText(expanded ? "收起" : "记录");
+		historyToggle.setText(expanded ? TextUtils.getText("pomodoro.window.collapse") : TextUtils.getText("pomodoro.window.records"));
 		if (!barCollapsed) {
 			applyExpandedSize(true);
 		}
@@ -687,7 +688,7 @@ final class PomodoroWindow extends JFrame {
 		else {
 			clockLabel.setText("00:00");
 			clockLabel.setForeground(theme.accent);
-			titleLabel.setText("选中节点后开始");
+			titleLabel.setText(TextUtils.getText("pomodoro.window.pick_node"));
 			titleLabel.setForeground(theme.muted);
 			collapsedClock.setText("00:00");
 			wasRunning = false;
@@ -715,7 +716,7 @@ final class PomodoroWindow extends JFrame {
 		final int maxChars = Math.max(18, historyExpanded ? 36 : 28);
 		final String name = plainText(node, maxChars);
 		if (name.length() == 0) {
-			titleLabel.setText("选中节点后开始");
+			titleLabel.setText(TextUtils.getText("pomodoro.window.pick_node"));
 			titleLabel.setForeground(theme.muted);
 		}
 		else {

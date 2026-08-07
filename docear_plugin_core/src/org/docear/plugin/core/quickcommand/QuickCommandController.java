@@ -12,6 +12,7 @@ import java.util.Map;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.LastSelectedNodeStore;
 import org.freeplane.features.map.LastSelectionMapExtension;
 import org.freeplane.features.map.MapController;
@@ -53,7 +54,7 @@ final class QuickCommandController {
 		final String trimmed = input.trim();
 		if (isCommand(trimmed)) {
 			final java.util.ArrayList list = new java.util.ArrayList();
-			list.add(QuickCommandCandidate.command(normalizeCommand(trimmed), "回车执行索引重建"));
+			list.add(QuickCommandCandidate.command(normalizeCommand(trimmed), TextUtils.getText("QuickCommand.command.rebuild")));
 			return list;
 		}
 		final int atAt = indexOfAtAt(input);
@@ -84,11 +85,11 @@ final class QuickCommandController {
 			return launch;
 		}
 		final java.util.ArrayList hints = new java.util.ArrayList();
-		hints.add(QuickCommandCandidate.hint("@导图名", "打开导图；左侧写文字可添加节点"));
-		hints.add(QuickCommandCandidate.hint("@@图标节点", "跳转到带图标的节点；左侧写文字可添加子节点"));
-		hints.add(QuickCommandCandidate.hint("#文件名", "搜索导图系统内文件并打开"));
-		hints.add(QuickCommandCandidate.hint("*节点文字", "全库节点搜索并跳转"));
-		hints.add(QuickCommandCandidate.hint("拼音 / 首字母", "例如 jc 可匹配「教程」"));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.map"), TextUtils.getText("QuickCommand.example.map.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.icon"), TextUtils.getText("QuickCommand.example.icon.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.file"), TextUtils.getText("QuickCommand.example.file.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.node"), TextUtils.getText("QuickCommand.example.node.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.pinyin"), TextUtils.getText("QuickCommand.example.pinyin.detail")));
 		return hints;
 	}
 
@@ -485,11 +486,12 @@ final class QuickCommandController {
 	private static void announceSilentAdd(final File mapFile, final String text, final boolean asTask) {
 		try {
 			final String mapName = mapFile != null ? mapFile.getName() : "";
-			final String kind = asTask ? "任务" : "节点";
+			final String kind = asTask ? TextUtils.getText("QuickCommand.kind.task")
+			        : TextUtils.getText("QuickCommand.kind.node");
 			final String label = text == null ? "" : text.trim();
 			final String shortLabel = label.length() > 40 ? label.substring(0, 40) + "…" : label;
 			Controller.getCurrentController().getViewController()
-			        .out("已静默添加" + kind + "「" + shortLabel + "」→ " + mapName);
+			        .out(TextUtils.format("QuickCommand.silentAdded", kind, shortLabel, mapName));
 		}
 		catch (Exception e) {
 			// ignore

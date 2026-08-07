@@ -41,6 +41,7 @@ import org.freeplane.plugin.workspace.features.mapactivity.MapActivityCollector;
 import org.freeplane.plugin.workspace.features.mapactivity.MapActivityItem;
 import org.freeplane.plugin.workspace.features.mapactivity.MapActivitySnapshot;
 import org.freeplane.plugin.workspace.features.mapactivity.PomodoroRange;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Top-left floating card: collapsed pulse pill / expanded current-map activity.
@@ -141,7 +142,7 @@ public class MapActivityOverlayPanel extends JPanel {
 		setLayout(new BorderLayout());
 		loadPersistedChrome();
 
-		collapsedTitle = new JLabel("本图");
+		collapsedTitle = new JLabel(TextUtils.getText("workspace.mapactivity.collapsed"));
 		collapsedTitle.setFont(DocearUiTheme.font(12f, Font.BOLD));
 		collapsedTitle.setForeground(ACCENT);
 
@@ -154,11 +155,11 @@ public class MapActivityOverlayPanel extends JPanel {
 		headerSubtitle = DocearUiTheme.mutedLabel("");
 		headerBar = buildHeaderBar();
 
-		tabAll = createTab("全部");
-		tabFlag = createTab("红旗");
-		tabReminder = createTab("提醒");
-		tabTodo = createTab("待办");
-		tabPomo = createTab("专注");
+		tabAll = createTab(TextUtils.getText("workspace.mapactivity.tab.all"));
+		tabFlag = createTab(TextUtils.getText("workspace.mapactivity.section.flag"));
+		tabReminder = createTab(TextUtils.getText("workspace.mapactivity.section.reminder"));
+		tabTodo = createTab(TextUtils.getText("workspace.mapactivity.section.todo"));
+		tabPomo = createTab(TextUtils.getText("workspace.mapactivity.section.pomodoro"));
 		final ButtonGroup tabs = new ButtonGroup();
 		tabs.add(tabAll);
 		tabs.add(tabFlag);
@@ -167,9 +168,9 @@ public class MapActivityOverlayPanel extends JPanel {
 		tabs.add(tabPomo);
 		tabBar = buildTabBar();
 
-		rangeToday = createTab("今日");
-		rangeWeek = createTab("本周");
-		rangeAll = createTab("全部");
+		rangeToday = createTab(TextUtils.getText("workspace.mapactivity.tab.today"));
+		rangeWeek = createTab(TextUtils.getText("workspace.mapactivity.tab.week"));
+		rangeAll = createTab(TextUtils.getText("workspace.mapactivity.tab.all"));
 		final ButtonGroup ranges = new ButtonGroup();
 		ranges.add(rangeToday);
 		ranges.add(rangeWeek);
@@ -182,7 +183,7 @@ public class MapActivityOverlayPanel extends JPanel {
 		sectionsHost.setLayout(new BoxLayout(sectionsHost, BoxLayout.Y_AXIS));
 		sectionsHost.setBorder(new EmptyBorder(4, 0, 4, 0));
 
-		emptyLabel = DocearUiTheme.mutedLabel("这张导图暂无此类动态");
+		emptyLabel = DocearUiTheme.mutedLabel(TextUtils.getText("workspace.mapactivity.empty_kind"));
 		emptyLabel.setBorder(new EmptyBorder(24, 16, 24, 16));
 		emptyLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
@@ -193,9 +194,9 @@ public class MapActivityOverlayPanel extends JPanel {
 		sectionsScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 		DocearUiTheme.styleScrollPane(sectionsScroll);
 
-		collapseButton = DocearUiTheme.ghostButton("收起");
-		homeButton = DocearUiTheme.ghostButton("归位");
-		homeButton.setToolTipText("回到导图左上角默认位置");
+		collapseButton = DocearUiTheme.ghostButton(TextUtils.getText("workspace.mapactivity.collapse"));
+		homeButton = DocearUiTheme.ghostButton(TextUtils.getText("workspace.mapactivity.home"));
+		homeButton.setToolTipText(TextUtils.getText("workspace.mapactivity.home.tip"));
 
 		assembleExpandedCard();
 		wireActions();
@@ -380,7 +381,7 @@ public class MapActivityOverlayPanel extends JPanel {
 		final JPanel left = new JPanel();
 		left.setOpaque(false);
 		left.setLayout(new BoxLayout(left, BoxLayout.Y_AXIS));
-		final JLabel title = new JLabel("本图动态");
+		final JLabel title = new JLabel(TextUtils.getText("workspace.mapactivity.title"));
 		title.setFont(DocearUiTheme.font(13f, Font.BOLD));
 		title.setForeground(DocearUiTheme.TEXT);
 		headerSubtitle.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -416,7 +417,7 @@ public class MapActivityOverlayPanel extends JPanel {
 		final JPanel bar = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
 		bar.setOpaque(false);
 		bar.setAlignmentX(Component.LEFT_ALIGNMENT);
-		final JLabel tip = new JLabel("时间");
+		final JLabel tip = new JLabel(TextUtils.getText("workspace.mapactivity.time"));
 		tip.setFont(DocearUiTheme.font(11f));
 		tip.setForeground(DocearUiTheme.TEXT_MUTED);
 		bar.add(tip);
@@ -644,25 +645,25 @@ public class MapActivityOverlayPanel extends JPanel {
 				sectionsHost.add(emptyLabel);
 			}
 			else {
-				addSection("红旗", FLAG, snapshot.getFlags(), sectionFlagOpen, new Runnable() {
+				addSection(TextUtils.getText("workspace.mapactivity.section.flag"), FLAG, snapshot.getFlags(), sectionFlagOpen, new Runnable() {
 					public void run() {
 						sectionFlagOpen = !sectionFlagOpen;
 						rebuildBody();
 					}
 				});
-				addSection("提醒", ACCENT, mergedReminders(), sectionReminderOpen, new Runnable() {
+				addSection(TextUtils.getText("workspace.mapactivity.section.reminder"), ACCENT, mergedReminders(), sectionReminderOpen, new Runnable() {
 					public void run() {
 						sectionReminderOpen = !sectionReminderOpen;
 						rebuildBody();
 					}
 				});
-				addSection("待办", TODO, snapshot.getTodos(), sectionTodoOpen, new Runnable() {
+				addSection(TextUtils.getText("workspace.mapactivity.section.todo"), TODO, snapshot.getTodos(), sectionTodoOpen, new Runnable() {
 					public void run() {
 						sectionTodoOpen = !sectionTodoOpen;
 						rebuildBody();
 					}
 				});
-				addSection("专注", WARN, snapshot.getPomodoro(), sectionPomodoroOpen, new Runnable() {
+				addSection(TextUtils.getText("workspace.mapactivity.section.pomodoro"), WARN, snapshot.getPomodoro(), sectionPomodoroOpen, new Runnable() {
 					public void run() {
 						sectionPomodoroOpen = !sectionPomodoroOpen;
 						rebuildBody();
@@ -856,25 +857,27 @@ public class MapActivityOverlayPanel extends JPanel {
 		collapsedBadges.removeAll();
 		final boolean attention = snapshot.attentionCount() > 0 || snapshot.hasRunningPomodoro();
 		if (snapshot.hasRunningPomodoro()) {
-			collapsedTitle.setText("专注中");
+			collapsedTitle.setText(TextUtils.getText("workspace.mapactivity.running"));
 			collapsedBar.setToolTipText(snapshot.getRunningTitle());
 		}
 		else if (!snapshot.isEmpty()) {
-			collapsedTitle.setText("本图");
-			collapsedBar.setToolTipText("本图动态 · 共 " + snapshot.totalCount() + " 项 · 点击展开");
+			collapsedTitle.setText(TextUtils.getText("workspace.mapactivity.collapsed"));
+			collapsedBar.setToolTipText(TextUtils.format("workspace.mapactivity.collapsed.tip", Integer.valueOf(snapshot.totalCount())));
 		}
 		else {
-			collapsedTitle.setText("本图");
-			collapsedBar.setToolTipText("本图暂无动态 · 点击展开");
+			collapsedTitle.setText(TextUtils.getText("workspace.mapactivity.collapsed"));
+			collapsedBar.setToolTipText(TextUtils.getText("workspace.mapactivity.collapsed.empty_tip"));
 		}
 		collapsedTitle.setForeground(attention ? new Color(0x11, 0x5E, 0x59) : ACCENT);
 
-		addBadgeIf(snapshot.flagCount() > 0, snapshot.flagCount() + "旗", FLAG, Color.WHITE);
-		addBadgeIf(snapshot.overdueCount() > 0, snapshot.overdueCount() + "逾", DANGER, Color.WHITE);
-		addBadgeIf(snapshot.reminderCount() > 0, snapshot.reminderCount() + "提", ACCENT, Color.WHITE);
-		addBadgeIf(snapshot.todoCount() > 0, snapshot.todoCount() + "办", TODO, Color.WHITE);
+		addBadgeIf(snapshot.flagCount() > 0, TextUtils.format("workspace.mapactivity.badge.flag", Integer.valueOf(snapshot.flagCount())), FLAG, Color.WHITE);
+		addBadgeIf(snapshot.overdueCount() > 0, TextUtils.format("workspace.mapactivity.badge.overdue", Integer.valueOf(snapshot.overdueCount())), DANGER, Color.WHITE);
+		addBadgeIf(snapshot.reminderCount() > 0, TextUtils.format("workspace.mapactivity.badge.reminder", Integer.valueOf(snapshot.reminderCount())), ACCENT, Color.WHITE);
+		addBadgeIf(snapshot.todoCount() > 0, TextUtils.format("workspace.mapactivity.badge.todo", Integer.valueOf(snapshot.todoCount())), TODO, Color.WHITE);
 		addBadgeIf(snapshot.hasRunningPomodoro() || snapshot.pomodoroCount() > 0,
-		        snapshot.hasRunningPomodoro() ? "专注" : (snapshot.pomodoroCount() + "专"), WARN, Color.WHITE);
+		        snapshot.hasRunningPomodoro() ? TextUtils.getText("workspace.mapactivity.badge.pomo_running")
+		                : TextUtils.format("workspace.mapactivity.badge.pomo", Integer.valueOf(snapshot.pomodoroCount())),
+		        WARN, Color.WHITE);
 
 		final RoundedPanel pill = (RoundedPanel) collapsedBar;
 		if (attention || !snapshot.isEmpty()) {
@@ -899,13 +902,13 @@ public class MapActivityOverlayPanel extends JPanel {
 
 	private String buildSubtitle() {
 		if (snapshot.isEmpty()) {
-			return "暂无动态";
+			return TextUtils.getText("workspace.mapactivity.summary.none");
 		}
 		final StringBuilder sb = new StringBuilder();
-		appendPart(sb, snapshot.flagCount(), "红旗");
-		appendPart(sb, snapshot.overdueCount() + snapshot.reminderCount(), "提醒");
-		appendPart(sb, snapshot.todoCount(), "待办");
-		appendPart(sb, snapshot.pomodoroCount(), "专注");
+		appendPart(sb, snapshot.flagCount(), TextUtils.getText("workspace.mapactivity.section.flag"));
+		appendPart(sb, snapshot.overdueCount() + snapshot.reminderCount(), TextUtils.getText("workspace.mapactivity.section.reminder"));
+		appendPart(sb, snapshot.todoCount(), TextUtils.getText("workspace.mapactivity.section.todo"));
+		appendPart(sb, snapshot.pomodoroCount(), TextUtils.getText("workspace.mapactivity.section.pomodoro"));
 		if (activeTab == CategoryTab.POMODORO || activeTab == CategoryTab.ALL) {
 			if (sb.length() > 0) {
 				sb.append(" · ");
@@ -998,7 +1001,7 @@ public class MapActivityOverlayPanel extends JPanel {
 
 	private Dimension computeCollapsedSize() {
 		final java.awt.FontMetrics fm = collapsedTitle.getFontMetrics(collapsedTitle.getFont());
-		final String title = collapsedTitle.getText() != null ? collapsedTitle.getText() : "本图";
+		final String title = collapsedTitle.getText() != null ? collapsedTitle.getText() : TextUtils.getText("workspace.mapactivity.collapsed");
 		int contentW = fm.stringWidth(title);
 		int contentH = Math.max(fm.getHeight(), 14);
 		if (collapsedBadges.isVisible()) {

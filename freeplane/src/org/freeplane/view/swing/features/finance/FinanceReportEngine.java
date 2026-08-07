@@ -11,6 +11,7 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.view.swing.features.reports.ReportChartSeries;
 import org.freeplane.view.swing.features.reports.ReportViewModel;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Builds finance {@link ReportViewModel}s for the center viewport.
@@ -34,10 +35,10 @@ public final class FinanceReportEngine {
 				return viewMonthOverview(fromYmd, toYmd);
 			}
 			if (ID_EXPENSE_BY_CATEGORY.equals(id)) {
-				return viewByCategory(fromYmd, toYmd, FinanceAttributes.FLOW_EXPENSE, "支出按分类");
+				return viewByCategory(fromYmd, toYmd, FinanceAttributes.FLOW_EXPENSE, TextUtils.getText("finance.report.title.expense_by_cat"));
 			}
 			if (ID_INCOME_BY_CATEGORY.equals(id)) {
-				return viewByCategory(fromYmd, toYmd, FinanceAttributes.FLOW_INCOME, "收入按分类");
+				return viewByCategory(fromYmd, toYmd, FinanceAttributes.FLOW_INCOME, TextUtils.getText("finance.report.title.income_by_cat"));
 			}
 			if (ID_TREND.equals(id)) {
 				return viewTrend(fromYmd, toYmd);
@@ -51,40 +52,40 @@ public final class FinanceReportEngine {
 			if (ID_COUPONS.equals(id)) {
 				return viewCoupons();
 			}
-			final ReportViewModel unknown = new ReportViewModel("财务报表", "未知类型：" + id);
-			unknown.emptyHint = "请选择有效的财务报表";
-			unknown.addDetail("未知报表：" + id);
+			final ReportViewModel unknown = new ReportViewModel(TextUtils.getText("finance.report.title.generic"), TextUtils.format("finance.report.unknown_type", id));
+			unknown.emptyHint = TextUtils.getText("finance.report.empty_hint_pick");
+			unknown.addDetail(TextUtils.format("finance.report.unknown_report", id));
 			return unknown;
 		}
 		catch (Exception e) {
 			LogUtils.warn("FinanceReportEngine.generateView failed: " + id, e);
-			final ReportViewModel fail = new ReportViewModel("财务报表失败", id);
+			final ReportViewModel fail = new ReportViewModel(TextUtils.getText("finance.report.title.failed"), id);
 			fail.addDetail(String.valueOf(e.getMessage()));
-			fail.emptyHint = "请检查财务导图后重试";
+			fail.emptyHint = TextUtils.getText("finance.report.empty_hint_retry");
 			return fail;
 		}
 	}
 
 	private static ReportViewModel viewMonthOverview(final String fromYmd, final String toYmd) {
 		final String period = periodFromRange(fromYmd, toYmd);
-		final ReportViewModel view = new ReportViewModel("财务 · 月度概览", rangeLabel(fromYmd, toYmd));
-		view.decision = "看清本月收支净额与支出构成";
-		view.dataSource = "个人财务导图 · 交易";
+		final ReportViewModel view = new ReportViewModel(TextUtils.getText("finance.report.title.month"), rangeLabel(fromYmd, toYmd));
+		view.decision = TextUtils.getText("finance.report.decision.month");
+		view.dataSource = TextUtils.getText("finance.report.source.txns");
 		final FinanceLedgerService.MonthSummary summary = FinanceLedgerService.monthSummary(period);
 		final long income = summary.incomeCents;
 		final long expense = summary.expenseCents;
 		final long net = summary.pnlNetCents();
-		view.addKpi("收入", "¥" + FinanceAttributes.formatYuan(income), "损益");
-		view.addKpi("支出", "¥" + FinanceAttributes.formatYuan(expense), "损益");
-		view.addKpi("结余", "¥" + FinanceAttributes.formatYuan(net), net >= 0 ? "盈余" : "透支");
+		view.addKpi(TextUtils.getText("finance.flow.income"), "¥" + FinanceAttributes.formatYuan(income), TextUtils.getText("finance.report.kpi.pnl"));
+		view.addKpi(TextUtils.getText("finance.flow.expense"), "¥" + FinanceAttributes.formatYuan(expense), TextUtils.getText("finance.report.kpi.pnl"));
+		view.addKpi(TextUtils.getText("finance.kpi.net"), "¥" + FinanceAttributes.formatYuan(net), net >= 0 ? TextUtils.getText("finance.report.kpi.surplus") : TextUtils.getText("finance.report.kpi.deficit"));
 		if (summary.borrowCents + summary.lendCents + summary.creditCents + summary.transferCents > 0L) {
-			view.addKpi("借入", "¥" + FinanceAttributes.formatYuan(summary.borrowCents), "负债流入");
-			view.addKpi("借出", "¥" + FinanceAttributes.formatYuan(summary.lendCents), "债权流出");
-			view.addKpi("信用卡", "¥" + FinanceAttributes.formatYuan(summary.creditCents), "额度占用");
-			view.addKpi("转账", "¥" + FinanceAttributes.formatYuan(summary.transferCents), "不计入损益");
+			view.addKpi(TextUtils.getText("finance.flow.borrow"), "¥" + FinanceAttributes.formatYuan(summary.borrowCents), TextUtils.getText("finance.report.kpi.liability_in"));
+			view.addKpi(TextUtils.getText("finance.flow.lend"), "¥" + FinanceAttributes.formatYuan(summary.lendCents), TextUtils.getText("finance.report.kpi.receivable_out"));
+			view.addKpi(TextUtils.getText("finance.flow.credit"), "¥" + FinanceAttributes.formatYuan(summary.creditCents), TextUtils.getText("finance.report.kpi.credit_use"));
+			view.addKpi(TextUtils.getText("finance.flow.transfer"), "¥" + FinanceAttributes.formatYuan(summary.transferCents), TextUtils.getText("finance.report.kpi.not_pnl"));
 		}
 
-		final ReportChartSeries pie = new ReportChartSeries("支出按分类", ReportChartSeries.TYPE_PIE);
+		final ReportChartSeries pie = new ReportChartSeries(TextUtils.getText("finance.report.chart.expense_by_cat"), ReportChartSeries.TYPE_PIE);
 		final Iterator it = summary.byCategory.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry e = (Map.Entry) it.next();
@@ -93,7 +94,7 @@ public final class FinanceReportEngine {
 		}
 		view.addChart(pie);
 
-		final ReportChartSeries byDay = new ReportChartSeries("每日支出（元）", ReportChartSeries.TYPE_BAR);
+		final ReportChartSeries byDay = new ReportChartSeries(TextUtils.getText("finance.report.chart.daily_expense"), ReportChartSeries.TYPE_BAR);
 		final Map dayExpense = sumByDay(fromYmd, toYmd, FinanceAttributes.FLOW_EXPENSE);
 		final Iterator dit = dayExpense.entrySet().iterator();
 		while (dit.hasNext()) {
@@ -103,16 +104,16 @@ public final class FinanceReportEngine {
 		view.addChart(byDay);
 
 		if (income == 0L && expense == 0L) {
-			view.emptyHint = "本月暂无损益交易。在左侧「财务」记一笔后再看。";
+			view.emptyHint = TextUtils.getText("finance.report.empty.month");
 		}
 		return view;
 	}
 
 	private static ReportViewModel viewByCategory(final String fromYmd, final String toYmd, final String flow,
 			final String title) {
-		final ReportViewModel view = new ReportViewModel("财务 · " + title, rangeLabel(fromYmd, toYmd));
-		view.decision = "找出最大分类";
-		view.dataSource = "个人财务导图 · 交易";
+		final ReportViewModel view = new ReportViewModel(TextUtils.format("finance.report.title.prefixed", title), rangeLabel(fromYmd, toYmd));
+		view.decision = TextUtils.getText("finance.report.decision.top_cat");
+		view.dataSource = TextUtils.getText("finance.report.source.txns");
 		final Map byCat = new TreeMap();
 		long total = 0L;
 		final List txns = FinanceLedgerService.listTransactions(fromYmd, toYmd);
@@ -123,13 +124,13 @@ public final class FinanceReportEngine {
 			}
 			final long cents = Math.abs(txn.amountCents);
 			total += cents;
-			final String cat = txn.categoryName == null || txn.categoryName.length() == 0 ? "其他" : txn.categoryName;
+			final String cat = txn.categoryName == null || txn.categoryName.length() == 0 ? TextUtils.getText("finance.category.other") : txn.categoryName;
 			final Long prev = (Long) byCat.get(cat);
 			byCat.put(cat, Long.valueOf((prev == null ? 0L : prev.longValue()) + cents));
 		}
-		view.addKpi("合计", "¥" + FinanceAttributes.formatYuan(total), title);
-		view.addKpi("分类数", String.valueOf(byCat.size()), "");
-		final ReportChartSeries pie = new ReportChartSeries(title + "（元）", ReportChartSeries.TYPE_PIE);
+		view.addKpi(TextUtils.getText("finance.report.kpi.total"), "¥" + FinanceAttributes.formatYuan(total), title);
+		view.addKpi(TextUtils.getText("finance.report.kpi.cat_count"), String.valueOf(byCat.size()), "");
+		final ReportChartSeries pie = new ReportChartSeries(TextUtils.format("finance.report.chart.yuan_suffix", title), ReportChartSeries.TYPE_PIE);
 		final Iterator it = byCat.entrySet().iterator();
 		while (it.hasNext()) {
 			final Map.Entry e = (Map.Entry) it.next();
@@ -140,72 +141,71 @@ public final class FinanceReportEngine {
 		}
 		view.addChart(pie);
 		if (byCat.isEmpty()) {
-			view.emptyHint = "该时段无" + title + "数据。";
+			view.emptyHint = TextUtils.format("finance.report.empty.no_data", title);
 		}
 		return view;
 	}
 
 	private static ReportViewModel viewTrend(final String fromYmd, final String toYmd) {
-		final ReportViewModel view = new ReportViewModel("财务 · 收支趋势", rangeLabel(fromYmd, toYmd));
-		view.decision = "看每日收入与支出节奏";
-		view.dataSource = "个人财务导图 · 交易";
+		final ReportViewModel view = new ReportViewModel(TextUtils.getText("finance.report.title.trend"), rangeLabel(fromYmd, toYmd));
+		view.decision = TextUtils.getText("finance.report.decision.trend");
+		view.dataSource = TextUtils.getText("finance.report.source.txns");
 		final Map dayExpense = sumByDay(fromYmd, toYmd, FinanceAttributes.FLOW_EXPENSE);
 		final Map dayIncome = sumByDay(fromYmd, toYmd, FinanceAttributes.FLOW_INCOME);
 		long expenseTotal = sumMap(dayExpense);
 		long incomeTotal = sumMap(dayIncome);
-		view.addKpi("支出合计", "¥" + FinanceAttributes.formatYuan(expenseTotal), "");
-		view.addKpi("收入合计", "¥" + FinanceAttributes.formatYuan(incomeTotal), "");
-		final ReportChartSeries expenseLine = new ReportChartSeries("每日支出（元）", ReportChartSeries.TYPE_LINE);
+		view.addKpi(TextUtils.getText("finance.report.kpi.expense_total"), "¥" + FinanceAttributes.formatYuan(expenseTotal), "");
+		view.addKpi(TextUtils.getText("finance.report.kpi.income_total"), "¥" + FinanceAttributes.formatYuan(incomeTotal), "");
+		final ReportChartSeries expenseLine = new ReportChartSeries(TextUtils.getText("finance.report.chart.daily_expense"), ReportChartSeries.TYPE_LINE);
 		fillDaySeries(expenseLine, dayExpense);
 		view.addChart(expenseLine);
-		final ReportChartSeries incomeLine = new ReportChartSeries("每日收入（元）", ReportChartSeries.TYPE_LINE);
+		final ReportChartSeries incomeLine = new ReportChartSeries(TextUtils.getText("finance.report.chart.daily_income"), ReportChartSeries.TYPE_LINE);
 		fillDaySeries(incomeLine, dayIncome);
 		view.addChart(incomeLine);
 		if (dayExpense.isEmpty() && dayIncome.isEmpty()) {
-			view.emptyHint = "该时段无交易，无法画趋势。";
+			view.emptyHint = TextUtils.getText("finance.report.empty.trend");
 		}
 		return view;
 	}
 
 	private static ReportViewModel viewBudgetStatus(final String fromYmd, final String toYmd) {
 		final String period = periodFromRange(fromYmd, toYmd);
-		final ReportViewModel view = new ReportViewModel("财务 · 预算执行", period);
-		view.decision = "对比预算与实际支出";
-		view.dataSource = "个人财务导图 · 预算/交易";
+		final ReportViewModel view = new ReportViewModel(TextUtils.getText("finance.report.title.budget"), period);
+		view.decision = TextUtils.getText("finance.report.decision.budget");
+		view.dataSource = TextUtils.getText("finance.report.source.budget");
 		final List budgets = FinanceLedgerService.listBudgets(period);
 		final List txns = FinanceLedgerService.listTransactions(fromYmd, toYmd);
 		final MapModel map = FinanceLedgerService.preferOpenFinanceMapPublic();
-		view.addKpi("预算条目", String.valueOf(budgets.size()), period);
-		view.addKpi("实际支出", "¥" + FinanceAttributes.formatYuan(
-				FinanceNodeRef.sumExpenseForBudgetCategory(map, FinanceNodeRef.TOTAL_BUDGET_NODE_ID, txns)), "损益支出");
-		final ReportChartSeries bar = new ReportChartSeries("预算 vs 已花（元）", ReportChartSeries.TYPE_BAR);
+		view.addKpi(TextUtils.getText("finance.report.kpi.budget_items"), String.valueOf(budgets.size()), period);
+		view.addKpi(TextUtils.getText("finance.report.kpi.actual_expense"), "¥" + FinanceAttributes.formatYuan(
+				FinanceNodeRef.sumExpenseForBudgetCategory(map, FinanceNodeRef.TOTAL_BUDGET_NODE_ID, txns)), TextUtils.getText("finance.report.kpi.pnl_expense"));
+		final ReportChartSeries bar = new ReportChartSeries(TextUtils.getText("finance.report.chart.budget_vs"), ReportChartSeries.TYPE_BAR);
 		for (int i = 0; i < budgets.size(); i++) {
 			final FinanceLedgerService.FinanceBudget b = (FinanceLedgerService.FinanceBudget) budgets.get(i);
 			final long spent = FinanceNodeRef.sumExpenseForBudgetCategory(map, b.categoryNodeId, txns);
-			bar.add(b.categoryName + "预算", b.amountCents / 100.0);
-			bar.add(b.categoryName + "已花", spent / 100.0);
-			view.addDetail(b.categoryName + " · 预算 ¥" + FinanceAttributes.formatYuan(b.amountCents) + " · 已花 ¥"
-					+ FinanceAttributes.formatYuan(spent) + " · 余 ¥"
-					+ FinanceAttributes.formatYuan(b.amountCents - spent));
+			bar.add(TextUtils.format("finance.report.budget_label", b.categoryName), b.amountCents / 100.0);
+			bar.add(TextUtils.format("finance.report.spent_label", b.categoryName), spent / 100.0);
+			view.addDetail(TextUtils.format("finance.report.detail.budget_line", b.categoryName, FinanceAttributes.formatYuan(b.amountCents),
+					FinanceAttributes.formatYuan(spent), FinanceAttributes.formatYuan(b.amountCents - spent)));
 		}
 		view.addChart(bar);
 		if (budgets.isEmpty()) {
-			view.emptyHint = "本月未设预算。在「财务」Tab 的「更多」里可添加。";
+			view.emptyHint = TextUtils.getText("finance.report.empty.budget");
 		}
 		return view;
 	}
 
 	private static ReportViewModel viewSubscriptions() {
-		final ReportViewModel view = new ReportViewModel("财务 · 订阅日均", "房租/会员等固定支出 · 折算到每天");
-		view.decision = "看日均占比，优先砍掉不划算的固定支出";
-		view.dataSource = "个人财务导图 · 订阅（月/年/周按约 30/365/7 天折算）";
+		final ReportViewModel view = new ReportViewModel(TextUtils.getText("finance.report.title.subs"), TextUtils.getText("finance.report.subtitle.subs"));
+		view.decision = TextUtils.getText("finance.report.decision.subs");
+		view.dataSource = TextUtils.getText("finance.report.source.subs");
 		final List subs = FinanceLedgerService.listSubscriptions();
 		final int activeCount = FinanceRules.countActiveSubscriptions(subs);
 		final long totalDaily = FinanceRules.totalDailySpendCents(subs);
-		view.addKpi("有效订阅", String.valueOf(activeCount), "");
-		view.addKpi("日均合计", "¥" + FinanceAttributes.formatYuan(totalDaily), "每天");
-		view.addKpi("折合月付", "¥" + FinanceAttributes.formatYuan(totalDaily * 30L), "约");
-		final ReportChartSeries pie = new ReportChartSeries("日均花费占比（元）", ReportChartSeries.TYPE_PIE);
+		view.addKpi(TextUtils.getText("finance.report.kpi.active_subs"), String.valueOf(activeCount), "");
+		view.addKpi(TextUtils.getText("finance.report.kpi.daily_total"), "¥" + FinanceAttributes.formatYuan(totalDaily), TextUtils.getText("finance.report.kpi.per_day"));
+		view.addKpi(TextUtils.getText("finance.report.kpi.monthly_equiv"), "¥" + FinanceAttributes.formatYuan(totalDaily * 30L), TextUtils.getText("finance.report.kpi.approx"));
+		final ReportChartSeries pie = new ReportChartSeries(TextUtils.getText("finance.report.chart.daily_share"), ReportChartSeries.TYPE_PIE);
 		Collections.sort(subs, new Comparator() {
 			public int compare(final Object a, final Object b) {
 				final FinanceLedgerService.FinanceSubscription sa = (FinanceLedgerService.FinanceSubscription) a;
@@ -220,7 +220,7 @@ public final class FinanceReportEngine {
 				return (na == null ? "" : na).compareTo(nb == null ? "" : nb);
 			}
 		});
-		view.addDetail("—— 按日均从高到低 ——");
+		view.addDetail(TextUtils.getText("finance.report.detail.rank_header"));
 		for (int i = 0; i < subs.size(); i++) {
 			final FinanceLedgerService.FinanceSubscription s = (FinanceLedgerService.FinanceSubscription) subs.get(i);
 			final boolean active = FinanceRules.isActiveSubscription(s.status);
@@ -228,27 +228,24 @@ public final class FinanceReportEngine {
 			if (active && daily > 0L) {
 				pie.add(trim(s.name, 14), daily / 100.0);
 			}
-			view.addDetail(s.name + " · ¥" + FinanceAttributes.formatYuan(s.amountCents) + "/"
-					+ FinanceRules.cycleLabelZh(s.cycle) + " · 日均 ¥" + FinanceAttributes.formatYuan(daily)
-					+ " · 下次 " + (s.nextYmd.length() == 0 ? "—" : s.nextYmd)
-					+ (active ? "" : " · " + s.status));
+			view.addDetail(TextUtils.format("finance.report.detail.sub_line", s.name, FinanceRules.cycleLabelZh(s.cycle), FinanceAttributes.formatYuan(daily), s.nextYmd.length() == 0 ? TextUtils.getText("finance.report.dash") : s.nextYmd));
 		}
 		view.addChart(pie);
 		if (subs.isEmpty()) {
-			view.emptyHint = "暂无订阅。在「财务」Tab 的「更多 → 加订阅」可记房租、会员等。";
+			view.emptyHint = TextUtils.getText("finance.report.empty.subs");
 		}
 		return view;
 	}
 
 	private static ReportViewModel viewCoupons() {
-		final ReportViewModel view = new ReportViewModel("财务 · 优惠券", "有效与即将过期");
-		view.decision = "优先用快过期的券";
-		view.dataSource = "个人财务导图 · 优惠券";
+		final ReportViewModel view = new ReportViewModel(TextUtils.getText("finance.report.title.coupons"), TextUtils.getText("finance.report.subtitle.coupons"));
+		view.decision = TextUtils.getText("finance.report.decision.coupons");
+		view.dataSource = TextUtils.getText("finance.report.source.coupons");
 		final List coupons = FinanceLedgerService.listCoupons();
 		final String today = FinanceAttributes.todayYmd();
 		int active = 0;
 		int expiring = 0;
-		view.addDetail("—— 有效 / 即将过期 ——");
+		view.addDetail(TextUtils.getText("finance.report.detail.coupon_header"));
 		for (int i = 0; i < coupons.size(); i++) {
 			final FinanceLedgerService.FinanceCoupon c = (FinanceLedgerService.FinanceCoupon) coupons.get(i);
 			final boolean isActive = !"used".equalsIgnoreCase(c.status) && !"expired".equalsIgnoreCase(c.status);
@@ -260,21 +257,23 @@ public final class FinanceReportEngine {
 			if (soon) {
 				expiring++;
 			}
-			final String flag = soon ? " · 将过期" : "";
-			view.addDetail(c.name + " · ¥" + FinanceAttributes.formatYuan(c.amountCents) + " · 到期 "
-					+ (c.expiresYmd.length() == 0 ? "—" : c.expiresYmd) + " · " + c.status + flag);
+			final String flag = soon ? TextUtils.getText("finance.report.detail.expiring_flag") : "";
+			view.addDetail(TextUtils.format("finance.report.detail.coupon_line", c.name,
+					FinanceAttributes.formatYuan(c.amountCents),
+					c.expiresYmd.length() == 0 ? TextUtils.getText("finance.report.dash") : c.expiresYmd,
+					c.status, flag));
 		}
-		view.addKpi("优惠券", String.valueOf(coupons.size()), "");
-		view.addKpi("有效", String.valueOf(active), "");
-		view.addKpi("14天内到期", String.valueOf(expiring), "抓紧用");
-		final ReportChartSeries pie = new ReportChartSeries("券面额（元）", ReportChartSeries.TYPE_PIE);
+		view.addKpi(TextUtils.getText("finance.report.kpi.coupons"), String.valueOf(coupons.size()), "");
+		view.addKpi(TextUtils.getText("finance.report.kpi.active"), String.valueOf(active), "");
+		view.addKpi(TextUtils.getText("finance.report.kpi.expire_14d"), String.valueOf(expiring), TextUtils.getText("finance.report.kpi.use_soon"));
+		final ReportChartSeries pie = new ReportChartSeries(TextUtils.getText("finance.report.chart.coupon_face"), ReportChartSeries.TYPE_PIE);
 		for (int i = 0; i < coupons.size(); i++) {
 			final FinanceLedgerService.FinanceCoupon c = (FinanceLedgerService.FinanceCoupon) coupons.get(i);
 			pie.add(trim(c.name, 14), Math.abs(c.amountCents) / 100.0);
 		}
 		view.addChart(pie);
 		if (coupons.isEmpty()) {
-			view.emptyHint = "暂无优惠券。在「财务」Tab 的「更多 → 加优惠券」里可添加。";
+			view.emptyHint = TextUtils.getText("finance.report.empty.coupons");
 		}
 		return view;
 	}

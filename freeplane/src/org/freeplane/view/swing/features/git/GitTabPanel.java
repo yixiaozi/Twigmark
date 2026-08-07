@@ -44,19 +44,20 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.core.util.TextUtils;
 
 public class GitTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 
-	private final JLabel statusLabel = new JLabel("就绪");
+	private final JLabel statusLabel = new JLabel(TextUtils.getText("git.status.ready"));
 	private final JLabel statusErrorLabel = new JLabel();
 	private final JPanel statusPanel = new JPanel();
 	private String lastErrorDetail = "";
-	private final JButton refreshButton = DocearUiTheme.softButton("刷新");
-	private final JButton pullButton = DocearUiTheme.softButton("拉取");
-	private final JButton pushButton = DocearUiTheme.softButton("推送");
-	private final JButton commitButton = DocearUiTheme.primaryButton("提交");
-	private final JCheckBox selectAllCheckBox = new JCheckBox("全选", true);
+	private final JButton refreshButton = DocearUiTheme.softButton(TextUtils.getText("git.refresh"));
+	private final JButton pullButton = DocearUiTheme.softButton(TextUtils.getText("git.pull"));
+	private final JButton pushButton = DocearUiTheme.softButton(TextUtils.getText("git.push"));
+	private final JButton commitButton = DocearUiTheme.primaryButton(TextUtils.getText("git.commit"));
+	private final JCheckBox selectAllCheckBox = new JCheckBox(TextUtils.getText("git.select_all"), true);
 	private final JTextField summaryField = new JTextField();
 	private final JTextArea descriptionArea = new JTextArea(6, 20);
 	private static final String PLACEHOLDER_SUMMARY = "Summary";
@@ -78,9 +79,9 @@ public class GitTabPanel extends JPanel {
 
 	private static final int CHANGES_REFRESH_INTERVAL_MS = 60000;
 
-	private static final String LABEL_PULL = "拉取";
-	private static final String LABEL_PUSH = "推送";
-	private static final String LABEL_REFRESH = "刷新";
+	private String labelPull() { return TextUtils.getText("git.pull"); }
+	private String labelPush() { return TextUtils.getText("git.push"); }
+	private String labelRefresh() { return TextUtils.getText("git.refresh"); }
 
 	public GitTabPanel() {
 		super(new BorderLayout(8, 8));
@@ -124,8 +125,8 @@ public class GitTabPanel extends JPanel {
 
 		final JTabbedPane tabs = new JTabbedPane();
 		DocearUiTheme.styleTabbedPane(tabs);
-		tabs.addTab("更改", buildChangesTab());
-		tabs.addTab("历史", historyPanel);
+		tabs.addTab(TextUtils.getText("git.tab.changes"), buildChangesTab());
+		tabs.addTab(TextUtils.getText("git.tab.history"), historyPanel);
 		tabs.addChangeListener(new ChangeListener() {
 			@Override
 			public void stateChanged(final ChangeEvent e) {
@@ -172,8 +173,8 @@ public class GitTabPanel extends JPanel {
 	}
 
 	private void updateRefreshButtonCountdown() {
-		refreshButton.setText(LABEL_REFRESH + " (" + secondsUntilAutoRefresh + "s)");
-		refreshButton.setToolTipText("刷新本地修改列表（" + secondsUntilAutoRefresh + " 秒后自动刷新）");
+		refreshButton.setText(labelRefresh() + " (" + secondsUntilAutoRefresh + "s)");
+		refreshButton.setToolTipText(TextUtils.format("git.tooltip.refresh", Integer.valueOf(secondsUntilAutoRefresh)));
 	}
 
 	private void checkRemoteSync(final boolean triggeredByRefresh) {
@@ -189,7 +190,7 @@ public class GitTabPanel extends JPanel {
 			SwingUtilities.invokeLater(new Runnable() {
 				@Override
 				public void run() {
-					statusLabel.setText("正在检查远端同步...");
+					statusLabel.setText(TextUtils.getText("git.status.checking_remote"));
 				}
 			});
 		}
@@ -213,18 +214,18 @@ public class GitTabPanel extends JPanel {
 
 	private void updateSyncButtons(final GitSyncStatus status) {
 		if (status == null) {
-			pullButton.setText(LABEL_PULL);
-			pushButton.setText(LABEL_PUSH);
+			pullButton.setText(labelPull());
+			pushButton.setText(labelPush());
 			pullButton.setToolTipText(null);
 			pushButton.setToolTipText(null);
 			pullButton.setForeground(null);
 			pushButton.setForeground(null);
 			return;
 		}
-		pullButton.setText(status.needsPull() ? LABEL_PULL + " \u2193" + status.behind : LABEL_PULL);
-		pushButton.setText(status.needsPush() ? LABEL_PUSH + " \u2191" + status.ahead : LABEL_PUSH);
-		pullButton.setToolTipText(status.needsPull() ? "远端有 " + status.behind + " 个新提交待拉取" : LABEL_PULL);
-		pushButton.setToolTipText(status.needsPush() ? "本地有 " + status.ahead + " 个提交待推送" : LABEL_PUSH);
+		pullButton.setText(status.needsPull() ? labelPull() + " \u2193" + status.behind : labelPull());
+		pushButton.setText(status.needsPush() ? labelPush() + " \u2191" + status.ahead : labelPush());
+		pullButton.setToolTipText(status.needsPull() ? TextUtils.format("git.tooltip.needs_pull", Integer.valueOf(status.behind)) : labelPull());
+		pushButton.setToolTipText(status.needsPush() ? TextUtils.format("git.tooltip.needs_push", Integer.valueOf(status.ahead)) : labelPush());
 		pullButton.setForeground(status.needsPull() ? DocearUiTheme.ACCENT_DEEP : DocearUiTheme.TEXT_MUTED);
 		pushButton.setForeground(status.needsPush() ? DocearUiTheme.SUCCESS : DocearUiTheme.TEXT_MUTED);
 	}
@@ -233,10 +234,10 @@ public class GitTabPanel extends JPanel {
 		if (status == null || repoDir == null) {
 			return;
 		}
-		final StringBuilder summary = new StringBuilder("仓库: ");
-		summary.append(shortRepoPath(repoDir));
+		final StringBuilder summary = new StringBuilder();
+		summary.append(TextUtils.format("git.summary.repo", shortRepoPath(repoDir)));
 		if (changes.size() > 0) {
-			summary.append(" · ").append(changes.size()).append(" 个修改");
+			summary.append(TextUtils.format("git.summary.changes", Integer.valueOf(changes.size())));
 		}
 		if (!status.fetchOk) {
 			// Background network failures stay silent; keep local summary only.
@@ -256,23 +257,23 @@ public class GitTabPanel extends JPanel {
 
 	private static void appendSyncSummary(final StringBuilder summary, final GitSyncStatus status) {
 		if (status.inSync()) {
-			summary.append(" · 与远端一致");
+			summary.append(TextUtils.getText("git.summary.in_sync"));
 			return;
 		}
 		if (status.diverged()) {
-			summary.append(" · 本地与远端已分叉 (将自动合并)");
+			summary.append(TextUtils.getText("git.summary.diverged"));
 			return;
 		}
 		if (status.needsPull()) {
-			summary.append(" · 远端有 ").append(status.behind).append(" 个新提交");
+			summary.append(TextUtils.format("git.summary.behind", Integer.valueOf(status.behind)));
 			return;
 		}
 		if (status.needsPush()) {
-			summary.append(" · 本地有 ").append(status.ahead).append(" 个未推送提交");
+			summary.append(TextUtils.format("git.summary.ahead", Integer.valueOf(status.ahead)));
 			return;
 		}
 		if (!status.hasUpstream) {
-			summary.append(" · 未配置 upstream");
+			summary.append(TextUtils.getText("git.summary.no_upstream"));
 		}
 	}
 
@@ -337,7 +338,7 @@ public class GitTabPanel extends JPanel {
 		}
 		final String shortText = shortenErrorForStrip(lastErrorDetail);
 		statusErrorLabel.setText("<html>" + escapeHtml(shortText) + "</html>");
-		statusErrorLabel.setToolTipText("点击查看完整详情");
+		statusErrorLabel.setToolTipText(TextUtils.getText("git.error.click_details"));
 		statusErrorLabel.setVisible(true);
 	}
 
@@ -355,7 +356,7 @@ public class GitTabPanel extends JPanel {
 			first = first.substring(0, 117) + "...";
 		}
 		if (error.length() > first.length() + 2) {
-			return first + " （点击查看详情）";
+			return first + TextUtils.getText("git.error.click_suffix");
 		}
 		return first;
 	}
@@ -374,7 +375,7 @@ public class GitTabPanel extends JPanel {
 		final JScrollPane scroll = new JScrollPane(area);
 		scroll.setPreferredSize(new Dimension(560, 200));
 		DocearUiTheme.styleScrollPane(scroll);
-		JOptionPane.showMessageDialog(this, scroll, "Git 错误详情", JOptionPane.ERROR_MESSAGE);
+		JOptionPane.showMessageDialog(this, scroll, TextUtils.getText("git.error.dialog_title"), JOptionPane.ERROR_MESSAGE);
 	}
 
 	private void maybeAutoSync(final GitSyncStatus status) {
@@ -395,7 +396,7 @@ public class GitTabPanel extends JPanel {
 			return;
 		}
 		if (status.needsPush()) {
-			runRemoteAction("推送", new String[] { "push" }, true);
+			runRemoteAction(TextUtils.getText("git.push"), new String[] { "push" }, true);
 		}
 	}
 
@@ -427,7 +428,7 @@ public class GitTabPanel extends JPanel {
 							return;
 						}
 						if (outcome.success) {
-							setStatusMessage(outcome.message.length() > 0 ? outcome.message : "自动拉取成功");
+							setStatusMessage(outcome.message.length() > 0 ? outcome.message : TextUtils.getText("git.auto_pull_ok"));
 							refreshLocalChanges(false);
 							historyPanel.refresh(repoDir);
 							checkRemoteSync(false);
@@ -460,7 +461,7 @@ public class GitTabPanel extends JPanel {
 
 		final JPanel tableHeader = new JPanel(new BorderLayout());
 		tableHeader.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
-		tableHeader.add(new JLabel("修改的文件"), BorderLayout.WEST);
+		tableHeader.add(new JLabel(TextUtils.getText("git.files_header")), BorderLayout.WEST);
 		tableHeader.add(selectAllCheckBox, BorderLayout.EAST);
 
 		final JPanel tablePanel = new JPanel(new BorderLayout(0, 2));
@@ -590,13 +591,13 @@ public class GitTabPanel extends JPanel {
 		pullButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(final ActionEvent e) {
-				runRemoteAction("拉取", GitCommand.buildPullArgs(repoDir, false), false);
+				runRemoteAction(TextUtils.getText("git.pull"), GitCommand.buildPullArgs(repoDir, false), false);
 			}
 		});
 		pushButton.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(final ActionEvent e) {
-				runRemoteAction("推送", new String[] { "push" }, false);
+				runRemoteAction(TextUtils.getText("git.push"), new String[] { "push" }, false);
 			}
 		});
 		commitButton.addActionListener(new ActionListener() {
@@ -651,9 +652,9 @@ public class GitTabPanel extends JPanel {
 
 	private void setupChangesContextMenu() {
 		final JPopupMenu popupMenu = new JPopupMenu();
-		final JMenuItem undoItem = new JMenuItem("撤销修改");
-		final JMenuItem openFileItem = new JMenuItem("打开文件");
-		final JMenuItem openFolderItem = new JMenuItem("打开所在文件夹");
+		final JMenuItem undoItem = new JMenuItem(TextUtils.getText("git.confirm.undo_title"));
+		final JMenuItem openFileItem = new JMenuItem(TextUtils.getText("git.menu.open_file"));
+		final JMenuItem openFolderItem = new JMenuItem(TextUtils.getText("git.menu.open_folder"));
 		popupMenu.add(undoItem);
 		popupMenu.add(openFileItem);
 		popupMenu.add(openFolderItem);
@@ -745,11 +746,11 @@ public class GitTabPanel extends JPanel {
 		}
 		final String path = change.getRelativePath();
 		final int confirm = JOptionPane.showConfirmDialog(this,
-		    "确定撤销对「" + change.getDisplayName() + "」的修改吗？", "撤销修改", JOptionPane.YES_NO_OPTION);
+		    TextUtils.format("git.confirm.undo", change.getDisplayName()), TextUtils.getText("git.confirm.undo_title"), JOptionPane.YES_NO_OPTION);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
 		}
-		statusLabel.setText("正在撤销...");
+		statusLabel.setText(TextUtils.getText("git.status.undoing"));
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
@@ -766,10 +767,10 @@ public class GitTabPanel extends JPanel {
 					@Override
 					public void run() {
 						if (finalResult.exitCode == 0) {
-							setStatusMessage("已撤销: " + change.getDisplayName());
+							setStatusMessage(TextUtils.format("git.status.undone", change.getDisplayName()));
 							refreshLocalChanges(false);
 						} else {
-							setStatusSummary("撤销失败", null);
+							setStatusSummary(TextUtils.getText("git.status.undo_failed"), null);
 							setStatusError(finalResult.errorText());
 						}
 					}
@@ -793,7 +794,7 @@ public class GitTabPanel extends JPanel {
 
 	private void openFileWithSystemApp(final File file) {
 		if (file == null || !file.isFile()) {
-			statusLabel.setText("文件不存在");
+			statusLabel.setText(TextUtils.getText("git.status.file_missing"));
 			return;
 		}
 		try {
@@ -803,14 +804,14 @@ public class GitTabPanel extends JPanel {
 		}
 		catch (Exception e) {
 			LogUtils.warn("无法打开文件: " + e.getMessage(), e);
-			statusLabel.setText("无法打开文件");
+			statusLabel.setText(TextUtils.getText("git.status.open_file_failed"));
 		}
 	}
 
 	private void openContainingFolder(final File file) {
 		final File folder = file != null && file.isDirectory() ? file : file != null ? file.getParentFile() : null;
 		if (folder == null || !folder.isDirectory()) {
-			statusLabel.setText("文件夹不存在");
+			statusLabel.setText(TextUtils.getText("git.status.folder_missing"));
 			return;
 		}
 		try {
@@ -824,7 +825,7 @@ public class GitTabPanel extends JPanel {
 			}
 			catch (Exception ex) {
 				LogUtils.warn("无法打开文件夹: " + ex.getMessage(), ex);
-				statusLabel.setText("无法打开文件夹");
+				statusLabel.setText(TextUtils.getText("git.status.open_folder_failed"));
 			}
 		}
 	}
@@ -857,7 +858,7 @@ public class GitTabPanel extends JPanel {
 		changesRefreshRunning = true;
 		if (!silent) {
 			resetRefreshCountdown();
-			statusLabel.setText("正在扫描...");
+			statusLabel.setText(TextUtils.getText("git.status.scanning"));
 			commitButton.setEnabled(false);
 		}
 
@@ -884,11 +885,11 @@ public class GitTabPanel extends JPanel {
 						SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_GIT, changes.size());
 						if (!silent) {
 							if (repository != null) {
-								setStatusSummary("仓库: " + shortRepoPath(repository) + " · 发现 " + loaded.size() + " 个修改",
+								setStatusSummary(TextUtils.format("git.summary.found", shortRepoPath(repository), Integer.valueOf(loaded.size())),
 								    repository.getAbsolutePath());
 								checkRemoteSync(true);
 							} else {
-								setStatusMessage("未找到 Git 仓库，请在用户配置目录的 git.local-<mac>.properties 中设置 git.repo.path=<仓库路径>");
+								setStatusMessage(TextUtils.getText("git.status.no_repo_hint"));
 							}
 							if (unchanged) {
 								selectAllCheckBox.setSelected(!loaded.isEmpty());
@@ -967,11 +968,11 @@ public class GitTabPanel extends JPanel {
 	private void commitChanges() {
 		final String summary = readSummaryText();
 		if (summary.isEmpty()) {
-			statusLabel.setText("请输入提交摘要");
+			statusLabel.setText(TextUtils.getText("git.status.need_message"));
 			return;
 		}
 		if (repoDir == null) {
-			statusLabel.setText("未找到 Git 仓库");
+			statusLabel.setText(TextUtils.getText("git.status.no_repo"));
 			return;
 		}
 		final List<String> selectedPaths = new ArrayList<String>();
@@ -982,25 +983,25 @@ public class GitTabPanel extends JPanel {
 			}
 		}
 		if (selectedPaths.isEmpty()) {
-			statusLabel.setText("请至少选择一个文件");
+			statusLabel.setText(TextUtils.getText("git.status.need_file"));
 			return;
 		}
 
 		final String description = readDescriptionText();
 		final String commitMessage = summary + (description.isEmpty() ? "" : "\n\n" + description);
 
-		statusLabel.setText("正在提交...");
+		statusLabel.setText(TextUtils.getText("git.status.committing"));
 		commitButton.setEnabled(false);
 
 		new Thread(new Runnable() {
 			@Override
 			public void run() {
 				boolean success = false;
-				String failureMessage = "提交失败";
+				String failureMessage = TextUtils.getText("git.status.commit_failed");
 				try {
 					GitCommand.Result resetResult = GitCommand.run(repoDir, "reset", "HEAD");
 					if (resetResult.exitCode != 0) {
-						failureMessage = "取消暂存失败: " + resetResult.errorText();
+						failureMessage = TextUtils.format("git.status.reset_failed", resetResult.errorText());
 					} else {
 						final String[] addArgs = new String[selectedPaths.size() + 2];
 						addArgs[0] = "add";
@@ -1010,19 +1011,19 @@ public class GitTabPanel extends JPanel {
 						}
 						final GitCommand.Result addResult = GitCommand.run(repoDir, addArgs);
 						if (addResult.exitCode != 0) {
-							failureMessage = "git add 失败: " + addResult.errorText();
+							failureMessage = TextUtils.format("git.status.add_failed", addResult.errorText());
 						} else {
 							final GitCommand.Result commitResult = GitCommand.run(repoDir, "commit", "-m", commitMessage);
 							success = commitResult.exitCode == 0;
 							if (!success) {
-								failureMessage = commitResult.errors.isEmpty() ? "没有可提交的更改" : commitResult.errorText();
+								failureMessage = commitResult.errors.isEmpty() ? TextUtils.getText("git.status.nothing_to_commit") : commitResult.errorText();
 							}
 						}
 					}
 				}
 				catch (Exception e) {
 					LogUtils.warn("Git commit failed: " + e.getMessage(), e);
-					failureMessage = "Git 命令执行失败: " + e.getMessage();
+					failureMessage = TextUtils.format("git.status.cmd_failed", e.getMessage());
 				}
 
 				final boolean finalSuccess = success;
@@ -1031,13 +1032,13 @@ public class GitTabPanel extends JPanel {
 					@Override
 					public void run() {
 						if (finalSuccess) {
-							setStatusMessage("提交成功");
+							setStatusMessage(TextUtils.getText("git.status.commit_ok"));
 							showSummaryHint();
 							showDescriptionHint();
 							GitPostCommitScriptRunner.scheduleAfterSuccessfulCommit();
 							refreshLocalChanges(false);
 						} else {
-							setStatusSummary("提交失败", null);
+							setStatusSummary(TextUtils.getText("git.status.commit_failed"), null);
 							setStatusError(finalFailureMessage);
 							updateCommitButtonState();
 						}
@@ -1054,7 +1055,7 @@ public class GitTabPanel extends JPanel {
 
 	private void runRemoteAction(final String actionLabel, final String[] gitArgs, final boolean automatic) {
 		if (repoDir == null) {
-			setStatusMessage("未找到 Git 仓库");
+			setStatusMessage(TextUtils.getText("git.status.no_repo"));
 			return;
 		}
 		if (remoteActionRunning) {
@@ -1064,7 +1065,8 @@ public class GitTabPanel extends JPanel {
 		if (automatic) {
 			autoSyncRunning = true;
 		}
-		setStatusMessage((automatic ? "自动" : "正在") + actionLabel + "...");
+		setStatusMessage(TextUtils.format(
+		        automatic ? "git.status.action_running_auto" : "git.status.action_running", actionLabel));
 		pullButton.setEnabled(false);
 		pushButton.setEnabled(false);
 		refreshButton.setEnabled(false);
@@ -1077,7 +1079,8 @@ public class GitTabPanel extends JPanel {
 				final String message;
 				if (success) {
 					final String detail = result.messageText();
-					message = (automatic ? "自动" : "") + actionLabel + "成功"
+					message = TextUtils.format(
+					        automatic ? "git.status.action_ok_auto" : "git.status.action_ok", actionLabel)
 					    + (detail.length() > 0 ? ": " + detail : "");
 				} else {
 					message = result.failureMessage(actionLabel);
@@ -1101,7 +1104,8 @@ public class GitTabPanel extends JPanel {
 							checkRemoteSync(false);
 							return;
 						}
-						setStatusSummary((automatic ? "自动" : "") + actionLabel + "失败",
+						setStatusSummary(TextUtils.format(
+						        automatic ? "git.status.action_failed_auto" : "git.status.action_failed", actionLabel),
 						    repoDir != null ? repoDir.getAbsolutePath() : null);
 						final String detail = result.messageText();
 						setStatusError(detail.length() > 0 ? detail : message);
@@ -1114,7 +1118,7 @@ public class GitTabPanel extends JPanel {
 
 	private class ChangesTableModel extends AbstractTableModel {
 		private static final long serialVersionUID = 1L;
-		private final String[] columns = { "", "状态", "文件名", "大小" };
+		private final String[] columns = { "", TextUtils.getText("git.col.status"), TextUtils.getText("git.col.name"), TextUtils.getText("git.col.size") };
 
 		public int getRowCount() {
 			return changes.size();

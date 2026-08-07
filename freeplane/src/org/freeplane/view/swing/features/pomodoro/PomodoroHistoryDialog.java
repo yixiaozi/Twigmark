@@ -29,6 +29,7 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.text.TextController;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Modal dialog listing completed pomodoro sessions for one node.
@@ -55,11 +56,11 @@ final class PomodoroHistoryDialog extends JDialog {
 	private final JLabel header;
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList list = new JList(listModel);
-	private final JButton editButton = btn("修改", null);
-	private final JButton deleteButton = btn("删除", null);
+	private final JButton editButton = btn(TextUtils.getText("pomodoro.history.edit"), null);
+	private final JButton deleteButton = btn(TextUtils.getText("pomodoro.history.delete"), null);
 
 	private PomodoroHistoryDialog(final Frame owner, final NodeModel node) {
-		super(owner, "番茄钟历史", true);
+		super(owner, TextUtils.getText("pomodoro.history.title"), true);
 		this.node = node;
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 		final JPanel root = new JPanel(new BorderLayout(8, 8));
@@ -94,7 +95,7 @@ final class PomodoroHistoryDialog extends JDialog {
 		final JPanel south = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
 		south.add(editButton);
 		south.add(deleteButton);
-		south.add(btn("写入笔记", new ActionListener() {
+		south.add(btn(TextUtils.getText("pomodoro.history.write_note"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final PomodoroExtension ext = PomodoroAttributes.read(node);
 				if (ext != null) {
@@ -102,7 +103,7 @@ final class PomodoroHistoryDialog extends JDialog {
 				}
 			}
 		}));
-		south.add(btn("定位节点", new ActionListener() {
+		south.add(btn(TextUtils.getText("pomodoro.history.locate"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				final PomodoroSessionManager manager = PomodoroSessionManager.getInstance();
 				if (manager != null) {
@@ -110,7 +111,7 @@ final class PomodoroHistoryDialog extends JDialog {
 				}
 			}
 		}));
-		south.add(btn("关闭", new ActionListener() {
+		south.add(btn(TextUtils.getText("pomodoro.history.close"), new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				dispose();
 			}
@@ -138,7 +139,7 @@ final class PomodoroHistoryDialog extends JDialog {
 		listModel.clear();
 		final List records = ext == null ? java.util.Collections.EMPTY_LIST : PomodoroLog.decode(ext.getLog());
 		if (records.isEmpty()) {
-			listModel.addElement(new PlaceholderRow("（暂无完成会话）"));
+			listModel.addElement(new PlaceholderRow(TextUtils.getText("pomodoro.history.empty")));
 		}
 		else {
 			// Newest session first; within a session, newest focus segment first.
@@ -189,7 +190,7 @@ final class PomodoroHistoryDialog extends JDialog {
 			return;
 		}
 		final int confirm = JOptionPane.showConfirmDialog(this,
-		        "确定删除整段会话记录吗？\n" + row.record.toDisplayLine(), "删除番茄钟记录", JOptionPane.YES_NO_OPTION,
+		        TextUtils.format("pomodoro.history.delete_confirm", row.record.toDisplayLine()), TextUtils.getText("pomodoro.history.delete_title"), JOptionPane.YES_NO_OPTION,
 		        JOptionPane.WARNING_MESSAGE);
 		if (confirm != JOptionPane.YES_OPTION) {
 			return;
@@ -250,15 +251,15 @@ final class PomodoroHistoryDialog extends JDialog {
 
 	private static String summarize(final PomodoroExtension ext, final long now) {
 		if (ext == null || (!ext.isEnabled() && ext.getTotalMs() <= 0 && ext.sessionCount() == 0)) {
-			return "未开启番茄钟";
+			return TextUtils.getText("pomodoro.history.not_enabled");
 		}
 		final String state = PomodoroAttributes.stateLabel(ext.getState());
 		final long today = PomodoroLog.sumFocusSince(PomodoroLog.decode(ext.getLog()), PomodoroLog.startOfToday())
 				+ (ext.liveSegmentMs(now) > 0
 						&& (ext.getSessionAt() > 0 ? ext.getSessionAt() : ext.getStartedAt()) >= PomodoroLog.startOfToday()
 								? ext.liveSegmentMs(now) : 0L);
-		return "状态 " + state + " · 今日 " + PomodoroFormatter.formatDuration(today) + " · 累计 "
-				+ PomodoroFormatter.formatDuration(ext.liveTotalMs(now)) + " · " + ext.sessionCount() + " 次会话";
+		return TextUtils.format("pomodoro.history.status", state, PomodoroFormatter.formatDuration(today),
+				PomodoroFormatter.formatDuration(ext.liveTotalMs(now)), Integer.valueOf(ext.sessionCount()));
 	}
 
 	private static String plain(final NodeModel node) {

@@ -37,6 +37,7 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.IconStoreFactory;
 import org.freeplane.features.mode.Controller;
@@ -50,7 +51,7 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("点选报表 → 打开/切换 Tab");
+	private final JLabel statusLabel = new JLabel();
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -66,6 +67,7 @@ public class ReportsTabPanel extends JPanel {
 		super(new BorderLayout(8, 8));
 		DocearUiTheme.styleCanvas(this);
 		setBorder(DocearUiTheme.pageBorder());
+		statusLabel.setText(TextUtils.getText("ReportsTab.status.hint"));
 		buildUi();
 		wireEvents();
 		reloadCatalog();
@@ -84,14 +86,14 @@ public class ReportsTabPanel extends JPanel {
 		final JPanel rangeRow = new JPanel(new BorderLayout(4, 0));
 		rangeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 		rangeRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, 28));
-		final JLabel rangeLabel = new JLabel("时间");
-		rangeCombo.addItem("今天");
-		rangeCombo.addItem("昨天");
-		rangeCombo.addItem("本周");
-		rangeCombo.addItem("近7天");
-		rangeCombo.addItem("本月");
-		rangeCombo.addItem("近30天");
-		rangeCombo.addItem("自定义…");
+		final JLabel rangeLabel = new JLabel(TextUtils.getText("ReportsTab.range.label"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.today"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.yesterday"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.thisWeek"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.last7Days"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.thisMonth"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.last30Days"));
+		rangeCombo.addItem(TextUtils.getText("ReportsTab.range.custom"));
 		rangeCombo.setSelectedIndex(ReportTimeRange.PRESET_THIS_WEEK);
 		rangeRow.add(rangeLabel, BorderLayout.WEST);
 		rangeRow.add(rangeCombo, BorderLayout.CENTER);
@@ -99,9 +101,9 @@ public class ReportsTabPanel extends JPanel {
 
 		customRangePanel.setVisible(false);
 		customRangePanel.setAlignmentX(Component.LEFT_ALIGNMENT);
-		customRangePanel.add(new JLabel("从"));
+		customRangePanel.add(new JLabel(TextUtils.getText("ReportsTab.custom.from")));
 		customRangePanel.add(startField);
-		customRangePanel.add(new JLabel("到"));
+		customRangePanel.add(new JLabel(TextUtils.getText("ReportsTab.custom.to")));
 		customRangePanel.add(endField);
 		final Calendar cal = Calendar.getInstance();
 		endField.setText(DAY.format(cal.getTime()));
@@ -113,12 +115,12 @@ public class ReportsTabPanel extends JPanel {
 		filterRow.setAlignmentX(Component.LEFT_ALIGNMENT);
 		filterRow.setBorder(BorderFactory.createEmptyBorder(4, 0, 2, 0));
 		final JPanel includeRow = new JPanel(new BorderLayout(4, 0));
-		includeField.setToolTipText("对应原版报表「搜索」：只保留包含该关键词的项");
-		includeRow.add(new JLabel("包含"), BorderLayout.WEST);
+		includeField.setToolTipText(TextUtils.getText("ReportsTab.filter.include.tooltip"));
+		includeRow.add(new JLabel(TextUtils.getText("ReportsTab.filter.include")), BorderLayout.WEST);
 		includeRow.add(includeField, BorderLayout.CENTER);
 		final JPanel excludeRow = new JPanel(new BorderLayout(4, 0));
-		excludeField.setToolTipText("对应原版报表「排除」：去掉包含该关键词的项");
-		excludeRow.add(new JLabel("排除"), BorderLayout.WEST);
+		excludeField.setToolTipText(TextUtils.getText("ReportsTab.filter.exclude.tooltip"));
+		excludeRow.add(new JLabel(TextUtils.getText("ReportsTab.filter.exclude")), BorderLayout.WEST);
 		excludeRow.add(excludeField, BorderLayout.CENTER);
 		filterRow.add(includeRow);
 		filterRow.add(excludeRow);
@@ -148,7 +150,8 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 打开/切换）"));
+		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+		        TextUtils.getText("ReportsTab.list.border")));
 		add(scroll, BorderLayout.CENTER);
 		setPreferredSize(new Dimension(280, 400));
 	}
@@ -193,7 +196,7 @@ public class ReportsTabPanel extends JPanel {
 	private void runSelected() {
 		final Object value = reportList.getSelectedValue();
 		if (!(value instanceof ReportDefinition)) {
-			statusLabel.setText("请先选择一种报表");
+			statusLabel.setText(TextUtils.getText("ReportsTab.status.selectFirst"));
 			return;
 		}
 		final ReportDefinition def = (ReportDefinition) value;
@@ -211,12 +214,13 @@ public class ReportsTabPanel extends JPanel {
 		}
 		catch (Exception e) {
 			statusLabel.setText(e.getMessage());
-			JOptionPane.showMessageDialog(this, e.getMessage(), "时间范围", JOptionPane.WARNING_MESSAGE);
+			JOptionPane.showMessageDialog(this, e.getMessage(), TextUtils.getText("ReportsTab.dialog.timeRange"),
+			        JOptionPane.WARNING_MESSAGE);
 			return;
 		}
 		final ReportViewportService service = ReportViewportService.get();
 		if (service == null) {
-			statusLabel.setText("无法打开报表视图");
+			statusLabel.setText(TextUtils.getText("ReportsTab.status.cannotOpen"));
 			return;
 		}
 		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
@@ -224,11 +228,11 @@ public class ReportsTabPanel extends JPanel {
 		// New tab each time; previous report tabs stay open and keep loading independently.
 		final ReportViewportService.ReportLoadSession session = service.beginReport(def, subtitle);
 		if (session == null || session.view == null) {
-			statusLabel.setText("无法打开报表视图");
+			statusLabel.setText(TextUtils.getText("ReportsTab.status.cannotOpen"));
 			return;
 		}
 		final int statusGen = ++statusGeneration;
-		statusLabel.setText("已打开「" + def.title + "」，正在加载…");
+		statusLabel.setText(TextUtils.format("ReportsTab.status.openedLoading", def.title));
 		// Heartbeat: long scans rarely emit mid-progress; keep the bar alive with elapsed time.
 		final Timer heartbeat = new Timer(300, new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
@@ -255,15 +259,16 @@ public class ReportsTabPanel extends JPanel {
 									if (statusGen != statusGeneration) {
 										return;
 									}
-									statusLabel.setText(message == null ? "加载中…" : message);
+									statusLabel.setText(message == null ? TextUtils.getText("ReportsTab.status.loading")
+									        : message);
 								}
 							});
 						}
 					};
 					viewModel = ReportEngine.generateView(def, query, progress);
-					service.updateProgress(session, "正在整理写入树…", 90);
+					service.updateProgress(session, TextUtils.getText("ReportsTab.progress.organizingTree"), 90);
 					tree = ReportEngine.toTree(viewModel);
-					service.updateProgress(session, "正在渲染图表…", 97);
+					service.updateProgress(session, TextUtils.getText("ReportsTab.progress.renderingCharts"), 97);
 				}
 				catch (Exception e) {
 					error = e;
@@ -279,13 +284,14 @@ public class ReportsTabPanel extends JPanel {
 							if (fail != null) {
 								service.showError(session, fail.getMessage());
 								if (statusGen == statusGeneration) {
-									statusLabel.setText("生成失败：" + fail.getMessage());
+									statusLabel.setText(TextUtils.format("ReportsTab.status.generateFailed",
+									        fail.getMessage()));
 								}
 								return;
 							}
 							service.showReport(session, resultView, resultTree);
 							if (statusGen == statusGeneration) {
-								statusLabel.setText("已显示「" + def.title + "」· 可切换/分组/关闭 Tab");
+								statusLabel.setText(TextUtils.format("ReportsTab.status.shown", def.title));
 							}
 						}
 						catch (Exception e) {
@@ -314,7 +320,7 @@ public class ReportsTabPanel extends JPanel {
 			sub.append(query.range.label);
 		}
 		if (sub.length() == 0) {
-			sub.append("正在加载…");
+			sub.append(TextUtils.getText("ReportsTab.status.loadingEllipsis"));
 		}
 		return sub.toString();
 	}
@@ -322,27 +328,27 @@ public class ReportsTabPanel extends JPanel {
 	private void showActivityReport() {
 		final UsageStatsReportService service = UsageStatsReportService.get();
 		if (service == null) {
-			statusLabel.setText("活动报表服务不可用");
+			statusLabel.setText(TextUtils.getText("ReportsTab.status.activityUnavailable"));
 			return;
 		}
 		service.setReportVisible(true);
-		statusLabel.setText("已显示「活动报表」· 关 Tab 或点「返回导图」");
+		statusLabel.setText(TextUtils.getText("ReportsTab.status.activityShown"));
 	}
 
 	private void showMcpAudit() {
 		try {
 			final AFreeplaneAction action = Controller.getCurrentController().getAction("McpStatusAuditAction");
 			if (action == null) {
-				statusLabel.setText("MCP 插件未加载，无法打开审计");
-				JOptionPane.showMessageDialog(this, "MCP 插件未加载，无法打开 MCP 审计。",
-				        "MCP 审计", JOptionPane.INFORMATION_MESSAGE);
+				statusLabel.setText(TextUtils.getText("ReportsTab.status.mcpPluginMissing"));
+				JOptionPane.showMessageDialog(this, TextUtils.getText("ReportsTab.dialog.mcpPluginMissing"),
+				        TextUtils.getText("ReportsTab.dialog.mcpAudit"), JOptionPane.INFORMATION_MESSAGE);
 				return;
 			}
 			action.actionPerformed(null);
-			statusLabel.setText("已打开「MCP 审计」· 关 Tab 或点「返回导图」");
+			statusLabel.setText(TextUtils.getText("ReportsTab.status.mcpOpened"));
 		}
 		catch (Exception e) {
-			statusLabel.setText("打开 MCP 审计失败：" + e.getMessage());
+			statusLabel.setText(TextUtils.format("ReportsTab.status.mcpOpenFailed", e.getMessage()));
 			LogUtils.warn("showMcpAudit failed", e);
 		}
 	}
@@ -353,8 +359,8 @@ public class ReportsTabPanel extends JPanel {
 		}
 		final int idx = rangeCombo.getSelectedIndex();
 		if (idx == ReportTimeRange.PRESET_CUSTOM) {
-			final Date start = parseDay(startField.getText(), "开始日期");
-			final Date end = parseDay(endField.getText(), "结束日期");
+			final Date start = parseDay(startField.getText(), TextUtils.getText("ReportsTab.parse.startDate"));
+			final Date end = parseDay(endField.getText(), TextUtils.getText("ReportsTab.parse.endDate"));
 			return ReportTimeRange.custom(start, end);
 		}
 		return ReportTimeRange.ofPreset(idx);
@@ -362,14 +368,14 @@ public class ReportsTabPanel extends JPanel {
 
 	private static Date parseDay(final String text, final String label) {
 		if (text == null || text.trim().length() == 0) {
-			throw new IllegalArgumentException(label + "不能为空（yyyy-MM-dd）");
+			throw new IllegalArgumentException(TextUtils.format("ReportsTab.parse.empty", label));
 		}
 		try {
 			DAY.setLenient(false);
 			return DAY.parse(text.trim());
 		}
 		catch (ParseException e) {
-			throw new IllegalArgumentException(label + "格式应为 yyyy-MM-dd");
+			throw new IllegalArgumentException(TextUtils.format("ReportsTab.parse.badFormat", label));
 		}
 	}
 

@@ -34,6 +34,7 @@ import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewManager;
@@ -101,7 +102,7 @@ final class MapSwitcherDialog extends JDialog {
 		root.setBackground(PANEL);
 		root.setBorder(new EmptyBorder(10, 12, 8, 12));
 
-		final JLabel title = new JLabel("切换导图 / 报表");
+		final JLabel title = new JLabel(TextUtils.getText("MapSwitcher.title"));
 		title.setFont(preferUiFont(12f));
 		title.setForeground(MUTED);
 		title.setBorder(new EmptyBorder(0, 2, 6, 2));
@@ -112,7 +113,7 @@ final class MapSwitcherDialog extends JDialog {
 		hintLabel.setFont(preferUiFont(11f));
 		hintLabel.setForeground(MUTED);
 		hintLabel.setBorder(new EmptyBorder(6, 2, 0, 2));
-		hintLabel.setText("← → ↑ ↓ 选择 · Enter 打开 · Delete 关闭 · Esc 取消");
+		hintLabel.setText(TextUtils.getText("MapSwitcher.hint"));
 
 		root.add(title, BorderLayout.NORTH);
 		root.add(strip, BorderLayout.CENTER);
@@ -261,7 +262,7 @@ final class MapSwitcherDialog extends JDialog {
 		}
 
 		if (entries.isEmpty()) {
-			final JLabel empty = new JLabel("没有已打开的导图或报表");
+			final JLabel empty = new JLabel(TextUtils.getText("MapSwitcher.empty"));
 			empty.setFont(preferUiFont(13f));
 			empty.setForeground(MUTED);
 			strip.add(empty);
