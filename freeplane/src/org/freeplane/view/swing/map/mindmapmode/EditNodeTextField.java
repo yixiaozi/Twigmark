@@ -53,10 +53,12 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.MatteBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultEditorKit;
 import javax.swing.text.DefaultEditorKit.PasteAction;
 import javax.swing.text.Document;
+import javax.swing.text.Element;
 import javax.swing.text.JTextComponent;
 import javax.swing.text.NavigationFilter;
 import javax.swing.text.StyleConstants;
@@ -76,6 +78,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.components.html.ScaledEditorKit;
 import org.freeplane.core.util.ColorUtils;
+import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
@@ -150,6 +153,9 @@ public class EditNodeTextField extends EditNodeBase {
 			if(updateRunning){
 				return;
 			}
+			// Keep autosave idle-gate fresh while typing / IME composing
+			// (model is not dirtied again until ok()).
+			touchMapEditActivity();
 			EventQueue.invokeLater(new Runnable() {
 				public void run() {
 					updateRunning = true;
@@ -232,11 +238,59 @@ public class EditNodeTextField extends EditNodeBase {
 		}
 	    final HTMLDocument document = (HTMLDocument) textfield.getDocument();
 	    document.getStyleSheet().addRule("body { width: " + (maxWidth - 1) + "}");
-	    // bad hack: call "setEditable" only to update view
-	    textfield.setEditable(false);
-	    textfield.setEditable(true);
 	    textfield.putClientProperty("EditNodeTextField.linewrap", true);
+	    // Do NOT toggle setEditable(false/true): on macOS that aborts IME composition
+	    // and can commit half-finished pinyin (e.g. "Ga") into the node text.
+	    textfield.revalidate();
+	    textfield.repaint();
     }
+
+	/** Refresh autosave idle timestamp so DoAutomaticSave waits while the user types. */
+	private void touchMapEditActivity() {
+		try {
+			if (node != null && node.getMap() != null) {
+				node.getMap().touchContentChangeTime();
+			}
+		}
+		catch (Exception e) {
+		}
+	}
+
+	/**
+	 * True while the IME still has uncommitted composed text in the editor
+	 * (pinyin / kana / hangul before candidate confirm).
+	 */
+	private static boolean hasComposedInputMethodText(final JTextComponent component) {
+		if (component == null) {
+			return false;
+		}
+		try {
+			final Document doc = component.getDocument();
+			if (!(doc instanceof HTMLDocument)) {
+				return false;
+			}
+			final HTMLDocument html = (HTMLDocument) doc;
+			final int length = html.getLength();
+			for (int offset = 0; offset < length;) {
+				final Element leaf = html.getCharacterElement(offset);
+				if (leaf == null) {
+					break;
+				}
+				final AttributeSet attrs = leaf.getAttributes();
+				if (attrs != null && attrs.isDefined(StyleConstants.ComposedTextAttribute)) {
+					return true;
+				}
+				final int end = leaf.getEndOffset();
+				if (end <= offset) {
+					break;
+				}
+				offset = end;
+			}
+		}
+		catch (Exception e) {
+		}
+		return false;
+	}
 
 	private static final int SPLIT_KEY_CODE;
 	static {
@@ -286,7 +340,29 @@ public class EditNodeTextField extends EditNodeBase {
 				eventSource = CANCEL;
 				return;
 			}
-			if (e.isTemporary() && e.getOppositeComponent() == null) {
+			// Menus / IME candidate UI / Alt-Tab flickers: never commit mid-composition.
+			if (e.isTemporary()) {
+				return;
+			}
+			if (Compat.isMacOsX()) {
+				// macOS IME candidate windows often steal focus without isTemporary=true.
+				// Defer: if focus returns or composition is still active, keep editing.
+				EventQueue.invokeLater(new Runnable() {
+					public void run() {
+						if (textfield == null || !textfield.isVisible() || eventSource == CANCEL || popupShown) {
+							return;
+						}
+						if (textfield.hasFocus()) {
+							return;
+						}
+						if (hasComposedInputMethodText(textfield)) {
+							textfield.requestFocusInWindow();
+							return;
+						}
+						submitText();
+						hideMe();
+					}
+				});
 				return;
 			}
 			submitText();

@@ -288,6 +288,14 @@ public class MapModel {
 	}
 
 	/**
+	 * Refresh the idle-gate clock without counting a new change (used while the
+	 * inline editor / IME is active so autosave waits for typing to finish).
+	 */
+	public void touchContentChangeTime() {
+		lastContentChangeTimeMs = System.currentTimeMillis();
+	}
+
+	/**
 	 * Set the value of url.
 	 *
 	 * @param v
