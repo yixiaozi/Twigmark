@@ -2,25 +2,24 @@
   <dontWrapJar>true</dontWrapJar>
   <headerType>gui</headerType>
   <jar>freeplanelauncher.jar</jar>
-  <outfile>docear.exe</outfile>
+  <outfile>twigmark.exe</outfile>
   <errTitle>Twigmark</errTitle>
   <cmdLine></cmdLine>
   <chdir></chdir>
   <priority>normal</priority>
-  <downloadUrl>http://java.com/download</downloadUrl>
-  <supportUrl></supportUrl>
+  <downloadUrl>https://adoptium.net/</downloadUrl>
+  <supportUrl>https://github.com/yixiaozi/Twigmark</supportUrl>
   <customProcName>false</customProcName>
   <stayAlive>true</stayAlive>
   <manifest></manifest>
   <icon>twigmark.ico</icon>
   <jre>
     <path>jre</path>
-    <minVersion>1.6.0</minVersion>
+    <bundledJre64Bit>true</bundledJre64Bit>
+    <bundledJreAsFallback>false</bundledJreAsFallback>
+    <minVersion>1.8.0</minVersion>
     <maxVersion></maxVersion>
     <jdkPreference>preferJre</jdkPreference>
-    <maxHeapSize>512</maxHeapSize>
-    <!-- Profile is {workingDirectory}/data; see working-directory.txt next to the exe. -->
-    <opt>-Xms40m</opt>
   </jre>
   <versionInfo>
     <fileVersion>1.2.0.0</fileVersion>
@@ -32,6 +31,6 @@
     <productName>Twigmark</productName>
     <companyName>Mantou</companyName>
     <internalName>Twigmark</internalName>
-    <originalFilename>docear.exe</originalFilename>
+    <originalFilename>twigmark.exe</originalFilename>
   </versionInfo>
 </launch4jConfig>
