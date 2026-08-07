@@ -7,8 +7,8 @@
 ### MCP
 
 - API Key 生成与认证（`Authorization: Bearer` / `X-Api-Key`）；公网绑定（非 loopback）强制要求 Key
-- 网页版 `/web/`：浏览器对话，服务端持有大模型 Key，进程内调用 MCP 工具操作导图
-- 产品设置 MCP 页：认证、公网一键绑定、Web LLM（OpenAI 兼容 Base URL / Key / 模型）
+- 网页版 `/web/`：账号密码登录；大模型配置与对话写入 `webchat-<MAC>.db`；同步数据目录后跨机汇总历史
+- 产品设置 MCP 页：认证、公网一键绑定与 Web LLM 种子配置
 
 ### 国际化
 

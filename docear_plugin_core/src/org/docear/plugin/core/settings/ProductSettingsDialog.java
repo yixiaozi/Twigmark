@@ -610,7 +610,9 @@ public final class ProductSettingsDialog extends JDialog {
 		final String port = String.valueOf(((Number) mcpPortSpinner.getValue()).intValue());
 		mcpStatusLabel.setText(TextUtils.format("ProductSettingsAction.mcp.status", host, port));
 		mcpWebUrlLabel.setText(TextUtils.format("ProductSettingsAction.mcp.web_url",
-		        isPublicMcpHost(host) ? "127.0.0.1" : host, port));
+		        isPublicMcpHost(host) ? "127.0.0.1" : host, port)
+		        + "  |  "
+		        + TextUtils.getText("ProductSettingsAction.mcp.webchat_db_hint"));
 
 		final McpRuntimeFacade.Backend backend = McpRuntimeFacade.get();
 		if (backend == null) {

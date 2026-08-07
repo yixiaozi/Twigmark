@@ -30,10 +30,23 @@ public final class McpWebAgent {
 	}
 
 	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history) throws Exception {
-		if (!DocearMcpConfig.isWebLlmConfigured()) {
+		return chat(userMessage, history, DocearMcpConfig.getWebLlmBaseUrl(), DocearMcpConfig.getWebLlmApiKey(),
+				DocearMcpConfig.getWebLlmModel());
+	}
+
+	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history, final String baseUrl,
+			final String apiKey, final String model) throws Exception {
+		final String key = apiKey == null ? "" : apiKey.trim();
+		if (key.length() == 0) {
 			throw new IllegalStateException(
-					"Web LLM API key is not configured. Set it in Product Settings → MCP → Web.");
+					"LLM API key is not configured. Add a profile in the web UI or Product Settings → MCP → Web.");
 		}
+		String endpointBase = baseUrl == null || baseUrl.trim().length() == 0 ? "https://api.openai.com/v1"
+				: baseUrl.trim();
+		if (endpointBase.endsWith("/")) {
+			endpointBase = endpointBase.substring(0, endpointBase.length() - 1);
+		}
+		final String modelName = model == null || model.trim().length() == 0 ? "gpt-4o-mini" : model.trim();
 		final String message = userMessage == null ? "" : userMessage.trim();
 		if (message.length() == 0) {
 			throw new IllegalArgumentException("message is required");
@@ -62,7 +75,7 @@ public final class McpWebAgent {
 		final int maxRounds = DocearMcpConfig.getWebLlmMaxToolRounds();
 
 		for (int round = 0; round < maxRounds; round++) {
-			final JsonValue response = callChatCompletions(messages, openaiTools);
+			final JsonValue response = callChatCompletions(messages, openaiTools, endpointBase, key, modelName);
 			final Map<String, JsonValue> choice = firstChoice(response);
 			final JsonValue messageValue = choice.get("message");
 			if (messageValue == null || messageValue.isNull()) {
@@ -139,7 +152,7 @@ public final class McpWebAgent {
 
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("reply", JsonValue.ofString(finalReply));
-		result.put("model", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
+		result.put("model", JsonValue.ofString(modelName));
 		result.put("toolTrace", JsonValue.ofList(toolTrace));
 		return result;
 	}
@@ -156,17 +169,17 @@ public final class McpWebAgent {
 		args.put("_audit", JsonValue.ofMap(audit));
 	}
 
-	private JsonValue callChatCompletions(final List<JsonValue> messages, final List<JsonValue> tools)
-			throws Exception {
+	private JsonValue callChatCompletions(final List<JsonValue> messages, final List<JsonValue> tools,
+			final String baseUrl, final String apiKey, final String model) throws Exception {
 		final Map<String, JsonValue> body = new LinkedHashMap<String, JsonValue>();
-		body.put("model", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
+		body.put("model", JsonValue.ofString(model));
 		body.put("messages", JsonValue.ofList(messages));
 		if (tools != null && !tools.isEmpty()) {
 			body.put("tools", JsonValue.ofList(tools));
 			body.put("tool_choice", JsonValue.ofString("auto"));
 		}
 		final String payload = JsonWriter.write(JsonValue.ofMap(body));
-		final URL url = new URL(DocearMcpConfig.getWebLlmBaseUrl() + "/chat/completions");
+		final URL url = new URL(baseUrl + "/chat/completions");
 		HttpURLConnection connection = null;
 		try {
 			connection = (HttpURLConnection) url.openConnection();
@@ -175,7 +188,7 @@ public final class McpWebAgent {
 			connection.setRequestMethod("POST");
 			connection.setDoOutput(true);
 			connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-			connection.setRequestProperty("Authorization", "Bearer " + DocearMcpConfig.getWebLlmApiKey());
+			connection.setRequestProperty("Authorization", "Bearer " + apiKey);
 			final byte[] bytes = payload.getBytes(UTF8);
 			connection.setFixedLengthStreamingMode(bytes.length);
 			final OutputStream out = connection.getOutputStream();

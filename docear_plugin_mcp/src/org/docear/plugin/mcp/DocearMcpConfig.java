@@ -91,9 +91,70 @@ public final class DocearMcpConfig {
 		return rounds;
 	}
 
+	public static int getWebchatSessionTtlHours() {
+		final int hours = getInt("webchat.sessionTtlHours", 720);
+		return hours < 1 ? 1 : hours;
+	}
+
 	public static boolean isWebLlmConfigured() {
 		final String key = getWebLlmApiKey();
 		return key != null && key.trim().length() > 0;
+	}
+
+	/** Same data dir as audit by default ({workingDirectory}/data). Override: {@code mcp.webchat.dataDir}. */
+	public static File getWebchatDataDir() {
+		final String configured = getString("webchat.dataDir", "");
+		if (configured.length() > 0) {
+			return new File(configured);
+		}
+		return getAuditDataDir();
+	}
+
+	/**
+	 * Local writable webchat DB: {@code webchat-&lt;mac&gt;.db}.
+	 * Peer machines sync their own files into the same folder; readers merge all.
+	 */
+	public static File getWebchatDbFile() {
+		final String configured = getString("webchat.dbPath", "");
+		if (configured.length() > 0) {
+			return new File(configured);
+		}
+		final File dir = getWebchatDataDir();
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+		final String macHex = org.docear.plugin.mcp.audit.McpAuditMachineId.getMacHex();
+		return new File(dir, "webchat-" + macHex + ".db");
+	}
+
+	/** Local + synced peer DBs: {@code webchat-*.db}. */
+	public static File[] listWebchatDbFiles() {
+		final File dir = getWebchatDataDir();
+		final java.util.List list = new java.util.ArrayList();
+		final File local = getWebchatDbFile();
+		if (local != null) {
+			list.add(local);
+		}
+		final File[] children = dir.listFiles();
+		if (children != null) {
+			for (int i = 0; i < children.length; i++) {
+				final File f = children[i];
+				if (f == null || !f.isFile()) {
+					continue;
+				}
+				final String name = f.getName().toLowerCase();
+				if (!name.startsWith("webchat-") || !name.endsWith(".db")) {
+					continue;
+				}
+				if (name.endsWith("-wal") || name.endsWith("-shm")) {
+					continue;
+				}
+				if (!containsFile(list, f)) {
+					list.add(f);
+				}
+			}
+		}
+		return (File[]) list.toArray(new File[list.size()]);
 	}
 
 	public static boolean isAuditEnabled() {
