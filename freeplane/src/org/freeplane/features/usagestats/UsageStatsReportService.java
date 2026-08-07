@@ -1,25 +1,18 @@
 package org.freeplane.features.usagestats;
 
-import java.awt.Component;
-import java.awt.EventQueue;
-
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.AFreeplaneAction;
-import org.freeplane.features.map.IMapSelectionListener;
-import org.freeplane.features.map.MapModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
-import org.freeplane.features.ui.IMapViewChangeListener;
-import org.freeplane.view.swing.map.MapView;
-import org.freeplane.view.swing.map.MapViewController;
+import org.freeplane.view.swing.features.reports.ReportDocumentService;
+import org.freeplane.view.swing.features.reports.ReportViewportService;
 
 /**
- * Shows usage statistics in the main map viewport (replacing the mind map canvas), toggled from Help ribbon.
+ * Shows usage statistics in a bottom document tab (mind-map area).
  */
-public class UsageStatsReportService implements IExtension, IMapSelectionListener, IMapViewChangeListener {
+public class UsageStatsReportService implements IExtension {
 	private UsageStatsReportPanel viewportPanel;
-	private boolean reportInViewport;
 
 	public UsageStatsReportService() {
 	}
@@ -48,9 +41,6 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 		final UsageStatsReportService service = new UsageStatsReportService();
 		modeController.addExtension(UsageStatsReportService.class, service);
 		modeController.addAction(new ToggleUsageStatsReportAction());
-		final Controller controller = Controller.getCurrentController();
-		controller.getMapViewManager().addMapSelectionListener(service);
-		controller.getMapViewManager().addMapViewChangeListener(service);
 		if (ResourceController.getResourceController().getBooleanProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY)) {
 			service.setReportVisible(true);
 		}
@@ -58,10 +48,16 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 
 	public void setReportVisible(final boolean visible) {
 		if (visible) {
-			showInMapViewport();
+			final ReportViewportService charts = ReportViewportService.get();
+			if (charts != null) {
+				charts.releaseSoftViewport();
+			}
+			final UsageStatsReportPanel panel = getViewportPanel();
+			panel.refresh();
+			ReportDocumentService.showInTab("活动报表", panel);
 		}
 		else {
-			hideFromMapViewport();
+			ReportDocumentService.closeTab();
 		}
 		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, visible);
 		syncToggleAction(visible);
@@ -79,71 +75,12 @@ public class UsageStatsReportService implements IExtension, IMapSelectionListene
 	}
 
 	public boolean isReportInViewport() {
-		return reportInViewport;
+		return ReportDocumentService.isOpen() && viewportPanel != null && viewportPanel.getParent() != null;
 	}
 
-	private MapViewController getMapViewController() {
-		return (MapViewController) Controller.getCurrentController().getMapViewManager();
-	}
-
-	private void showInMapViewport() {
-		final MapViewController mapViewController = getMapViewController();
-		mapViewController.refreshViewportView(getViewportPanel());
-		reportInViewport = true;
-		getViewportPanel().refresh();
-	}
-
-	private void hideFromMapViewport() {
-		if (!reportInViewport) {
-			return;
-		}
-		final MapViewController mapViewController = getMapViewController();
-		final MapView mapView = mapViewController.getMapView();
-		if (mapView != null) {
-			mapViewController.refreshViewportView(mapView);
-		}
-		reportInViewport = false;
-	}
-
-	private void ensureReportStillInViewport() {
-		if (!reportInViewport) {
-			return;
-		}
-		final Component view = getMapViewController().getScrollPane().getViewport().getView();
-		if (viewportPanel != null && view != viewportPanel) {
-			showInMapViewport();
-		}
-	}
-
-	public void beforeMapChange(final MapModel oldMap, final MapModel newMap) {
-	}
-
-	public void afterMapChange(final MapModel oldMap, final MapModel newMap) {
-		if (!reportInViewport) {
-			return;
-		}
-		ensureReportStillInViewport();
-		getViewportPanel().refresh();
-	}
-
-	public void beforeViewChange(final Component oldView, final Component newView) {
-	}
-
-	public void afterViewChange(final Component oldView, final Component newView) {
-		if (!reportInViewport) {
-			return;
-		}
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				ensureReportStillInViewport();
-				getViewportPanel().refresh();
-			}
-		});
-	}
-
-	public void afterViewClose(final Component oldView) {
-	}
-
-	public void afterViewCreated(final Component mapView) {
+	/** Stop soft-viewport fighting when another report tab takes over. */
+	public void releaseSoftViewport() {
+		syncToggleAction(false);
+		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, false);
 	}
 }
