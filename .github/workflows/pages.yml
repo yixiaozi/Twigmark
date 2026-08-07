@@ -1,4 +1,8 @@
-name: Deploy GitHub Pages
+name: Update Pages release data
+
+# Site lives in docs/ (GitHub Pages: Deploy from a branch → master → /docs).
+# This workflow refreshes docs/data/release.json on each Release publish.
+# The page also reads the GitHub Releases API in the browser as a live fallback.
 
 on:
   release:
@@ -6,35 +10,29 @@ on:
   push:
     branches: [master]
     paths:
-      - "docs/**"
       - "docear_plugin_core/resources/version.properties"
-      - ".github/workflows/pages.yml"
       - "scripts/update-pages-release.py"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-release-data
   cancel-in-progress: true
 
 jobs:
-  build:
+  sync-release-json:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
         with:
-          # First run: create/enable Pages (Source = GitHub Actions) if missing
-          enablement: true
+          # Commit back to the same branch that triggered the workflow
+          ref: ${{ github.event_name == 'release' && github.event.repository.default_branch || github.ref }}
 
-      - name: Build site with release data
+      - name: Generate docs/data/release.json
         env:
           EVENT_NAME: ${{ github.event_name }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
@@ -44,12 +42,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p _site
-          cp -a docs/. _site/
-          mkdir -p _site/data
-
           python3 scripts/update-pages-release.py \
-            --out _site/data/release.json \
+            --out docs/data/release.json \
             --version-properties docear_plugin_core/resources/version.properties \
             --event-name "$EVENT_NAME" \
             --release-tag "${RELEASE_TAG:-}" \
@@ -57,23 +51,12 @@ jobs:
             --release-html-url "${RELEASE_HTML_URL:-}" \
             --release-published-at "${RELEASE_PUBLISHED_AT:-}" \
             --repo "${{ github.repository }}"
+          cat docs/data/release.json
 
-          # Also refresh the in-repo seed used for local preview / API fallback
-          cp _site/data/release.json docs/data/release.json
-          cat _site/data/release.json
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Commit release.json
+        uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          path: _site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          commit_message: "chore(pages): sync release.json [skip ci]"
+          file_pattern: docs/data/release.json
+          commit_user_name: github-actions[bot]
+          commit_user_email: 41898282+github-actions[bot]@users.noreply.github.com

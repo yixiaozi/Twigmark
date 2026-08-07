@@ -1,0 +1,62 @@
+name: Deploy GitHub Pages (Actions)
+
+# Optional alternative to branch-based Pages (master → /docs).
+# Run manually after: Settings → Pages → Source → GitHub Actions.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-actions-deploy
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.setup.outcome == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        id: setup
+        uses: actions/configure-pages@v5
+
+      - name: Build site with release data
+        env:
+          EVENT_NAME: workflow_dispatch
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a docs/. _site/
+          mkdir -p _site/data
+          python3 scripts/update-pages-release.py \
+            --out _site/data/release.json \
+            --version-properties docear_plugin_core/resources/version.properties \
+            --event-name "$EVENT_NAME" \
+            --repo "${{ github.repository }}"
+          cat _site/data/release.json
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
