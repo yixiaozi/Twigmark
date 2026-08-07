@@ -1,28 +1,18 @@
 package org.freeplane.view.swing.features.reports;
 
-import java.awt.Component;
-import java.awt.EventQueue;
-
 import javax.swing.JOptionPane;
 
 import org.freeplane.core.extension.IExtension;
-import org.freeplane.features.map.IMapSelectionListener;
-import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
-import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.usagestats.UsageStatsReportService;
-import org.freeplane.view.swing.map.MapView;
-import org.freeplane.view.swing.map.MapViewController;
 
 /**
- * Shows report charts in the main mind-map viewport (same place as the map canvas).
+ * Shows report charts via {@link ReportDocumentService} (bottom tab + mind-map area).
  */
-public final class ReportViewportService implements IExtension, IMapSelectionListener, IMapViewChangeListener {
+public final class ReportViewportService implements IExtension {
 	private ReportViewportPanel viewportPanel;
-	private boolean reportInViewport;
-	private boolean listenersInstalled;
 
 	public static ReportViewportService get() {
 		final Controller controller = Controller.getCurrentController();
@@ -44,21 +34,7 @@ public final class ReportViewportService implements IExtension, IMapSelectionLis
 		}
 		service = new ReportViewportService();
 		modeController.addExtension(ReportViewportService.class, service);
-		service.ensureListeners();
 		return service;
-	}
-
-	private void ensureListeners() {
-		if (listenersInstalled) {
-			return;
-		}
-		final Controller controller = Controller.getCurrentController();
-		if (controller == null) {
-			return;
-		}
-		controller.getMapViewManager().addMapSelectionListener(this);
-		controller.getMapViewManager().addMapViewChangeListener(this);
-		listenersInstalled = true;
 	}
 
 	private ReportViewportPanel getViewportPanel() {
@@ -66,7 +42,7 @@ public final class ReportViewportService implements IExtension, IMapSelectionLis
 			viewportPanel = new ReportViewportPanel();
 			viewportPanel.setOnClose(new Runnable() {
 				public void run() {
-					hideFromMapViewport();
+					ReportDocumentService.closeTab();
 				}
 			});
 			viewportPanel.setOnWrite(new Runnable() {
@@ -79,40 +55,30 @@ public final class ReportViewportService implements IExtension, IMapSelectionLis
 	}
 
 	public void showReport(final ReportViewModel model, final ReportNodeSpec tree) {
-		ensureListeners();
 		final UsageStatsReportService activity = UsageStatsReportService.get();
 		if (activity != null) {
-			activity.setReportVisible(false);
+			activity.releaseSoftViewport();
 		}
 		final ReportViewportPanel panel = getViewportPanel();
 		panel.showModel(model, tree);
-		showInMapViewport();
+		final String title = model == null || model.title == null || model.title.length() == 0 ? "报表"
+		        : model.title;
+		ReportDocumentService.showInTab(title, panel);
 	}
 
+	/** @deprecated soft viewport flag removed; kept for callers that hide charts before opening another view */
 	public boolean isReportInViewport() {
-		return reportInViewport;
-	}
-
-	private MapViewController getMapViewController() {
-		return (MapViewController) Controller.getCurrentController().getMapViewManager();
-	}
-
-	private void showInMapViewport() {
-		final MapViewController mapViewController = getMapViewController();
-		mapViewController.refreshViewportView(getViewportPanel());
-		reportInViewport = true;
+		return ReportDocumentService.isOpen() && viewportPanel != null
+		        && viewportPanel.getParent() != null;
 	}
 
 	public void hideFromMapViewport() {
-		if (!reportInViewport) {
-			return;
-		}
-		final MapViewController mapViewController = getMapViewController();
-		final MapView mapView = mapViewController.getMapView();
-		if (mapView != null) {
-			mapViewController.refreshViewportView(mapView);
-		}
-		reportInViewport = false;
+		ReportDocumentService.closeTab();
+	}
+
+	/** Stop fighting document tabs / map view changes (no-op soft state). */
+	public void releaseSoftViewport() {
+		// Intentionally empty: reports now live in ReportDocumentView tabs.
 	}
 
 	private void writeCurrentToSelection() {
@@ -134,45 +100,5 @@ public final class ReportViewportService implements IExtension, IMapSelectionLis
 			JOptionPane.showMessageDialog(getViewportPanel(), e.getMessage(), "写入报表",
 			        JOptionPane.ERROR_MESSAGE);
 		}
-	}
-
-	private void ensureReportStillInViewport() {
-		if (!reportInViewport) {
-			return;
-		}
-		final Component view = getMapViewController().getScrollPane().getViewport().getView();
-		if (viewportPanel != null && view != viewportPanel) {
-			showInMapViewport();
-		}
-	}
-
-	public void beforeMapChange(final MapModel oldMap, final MapModel newMap) {
-	}
-
-	public void afterMapChange(final MapModel oldMap, final MapModel newMap) {
-		if (!reportInViewport) {
-			return;
-		}
-		ensureReportStillInViewport();
-	}
-
-	public void beforeViewChange(final Component oldView, final Component newView) {
-	}
-
-	public void afterViewChange(final Component oldView, final Component newView) {
-		if (!reportInViewport) {
-			return;
-		}
-		EventQueue.invokeLater(new Runnable() {
-			public void run() {
-				ensureReportStillInViewport();
-			}
-		});
-	}
-
-	public void afterViewClose(final Component oldView) {
-	}
-
-	public void afterViewCreated(final Component mapView) {
 	}
 }

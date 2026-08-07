@@ -399,6 +399,13 @@ class MapViewTabs implements IMapViewChangeListener {
 		ensureVisibleAndSelect(tabKey);
 	}
 
+	/** Refresh titles for open tabs (e.g. report tab title changed). */
+	public void refreshTabTitles() {
+		for (int i = 0; i < mTabbedPane.getTabCount() && i < visibleTabKeys.size(); i++) {
+			mTabbedPane.setTitleAt(i, formatTabTitle(resolveTabTitle(visibleTabKeys.get(i))));
+		}
+	}
+
 	public void closeDocumentTab(final Component tabKey) {
 		for (int i = 0; i < mTabbedPaneMapViews.size(); ++i) {
 			if (mTabbedPaneMapViews.get(i) == tabKey) {

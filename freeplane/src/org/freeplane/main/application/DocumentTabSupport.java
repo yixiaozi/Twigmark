@@ -74,4 +74,11 @@ public final class DocumentTabSupport {
 		        .getMapViewComponent();
 		Controller.getCurrentController().getMapViewManager().refreshViewportView(mapView);
 	}
+
+	public static void refreshTabTitles() {
+		final MapViewTabs tabs = MapViewTabs.getInstance();
+		if (tabs != null) {
+			tabs.refreshTabTitles();
+		}
+	}
 }

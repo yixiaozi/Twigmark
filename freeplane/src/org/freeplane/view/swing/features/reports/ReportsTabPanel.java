@@ -59,6 +59,7 @@ public class ReportsTabPanel extends JPanel {
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList reportList = new JList(listModel);
 	private volatile boolean generating;
+	private volatile int generateGeneration;
 	private boolean suppressSelectionEvent;
 
 	public ReportsTabPanel() {
@@ -190,9 +191,6 @@ public class ReportsTabPanel extends JPanel {
 	}
 
 	private void runSelected() {
-		if (generating) {
-			return;
-		}
 		final Object value = reportList.getSelectedValue();
 		if (!(value instanceof ReportDefinition)) {
 			statusLabel.setText("请先选择一种报表");
@@ -217,6 +215,7 @@ public class ReportsTabPanel extends JPanel {
 			return;
 		}
 		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
+		final int gen = ++generateGeneration;
 		generating = true;
 		statusLabel.setText("正在生成「" + def.title + "」…");
 		final Thread thread = new Thread(new Runnable() {
@@ -237,6 +236,9 @@ public class ReportsTabPanel extends JPanel {
 				final Exception fail = error;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
+						if (gen != generateGeneration) {
+							return;
+						}
 						try {
 							if (fail != null) {
 								statusLabel.setText("生成失败：" + fail.getMessage());
@@ -250,7 +252,7 @@ public class ReportsTabPanel extends JPanel {
 								return;
 							}
 							service.showReport(resultView, resultTree);
-							statusLabel.setText("已显示「" + def.title + "」· " + def.decision);
+							statusLabel.setText("已显示「" + def.title + "」· 可关 Tab / 返回导图");
 						}
 						catch (Exception e) {
 							statusLabel.setText(e.getMessage());
@@ -258,7 +260,9 @@ public class ReportsTabPanel extends JPanel {
 							        JOptionPane.WARNING_MESSAGE);
 						}
 						finally {
-							generating = false;
+							if (gen == generateGeneration) {
+								generating = false;
+							}
 						}
 					}
 				});
@@ -274,12 +278,8 @@ public class ReportsTabPanel extends JPanel {
 			statusLabel.setText("活动报表服务不可用");
 			return;
 		}
-		final ReportViewportService charts = ReportViewportService.get();
-		if (charts != null) {
-			charts.hideFromMapViewport();
-		}
 		service.setReportVisible(true);
-		statusLabel.setText("已显示「活动报表」· 点右上角「返回导图」关闭");
+		statusLabel.setText("已显示「活动报表」· 关 Tab 或点「返回导图」");
 	}
 
 	private void showMcpAudit() {
@@ -287,16 +287,12 @@ public class ReportsTabPanel extends JPanel {
 			final AFreeplaneAction action = Controller.getCurrentController().getAction("McpStatusAuditAction");
 			if (action == null) {
 				statusLabel.setText("MCP 插件未加载，无法打开审计");
-				JOptionPane.showMessageDialog(this, "MCP 插件未加载，无法打开审计对话框。\n也可在「产品设置」里打开 MCP 审计。",
+				JOptionPane.showMessageDialog(this, "MCP 插件未加载，无法打开 MCP 审计。",
 				        "MCP 审计", JOptionPane.INFORMATION_MESSAGE);
 				return;
 			}
-			final ReportViewportService charts = ReportViewportService.get();
-			if (charts != null) {
-				charts.hideFromMapViewport();
-			}
 			action.actionPerformed(null);
-			statusLabel.setText("已打开「MCP 审计」");
+			statusLabel.setText("已打开「MCP 审计」· 关 Tab 或点「返回导图」");
 		}
 		catch (Exception e) {
 			statusLabel.setText("打开 MCP 审计失败：" + e.getMessage());
