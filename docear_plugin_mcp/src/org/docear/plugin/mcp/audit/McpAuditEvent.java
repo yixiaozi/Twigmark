@@ -1,7 +1,12 @@
 package org.docear.plugin.mcp.audit;
 
+import java.util.UUID;
+
 public final class McpAuditEvent {
 
+	public final String eventId;
+	public final String machineId;
+	public final String machineName;
 	public final long ts;
 	public final String tenant;
 	public final String actor;
@@ -23,11 +28,16 @@ public final class McpAuditEvent {
 	public final long durationMs;
 	public final String errorMessage;
 
-	public McpAuditEvent(final long ts, final String tenant, final String actor, final String action, final String kind,
-	    final McpOperationIntent intent, final String traceId, final String sessionId, final String clientName,
-	    final String osUser, final String remoteAddress, final String questionSummary, final String operationGoal,
-	    final String requestJson, final String responseJson, final int responseBytes, final boolean responseTruncated,
-	    final boolean success, final long durationMs, final String errorMessage) {
+	public McpAuditEvent(final String eventId, final String machineId, final String machineName, final long ts,
+	    final String tenant, final String actor, final String action, final String kind, final McpOperationIntent intent,
+	    final String traceId, final String sessionId, final String clientName, final String osUser,
+	    final String remoteAddress, final String questionSummary, final String operationGoal, final String requestJson,
+	    final String responseJson, final int responseBytes, final boolean responseTruncated, final boolean success,
+	    final long durationMs, final String errorMessage) {
+		this.eventId = eventId != null && eventId.length() > 0 ? eventId : UUID.randomUUID().toString();
+		this.machineId = machineId != null && machineId.length() > 0 ? machineId : McpAuditMachineId.getMachineId();
+		this.machineName = machineName != null && machineName.length() > 0 ? machineName
+		    : McpAuditMachineId.getMachineName();
 		this.ts = ts;
 		this.tenant = tenant != null ? tenant : "default";
 		this.actor = actor != null ? actor : "";
@@ -48,5 +58,17 @@ public final class McpAuditEvent {
 		this.success = success;
 		this.durationMs = durationMs;
 		this.errorMessage = errorMessage != null ? errorMessage : "";
+	}
+
+	/** Local record helper: auto-assigns this machine's id and a fresh event UUID. */
+	public static McpAuditEvent local(final long ts, final String tenant, final String actor, final String action,
+	    final String kind, final McpOperationIntent intent, final String traceId, final String sessionId,
+	    final String clientName, final String osUser, final String remoteAddress, final String questionSummary,
+	    final String operationGoal, final String requestJson, final String responseJson, final int responseBytes,
+	    final boolean responseTruncated, final boolean success, final long durationMs, final String errorMessage) {
+		return new McpAuditEvent(UUID.randomUUID().toString(), McpAuditMachineId.getMachineId(),
+		    McpAuditMachineId.getMachineName(), ts, tenant, actor, action, kind, intent, traceId, sessionId, clientName,
+		    osUser, remoteAddress, questionSummary, operationGoal, requestJson, responseJson, responseBytes,
+		    responseTruncated, success, durationMs, errorMessage);
 	}
 }
