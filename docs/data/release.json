@@ -1,11 +1,11 @@
 {
   "name": "Twigmark",
-  "version": "1.2.0",
+  "version": "Twigmark-1.1.1",
   "status": "stable",
-  "tag": "v1.2.0",
+  "tag": "Twigmark-1.1.1",
   "publishedAt": "2026-08-07",
-  "htmlUrl": "https://github.com/yixiaozi/Twigmark/releases",
-  "downloadUrl": "https://github.com/yixiaozi/Twigmark/releases/latest",
+  "htmlUrl": "https://github.com/yixiaozi/Twigmark/releases/tag/Twigmark-1.1.1",
+  "downloadUrl": "https://github.com/yixiaozi/Twigmark/releases/tag/Twigmark-1.1.1",
   "notesUrl": "https://github.com/yixiaozi/Twigmark/blob/master/RELEASE_NOTES.md",
   "repoUrl": "https://github.com/yixiaozi/Twigmark"
 }
