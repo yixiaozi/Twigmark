@@ -176,6 +176,14 @@ public final class MapViewTabOrder {
 		return tabs.getAllTabKeysInOrder();
 	}
 
+	/** Select a bottom tab by its key (MapView or {@link org.freeplane.features.ui.IDocumentTabView}). */
+	public static void selectTabKey(final Component tabKey) {
+		final MapViewTabs tabs = MapViewTabs.getInstance();
+		if (tabs != null && tabKey != null) {
+			tabs.selectDocumentTab(tabKey);
+		}
+	}
+
 	/**
 	 * Cycle Ctrl+Tab among currently visible bottom tabs (group filter + drag order).
 	 *

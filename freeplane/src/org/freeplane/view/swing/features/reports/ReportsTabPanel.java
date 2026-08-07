@@ -50,7 +50,7 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("点选报表 → 新开 Tab，可保留多个");
+	private final JLabel statusLabel = new JLabel("点选报表 → 打开/切换 Tab");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -148,7 +148,7 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 新开 Tab）"));
+		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 打开/切换）"));
 		add(scroll, BorderLayout.CENTER);
 		setPreferredSize(new Dimension(280, 400));
 	}
@@ -228,7 +228,7 @@ public class ReportsTabPanel extends JPanel {
 			return;
 		}
 		final int statusGen = ++statusGeneration;
-		statusLabel.setText("已新开「" + def.title + "」Tab，正在加载…");
+		statusLabel.setText("已打开「" + def.title + "」，正在加载…");
 		// Heartbeat: long scans rarely emit mid-progress; keep the bar alive with elapsed time.
 		final Timer heartbeat = new Timer(300, new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {

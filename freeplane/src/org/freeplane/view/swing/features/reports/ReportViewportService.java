@@ -12,16 +12,18 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.usagestats.UsageStatsReportService;
+import org.freeplane.main.application.DocumentTabSupport;
 
 /**
- * Opens each chart report in its own bottom tab. Previous reports stay open until
- * the user closes them. Loading progress is scoped per tab/session.
+ * Chart reports as bottom tabs. Same report id reuses its tab (focus + reload)
+ * instead of stacking duplicates. Tab titles stay short like the sidebar.
  */
 public final class ReportViewportService implements IExtension {
 
 	/** One open (or loading) report tab. */
 	public static final class ReportLoadSession {
 		public final int id;
+		public final String shortTitle;
 		public final ReportViewportPanel panel;
 		public final ReportDocumentView view;
 		public final long startedAtMs;
@@ -29,8 +31,10 @@ public final class ReportViewportService implements IExtension {
 		private volatile boolean finished;
 		private volatile boolean failed;
 
-		ReportLoadSession(final int id, final ReportViewportPanel panel, final ReportDocumentView view) {
+		ReportLoadSession(final int id, final String shortTitle, final ReportViewportPanel panel,
+		        final ReportDocumentView view) {
 			this.id = id;
+			this.shortTitle = shortTitle == null || shortTitle.length() == 0 ? "报表" : shortTitle;
 			this.panel = panel;
 			this.view = view;
 			this.startedAtMs = System.currentTimeMillis();
@@ -95,8 +99,7 @@ public final class ReportViewportService implements IExtension {
 	}
 
 	/**
-	 * Open a <b>new</b> report tab immediately with a loading shell.
-	 * Previous report tabs are left alone (they keep loading / showing independently).
+	 * Focus existing tab for this report id, or open one. Always shows loading then fills data.
 	 */
 	public ReportLoadSession beginReport(final ReportDefinition def, final String subtitle) {
 		final UsageStatsReportService activity = UsageStatsReportService.get();
@@ -107,33 +110,65 @@ public final class ReportViewportService implements IExtension {
 		synchronized (this) {
 			id = ++nextSessionId;
 		}
-		final String title = def == null || def.title == null || def.title.length() == 0 ? "报表"
-		        : "报表 · " + def.title;
+		final String shortTitle = def == null || def.title == null || def.title.length() == 0 ? "报表" : def.title;
 		final String decision = def == null || def.decision == null ? "" : def.decision;
 		final String dataSource = def == null || def.dataSource == null ? "" : def.dataSource;
 		final String sub = subtitle == null ? "" : subtitle;
-		final String assignKey = "report://" + (def == null || def.id == null ? "unknown" : def.id) + "/" + id;
-		final ReportViewportPanel panel = new ReportViewportPanel();
-		final ReportDocumentView[] viewRef = new ReportDocumentView[1];
-		panel.setOnClose(new Runnable() {
-			public void run() {
-				final ReportDocumentView v = viewRef[0];
-				if (v != null) {
-					ReportDocumentService.close(v);
+		final String assignKey = ReportDocumentService.keyForReportId(def == null ? null : def.id);
+
+		final ReportDocumentView existing = ReportDocumentService.findByAssignmentKey(assignKey);
+		final ReportViewportPanel panel;
+		final ReportDocumentView view;
+		if (existing != null && !existing.isClosed() && existing.getContent() instanceof ReportViewportPanel) {
+			view = existing;
+			panel = (ReportViewportPanel) existing.getContent();
+			panel.showLoading(shortTitle, sub, decision, dataSource);
+			view.setTabTitle(shortTitle);
+			DocumentTabSupport.openDocumentTab(view);
+			DocumentTabSupport.selectDocumentTab(view);
+		}
+		else {
+			panel = new ReportViewportPanel();
+			final ReportDocumentView[] viewRef = new ReportDocumentView[1];
+			panel.setOnClose(new Runnable() {
+				public void run() {
+					final ReportDocumentView v = viewRef[0];
+					if (v != null) {
+						ReportDocumentService.close(v);
+					}
 				}
-			}
-		});
-		panel.setOnWrite(new Runnable() {
-			public void run() {
-				writeFromPanel(panel);
-			}
-		});
-		panel.showLoading(title, sub, decision, dataSource);
-		final ReportDocumentView view = ReportDocumentService.openNew(title + " · 加载中", panel, assignKey);
-		viewRef[0] = view;
-		final ReportLoadSession session = new ReportLoadSession(id, panel, view);
+			});
+			panel.setOnWrite(new Runnable() {
+				public void run() {
+					writeFromPanel(panel);
+				}
+			});
+			panel.showLoading(shortTitle, sub, decision, dataSource);
+			view = ReportDocumentService.openOrFocus(shortTitle, panel, assignKey);
+			viewRef[0] = view;
+		}
+
+		// Invalidate any in-flight load for a previous click on the same tab.
+		invalidateSessionsForView(view);
+		final ReportLoadSession session = new ReportLoadSession(id, shortTitle, panel, view);
 		sessionsById.put(Integer.valueOf(id), session);
 		return session;
+	}
+
+	private void invalidateSessionsForView(final ReportDocumentView view) {
+		if (view == null) {
+			return;
+		}
+		synchronized (sessionsById) {
+			final Object[] values = sessionsById.values().toArray();
+			for (int i = 0; i < values.length; i++) {
+				final ReportLoadSession s = (ReportLoadSession) values[i];
+				if (s != null && s.view == view) {
+					s.markFinished();
+					sessionsById.remove(Integer.valueOf(s.id));
+				}
+			}
+		}
 	}
 
 	public ReportLoadSession getSession(final int id) {
@@ -176,10 +211,12 @@ public final class ReportViewportService implements IExtension {
 					sessionsById.remove(Integer.valueOf(session.id));
 					return;
 				}
+				if (session.isFinished()) {
+					// Superseded by a newer click on the same report tab.
+					return;
+				}
 				session.panel.showModel(model, tree);
-				final String title = model == null || model.title == null || model.title.length() == 0 ? "报表"
-				        : model.title;
-				session.view.setTabTitle(title);
+				session.view.setTabTitle(session.shortTitle);
 				session.markFinished();
 				sessionsById.remove(Integer.valueOf(session.id));
 			}
@@ -204,8 +241,11 @@ public final class ReportViewportService implements IExtension {
 					sessionsById.remove(Integer.valueOf(session.id));
 					return;
 				}
+				if (session.isFinished() && !session.isFailed()) {
+					return;
+				}
 				session.panel.showError("报表生成失败", msg);
-				session.view.setTabTitle("报表 · 失败");
+				session.view.setTabTitle(session.shortTitle);
 				session.markFailed();
 				sessionsById.remove(Integer.valueOf(session.id));
 			}
@@ -218,13 +258,25 @@ public final class ReportViewportService implements IExtension {
 		}
 	}
 
-	/** Legacy helper: open a finished model in a brand-new tab. */
+	/** Legacy helper: open a finished model in a tab keyed by title. */
 	public void showReport(final ReportViewModel model, final ReportNodeSpec tree) {
 		final UsageStatsReportService activity = UsageStatsReportService.get();
 		if (activity != null) {
 			activity.releaseSoftViewport();
 		}
-		final ReportViewportPanel panel = new ReportViewportPanel();
+		final String shortTitle = model == null || model.title == null || model.title.length() == 0 ? "报表"
+		        : stripReportPrefix(model.title);
+		final String assignKey = ReportDocumentService.keyForReportId(shortTitle);
+		final ReportDocumentView existing = ReportDocumentService.findByAssignmentKey(assignKey);
+		final ReportViewportPanel panel;
+		if (existing != null && !existing.isClosed() && existing.getContent() instanceof ReportViewportPanel) {
+			panel = (ReportViewportPanel) existing.getContent();
+			panel.showModel(model, tree);
+			existing.setTabTitle(shortTitle);
+			DocumentTabSupport.selectDocumentTab(existing);
+			return;
+		}
+		panel = new ReportViewportPanel();
 		final ReportDocumentView[] viewRef = new ReportDocumentView[1];
 		panel.setOnClose(new Runnable() {
 			public void run() {
@@ -239,9 +291,14 @@ public final class ReportViewportService implements IExtension {
 			}
 		});
 		panel.showModel(model, tree);
-		final String title = model == null || model.title == null || model.title.length() == 0 ? "报表"
-		        : model.title;
-		viewRef[0] = ReportDocumentService.openNew(title, panel, "report://direct/" + System.nanoTime());
+		viewRef[0] = ReportDocumentService.openOrFocus(shortTitle, panel, assignKey);
+	}
+
+	private static String stripReportPrefix(final String title) {
+		if (title.startsWith("报表 · ")) {
+			return title.substring("报表 · ".length());
+		}
+		return title;
 	}
 
 	public boolean isReportInViewport() {

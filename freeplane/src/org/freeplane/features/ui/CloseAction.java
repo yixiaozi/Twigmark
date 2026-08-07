@@ -23,22 +23,26 @@ import java.awt.event.ActionEvent;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.main.application.DocumentTabSupport;
 
-/** This closes only the current map */
+/** Closes the active document tab (report etc.) or the current mind map. */
 public class CloseAction extends AFreeplaneAction {
 	static final String NAME = "close";
 	/**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
-// // 	final private Controller controller;
 
 	CloseAction() {
 		super("CloseAction");
-//		this.controller = controller;
 	}
 
 	public void actionPerformed(final ActionEvent e) {
+		final IDocumentTabView doc = DocumentTabSupport.getActiveDocumentView();
+		if (doc != null) {
+			doc.requestClose(false);
+			return;
+		}
 		Controller.getCurrentController().close(false);
 	}
 }

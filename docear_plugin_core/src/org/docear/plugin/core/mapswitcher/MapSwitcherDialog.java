@@ -35,11 +35,15 @@ import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
+import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewManager;
+import org.freeplane.main.application.DocumentTabSupport;
+import org.freeplane.main.application.MapViewTabOrder;
 import org.freeplane.view.swing.map.MapView;
 
 /**
- * Alt+Space overlay: compact open-map switcher with ←→/↑↓, Enter, Delete.
+ * Alt+Space overlay: compact open-tab switcher (mind maps + report tabs)
+ * with ←→/↑↓, Enter, Delete.
  */
 final class MapSwitcherDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
@@ -97,7 +101,7 @@ final class MapSwitcherDialog extends JDialog {
 		root.setBackground(PANEL);
 		root.setBorder(new EmptyBorder(10, 12, 8, 12));
 
-		final JLabel title = new JLabel("切换导图");
+		final JLabel title = new JLabel("切换导图 / 报表");
 		title.setFont(preferUiFont(12f));
 		title.setForeground(MUTED);
 		title.setBorder(new EmptyBorder(0, 2, 6, 2));
@@ -213,27 +217,51 @@ final class MapSwitcherDialog extends JDialog {
 			return;
 		}
 		final IMapViewManager manager = controller.getMapViewManager();
-		final List views = manager.getMapViewVector();
-		final Component active = manager.getMapViewComponent();
+		final Component activeMap = manager.getMapViewComponent();
+		final IDocumentTabView activeDoc = DocumentTabSupport.getActiveDocumentView();
 		int activeIndex = 0;
-		for (int i = 0; i < views.size(); i++) {
-			final Object view = views.get(i);
-			if (!(view instanceof MapView)) {
-				continue;
-			}
-			final MapView mapView = (MapView) view;
-			final String key = mapView.getName();
-			if (key == null || key.length() == 0) {
-				continue;
-			}
-			final Entry entry = new Entry(key, formatTitle(key), mapView == active);
-			entries.add(entry);
-			if (mapView == active) {
-				activeIndex = entries.size() - 1;
+
+		final List tabKeys = MapViewTabOrder.getAllTabKeysInOrder();
+		if (tabKeys != null) {
+			for (int i = 0; i < tabKeys.size(); i++) {
+				final Object keyObj = tabKeys.get(i);
+				if (!(keyObj instanceof Component)) {
+					continue;
+				}
+				final Component tabKey = (Component) keyObj;
+				final Entry entry = entryForTabKey(tabKey, activeMap, activeDoc);
+				if (entry == null) {
+					continue;
+				}
+				entries.add(entry);
+				if (entry.active) {
+					activeIndex = entries.size() - 1;
+				}
 			}
 		}
+		// Fallback when tab strip not ready: maps only.
 		if (entries.isEmpty()) {
-			final JLabel empty = new JLabel("没有已打开的导图");
+			final List views = manager.getMapViewVector();
+			for (int i = 0; i < views.size(); i++) {
+				final Object view = views.get(i);
+				if (!(view instanceof MapView)) {
+					continue;
+				}
+				final MapView mapView = (MapView) view;
+				final String name = mapView.getName();
+				if (name == null || name.length() == 0) {
+					continue;
+				}
+				final boolean active = activeDoc == null && mapView == activeMap;
+				entries.add(new Entry(mapView, formatMapTitle(name), active));
+				if (active) {
+					activeIndex = entries.size() - 1;
+				}
+			}
+		}
+
+		if (entries.isEmpty()) {
+			final JLabel empty = new JLabel("没有已打开的导图或报表");
 			empty.setFont(preferUiFont(13f));
 			empty.setForeground(MUTED);
 			strip.add(empty);
@@ -253,6 +281,28 @@ final class MapSwitcherDialog extends JDialog {
 		}
 		rebuildCards();
 		packAndLayout();
+	}
+
+	private static Entry entryForTabKey(final Component tabKey, final Component activeMap,
+	        final IDocumentTabView activeDoc) {
+		if (tabKey instanceof IDocumentTabView) {
+			final IDocumentTabView doc = (IDocumentTabView) tabKey;
+			final String title = doc.getTabTitle();
+			if (title == null || title.length() == 0) {
+				return null;
+			}
+			return new Entry(tabKey, title, activeDoc == doc);
+		}
+		if (tabKey instanceof MapView) {
+			final MapView mapView = (MapView) tabKey;
+			final String name = mapView.getName();
+			if (name == null || name.length() == 0) {
+				return null;
+			}
+			final boolean active = activeDoc == null && mapView == activeMap;
+			return new Entry(mapView, formatMapTitle(name), active);
+		}
+		return null;
 	}
 
 	private void rebuildCards() {
@@ -367,16 +417,42 @@ final class MapSwitcherDialog extends JDialog {
 		final Entry entry = (Entry) entries.get(selectedIndex);
 		closing = true;
 		try {
-			final IMapViewManager manager = Controller.getCurrentController().getMapViewManager();
-			if (manager != null) {
-				manager.changeToMapView(entry.key);
-			}
+			activateEntry(entry);
 		}
 		catch (Exception e) {
-			LogUtils.warn("MapSwitcher: could not switch to " + entry.key, e);
+			LogUtils.warn("MapSwitcher: could not switch to " + entry.title, e);
 		}
 		finally {
 			dispose();
+		}
+	}
+
+	private void activateEntry(final Entry entry) {
+		final Controller controller = Controller.getCurrentController();
+		if (controller == null) {
+			return;
+		}
+		final IMapViewManager manager = controller.getMapViewManager();
+		if (entry.tabKey instanceof IDocumentTabView) {
+			final IDocumentTabView doc = (IDocumentTabView) entry.tabKey;
+			DocumentTabSupport.openDocumentTab(doc);
+			DocumentTabSupport.selectDocumentTab(doc);
+			return;
+		}
+		if (entry.tabKey instanceof MapView) {
+			final MapView mapView = (MapView) entry.tabKey;
+			// Leaving a report/document tab: always restore the map viewport even
+			// when this MapView is already the "current" map (changeToMapView no-op).
+			DocumentTabSupport.deactivateDocumentView();
+			if (manager != null) {
+				if (mapView != manager.getMapViewComponent()) {
+					manager.changeToMapView(mapView);
+				}
+				else {
+					manager.refreshViewportView(mapView);
+				}
+			}
+			MapViewTabOrder.selectTabKey(mapView);
 		}
 	}
 
@@ -388,20 +464,25 @@ final class MapSwitcherDialog extends JDialog {
 		final int keepIndex = selectedIndex;
 		setAlwaysOnTop(false);
 		try {
-			final Controller controller = Controller.getCurrentController();
-			final IMapViewManager manager = controller.getMapViewManager();
-			if (manager == null) {
-				return;
+			if (entry.tabKey instanceof IDocumentTabView) {
+				((IDocumentTabView) entry.tabKey).requestClose(false);
 			}
-			final Component currentView = manager.getMapViewComponent();
-			final String currentName = currentView == null ? null : currentView.getName();
-			if (currentName == null || !entry.key.equals(currentName)) {
-				manager.changeToMapView(entry.key);
+			else if (entry.tabKey instanceof MapView) {
+				final Controller controller = Controller.getCurrentController();
+				final IMapViewManager manager = controller.getMapViewManager();
+				if (manager == null) {
+					return;
+				}
+				final Component currentView = manager.getMapViewComponent();
+				if (currentView != entry.tabKey) {
+					DocumentTabSupport.deactivateDocumentView();
+					manager.changeToMapView((MapView) entry.tabKey);
+				}
+				controller.close(false);
 			}
-			controller.close(false);
 		}
 		catch (Exception e) {
-			LogUtils.warn("MapSwitcher: could not close " + entry.key, e);
+			LogUtils.warn("MapSwitcher: could not close " + entry.title, e);
 		}
 		finally {
 			if (isDisplayable()) {
@@ -429,7 +510,6 @@ final class MapSwitcherDialog extends JDialog {
 		if (width > DIALOG_MAX_WIDTH) {
 			width = DIALOG_MAX_WIDTH;
 		}
-		// Force wrap width so FlowLayout can form multiple rows when many maps are open.
 		strip.setPreferredSize(new Dimension(width - 28, strip.getPreferredSize().height));
 		pack();
 		refreshColumnsPerRow();
@@ -477,7 +557,7 @@ final class MapSwitcherDialog extends JDialog {
 		return DocearUiTheme.font(size);
 	}
 
-	private static String formatTitle(final String name) {
+	private static String formatMapTitle(final String name) {
 		if (name == null) {
 			return "";
 		}
@@ -502,8 +582,11 @@ final class MapSwitcherDialog extends JDialog {
 		if (controller == null || controller.getMapViewManager() == null) {
 			return;
 		}
+		final List tabKeys = MapViewTabOrder.getAllTabKeysInOrder();
 		final List views = controller.getMapViewManager().getMapViewVector();
-		if (views == null || views.isEmpty()) {
+		final boolean hasTabs = tabKeys != null && !tabKeys.isEmpty();
+		final boolean hasMaps = views != null && !views.isEmpty();
+		if (!hasTabs && !hasMaps) {
 			return;
 		}
 		current = new MapSwitcherDialog();
@@ -512,12 +595,12 @@ final class MapSwitcherDialog extends JDialog {
 	}
 
 	private static final class Entry {
-		final String key;
+		final Component tabKey;
 		final String title;
 		final boolean active;
 
-		Entry(final String key, final String title, final boolean active) {
-			this.key = key;
+		Entry(final Component tabKey, final String title, final boolean active) {
+			this.tabKey = tabKey;
 			this.title = title;
 			this.active = active;
 		}
