@@ -11,6 +11,7 @@
 | 版本 | **1.2.0**（stable） |
 | 许可证 | [GNU GPL v2](LICENSE) |
 | 仓库 | https://github.com/yixiaozi/Twigmark |
+| 主页 | https://yixiaozi.github.io/Twigmark/ |
 | 平台 | Windows（当前主要发行目标） |
 
 ---
@@ -153,6 +154,7 @@ Twigmark 是挂在 Freeplane 上的 OSGi 插件套件：
 
 ## 文档与版本
 
+- 项目主页：[yixiaozi.github.io/Twigmark](https://yixiaozi.github.io/Twigmark/)（`docs/`，发版时由 GitHub Actions 自动更新版本与下载链接）  
 - [RELEASE_NOTES.md](RELEASE_NOTES.md) — 1.2.0 发布说明  
 - [CHANGELOG.md](CHANGELOG.md) — 变更记录  
 - [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) — 第三方与上游声明  

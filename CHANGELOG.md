@@ -20,6 +20,7 @@
 - 打包：新增 `scripts/package-twigmark.ps1`；本地部署脚本默认改为仓库内 / 环境变量路径，不再写死 `E:\`
 - 上手：欢迎导图改为「3 分钟上手」路径
 - 图标：新 Twigmark 应用图标（启动器 / 安装包 / 闪屏）
+- 主页：新增 GitHub Pages（`docs/` → https://yixiaozi.github.io/Twigmark/）；Release 发布时 Actions 自动刷新版本与下载链接
 
 ### 近期已合入能力（基线）
 

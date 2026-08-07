@@ -1,0 +1,76 @@
+name: Deploy GitHub Pages
+
+on:
+  release:
+    types: [published]
+  push:
+    branches: [master]
+    paths:
+      - "docs/**"
+      - "docear_plugin_core/resources/version.properties"
+      - ".github/workflows/pages.yml"
+      - "scripts/update-pages-release.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build site with release data
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_HTML_URL: ${{ github.event.release.html_url }}
+          RELEASE_PUBLISHED_AT: ${{ github.event.release.published_at }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a docs/. _site/
+          mkdir -p _site/data
+
+          python3 scripts/update-pages-release.py \
+            --out _site/data/release.json \
+            --version-properties docear_plugin_core/resources/version.properties \
+            --event-name "$EVENT_NAME" \
+            --release-tag "${RELEASE_TAG:-}" \
+            --release-name "${RELEASE_NAME:-}" \
+            --release-html-url "${RELEASE_HTML_URL:-}" \
+            --release-published-at "${RELEASE_PUBLISHED_AT:-}" \
+            --repo "${{ github.repository }}"
+
+          # Also refresh the in-repo seed used for local preview / API fallback
+          cp _site/data/release.json docs/data/release.json
+          cat _site/data/release.json
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
