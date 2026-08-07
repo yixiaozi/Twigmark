@@ -4,70 +4,67 @@
 
 | 能力 | 说明 |
 |------|------|
-| MCP API Key | 可选；公网绑定强制开启 |
+| MCP API Key | 可选；公网绑定强制开启（保护 `/mcp`） |
 | 公网监听 | 主机设为 `0.0.0.0`（或非 loopback） |
-| 网页版 | `http://<host>:<port>/web/` 对话并调用导图工具 |
-| 大模型 Key | 只保存在 Twigmark 设置里，不进浏览器 |
+| 网页账号 | `/web/` 使用**账号密码**登录（会话 Token） |
+| 大模型库 | 每台电脑 `webchat-<MAC>.db`；配置与对话写入本机库 |
+| 跨机历史 | 数据目录同步后，列表合并所有 `webchat-*.db` |
+
+## 网页账号与数据库
+
+路径（默认与审计库同目录，即主目录下的 `data/`）：
+
+```text
+webchat-<本机MAC>.db   ← 本机写入（用户镜像、会话、LLM 配置、新对话）
+webchat-<其他MAC>.db   ← 同步过来的同伴库（只读合并）
+```
+
+表：`users`、`sessions`、`llm_profiles`、`conversations`、`messages`。
+
+- **注册 / 登录**：在任意已同步库中匹配用户名；密码哈希用加盐迭代 SHA-256  
+- **会话**：只写本机 `sessions`；请求头 `Authorization: Bearer <token>`  
+- **大模型配置**：按用户存入 DB（Base URL / API Key / 模型）；优先本机默认配置  
+- **对话**：新消息始终写入本机库；历史列表按 `username` 汇总全部 `webchat-*.db`
+
+把整个 `data/`（或其中 `webchat-*.db`）用网盘/Git/同步盘在多台电脑间同步，即可在任意一台看到全部对话。
 
 ## 产品设置
 
 **产品设置 → MCP**：
 
-1. **生成 Key** — 写入 `mcp.auth.apiKey`，并勾选「要求 API Key」  
-2. **公网绑定** — 一键设为 `0.0.0.0` 并确保有 Key  
-3. **Web** — 启用网页；填写 OpenAI 兼容的 Base URL / LLM API Key / 模型  
-4. **重启服务** — 使监听与路由生效  
+1. （可选）MCP API Key / 公网绑定 — 保护 Cursor 等 MCP 客户端  
+2. Web 开关；设置里的 LLM 字段可作为**新账号的默认画像种子**（首次登录时写入 DB）  
+3. 重启服务  
 
-默认仍为 `127.0.0.1:7720`，本机 Cursor 可无 Key。
+网页端登录后，可在页面「大模型」里增删改配置（以数据库为准）。
 
-## 客户端调用 MCP
+## API（网页）
 
-启用认证或公网后，请求需带：
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/status` | 公开状态（无密钥） |
+| POST | `/api/register` | `{username,password}` |
+| POST | `/api/login` | → `{token,username,…}` |
+| POST | `/api/logout` | 需会话 |
+| GET | `/api/me` | 需会话 |
+| GET/POST | `/api/llm-profiles` | 列表 / 保存 |
+| POST | `/api/llm-profiles/delete` | `{id}` |
+| GET/POST | `/api/conversations` | 列表 / 新建 |
+| GET | `/api/conversations/{id}` | 含消息（跨库合并） |
+| POST | `/api/chat` | `{message,conversationId?,profileId?}` |
+
+## MCP 客户端
+
+启用认证或公网后，`/mcp` 仍需：
 
 ```http
-Authorization: Bearer tm_your_key
+Authorization: Bearer tm_your_mcp_key
 ```
 
-或：
-
-```http
-X-Api-Key: tm_your_key
-```
-
-Cursor `mcp.json` 示例（远端 / 隧道）：
-
-```json
-{
-  "mcpServers": {
-    "twigmark": {
-      "url": "https://your-host.example/mcp",
-      "headers": {
-        "Authorization": "Bearer tm_your_key"
-      }
-    }
-  }
-}
-```
-
-本机默认可继续用 `http://127.0.0.1:7720/mcp`（未开认证时无需 Header）。
-
-## 网页版
-
-- 静态页：`GET /web/`  
-- 状态：`GET /api/status`（不含密钥）  
-- 对话：`POST /api/chat`（认证开启时需 MCP Key）  
-  ```json
-  { "message": "当前选中了什么？", "history": [] }
-  ```
-- 服务端用配置的 LLM Key 调 `/chat/completions`，并在进程内执行 MCP 工具（不二次走 HTTP）。
+与网页账号相互独立。
 
 ## 安全建议
 
-1. 公网务必用 API Key；尽量前面再加 HTTPS 反代（nginx / Caddy）  
-2. 不要把 LLM Key 或 MCP Key 写进仓库  
-3. 只读模式：`mcp.readonly=true`（部分工具仍在完善）  
-4. `/health` 不要求 Key，便于探活；勿在公网暴露未鉴权的管理面  
-
-## 相关配置键
-
-见 `docear_plugin_mcp/resources/mcp.properties`：`mcp.auth.*`、`mcp.web.*`。
+1. 公网务必开 MCP API Key，并加 HTTPS 反代  
+2. 网页密码与 LLM Key 勿提交到公开仓库  
+3. 同步 `webchat-*.db` 时注意文件含密钥与对话明文，目录权限要收紧  

@@ -19,6 +19,7 @@ import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.webchat.WebchatApi;
 import org.freeplane.core.util.LogUtils;
 
 import com.sun.net.httpserver.HttpExchange;
@@ -30,6 +31,7 @@ public final class McpHttpServer {
 	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private final McpProtocol protocol = new McpProtocol();
 	private final McpWebAgent webAgent = new McpWebAgent(protocol);
+	private final WebchatApi webchatApi = new WebchatApi(webAgent);
 	private HttpServer server;
 	private ExecutorService executor;
 
@@ -40,8 +42,7 @@ public final class McpHttpServer {
 		server = HttpServer.create(new InetSocketAddress(host, port), 0);
 		server.createContext("/mcp", new McpHandler());
 		server.createContext("/health", new HealthHandler());
-		server.createContext("/api/status", new ApiStatusHandler());
-		server.createContext("/api/chat", new ApiChatHandler());
+		server.createContext("/api", new ApiDispatcher());
 		if (DocearMcpConfig.isWebEnabled()) {
 			server.createContext("/web", new StaticWebHandler());
 		}
@@ -100,7 +101,7 @@ public final class McpHttpServer {
 		}
 	}
 
-	private final class ApiStatusHandler implements HttpHandler {
+	private final class ApiDispatcher implements HttpHandler {
 		public void handle(final HttpExchange exchange) throws IOException {
 			addCorsHeaders(exchange);
 			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
@@ -108,69 +109,62 @@ public final class McpHttpServer {
 				exchange.close();
 				return;
 			}
-			if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-				writeJson(exchange, 405, apiError("Only GET is supported on /api/status"));
+			final String path = exchange.getRequestURI().getPath();
+			final String method = exchange.getRequestMethod();
+			if ("/api/status".equals(path) && "GET".equalsIgnoreCase(method)) {
+				writeJson(exchange, 200, webchatApi.handleStatus());
 				return;
 			}
-			// Status is readable without key so the web UI can learn authRequired;
-			// it never returns secrets.
-			final Map<String, JsonValue> status = new LinkedHashMap<String, JsonValue>();
-			status.put("service", JsonValue.ofString("twigmark-mcp"));
-			status.put("authRequired", JsonValue.ofBoolean(McpAuth.isAuthRequired()));
-			status.put("authConfigured", JsonValue.ofBoolean(McpAuth.hasConfiguredApiKey()));
-			status.put("webEnabled", JsonValue.ofBoolean(DocearMcpConfig.isWebEnabled()));
-			status.put("llmConfigured", JsonValue.ofBoolean(DocearMcpConfig.isWebLlmConfigured()));
-			status.put("llmModel", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
-			status.put("publicBind", JsonValue.ofBoolean(DocearMcpConfig.isPublicBind()));
-			status.put("readonly", JsonValue.ofBoolean(DocearMcpConfig.isReadOnly()));
-			status.put("host", JsonValue.ofString(DocearMcpConfig.getHost()));
-			status.put("port", JsonValue.ofNumber(Integer.valueOf(DocearMcpConfig.getPort())));
-			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(status)));
-		}
-	}
-
-	private final class ApiChatHandler implements HttpHandler {
-		public void handle(final HttpExchange exchange) throws IOException {
-			addCorsHeaders(exchange);
-			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-				exchange.sendResponseHeaders(204, -1);
-				exchange.close();
-				return;
-			}
-			if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-				writeJson(exchange, 405, apiError("Only POST is supported on /api/chat"));
-				return;
-			}
-			if (!DocearMcpConfig.isWebEnabled()) {
+			if (!DocearMcpConfig.isWebEnabled() && !"/api/status".equals(path)) {
 				writeJson(exchange, 403, apiError("Web UI is disabled"));
 				return;
 			}
-			if (!McpAuth.isAuthorized(exchange)) {
-				writeJson(exchange, 401, apiError("Unauthorized: provide Authorization: Bearer <mcp-api-key>"));
+			if ("/api/register".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleRegister(exchange, readBody(exchange));
 				return;
 			}
-			final String body = readBody(exchange);
-			try {
-				final JsonValue request = JsonParser.parse(body);
-				final Map<String, JsonValue> map = request.asMap();
-				final String message = map.containsKey("message") ? map.get("message").asString() : "";
-				List<JsonValue> history = new ArrayList<JsonValue>();
-				if (map.containsKey("history")) {
-					history = map.get("history").asList();
-				}
-				final Map<String, JsonValue> result = webAgent.chat(message, history);
-				writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(result)));
+			if ("/api/login".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleLogin(exchange, readBody(exchange));
+				return;
 			}
-			catch (IllegalArgumentException e) {
-				writeJson(exchange, 400, apiError(e.getMessage()));
+			if ("/api/logout".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleLogout(exchange);
+				return;
 			}
-			catch (IllegalStateException e) {
-				writeJson(exchange, 400, apiError(e.getMessage()));
+			if ("/api/me".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleMe(exchange);
+				return;
 			}
-			catch (Exception e) {
-				LogUtils.warn("Web chat failed: " + e.getMessage(), e);
-				writeJson(exchange, 500, apiError(e.getMessage() != null ? e.getMessage() : "chat failed"));
+			if ("/api/llm-profiles".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleListProfiles(exchange);
+				return;
 			}
+			if ("/api/llm-profiles".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleSaveProfile(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/llm-profiles/delete".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleDeleteProfile(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/conversations".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleListConversations(exchange);
+				return;
+			}
+			if ("/api/conversations".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleCreateConversation(exchange, readBody(exchange));
+				return;
+			}
+			if (path != null && path.startsWith("/api/conversations/") && "GET".equalsIgnoreCase(method)) {
+				final String id = path.substring("/api/conversations/".length());
+				webchatApi.handleGetConversation(exchange, id);
+				return;
+			}
+			if ("/api/chat".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleChat(exchange, readBody(exchange));
+				return;
+			}
+			writeJson(exchange, 404, apiError("Unknown API path: " + path));
 		}
 	}
 
@@ -286,7 +280,7 @@ public final class McpHttpServer {
 		headers.put("Access-Control-Allow-Origin", "*");
 		headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS, HEAD");
 		headers.put("Access-Control-Allow-Headers",
-				"Content-Type, Accept, Authorization, X-Api-Key, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
+				"Content-Type, Accept, Authorization, X-Api-Key, X-Session-Token, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
 		for (final Map.Entry<String, String> entry : headers.entrySet()) {
 			exchange.getResponseHeaders().set(entry.getKey(), entry.getValue());
 		}
