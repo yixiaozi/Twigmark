@@ -116,11 +116,18 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
  	
  	public void setDefaultAccelerator(final String itemKey, final String accelerator) {
 		final String shortcutKey = getPropertyKey(itemKey);
-		if (null == getProperty(shortcutKey)) {
+		// Always remember the factory/ribbon default for the hot-key editor,
+		// even when the user already remapped the live binding.
+		if (!defaultProps.containsKey(shortcutKey)) {
 			defaultProps.setProperty(shortcutKey, accelerator);
 		}
-		KeyStroke ks = KeyStroke.getKeyStroke(accelerator);
-		AFreeplaneAction action = builder.getMode().getAction(itemKey);
+		// User presets are loaded into keysetProps before the ribbon is built —
+		// do not clobber them with XML defaults.
+		if (keysetProps.containsKey(shortcutKey)) {
+			return;
+		}
+		final KeyStroke ks = KeyStroke.getKeyStroke(accelerator);
+		final AFreeplaneAction action = builder.getMode().getAction(itemKey);
 		setAccelerator(action, ks, false);
 	}
  	
@@ -159,6 +166,40 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 	/** Snapshot of actionKey → accelerator (for the shortcuts editor). */
 	public Map<String, KeyStroke> getActionAccelerators() {
 		return new HashMap<String, KeyStroke>(actionMap);
+	}
+
+	/**
+	 * Factory / ribbon default stroke for an action (before user remaps).
+	 * Used by the hot-key editor 「默认快捷键」column.
+	 */
+	public KeyStroke getDefaultAccelerator(final String actionKey) {
+		if (actionKey == null) {
+			return null;
+		}
+		final String shortcutKey = getPropertyKey(actionKey);
+		final String raw = defaultProps.getProperty(shortcutKey);
+		if (raw == null || raw.length() == 0) {
+			return null;
+		}
+		return parseKeyStroke(raw);
+	}
+
+	/** Action keys that have a recorded default stroke (ribbon XML or default properties). */
+	public java.util.Set getDefaultAcceleratorActionKeys() {
+		final java.util.Set keys = new java.util.HashSet();
+		final String prefix = SHORTCUT_PROPERTY_PREFIX + builder.getMode().getModeName() + "/";
+		for (final Iterator it = defaultProps.keySet().iterator(); it.hasNext();) {
+			final String propKey = String.valueOf(it.next());
+			if (!propKey.startsWith(prefix)) {
+				continue;
+			}
+			final String value = defaultProps.getProperty(propKey);
+			if (value == null || value.length() == 0) {
+				continue;
+			}
+			keys.add(propKey.substring(prefix.length()));
+		}
+		return keys;
 	}
 
 	/**
@@ -349,7 +390,50 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 
 	public void loadDefaultAcceleratorPresets() {
 		loadAcceleratorPresetsResource("/accelerator.default.properties", "default");
+		seedDefaultAcceleratorPresets();
 		applyPlatformDefaultAccelerators();
+	}
+
+	/**
+	 * Record factory defaults from {@code accelerator.default.properties} into
+	 * {@link #defaultProps} without changing live bindings. Safe to call after
+	 * the user preset file has been loaded.
+	 */
+	public void seedDefaultAcceleratorPresets() {
+		InputStream in = null;
+		try {
+			in = RibbonAcceleratorManager.class.getResourceAsStream("/accelerator.default.properties");
+			if (in == null) {
+				return;
+			}
+			final Properties prop = new Properties();
+			prop.load(in);
+			for (final Entry<Object, Object> entry : prop.entrySet()) {
+				final String shortcutKey = (String) entry.getKey();
+				final String keystrokeString = (String) entry.getValue();
+				if (!shortcutKey.startsWith(SHORTCUT_PROPERTY_PREFIX)) {
+					continue;
+				}
+				if (keystrokeString == null || keystrokeString.length() == 0) {
+					continue;
+				}
+				if (!defaultProps.containsKey(shortcutKey)) {
+					defaultProps.setProperty(shortcutKey, keystrokeString);
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Could not seed default accelerator presets: " + e.getMessage());
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (IOException e) {
+				}
+			}
+		}
 	}
 
 	/**

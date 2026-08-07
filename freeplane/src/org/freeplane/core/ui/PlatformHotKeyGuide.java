@@ -137,19 +137,96 @@ public final class PlatformHotKeyGuide {
 		final StringBuffer sb = new StringBuffer();
 		sb.append("<html><body style='width:760px;font-family:sans-serif;font-size:12pt'>");
 		sb.append("<b>当前平台：").append(platform).append("</b>");
-		sb.append(" · 快捷键按操作系统分别保存（");
-		sb.append(getAcceleratorFileName()).append("），Win / Mac 互不覆盖。<br/>");
-		sb.append("<b>修饰键对应：</b> Ctrl ↔ ⌘Command　·　Alt ↔ ⌥Option　·　Shift ↔ ⇧Shift<br/>");
+		sb.append(" · 在此修改只写入本机文件 <code>")
+		        .append(getAcceleratorFileName())
+		        .append("</code>（Win / Mac / Linux 互不覆盖）。<br/>");
+		sb.append("<b>修饰键对应：</b> Ctrl ↔ Cmd　·　Alt ↔ Option　·　Shift 相同<br/>");
 		if (Compat.isMacOsX()) {
 			sb.append("<b>Mac 默认替代（无物理键 / 系统占用）：</b> ");
-			sb.append("Insert→Tab 新建子节点；⇧Insert→⇧Tab 新建父节点；");
-			sb.append("Alt+⇧Insert→⌘⇧I 总结；Alt+Space→⌘⇧O 切换导图。");
+			sb.append("Insert→Tab 新建子节点；Shift+Insert→Shift+Tab 新建父节点；");
+			sb.append("Alt+Shift+Insert→Cmd+Shift+I 总结；Alt+Space→Cmd+Shift+O 切换导图。");
 		}
 		else {
-			sb.append("<b>Windows / Linux：</b> Insert 新建子节点；⇧Insert 新建父节点；Alt+Space 切换导图。");
-			sb.append(" 同步到 Mac 时不会覆盖本机键位。");
+			sb.append("<b>Windows / Linux 出厂默认：</b> Insert 新建子节点；Shift+Insert 新建父节点；Alt+Space 切换导图。");
+			sb.append(" 「默认快捷键」列可查看出厂键位（即使你已改绑）。");
 		}
 		sb.append("</body></html>");
 		return sb.toString();
+	}
+
+	/**
+	 * ASCII-safe stroke text for tables/notes (avoids □□ on Windows fonts that lack ⌘⌥⇧).
+	 * {@code macStyle=true} names modifiers Cmd/Option; otherwise Ctrl/Alt.
+	 */
+	public static String formatStrokeReadable(final KeyStroke keyStroke, final boolean macStyle) {
+		if (keyStroke == null) {
+			return "";
+		}
+		final int mods = keyStroke.getModifiers();
+		final StringBuffer sb = new StringBuffer();
+		final boolean meta = (mods & KeyEvent.META_MASK) != 0 || (mods & KeyEvent.META_DOWN_MASK) != 0;
+		final boolean ctrl = (mods & KeyEvent.CTRL_MASK) != 0 || (mods & KeyEvent.CTRL_DOWN_MASK) != 0;
+		final boolean alt = (mods & KeyEvent.ALT_MASK) != 0 || (mods & KeyEvent.ALT_DOWN_MASK) != 0;
+		final boolean shift = (mods & KeyEvent.SHIFT_MASK) != 0 || (mods & KeyEvent.SHIFT_DOWN_MASK) != 0;
+		if (macStyle) {
+			if (meta || ctrl) {
+				appendMod(sb, "Cmd");
+			}
+			if (alt) {
+				appendMod(sb, "Option");
+			}
+		}
+		else {
+			if (ctrl || meta) {
+				appendMod(sb, "Ctrl");
+			}
+			if (alt) {
+				appendMod(sb, "Alt");
+			}
+		}
+		if (shift) {
+			appendMod(sb, "Shift");
+		}
+		sb.append(simplifyKeyText(KeyEvent.getKeyText(keyStroke.getKeyCode())));
+		return sb.toString();
+	}
+
+	/** Format a stroke string (e.g. {@code meta shift O}) for Mac-alternative notes. */
+	public static String formatMacAltReadable(final String strokeString) {
+		if (strokeString == null || strokeString.length() == 0) {
+			return "";
+		}
+		final KeyStroke ks = KeyStroke.getKeyStroke(strokeString);
+		if (ks == null) {
+			return strokeString;
+		}
+		return formatStrokeReadable(ks, true);
+	}
+
+	private static void appendMod(final StringBuffer sb, final String mod) {
+		sb.append(mod);
+		sb.append('+');
+	}
+
+	private static String simplifyKeyText(final String keyText) {
+		if (keyText == null) {
+			return "";
+		}
+		if ("Back Slash".equalsIgnoreCase(keyText)) {
+			return "\\";
+		}
+		if ("Period".equalsIgnoreCase(keyText)) {
+			return ".";
+		}
+		if ("Comma".equalsIgnoreCase(keyText)) {
+			return ",";
+		}
+		if ("Minus".equalsIgnoreCase(keyText)) {
+			return "-";
+		}
+		if ("Equals".equalsIgnoreCase(keyText)) {
+			return "=";
+		}
+		return keyText;
 	}
 }

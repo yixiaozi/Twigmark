@@ -143,11 +143,11 @@ public final class HotKeyEditorDialog extends JDialog {
 		table.getTableHeader().setReorderingAllowed(false);
 		sorter = new TableRowSorter(tableModel);
 		table.setRowSorter(sorter);
-		table.getColumnModel().getColumn(0).setPreferredWidth(150);
-		table.getColumnModel().getColumn(1).setPreferredWidth(200);
-		table.getColumnModel().getColumn(2).setPreferredWidth(120);
-		table.getColumnModel().getColumn(3).setPreferredWidth(280);
-		table.getColumnModel().getColumn(4).setPreferredWidth(110);
+		table.getColumnModel().getColumn(0).setPreferredWidth(90);
+		table.getColumnModel().getColumn(1).setPreferredWidth(220);
+		table.getColumnModel().getColumn(2).setPreferredWidth(130);
+		table.getColumnModel().getColumn(3).setPreferredWidth(120);
+		table.getColumnModel().getColumn(4).setPreferredWidth(260);
 		table.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				if (e.getClickCount() == 2) {
@@ -248,22 +248,22 @@ public final class HotKeyEditorDialog extends JDialog {
 		final StringBuffer sb = new StringBuffer();
 		sb.append("<html><body style='width:520px;font-family:sans-serif'>");
 		sb.append("<h3>修饰键对应</h3><ul>");
-		sb.append("<li><b>Ctrl</b>（Windows/Linux）↔ <b>⌘ Command</b>（Mac）</li>");
-		sb.append("<li><b>Alt</b>（Windows/Linux）↔ <b>⌥ Option</b>（Mac）</li>");
-		sb.append("<li><b>Shift</b> ↔ <b>⇧ Shift</b>（各平台相同）</li>");
+		sb.append("<li><b>Ctrl</b>（Windows/Linux）↔ <b>Cmd</b>（Mac）</li>");
+		sb.append("<li><b>Alt</b>（Windows/Linux）↔ <b>Option</b>（Mac）</li>");
+		sb.append("<li><b>Shift</b> 各平台相同</li>");
 		sb.append("</ul><h3>Mac 没有 / 易冲突的键 → 默认替代</h3><table border='1' cellpadding='4' cellspacing='0'>");
 		sb.append("<tr><th>Windows / Linux</th><th>动作</th><th>Mac 默认</th></tr>");
 		sb.append("<tr><td>Insert</td><td>新建子节点</td><td>Tab</td></tr>");
-		sb.append("<tr><td>⇧Insert</td><td>新建父节点</td><td>⇧Tab</td></tr>");
-		sb.append("<tr><td>Alt+⇧Insert</td><td>总结节点</td><td>⌘⇧I</td></tr>");
-		sb.append("<tr><td>Alt+Space</td><td>切换导图</td><td>⌘⇧O（避开输入法）</td></tr>");
-		sb.append("<tr><td>Ctrl+⇧Space</td><td>快速捕获</td><td>⌘⇧Space</td></tr>");
-		sb.append("<tr><td>⇧Space</td><td>快速命令</td><td>⌘⇧.</td></tr>");
+		sb.append("<tr><td>Shift+Insert</td><td>新建父节点</td><td>Shift+Tab</td></tr>");
+		sb.append("<tr><td>Alt+Shift+Insert</td><td>总结节点</td><td>Cmd+Shift+I</td></tr>");
+		sb.append("<tr><td>Alt+Space</td><td>切换导图</td><td>Cmd+Shift+O（避开输入法）</td></tr>");
+		sb.append("<tr><td>Ctrl+Shift+Space</td><td>快速捕获</td><td>Cmd+Shift+Space</td></tr>");
+		sb.append("<tr><td>Shift+Space</td><td>快速命令</td><td>Cmd+Shift+.</td></tr>");
 		sb.append("</table>");
 		sb.append("<p>Home / End / PgUp / PgDn 在 Mac 笔记本上通常需按 <b>Fn</b>。</p>");
-		sb.append("<p>本机配置文件：<code>ribbons/")
+		sb.append("<p><b>当前平台改键只写入：</b><code>ribbons/")
 		        .append(PlatformHotKeyGuide.getAcceleratorFileName())
-		        .append("</code>（按操作系统分开，同步目录下互不覆盖）。</p>");
+		        .append("</code>（Win / Mac / Linux 分文件，互不覆盖）。</p>");
 		sb.append("</body></html>");
 		final JEditorPane pane = new JEditorPane("text/html", sb.toString());
 		pane.setEditable(false);
@@ -326,8 +326,7 @@ public final class HotKeyEditorDialog extends JDialog {
 				final String actionKey = guessActionKey(entry.getKey());
 				final AFreeplaneAction action = actionKey == null ? null : modeController.getAction(actionKey);
 				if (action != null) {
-					addOrMerge(byAction, action, parentCategory.length() == 0 ? TextUtils.getText("menu_bar", "菜单")
-					        : parentCategory, entry.getLabel());
+					addOrMerge(byAction, action, HotKeyCategoryResolver.categoryFor(actionKey), entry.getLabel());
 				}
 			}
 		}
@@ -343,6 +342,19 @@ public final class HotKeyEditorDialog extends JDialog {
 			final Map accel = acceleratorManager.getActionAccelerators();
 			for (final Iterator it = accel.keySet().iterator(); it.hasNext();) {
 				final String actionKey = (String) it.next();
+				final AFreeplaneAction action = modeController.getAction(actionKey);
+				if (action == null) {
+					continue;
+				}
+				addOrMerge(byAction, action, HotKeyCategoryResolver.categoryFor(actionKey),
+				        RibbonActionContributorFactory.getActionTitle(action));
+				seen.add(actionKey);
+			}
+			// Ensure every action that has a factory default appears (e.g. Insert),
+			// even if the current binding was cleared or never loaded into the map.
+			final Set defaults = acceleratorManager.getDefaultAcceleratorActionKeys();
+			for (final Iterator it = defaults.iterator(); it.hasNext();) {
+				final String actionKey = (String) it.next();
 				if (seen.contains(actionKey)) {
 					continue;
 				}
@@ -350,7 +362,7 @@ public final class HotKeyEditorDialog extends JDialog {
 				if (action == null) {
 					continue;
 				}
-				addOrMerge(byAction, action, TextUtils.getText("hot_keys_editor.category_other", "其他 / Ribbon"),
+				addOrMerge(byAction, action, HotKeyCategoryResolver.categoryFor(actionKey),
 				        RibbonActionContributorFactory.getActionTitle(action));
 				seen.add(actionKey);
 			}
@@ -369,7 +381,12 @@ public final class HotKeyEditorDialog extends JDialog {
 			if (title == null || title.length() == 0 || title.startsWith("[")) {
 				continue;
 			}
-			addOrMerge(byAction, action, TextUtils.getText("hot_keys_editor.category_unbound", "未分类动作"), title);
+			// Only list unbound actions that we can categorize (avoids dumping hundreds of internals).
+			final String category = HotKeyCategoryResolver.categoryFor(actionKey);
+			if (TextUtils.getText("hot_keys_editor.category_other", "其他").equals(category)) {
+				continue;
+			}
+			addOrMerge(byAction, action, category, title);
 		}
 	}
 
@@ -377,21 +394,26 @@ public final class HotKeyEditorDialog extends JDialog {
 	        final String label) {
 		final String key = action.getKey();
 		HotKeyRow row = (HotKeyRow) byAction.get(key);
+		final String resolvedCategory = HotKeyCategoryResolver.categoryFor(key);
 		if (row == null) {
 			row = new HotKeyRow();
 			row.actionKey = key;
 			row.action = action;
-			row.category = category == null ? "" : category;
+			row.category = resolvedCategory;
 			row.label = label == null ? key : label;
 			byAction.put(key, row);
 		}
-		else if ((row.category == null || row.category.length() == 0
-		        || row.category.startsWith(TextUtils.getText("hot_keys_editor.category_other", "其他")))
-		        && category != null && category.length() > 0) {
-			row.category = category;
+		else {
+			row.category = resolvedCategory;
+			if (category != null && category.length() > 0
+			        && TextUtils.getText("hot_keys_editor.category_other", "其他").equals(row.category)
+			        && !TextUtils.getText("hot_keys_editor.category_other", "其他").equals(category)) {
+				row.category = category;
+			}
 		}
 		row.keyStroke = resolveStroke(action);
-		row.platformNote = platformNoteFor(row.actionKey, row.keyStroke);
+		row.defaultStroke = resolveDefaultStroke(key);
+		row.platformNote = platformNoteFor(row.actionKey, row.keyStroke, row.defaultStroke);
 	}
 
 	private KeyStroke resolveStroke(final AFreeplaneAction action) {
@@ -401,48 +423,69 @@ public final class HotKeyEditorDialog extends JDialog {
 		return null;
 	}
 
-	static String platformNoteFor(final String actionKey, final KeyStroke stroke) {
-		final String macAlt = (String) PlatformHotKeyGuide.getMacDefaultAlternatives().get(actionKey);
-		if (Compat.isMacOsX()) {
-			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)) {
-				return macAlt != null
-				        ? TextUtils.getText("hot_keys_editor.note.insert_mac", "Mac 无 Insert → 建议 ") + formatAlt(macAlt)
-				        : TextUtils.getText("hot_keys_editor.note.insert_generic", "Mac 无 Insert，请改绑");
-			}
-			if (PlatformHotKeyGuide.isAltSpace(stroke)) {
-				return TextUtils.getText("hot_keys_editor.note.alt_space", "与输入法冲突 → 建议 ⌘⇧O");
-			}
-			if (macAlt != null && stroke == null) {
-				return TextUtils.getText("hot_keys_editor.note.mac_default", "Mac 默认 ") + formatAlt(macAlt);
-			}
-			return "";
+	private KeyStroke resolveDefaultStroke(final String actionKey) {
+		if (acceleratorManager == null) {
+			return null;
 		}
-		// Windows / Linux: explain what Mac will use
-		if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke) && macAlt != null) {
-			return TextUtils.getText("hot_keys_editor.note.win_insert", "Mac 无此键 → 默认 ") + formatAlt(macAlt);
-		}
-		if (PlatformHotKeyGuide.isAltSpace(stroke)) {
-			return TextUtils.getText("hot_keys_editor.note.win_alt_space", "Mac 上改为 ⌘⇧O");
-		}
-		if (macAlt != null && stroke != null) {
-			final KeyStroke macStroke = RibbonAcceleratorManager.parseKeyStroke(macAlt);
-			if (macStroke != null && !macStroke.equals(stroke)) {
-				return TextUtils.getText("hot_keys_editor.note.mac_uses", "Mac 默认 ") + formatAlt(macAlt);
-			}
-		}
-		return "";
+		return acceleratorManager.getDefaultAccelerator(actionKey);
 	}
 
-	/** Format a Mac-alternative stroke for display without remapping meta↔control. */
-	private static String formatAlt(final String strokeString) {
-		if (strokeString == null) {
-			return "";
+	static String platformNoteFor(final String actionKey, final KeyStroke stroke, final KeyStroke defaultStroke) {
+		final String macAlt = (String) PlatformHotKeyGuide.getMacDefaultAlternatives().get(actionKey);
+		final StringBuffer note = new StringBuffer();
+		if (Compat.isMacOsX()) {
+			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)) {
+				note.append(macAlt != null
+				        ? TextUtils.getText("hot_keys_editor.note.insert_mac", "Mac 无 Insert → 建议 ")
+				                + PlatformHotKeyGuide.formatMacAltReadable(macAlt)
+				        : TextUtils.getText("hot_keys_editor.note.insert_generic", "Mac 无 Insert，请改绑"));
+			}
+			else if (PlatformHotKeyGuide.isAltSpace(stroke)) {
+				note.append(TextUtils.getText("hot_keys_editor.note.alt_space", "与输入法冲突 → 建议 Cmd+Shift+O"));
+			}
+			else if (macAlt != null && stroke == null) {
+				note.append(TextUtils.getText("hot_keys_editor.note.mac_default", "Mac 默认 "))
+				        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
+			}
 		}
-		final KeyStroke ks = KeyStroke.getKeyStroke(strokeString);
-		if (ks == null) {
-			return strokeString;
+		else {
+			// Windows / Linux: explain what Mac will use (ASCII — Windows fonts often lack ⌘⌥⇧)
+			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)
+			        || PlatformHotKeyGuide.usesMacUnavailableKey(defaultStroke)) {
+				if (macAlt != null) {
+					note.append(TextUtils.getText("hot_keys_editor.note.win_insert", "Mac 无此键 → 默认 "))
+					        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
+				}
+			}
+			else if (PlatformHotKeyGuide.isAltSpace(stroke) || PlatformHotKeyGuide.isAltSpace(defaultStroke)) {
+				note.append(TextUtils.getText("hot_keys_editor.note.win_alt_space", "Mac 上改为 Cmd+Shift+O"));
+			}
+			else if (macAlt != null && stroke != null) {
+				final KeyStroke macStroke = RibbonAcceleratorManager.parseKeyStroke(macAlt);
+				if (macStroke != null && !sameStroke(macStroke, stroke)) {
+					note.append(TextUtils.getText("hot_keys_editor.note.mac_uses", "Mac 默认 "))
+					        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
+				}
+			}
 		}
-		return formatMacStroke(ks);
+		if (defaultStroke != null && stroke != null && !sameStroke(defaultStroke, stroke)) {
+			if (note.length() > 0) {
+				note.append(" · ");
+			}
+			note.append(TextUtils.getText("hot_keys_editor.note.remapped", "已改绑（出厂 "))
+			        .append(formatStroke(defaultStroke)).append("）");
+		}
+		return note.toString();
+	}
+
+	private static boolean sameStroke(final KeyStroke a, final KeyStroke b) {
+		if (a == b) {
+			return true;
+		}
+		if (a == null || b == null) {
+			return false;
+		}
+		return a.getKeyCode() == b.getKeyCode() && a.getModifiers() == b.getModifiers();
 	}
 
 	private static String guessActionKey(final String menuPath) {
@@ -470,10 +513,12 @@ public final class HotKeyEditorDialog extends JDialog {
 					return true;
 				}
 				final String stroke = row.keyStroke == null ? "" : formatStroke(row.keyStroke).toLowerCase();
+				final String def = row.defaultStroke == null ? "" : formatStroke(row.defaultStroke).toLowerCase();
 				final String note = row.platformNote == null ? "" : row.platformNote.toLowerCase();
 				return row.label.toLowerCase().indexOf(q) >= 0 || row.category.toLowerCase().indexOf(q) >= 0
-				        || row.actionKey.toLowerCase().indexOf(q) >= 0 || stroke.indexOf(q) >= 0
-				        || note.indexOf(q) >= 0;
+				        || stroke.indexOf(q) >= 0 || def.indexOf(q) >= 0 || note.indexOf(q) >= 0
+				        || ("insert".equals(q) && (def.indexOf("insert") >= 0 || stroke.indexOf("insert") >= 0
+				                || note.indexOf("insert") >= 0));
 			}
 		});
 		updateStatus();
@@ -549,7 +594,8 @@ public final class HotKeyEditorDialog extends JDialog {
 		for (int i = 0; i < rows.size(); i++) {
 			final HotKeyRow r = (HotKeyRow) rows.get(i);
 			r.keyStroke = resolveStroke(r.action);
-			r.platformNote = platformNoteFor(r.actionKey, r.keyStroke);
+			r.defaultStroke = resolveDefaultStroke(r.actionKey);
+			r.platformNote = platformNoteFor(r.actionKey, r.keyStroke, r.defaultStroke);
 		}
 		tableModel.fireTableDataChanged();
 		applyFilter();
@@ -575,29 +621,8 @@ public final class HotKeyEditorDialog extends JDialog {
 		if (keyStroke == null) {
 			return "";
 		}
-		if (Compat.isMacOsX()) {
-			return formatMacStroke(keyStroke);
-		}
-		return MenuUtils.formatKeyStroke(keyStroke);
-	}
-
-	private static String formatMacStroke(final KeyStroke keyStroke) {
-		final int mods = keyStroke.getModifiers();
-		final StringBuffer sb = new StringBuffer();
-		if ((mods & KeyEvent.META_MASK) != 0 || (mods & KeyEvent.META_DOWN_MASK) != 0) {
-			sb.append('\u2318');
-		}
-		if ((mods & KeyEvent.CTRL_MASK) != 0 || (mods & KeyEvent.CTRL_DOWN_MASK) != 0) {
-			sb.append('\u2303');
-		}
-		if ((mods & KeyEvent.ALT_MASK) != 0 || (mods & KeyEvent.ALT_DOWN_MASK) != 0) {
-			sb.append('\u2325');
-		}
-		if ((mods & KeyEvent.SHIFT_MASK) != 0 || (mods & KeyEvent.SHIFT_DOWN_MASK) != 0) {
-			sb.append('\u21E7');
-		}
-		sb.append(KeyEvent.getKeyText(keyStroke.getKeyCode()));
-		return sb.toString();
+		// Always ASCII-safe (Cmd/Ctrl/…) so Windows tables never show □□ for Mac glyphs.
+		return PlatformHotKeyGuide.formatStrokeReadable(keyStroke, Compat.isMacOsX());
 	}
 
 	private static ModeController resolveModeController() {
@@ -627,8 +652,8 @@ public final class HotKeyEditorDialog extends JDialog {
 		        TextUtils.getText("hot_keys_editor.col.category", "分类"),
 		        TextUtils.getText("hot_keys_editor.col.action", "动作"),
 		        TextUtils.getText("hot_keys_editor.col.shortcut", "本机快捷键"),
-		        TextUtils.getText("hot_keys_editor.col.platform_note", "平台说明"),
-		        TextUtils.getText("hot_keys_editor.col.action_key", "动作 ID") };
+		        TextUtils.getText("hot_keys_editor.col.default", "默认快捷键"),
+		        TextUtils.getText("hot_keys_editor.col.platform_note", "平台说明") };
 
 		public int getRowCount() {
 			return rows.size();
@@ -652,9 +677,9 @@ public final class HotKeyEditorDialog extends JDialog {
 				case 2:
 					return formatStroke(row.keyStroke);
 				case 3:
-					return row.platformNote;
+					return formatStroke(row.defaultStroke);
 				case 4:
-					return row.actionKey;
+					return row.platformNote;
 				default:
 					return "";
 			}
@@ -668,5 +693,6 @@ public final class HotKeyEditorDialog extends JDialog {
 		String platformNote = "";
 		AFreeplaneAction action;
 		KeyStroke keyStroke;
+		KeyStroke defaultStroke;
 	}
 }
