@@ -245,16 +245,7 @@ public final class WebchatApi {
 				return;
 			}
 			final boolean includeTitle = !"false".equalsIgnoreCase(str(args, "includeTitle"));
-			int expireDays = 30;
-			try {
-				final String raw = str(args, "expireDays");
-				if (raw.length() > 0) {
-					expireDays = Integer.parseInt(raw);
-				}
-			}
-			catch (NumberFormatException ignored) {
-			}
-			final Map share = WebchatService.createMessageShare(username, messageId, includeTitle, expireDays);
+			final Map share = WebchatService.createMessageShare(username, messageId, includeTitle);
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
 		}
 		catch (IllegalArgumentException e) {
@@ -298,6 +289,77 @@ public final class WebchatApi {
 		}
 		catch (Exception e) {
 			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
+	public void handleListPublicShares(final HttpExchange exchange) throws IOException {
+		try {
+			final Map q = queryParams(exchange);
+			final int limit = intParam(q, "limit", 50);
+			final int offset = intParam(q, "offset", 0);
+			final List items = WebchatService.listPublicShares(limit, offset);
+			final Map out = new LinkedHashMap();
+			out.put("shares", JsonValue.ofList(WebchatService.toJsonMaps(items)));
+			out.put("count", JsonValue.ofNumber(Integer.valueOf(items.size())));
+			out.put("offset", JsonValue.ofNumber(Integer.valueOf(offset)));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
+		}
+		catch (Exception e) {
+			LogUtils.warn("list public shares failed: " + e.getMessage(), e);
+			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
+	private static Map queryParams(final HttpExchange exchange) {
+		final Map map = new LinkedHashMap();
+		final java.net.URI uri = exchange.getRequestURI();
+		final String raw = uri == null ? null : uri.getRawQuery();
+		if (raw == null || raw.length() == 0) {
+			return map;
+		}
+		final String[] parts = raw.split("&");
+		for (int i = 0; i < parts.length; i++) {
+			final String part = parts[i];
+			if (part.length() == 0) {
+				continue;
+			}
+			final int eq = part.indexOf('=');
+			String key;
+			String value;
+			if (eq < 0) {
+				key = decode(part);
+				value = "";
+			}
+			else {
+				key = decode(part.substring(0, eq));
+				value = decode(part.substring(eq + 1));
+			}
+			if (key.length() > 0) {
+				map.put(key, value);
+			}
+		}
+		return map;
+	}
+
+	private static String decode(final String value) {
+		try {
+			return java.net.URLDecoder.decode(value, "UTF-8");
+		}
+		catch (Exception e) {
+			return value;
+		}
+	}
+
+	private static int intParam(final Map q, final String key, final int fallback) {
+		final Object v = q.get(key);
+		if (v == null) {
+			return fallback;
+		}
+		try {
+			return Integer.parseInt(String.valueOf(v).trim());
+		}
+		catch (NumberFormatException e) {
+			return fallback;
 		}
 	}
 

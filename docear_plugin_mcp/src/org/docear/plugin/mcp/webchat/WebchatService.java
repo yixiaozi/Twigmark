@@ -388,11 +388,11 @@ public final class WebchatService {
 	}
 
 	/**
-	 * Create a public share link for one assistant message.
+	 * Create a permanent public share for one assistant message (includes paired user question).
 	 * Security: opaque token; public payload excludes tool traces, paths, and account secrets.
 	 */
 	public static Map<String, Object> createMessageShare(final String username, final String messageId,
-			final boolean includeTitle, final int expireDays) throws Exception {
+			final boolean includeTitle) throws Exception {
 		final Map message = findMessageAcross(messageId);
 		if (message == null) {
 			throw new IllegalArgumentException("message not found");
@@ -406,17 +406,20 @@ public final class WebchatService {
 		if (conv == null) {
 			throw new IllegalArgumentException("conversation not found");
 		}
+		final Map userMsg = findPrecedingUserMessage(conversationId,
+				((Long) message.get("createdAt")).longValue());
+		final String userMessageId = userMsg == null ? "" : nullToEmpty((String) userMsg.get("id"));
+		final String questionText = userMsg == null ? "" : nullToEmpty((String) userMsg.get("content"));
 		final String token = "pub_" + WebchatPassword.newId() + WebchatPassword.newId();
 		final long now = System.currentTimeMillis();
-		final int days = expireDays < 1 ? 30 : (expireDays > 365 ? 365 : expireDays);
-		final long expiresAt = now + days * 24L * 60L * 60L * 1000L;
-		WebchatDatabase.local().upsertMessageShare(token, messageId, conversationId, username, now, expiresAt,
-				includeTitle);
+		WebchatDatabase.local().upsertMessageShare(token, messageId, userMessageId, questionText, conversationId,
+				username, now, 0L, includeTitle);
 		final Map out = new LinkedHashMap();
 		out.put("token", token);
 		out.put("messageId", messageId);
-		out.put("expiresAt", Long.valueOf(expiresAt));
+		out.put("expiresAt", Long.valueOf(0L));
 		out.put("path", "/web/share.html?t=" + token);
+		out.put("galleryPath", "/web/shares.html");
 		return out;
 	}
 
@@ -457,16 +460,25 @@ public final class WebchatService {
 		if (message == null || !"assistant".equals(nullToEmpty((String) message.get("role")))) {
 			throw new IllegalArgumentException("share not found");
 		}
+		String question = nullToEmpty((String) share.get("questionText"));
+		if (question.length() == 0) {
+			final Map userMsg = findPrecedingUserMessage(nullToEmpty((String) share.get("conversationId")),
+					((Long) message.get("createdAt")).longValue());
+			if (userMsg != null) {
+				question = nullToEmpty((String) userMsg.get("content"));
+			}
+		}
 		final Map out = new LinkedHashMap();
+		out.put("question", question);
 		out.put("content", nullToEmpty((String) message.get("content")));
 		out.put("model", nullToEmpty((String) message.get("model")));
 		out.put("createdAt", message.get("createdAt"));
-		out.put("expiresAt", Long.valueOf(expiresAt));
+		out.put("sharedAt", share.get("createdAt"));
 		if (Boolean.TRUE.equals(share.get("includeTitle"))) {
-			final String username = nullToEmpty((String) share.get("username"));
+			final String owner = nullToEmpty((String) share.get("username"));
 			final String conversationId = nullToEmpty((String) share.get("conversationId"));
 			try {
-				final Map conv = findConversationAcross(username, conversationId);
+				final Map conv = findConversationAcross(owner, conversationId);
 				if (conv != null) {
 					out.put("title", nullToEmpty((String) conv.get("title")));
 				}
@@ -476,6 +488,121 @@ public final class WebchatService {
 		}
 		// Deliberately omit: username, tool traces, map paths, conversation id, message id.
 		return out;
+	}
+
+	/** Public catalog of active shares — safe fields only. */
+	public static List listPublicShares(final int limit, final int offset) throws Exception {
+		final int max = limit < 1 ? 50 : (limit > 200 ? 200 : limit);
+		final int off = offset < 0 ? 0 : offset;
+		final long now = System.currentTimeMillis();
+		final Map byToken = new LinkedHashMap();
+		final List dbs = openAll();
+		for (int i = 0; i < dbs.size(); i++) {
+			final List rows = ((WebchatDatabase) dbs.get(i)).listActiveMessageShares(max + off + 50, 0, now);
+			for (int j = 0; j < rows.size(); j++) {
+				final Map share = (Map) rows.get(j);
+				final String token = nullToEmpty((String) share.get("token"));
+				if (token.length() == 0) {
+					continue;
+				}
+				final Map existing = (Map) byToken.get(token);
+				if (existing == null
+						|| ((Long) share.get("createdAt")).longValue() >= ((Long) existing.get("createdAt"))
+								.longValue()) {
+					byToken.put(token, share);
+				}
+			}
+		}
+		final List sorted = new ArrayList(byToken.values());
+		Collections.sort(sorted, new Comparator() {
+			public int compare(final Object a, final Object b) {
+				final long ua = ((Long) ((Map) a).get("createdAt")).longValue();
+				final long ub = ((Long) ((Map) b).get("createdAt")).longValue();
+				return ua < ub ? 1 : (ua > ub ? -1 : 0);
+			}
+		});
+		final List items = new ArrayList();
+		final int end = Math.min(sorted.size(), off + max);
+		for (int i = off; i < end; i++) {
+			items.add(buildPublicShareListItem((Map) sorted.get(i)));
+		}
+		return items;
+	}
+
+	private static Map buildPublicShareListItem(final Map share) throws Exception {
+		final String token = nullToEmpty((String) share.get("token"));
+		final String messageId = nullToEmpty((String) share.get("messageId"));
+		final Map message = findMessageAcross(messageId);
+		final Map item = new LinkedHashMap();
+		item.put("token", token);
+		item.put("path", "/web/share.html?t=" + token);
+		item.put("sharedAt", share.get("createdAt"));
+		String question = nullToEmpty((String) share.get("questionText"));
+		if (question.length() == 0 && message != null) {
+			final Map userMsg = findPrecedingUserMessage(nullToEmpty((String) share.get("conversationId")),
+					((Long) message.get("createdAt")).longValue());
+			if (userMsg != null) {
+				question = nullToEmpty((String) userMsg.get("content"));
+			}
+		}
+		item.put("question", previewText(question, 240));
+		if (message != null) {
+			item.put("answerPreview", previewText(nullToEmpty((String) message.get("content")), 320));
+			item.put("model", nullToEmpty((String) message.get("model")));
+			item.put("createdAt", message.get("createdAt"));
+		}
+		else {
+			item.put("answerPreview", "");
+			item.put("model", "");
+		}
+		if (Boolean.TRUE.equals(share.get("includeTitle"))) {
+			try {
+				final Map conv = findConversationAcross(nullToEmpty((String) share.get("username")),
+						nullToEmpty((String) share.get("conversationId")));
+				if (conv != null) {
+					item.put("title", nullToEmpty((String) conv.get("title")));
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		return item;
+	}
+
+	private static String previewText(final String text, final int max) {
+		final String raw = text == null ? "" : text.trim().replaceAll("\\s+", " ");
+		if (raw.length() <= max) {
+			return raw;
+		}
+		return raw.substring(0, max) + "…";
+	}
+
+	private static Map findPrecedingUserMessage(final String conversationId, final long beforeCreatedAt) {
+		if (conversationId == null || conversationId.length() == 0) {
+			return null;
+		}
+		final List dbs = openAll();
+		Map best = null;
+		long bestAt = Long.MIN_VALUE;
+		for (int i = 0; i < dbs.size(); i++) {
+			try {
+				final List msgs = ((WebchatDatabase) dbs.get(i)).listMessages(conversationId, 1000);
+				for (int j = 0; j < msgs.size(); j++) {
+					final Map m = (Map) msgs.get(j);
+					if (!"user".equals(nullToEmpty((String) m.get("role")))) {
+						continue;
+					}
+					final long at = ((Long) m.get("createdAt")).longValue();
+					if (at < beforeCreatedAt && at >= bestAt) {
+						bestAt = at;
+						best = m;
+					}
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		return best;
 	}
 
 	private static Map findMessageAcross(final String messageId) {

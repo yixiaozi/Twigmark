@@ -178,6 +178,10 @@ public final class McpHttpServer {
 				webchatApi.handlePublicShare(exchange, token);
 				return;
 			}
+			if ("/api/public/shares".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleListPublicShares(exchange);
+				return;
+			}
 			if ("/api/chat".equals(path) && "POST".equalsIgnoreCase(method)) {
 				webchatApi.handleChat(exchange, readBody(exchange));
 				return;

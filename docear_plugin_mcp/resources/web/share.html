@@ -3,8 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="robots" content="noindex,nofollow" />
-    <title>Twigmark · 公开回答</title>
+    <title>Twigmark · 公开问答</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,12 +14,20 @@
   </head>
   <body>
     <div class="share-page">
-      <article class="share-card">
+      <p class="share-top-nav"><a href="./shares.html">← 全部公开问答</a> · <a href="./">Twigmark</a></p>
+      <article class="share-card share-detail-card">
         <div class="logo-mark small" aria-hidden="true"></div>
-        <h1 id="title">公开回答</h1>
+        <h1 id="title">公开问答</h1>
         <p class="share-meta" id="meta">加载中…</p>
-        <div class="share-body" id="body"></div>
-        <p class="share-foot">仅公开单条助手回答，不含工具轨迹、导图路径或账号信息。链接可由作者撤销。</p>
+        <section class="share-qa-block">
+          <p class="share-q-label">问</p>
+          <div class="share-q-body" id="question"></div>
+        </section>
+        <section class="share-qa-block">
+          <p class="share-a-label">答</p>
+          <div class="share-body" id="body"></div>
+        </section>
+        <p class="share-foot">不含工具轨迹、导图路径或账号信息。作者可随时撤销公开。</p>
       </article>
     </div>
     <script>
@@ -52,6 +59,7 @@
         var token = params.get("t") || "";
         var titleEl = document.getElementById("title");
         var metaEl = document.getElementById("meta");
+        var questionEl = document.getElementById("question");
         var bodyEl = document.getElementById("body");
         if (!token) {
           metaEl.textContent = "缺少分享令牌";
@@ -71,17 +79,13 @@
             if (res.body.title) titleEl.textContent = res.body.title;
             var bits = [];
             if (res.body.model) bits.push(res.body.model);
-            if (res.body.createdAt) {
+            if (res.body.sharedAt) {
               try {
-                bits.push(new Date(Number(res.body.createdAt)).toLocaleString());
+                bits.push("公开于 " + new Date(Number(res.body.sharedAt)).toLocaleString());
               } catch (e) {}
             }
-            if (res.body.expiresAt) {
-              try {
-                bits.push("有效至 " + new Date(Number(res.body.expiresAt)).toLocaleDateString());
-              } catch (e) {}
-            }
-            metaEl.textContent = bits.join(" · ") || "公开回答";
+            metaEl.textContent = bits.join(" · ") || "公开问答";
+            questionEl.innerHTML = renderMarkdown(res.body.question || "(无问题文本)");
             bodyEl.innerHTML = renderMarkdown(res.body.content || "");
           })
           .catch(function () {

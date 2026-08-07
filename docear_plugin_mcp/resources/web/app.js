@@ -240,7 +240,7 @@
         var shareBtn = document.createElement("button");
         shareBtn.type = "button";
         shareBtn.className = "share-btn";
-        shareBtn.textContent = "公开此回答";
+        shareBtn.textContent = "公开此问答";
         shareBtn.addEventListener("click", function () {
           shareMessage(messageId);
         });
@@ -258,7 +258,7 @@
     if (!messageId) return;
     api("/messages/share", {
       method: "POST",
-      body: JSON.stringify({ messageId: messageId, includeTitle: true, expireDays: 30 }),
+      body: JSON.stringify({ messageId: messageId, includeTitle: true }),
     }).then(function (res) {
       if (!res.ok) {
         toast((res.body && res.body.error) || "公开失败");
@@ -269,14 +269,14 @@
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(
           function () {
-            toast("已公开并复制链接（30 天有效，可撤销）");
+            toast("已公开（含你的问题），链接已复制 · 可在公开问答库查看");
           },
           function () {
             toast("公开链接：" + url);
           }
         );
       } else {
-        window.prompt("公开链接（仅含本条回答）", url);
+        window.prompt("公开链接（含问答）", url);
       }
     });
   }

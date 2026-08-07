@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twigmark · 公开问答库</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="share-page shares-page">
+      <header class="shares-head">
+        <div class="shares-brand">
+          <div class="logo-mark small" aria-hidden="true"></div>
+          <div>
+            <h1>公开问答库</h1>
+            <p class="muted tiny">用户主动公开的问答，永久保存，不含账号与导图路径</p>
+          </div>
+        </div>
+        <a class="ghost small shares-back" href="./">返回 Twigmark</a>
+      </header>
+      <main id="share-list" class="share-list">
+        <p class="muted">加载中…</p>
+      </main>
+    </div>
+    <script>
+      (function () {
+        function escapeHtml(text) {
+          return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+        function fmt(ts) {
+          if (!ts) return "";
+          try {
+            return new Date(Number(ts)).toLocaleString();
+          } catch (e) {
+            return "";
+          }
+        }
+        var listEl = document.getElementById("share-list");
+        fetch("../api/public/shares?limit=100", { cache: "no-store" })
+          .then(function (r) {
+            return r.json().then(function (body) {
+              return { ok: r.ok, body: body };
+            });
+          })
+          .then(function (res) {
+            if (!res.ok) {
+              listEl.innerHTML = '<p class="err">' + escapeHtml((res.body && res.body.error) || "加载失败") + "</p>";
+              return;
+            }
+            var items = (res.body && res.body.shares) || [];
+            if (!items.length) {
+              listEl.innerHTML = '<p class="muted">还没有公开问答。登录后在对话里点「公开此问答」即可发布。</p>';
+              return;
+            }
+            listEl.innerHTML = "";
+            items.forEach(function (item) {
+              var a = document.createElement("a");
+              a.className = "share-card-link";
+              a.href = "./share.html?t=" + encodeURIComponent(item.token || "");
+              a.innerHTML =
+                '<article class="share-card-item">' +
+                (item.title ? '<h2 class="share-item-title"></h2>' : "") +
+                '<p class="share-q-label">问</p><p class="share-q"></p>' +
+                '<p class="share-a-label">答</p><p class="share-a muted"></p>' +
+                '<p class="share-meta-line"></p></article>';
+              if (item.title) a.querySelector(".share-item-title").textContent = item.title;
+              a.querySelector(".share-q").textContent = item.question || "(无问题文本)";
+              a.querySelector(".share-a").textContent = item.answerPreview || "";
+              var meta = [];
+              if (item.model) meta.push(item.model);
+              if (item.sharedAt) meta.push("公开于 " + fmt(item.sharedAt));
+              a.querySelector(".share-meta-line").textContent = meta.join(" · ");
+              listEl.appendChild(a);
+            });
+          })
+          .catch(function () {
+            listEl.innerHTML = '<p class="err">网络错误</p>';
+          });
+      })();
+    </script>
+  </body>
+</html>
