@@ -3,8 +3,8 @@ package org.freeplane.features.usagestats;
 import java.io.File;
 
 public class MapUsageSummary {
-	private final String mapPath;
-	private final String displayName;
+	private String mapPath;
+	private String displayName;
 	private int sessionCount;
 	private long totalDurationMs;
 	private long effectiveDurationMs;
@@ -13,8 +13,8 @@ public class MapUsageSummary {
 
 	public MapUsageSummary(String mapPath) {
 		this.mapPath = mapPath == null ? "" : mapPath;
-		final File file = mapPath.isEmpty() ? null : new File(mapPath);
-		this.displayName = file != null ? file.getName() : mapPath;
+		final File file = this.mapPath.isEmpty() ? null : new File(this.mapPath);
+		this.displayName = file != null ? file.getName() : this.mapPath;
 	}
 
 	public void addRecord(UsageRecord record) {
@@ -27,6 +27,18 @@ public class MapUsageSummary {
 		idleDurationMs += record.getIdleDurationMs();
 		if (record.getEndTime() > lastEndTime) {
 			lastEndTime = record.getEndTime();
+		}
+	}
+
+	/** When merging path variants of the same map, keep the most recently used path. */
+	public void preferPath(final String path, final long endTime) {
+		if (path == null || path.length() == 0) {
+			return;
+		}
+		if (endTime >= lastEndTime || mapPath.length() == 0) {
+			mapPath = path;
+			final File file = new File(path);
+			displayName = file.getName();
 		}
 	}
 

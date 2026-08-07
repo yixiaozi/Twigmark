@@ -109,11 +109,21 @@ public class UsageStatsManager {
     
     public void onWindowActivated() {
         isWindowActive = true;
+        // Resume existing session when returning from an in-app dialog; only start if none.
+        if (currentRecord != null) {
+            idleDetector.markActivity();
+            return;
+        }
         if (currentMapPath != null && !currentMapPath.isEmpty()) {
             startNewRecord();
         }
     }
     
+    /**
+     * Pause recording when the user leaves the application.
+     * In-app focus changes (dialogs, other Docear windows) should NOT call this —
+     * see FreeplaneGUIStarter window listener.
+     */
     public void onWindowDeactivated() {
         isWindowActive = false;
         if (currentRecord != null) {
@@ -160,15 +170,29 @@ public class UsageStatsManager {
         if (currentRecord == null) {
             return;
         }
-        
+
+        // Flush trailing idle (user went idle and never came back before session ended).
+        if (lastIdleStart > 0L || idleDetector.isIdle()) {
+            idleTimeAccumulator += idleDetector.getChargeableIdleMsNow();
+            lastIdleStart = 0L;
+        }
+
         long now = System.currentTimeMillis();
         currentRecord.setEndTime(now);
         currentRecord.setIdleDurationMs(idleTimeAccumulator);
         currentRecord.calculateDurations();
-        
+
+        // Guard against idle > total (clock skew / double flush).
+        if (currentRecord.getEffectiveDurationMs() < 0L) {
+            currentRecord.setEffectiveDurationMs(0L);
+            currentRecord.setIdleDurationMs(currentRecord.getTotalDurationMs());
+        }
+
         saveRecord(currentRecord);
-        
+
         currentRecord = null;
+        idleTimeAccumulator = 0L;
+        lastIdleStart = 0L;
     }
     
     private void handleIdleDetected(long idleTimeMs) {
@@ -177,9 +201,11 @@ public class UsageStatsManager {
         }
     }
     
-    private void handleUserActivity(long idleTimeMs) {
+    private void handleUserActivity(long chargeableIdleMs) {
         if (currentRecord != null && lastIdleStart > 0) {
-            idleTimeAccumulator += idleTimeMs;
+            if (chargeableIdleMs > 0L) {
+                idleTimeAccumulator += chargeableIdleMs;
+            }
             lastIdleStart = 0;
         }
     }
@@ -311,8 +337,14 @@ public class UsageStatsManager {
         if (mapPath == null || mapPath.isEmpty()) {
             return summary;
         }
+        final String wantHash = calculateDcrId(mapPath);
+        final String wantKey = summaryKeyForPath(mapPath, wantHash);
         for (final UsageRecord record : loadAllRecords()) {
-            if (summary.matchesPath(record.getMapPath()) && isSignificantSession(record)) {
+            if (!isSignificantSession(record)) {
+                continue;
+            }
+            if (recordMatchesMap(record, mapPath, wantHash, wantKey)) {
+                summary.preferPath(record.getMapPath(), record.getEndTime());
                 summary.addRecord(record);
             }
         }
@@ -324,9 +356,13 @@ public class UsageStatsManager {
         if (mapPath == null || mapPath.isEmpty()) {
             return result;
         }
-        final MapUsageSummary matcher = new MapUsageSummary(mapPath);
+        final String wantHash = calculateDcrId(mapPath);
+        final String wantKey = summaryKeyForPath(mapPath, wantHash);
         for (final UsageRecord record : loadAllRecords()) {
-            if (matcher.matchesPath(record.getMapPath()) && isSignificantSession(record)) {
+            if (!isSignificantSession(record)) {
+                continue;
+            }
+            if (recordMatchesMap(record, mapPath, wantHash, wantKey)) {
                 result.add(record);
             }
         }
@@ -345,8 +381,39 @@ public class UsageStatsManager {
         return result;
     }
 
+    private static boolean recordMatchesMap(final UsageRecord record, final String mapPath, final String wantHash,
+            final String wantKey) {
+        if (record == null) {
+            return false;
+        }
+        final String hash = record.getFileHash();
+        if (wantHash != null && wantHash.length() > 0 && hash != null && wantHash.equals(hash)) {
+            return true;
+        }
+        if (wantKey != null && wantKey.length() > 0 && wantKey.equals(summaryKeyFor(record))) {
+            return true;
+        }
+        final MapUsageSummary matcher = new MapUsageSummary(mapPath);
+        return matcher.matchesPath(record.getMapPath());
+    }
+
+    private static String summaryKeyForPath(final String path, final String hash) {
+        if (hash != null && hash.length() > 0) {
+            return "hash:" + hash;
+        }
+        if (path == null || path.length() == 0) {
+            return "";
+        }
+        try {
+            return "path:" + new File(path).getCanonicalPath();
+        }
+        catch (Exception e) {
+            return "path:" + path;
+        }
+    }
+
     public java.util.Map<String, MapUsageSummary> summarizeByMap() {
-        final java.util.LinkedHashMap<String, MapUsageSummary> byPath = new java.util.LinkedHashMap<String, MapUsageSummary>();
+        final java.util.LinkedHashMap<String, MapUsageSummary> byKey = new java.util.LinkedHashMap<String, MapUsageSummary>();
         for (final UsageRecord record : loadAllRecords()) {
             if (!isSignificantSession(record)) {
                 continue;
@@ -355,14 +422,44 @@ public class UsageStatsManager {
             if (path == null || path.isEmpty()) {
                 continue;
             }
-            MapUsageSummary summary = byPath.get(path);
+            final String key = summaryKeyFor(record);
+            MapUsageSummary summary = byKey.get(key);
             if (summary == null) {
                 summary = new MapUsageSummary(path);
-                byPath.put(path, summary);
+                byKey.put(key, summary);
+            }
+            else {
+                summary.preferPath(path, record.getEndTime());
             }
             summary.addRecord(record);
         }
+        // Re-key by canonical/preferred path for UI selection.
+        final java.util.LinkedHashMap<String, MapUsageSummary> byPath = new java.util.LinkedHashMap<String, MapUsageSummary>();
+        for (final MapUsageSummary summary : byKey.values()) {
+            byPath.put(summary.getMapPath(), summary);
+        }
         return byPath;
+    }
+
+    /** Merge key: dcr/file hash when present, else canonical path, else raw path. */
+    static String summaryKeyFor(final UsageRecord record) {
+        if (record == null) {
+            return "";
+        }
+        final String hash = record.getFileHash();
+        if (hash != null && hash.length() > 0) {
+            return "hash:" + hash;
+        }
+        final String path = record.getMapPath();
+        if (path == null || path.length() == 0) {
+            return "";
+        }
+        try {
+            return "path:" + new File(path).getCanonicalPath();
+        }
+        catch (Exception e) {
+            return "path:" + path;
+        }
     }
 
     public static String formatDuration(final long millis) {
