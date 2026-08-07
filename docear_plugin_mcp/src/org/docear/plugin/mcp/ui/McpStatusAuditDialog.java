@@ -14,7 +14,6 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
-import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
@@ -26,9 +25,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JDialog;
-import javax.swing.JFileChooser;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JSpinner;
@@ -43,7 +40,6 @@ import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
-import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 
 import org.docear.plugin.mcp.Activator;
@@ -110,8 +106,8 @@ public final class McpStatusAuditDialog extends JDialog {
 		        t("col.machine"), t("col.machineId"), t("col.calls"), t("col.ok"), t("col.fail"), t("col.avgMs"),
 		        t("col.maxMs"), t("col.last") });
 		actionStatsModel = nonEditableModel(new String[] {
-		        t("col.action"), t("col.intent"), t("col.calls"), t("col.ok"), t("col.fail"), t("col.avgMs"),
-		        t("col.maxMs") });
+		        t("col.action"), t("col.intent"), t("col.avgMs"), t("col.calls"), t("col.ok"), t("col.fail"),
+		        t("col.maxMs"), t("col.totalMs") });
 		dayStatsModel = nonEditableModel(new String[] {
 		        t("col.day"), t("col.calls"), t("col.ok"), t("col.fail"), t("col.avgMs"), t("col.maxMs") });
 		slowModel = nonEditableModel(new String[] {
@@ -165,9 +161,9 @@ public final class McpStatusAuditDialog extends JDialog {
 		root.add(north, BorderLayout.NORTH);
 
 		tabs.setFont(DocearUiTheme.font(12f, Font.BOLD));
+		tabs.addTab(t("tab.stats"), buildStatsPane());
 		tabs.addTab(t("tab.events"), buildEventsPane());
 		tabs.addTab(t("tab.traces"), buildTracesPane());
-		tabs.addTab(t("tab.stats"), buildStatsPane());
 		tabs.addTab(t("tab.machines"), buildMachinesPane());
 		tabs.addTab(t("tab.slow"), buildSlowPane());
 		root.add(tabs, BorderLayout.CENTER);
@@ -178,26 +174,8 @@ public final class McpStatusAuditDialog extends JDialog {
 		south.add(resultMetaLabel, BorderLayout.WEST);
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		DocearUiTheme.styleCanvas(buttons);
-		final JButton exportBtn = DocearUiTheme.softButton(t("export"));
-		final JButton importJsonlBtn = DocearUiTheme.softButton(t("import_jsonl"));
-		final JButton importDbBtn = DocearUiTheme.softButton(t("import_db"));
 		final JButton refresh = DocearUiTheme.softButton(t("refresh"));
 		final JButton close = DocearUiTheme.primaryButton(TextUtils.getText("ok"));
-		exportBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				doExport();
-			}
-		});
-		importJsonlBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				doImportJsonl();
-			}
-		});
-		importDbBtn.addActionListener(new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				doImportDb();
-			}
-		});
 		refresh.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				refreshAll();
@@ -208,9 +186,6 @@ public final class McpStatusAuditDialog extends JDialog {
 				dispose();
 			}
 		});
-		buttons.add(exportBtn);
-		buttons.add(importJsonlBtn);
-		buttons.add(importDbBtn);
 		buttons.add(refresh);
 		buttons.add(close);
 		south.add(buttons, BorderLayout.EAST);
@@ -657,11 +632,12 @@ public final class McpStatusAuditDialog extends JDialog {
 		final boolean auditOn = DocearMcpConfig.isAuditEnabled();
 		final int count = McpAuditService.countAuditEvents();
 		final int pending = McpAuditService.pendingAuditCount();
+		final int dbCount = McpAuditService.loadedAuditDatabaseCount();
 		auditMetaLabel.setText(TextUtils.format("McpStatusAuditAction.audit_meta",
 		        auditOn ? t("audit.on") : t("audit.off"), Integer.valueOf(count), Integer.valueOf(pending),
-		        DocearMcpConfig.getAuditDbFile().getAbsolutePath()));
+		        Integer.valueOf(dbCount), DocearMcpConfig.getAuditDataDir().getAbsolutePath()));
 		machineLabel.setText(TextUtils.format("McpStatusAuditAction.machine_meta", McpAuditService.getLocalMachineName(),
-		        McpAuditService.getLocalMachineId()));
+		        McpAuditService.getLocalMachineId(), DocearMcpConfig.getAuditDbFile().getName()));
 	}
 
 	private void reloadEvents(final McpAuditQuery q) {
@@ -709,11 +685,13 @@ public final class McpStatusAuditDialog extends JDialog {
 		sb.append(t("stats.total")).append(": ").append(intVal(sum.get("count"))).append("    ");
 		sb.append(t("col.ok")).append(": ").append(intVal(sum.get("successCount"))).append("    ");
 		sb.append(t("col.fail")).append(": ").append(intVal(sum.get("failCount"))).append("    ");
-		sb.append(t("col.machine")).append(": ").append(intVal(sum.get("machineCount"))).append('\n');
+		sb.append(t("col.machine")).append(": ").append(intVal(sum.get("machineCount"))).append("    ");
+		sb.append(t("stats.dbs")).append(": ").append(intVal(sum.get("databaseCount"))).append('\n');
 		sb.append(t("col.avgMs")).append(": ").append(longVal(sum.get("avgDurationMs"))).append("    ");
 		sb.append(t("col.maxMs")).append(": ").append(longVal(sum.get("maxDurationMs"))).append("    ");
 		sb.append(t("col.minMs")).append(": ").append(longVal(sum.get("minDurationMs"))).append("    ");
-		sb.append(t("stats.totalMs")).append(": ").append(longVal(sum.get("totalDurationMs")));
+		sb.append(t("stats.totalMs")).append(": ").append(longVal(sum.get("totalDurationMs"))).append('\n');
+		sb.append(t("stats.avg_hint"));
 		statsSummaryArea.setText(sb.toString());
 
 		actionStatsModel.setRowCount(0);
@@ -721,9 +699,12 @@ public final class McpStatusAuditDialog extends JDialog {
 		for (int i = 0; i < byAction.size(); i++) {
 			final Map<String, Object> row = byAction.get(i);
 			actionStatsModel.addRow(new Object[] {
-			        str(row.get("action")), str(row.get("intent")), Integer.valueOf(intVal(row.get("count"))),
+			        str(row.get("action")), str(row.get("intent")),
+			        Long.valueOf(longVal(row.get("avgDurationMs"))),
+			        Integer.valueOf(intVal(row.get("count"))),
 			        Integer.valueOf(intVal(row.get("successCount"))), Integer.valueOf(intVal(row.get("failCount"))),
-			        Long.valueOf(longVal(row.get("avgDurationMs"))), Long.valueOf(longVal(row.get("maxDurationMs"))) });
+			        Long.valueOf(longVal(row.get("maxDurationMs"))),
+			        Long.valueOf(longVal(row.get("totalDurationMs"))) });
 		}
 
 		dayStatsModel.setRowCount(0);
@@ -839,65 +820,12 @@ public final class McpStatusAuditDialog extends JDialog {
 		if (machineId.length() > 0) {
 			selectComboByContains(machineCombo, machineId);
 		}
-		tabs.setSelectedIndex(0);
+		tabs.setSelectedIndex(1);
 		SwingUtilities.invokeLater(new Runnable() {
 			public void run() {
 				refreshAll();
 			}
 		});
-	}
-
-	private void doExport() {
-		final JFileChooser chooser = new JFileChooser();
-		chooser.setSelectedFile(new File("audit-export-" + McpAuditService.getLocalMachineId() + ".jsonl"));
-		chooser.setFileFilter(new FileNameExtensionFilter("JSONL", "jsonl", "json"));
-		if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
-			return;
-		}
-		try {
-			final int n = McpAuditService.exportAuditJsonl(chooser.getSelectedFile(), currentQuery());
-			JOptionPane.showMessageDialog(this, TextUtils.format("McpStatusAuditAction.export_ok", Integer.valueOf(n)),
-			        t("text"), JOptionPane.INFORMATION_MESSAGE);
-		}
-		catch (Exception e) {
-			JOptionPane.showMessageDialog(this, e.getMessage(), t("text"), JOptionPane.ERROR_MESSAGE);
-		}
-	}
-
-	private void doImportJsonl() {
-		final JFileChooser chooser = new JFileChooser();
-		chooser.setFileFilter(new FileNameExtensionFilter("JSONL", "jsonl", "json"));
-		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
-			return;
-		}
-		try {
-			final int n = McpAuditService.importAuditJsonl(chooser.getSelectedFile());
-			JOptionPane.showMessageDialog(this,
-			        TextUtils.format("McpStatusAuditAction.import_ok", Integer.valueOf(n)), t("text"),
-			        JOptionPane.INFORMATION_MESSAGE);
-			refreshAll();
-		}
-		catch (Exception e) {
-			JOptionPane.showMessageDialog(this, e.getMessage(), t("text"), JOptionPane.ERROR_MESSAGE);
-		}
-	}
-
-	private void doImportDb() {
-		final JFileChooser chooser = new JFileChooser();
-		chooser.setFileFilter(new FileNameExtensionFilter("SQLite DB", "db", "sqlite"));
-		if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
-			return;
-		}
-		try {
-			final int n = McpAuditService.importAuditDb(chooser.getSelectedFile());
-			JOptionPane.showMessageDialog(this,
-			        TextUtils.format("McpStatusAuditAction.import_ok", Integer.valueOf(n)), t("text"),
-			        JOptionPane.INFORMATION_MESSAGE);
-			refreshAll();
-		}
-		catch (Exception e) {
-			JOptionPane.showMessageDialog(this, e.getMessage(), t("text"), JOptionPane.ERROR_MESSAGE);
-		}
 	}
 
 	private String formatTs(final Object value) {
