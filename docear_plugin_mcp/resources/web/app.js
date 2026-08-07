@@ -39,6 +39,7 @@
   var currentMap = null;
   var currentTree = null;
   var expanded = {};
+  var folderOpen = {};
   var busy = false;
   var askBusy = false;
   var filterTimer = null;
@@ -284,10 +285,15 @@
     if (asNew) profileSelect.value = "";
   }
 
+  var mapsWarmPoll = null;
+
   function loadMaps() {
     var q = (mapFilter.value || "").trim();
-    mapCount.textContent = "加载中…";
-    return api("/maps" + (q ? "?q=" + encodeURIComponent(q) : "")).then(function (res) {
+    if (!maps.length) {
+      mapCount.textContent = "加载中…";
+    }
+    var url = "/maps?limit=2000" + (q ? "&q=" + encodeURIComponent(q) : "");
+    return api(url).then(function (res) {
       if (!res.ok) {
         mapCount.textContent = (res.body && res.body.error) || "加载失败";
         if (res.status === 401) {
@@ -298,8 +304,48 @@
         return;
       }
       maps = res.body.maps || [];
-      mapCount.textContent = maps.length + " 张导图";
+      if (res.body.warming && !maps.length) {
+        mapCount.textContent = "索引构建中…";
+        mapList.innerHTML = '<p class="muted tiny">正在扫描导图库，请稍候…</p>';
+        if (mapsWarmPoll) clearTimeout(mapsWarmPoll);
+        mapsWarmPoll = setTimeout(loadMaps, 1500);
+        return;
+      }
+      if (mapsWarmPoll) {
+        clearTimeout(mapsWarmPoll);
+        mapsWarmPoll = null;
+      }
+      var groups = groupMaps(maps);
+      mapCount.textContent =
+        maps.length + " 张 · " + groups.length + " 组" + (res.body.warming ? " · 刷新中" : "");
       renderMapList();
+      if (res.body.warming) {
+        mapsWarmPoll = setTimeout(loadMaps, 2500);
+      }
+    });
+  }
+
+  function folderKey(m) {
+    var rel = m.relativePath || m.path || "";
+    rel = rel.replace(/\\/g, "/");
+    var parts = rel.split("/");
+    if (parts.length <= 1) return "（根目录）";
+    return parts[0] || "（根目录）";
+  }
+
+  function groupMaps(list) {
+    var order = [];
+    var by = {};
+    list.forEach(function (m) {
+      var key = folderKey(m);
+      if (!by[key]) {
+        by[key] = [];
+        order.push(key);
+      }
+      by[key].push(m);
+    });
+    return order.map(function (k) {
+      return { name: k, items: by[k] };
     });
   }
 
@@ -309,18 +355,51 @@
       mapList.innerHTML = '<p class="muted tiny">没有匹配的导图</p>';
       return;
     }
-    maps.forEach(function (m) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "map-item" + (currentMap && currentMap.path === m.path ? " active" : "");
-      btn.innerHTML = '<span class="t"></span><span class="s"></span>';
-      btn.querySelector(".t").textContent = m.title || m.name || "(未命名)";
-      btn.querySelector(".s").textContent =
-        (m.relativePath || m.path || "") + " · " + formatSize(m.size) + " · " + (m.modifiedAt || "");
-      btn.addEventListener("click", function () {
-        openMap(m);
+    var q = (mapFilter.value || "").trim();
+    var groups = groupMaps(maps);
+    groups.forEach(function (g, idx) {
+      var open = folderOpen[g.name];
+      if (q) {
+        open = true;
+      } else if (open === undefined) {
+        // Auto-open small groups / first group
+        open = g.items.length <= 12 || idx === 0;
+        folderOpen[g.name] = open;
+      }
+      var wrap = document.createElement("div");
+      wrap.className = "folder-group" + (open ? " open" : "");
+      var head = document.createElement("button");
+      head.type = "button";
+      head.className = "folder-head";
+      head.innerHTML = '<span class="chev"></span><span class="fname"></span><span class="fcnt"></span>';
+      head.querySelector(".chev").textContent = open ? "▾" : "▸";
+      head.querySelector(".fname").textContent = g.name;
+      head.querySelector(".fcnt").textContent = String(g.items.length);
+      head.addEventListener("click", function () {
+        folderOpen[g.name] = !folderOpen[g.name];
+        renderMapList();
       });
-      mapList.appendChild(btn);
+      var body = document.createElement("div");
+      body.className = "folder-body";
+      g.items.forEach(function (m) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-item" + (currentMap && currentMap.path === m.path ? " active" : "");
+        btn.innerHTML = '<span class="t"></span><span class="s"></span>';
+        btn.querySelector(".t").textContent = m.title || m.name || "(未命名)";
+        var sub = m.relativePath || m.path || "";
+        // show path under folder without repeating folder prefix
+        if (sub.indexOf(g.name + "/") === 0) sub = sub.substring(g.name.length + 1);
+        btn.querySelector(".s").textContent =
+          sub + " · " + formatSize(m.size) + " · " + (m.modifiedAt || "").replace(/:\d{2}$/, "");
+        btn.addEventListener("click", function () {
+          openMap(m);
+        });
+        body.appendChild(btn);
+      });
+      wrap.appendChild(head);
+      wrap.appendChild(body);
+      mapList.appendChild(wrap);
     });
   }
 
@@ -603,7 +682,8 @@
       switchView(btn.getAttribute("data-view"));
     });
   });
-  document.getElementById("btn-login").addEventListener("click", function () {
+  document.getElementById("auth-form").addEventListener("submit", function (e) {
+    e.preventDefault();
     doAuth(false);
   });
   document.getElementById("btn-register").addEventListener("click", function () {

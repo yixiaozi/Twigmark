@@ -21,16 +21,16 @@
           <h1>Twigmark</h1>
           <p class="lede">导图库网页版：浏览、搜索，并对任意导图提问。手机也能用。</p>
         </div>
-        <div class="auth-card">
+        <form class="auth-card" id="auth-form" autocomplete="on">
           <p class="muted" id="auth-hint">登录后访问导图库与对话。</p>
-          <label>账号 <input id="auth-user" autocomplete="username" /></label>
-          <label>密码 <input id="auth-pass" type="password" autocomplete="current-password" /></label>
+          <label>账号 <input id="auth-user" name="username" autocomplete="username" /></label>
+          <label>密码 <input id="auth-pass" name="password" type="password" autocomplete="current-password" /></label>
           <div class="auth-actions">
-            <button type="button" id="btn-login" class="primary">登录</button>
+            <button type="submit" id="btn-login" class="primary">登录</button>
             <button type="button" id="btn-register" class="ghost">首次注册</button>
           </div>
           <p id="auth-error" class="err"></p>
-        </div>
+        </form>
       </div>
     </div>
 

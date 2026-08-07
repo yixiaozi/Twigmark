@@ -113,21 +113,23 @@ public final class McpMindMapService {
 		return getMindmapJson(filePath, maxDepth, true);
 	}
 
+	private static final Object WEB_MAP_LIST_LOCK = new Object();
+	private static volatile List webMapListCache = null;
+	private static volatile long webMapListCacheAt = 0L;
+	private static final long WEB_MAP_LIST_TTL_MS = 5L * 60L * 1000L;
+	private static volatile boolean webMapListScanning = false;
+
 	/**
 	 * Lightweight catalog for the web library (session-auth HTTP layer).
 	 * Returns JSON list: path, name, relativePath, size, modifiedAt, modifiedAtMillis.
+	 * When the catalog is still building, returns quickly with warming=true.
 	 */
 	public static String listMindMapsForWeb(final String query, final int limit) {
 		final String needle = query == null ? "" : query.trim().toLowerCase();
 		final int max = limit < 1 ? 500 : (limit > 2000 ? 2000 : limit);
+		final boolean[] warming = new boolean[] { false };
 		final List files = new ArrayList();
-		final List cached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
-		if (cached != null && !cached.isEmpty()) {
-			files.addAll(cached);
-		}
-		else {
-			MindMapDataRootResolver.collectMindmapFiles(files);
-		}
+		files.addAll(listMindMapFilesFast(warming));
 		sortFilesByModifiedDesc(files);
 		File rootDir = null;
 		try {
@@ -165,7 +167,73 @@ public final class McpMindMapService {
 		out.put("maps", JsonValue.ofList(items));
 		out.put("count", JsonValue.ofNumber(Integer.valueOf(items.size())));
 		out.put("root", JsonValue.ofString(rootPath));
+		out.put("warming", JsonValue.ofBoolean(Boolean.valueOf(warming[0])));
 		return JsonValue.ofMap(out).toJson();
+	}
+
+	/**
+	 * Prefer shared snapshot / TTL cache. Never block HTTP on a full disk walk:
+	 * kick off a background scan and report warming until ready.
+	 */
+	private static List listMindMapFilesFast(final boolean[] warmingOut) {
+		if (WorkspaceSideTabScanCache.isMindMapScanComplete()) {
+			final List snapshot = WorkspaceSideTabScanCache.getMindMapFilesSnapshot();
+			return snapshot != null ? snapshot : Collections.emptyList();
+		}
+		final long now = System.currentTimeMillis();
+		synchronized (WEB_MAP_LIST_LOCK) {
+			if (webMapListCache != null && now - webMapListCacheAt < WEB_MAP_LIST_TTL_MS) {
+				return new ArrayList(webMapListCache);
+			}
+			ensureWebMapCatalogScanLocked();
+			if (warmingOut != null) {
+				warmingOut[0] = true;
+			}
+			if (webMapListCache != null) {
+				return new ArrayList(webMapListCache);
+			}
+			return Collections.emptyList();
+		}
+	}
+
+	private static void ensureWebMapCatalogScanLocked() {
+		if (webMapListScanning) {
+			return;
+		}
+		if (WorkspaceSideTabScanCache.isMindMapScanComplete()) {
+			return;
+		}
+		webMapListScanning = true;
+		final Thread t = new Thread(new Runnable() {
+			public void run() {
+				try {
+					final List files = new ArrayList();
+					MindMapDataRootResolver.collectMindmapFiles(files);
+					sortFilesByModifiedDesc(files);
+					webMapListCache = files;
+					webMapListCacheAt = System.currentTimeMillis();
+					WorkspaceSideTabScanCache.publishMindMapFiles(files);
+					LogUtils.info("Web mind-map catalog warmed (" + files.size() + " files)");
+				}
+				catch (Exception e) {
+					LogUtils.warn("Web mind-map catalog warmup failed: " + e.getMessage());
+				}
+				finally {
+					synchronized (WEB_MAP_LIST_LOCK) {
+						webMapListScanning = false;
+					}
+				}
+			}
+		}, "twigmark-web-map-scan");
+		t.setDaemon(true);
+		t.start();
+	}
+
+	/** Warm mind-map file cache in background (headless-safe, no Swing Timer). */
+	public static void warmupMindMapCatalogAsync() {
+		synchronized (WEB_MAP_LIST_LOCK) {
+			ensureWebMapCatalogScanLocked();
+		}
 	}
 
 	/** Compact outline JSON for web chat map focus (bounded size). */

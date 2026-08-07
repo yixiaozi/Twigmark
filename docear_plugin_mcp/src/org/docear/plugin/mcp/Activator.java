@@ -95,6 +95,12 @@ public class Activator implements BundleActivator {
 			httpServer = new McpHttpServer();
 			httpServer.start();
 			lastError = "";
+			try {
+				org.docear.plugin.mcp.service.McpMindMapService.warmupMindMapCatalogAsync();
+			}
+			catch (Exception warmErr) {
+				LogUtils.warn("Mind-map catalog warmup schedule failed: " + warmErr.getMessage());
+			}
 		}
 		catch (Exception e) {
 			lastError = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();

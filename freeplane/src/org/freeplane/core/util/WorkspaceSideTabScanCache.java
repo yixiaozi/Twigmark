@@ -74,11 +74,20 @@ public final class WorkspaceSideTabScanCache {
 		final List<File> files = new ArrayList<File>();
 		MindMapDataRootResolver.collectMindmapFiles(files);
 		sortByLastModifiedDesc(files);
+		publishMindMapFiles(files);
+		return new ArrayList<File>(files);
+	}
+
+	/**
+	 * Publish a completed mind-map file walk into the shared cache so other callers
+	 * (MCP tools, web library) avoid a second full directory scan.
+	 */
+	public static void publishMindMapFiles(final List<File> files) {
+		final List<File> copy = files == null ? new ArrayList<File>() : new ArrayList<File>(files);
 		synchronized (WorkspaceSideTabScanCache.class) {
-			mindMapFiles = files;
+			mindMapFiles = copy;
 			mindMapScanComplete = true;
 		}
-		return new ArrayList<File>(files);
 	}
 
 	/** Drop cached file lists so the next call rescans (e.g. after large imports). */

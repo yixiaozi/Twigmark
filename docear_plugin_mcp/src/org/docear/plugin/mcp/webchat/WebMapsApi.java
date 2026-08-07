@@ -35,9 +35,17 @@ public final class WebMapsApi {
 		catch (IllegalArgumentException e) {
 			writeJson(exchange, 401, error(e.getMessage()));
 		}
+		catch (IOException e) {
+			// Client aborted (e.g. navigated away) — avoid noisy stack traces.
+			LogUtils.warn("list maps aborted: " + e.getMessage());
+		}
 		catch (Exception e) {
 			LogUtils.warn("list maps failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			try {
+				writeJson(exchange, 500, error(e.getMessage()));
+			}
+			catch (IOException ignored) {
+			}
 		}
 	}
 
