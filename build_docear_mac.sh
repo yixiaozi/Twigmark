@@ -1,5 +1,5 @@
 #!/bin/bash
-# Docear Mac 版本发布脚本
+# Twigmark Mac 版本发布脚本
 set -e
 
 # 配置
@@ -7,6 +7,7 @@ PROJECT_DIR="/Users/wangyang/Develop/Docear-Desktop"
 TEMP_DIR="/Users/wangyang/Temp"
 APPLICATIONS_DIR="/Applications"
 ANT_CMD="${PROJECT_DIR}/tools/apache-ant-1.10.14/bin/ant"
+APP_NAME="Twigmark"
 
 # 颜色输出
 RED='\033[0;31m'
@@ -18,13 +19,13 @@ NC='\033[0m' # No Color
 show_help() {
     echo "Usage: $0 [OPTIONS]"
     echo ""
-    echo "Docear Mac 版本构建与发布脚本"
+    echo "Twigmark Mac 版本构建与发布脚本"
     echo ""
     echo "Options:"
     echo "  -h, --help          Show this help message and exit"
     echo "  --skip-build        Skip building and use existing build artifacts"
     echo "  --check             Check system requirements and exit"
-    echo "  --no-applications   Do not copy Docear.app into /Applications"
+    echo "  --no-applications   Do not copy Twigmark.app into /Applications"
     echo ""
     echo "System Requirements:"
     echo "  - Java Development Kit (JDK) 8 (Apple Silicon 优先 Azul Zulu 8 aarch64)"
@@ -40,14 +41,15 @@ show_help() {
     echo ""
     echo "Typical rebuild + install:"
     echo "  ./build_docear_mac.sh"
-    echo "  # Result: docear_framework/build4mac/Docear.app and /Applications/Docear.app"
+    echo "  # Result: docear_framework/build4mac/Twigmark.app and /Applications/Twigmark.app"
     echo ""
 }
 
-# 修复 Docear.app
-fix_docear_app() {
+# 修复 Twigmark.app
+fix_mac_app() {
     local app_path="$1"
-    local launcher_src="$PROJECT_DIR/docear_framework/build4mac/Docear.app/Contents/MacOS/Docear"
+    # 模板在版本库内（不依赖 build4mac，clean 后仍可用）
+    local launcher_src="$PROJECT_DIR/docear_framework/macos/Twigmark"
     echo -e "${YELLOW}正在修复 $app_path ...${NC}"
     
     # 1. 使用仓库内维护的启动脚本：Apple Silicon 优先 arm64 JDK 8，避免 Rosetta
@@ -55,20 +57,25 @@ fix_docear_app() {
         echo -e "${RED}找不到启动器模板: $launcher_src${NC}"
         exit 1
     fi
-    cp "$launcher_src" "$app_path/Contents/MacOS/Docear"
+    cp "$launcher_src" "$app_path/Contents/MacOS/Twigmark"
     
     # 2. 设置执行权限
-    chmod +x "$app_path/Contents/MacOS/Docear"
+    chmod +x "$app_path/Contents/MacOS/Twigmark"
     
     # 3. 修改 Info.plist
     local plist_path="$app_path/Contents/Info.plist"
     
-    /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Docear" "$plist_path" 2>/dev/null || {
-        sed -i '' 's/FreeplaneJavaApplicationStub/Docear/g' "$plist_path"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Twigmark" "$plist_path" 2>/dev/null || {
+        sed -i '' 's/FreeplaneJavaApplicationStub/Twigmark/g' "$plist_path"
     }
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName Twigmark" "$plist_path" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName Twigmark" "$plist_path" 2>/dev/null || \
+        /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string Twigmark" "$plist_path" 2>/dev/null || true
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIconFile twigmark.icns" "$plist_path" 2>/dev/null || true
     
     # 4. 删除旧的启动器
     rm -f "$app_path/Contents/MacOS/FreeplaneJavaApplicationStub"
+    rm -f "$app_path/Contents/MacOS/Docear"
     
     echo -e "${GREEN}✓ $app_path 修复完成！${NC}"
 }
@@ -143,16 +150,31 @@ main() {
     
     # 打印头部信息
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}Docear Mac 版本构建与发布${NC}"
+    echo -e "${GREEN}Twigmark Mac 版本构建与发布${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo ""
     
-    # Prefer Temurin/Zulu JDK 8 in JVMs folder; java_home -v 1.8 may pick JavaAppletPlugin
+    # Prefer arm64 JDK 8 (Zulu/Temurin) on Apple Silicon; avoid JavaAppletPlugin / Rosetta when possible
     if [ -z "$JAVA_HOME" ] || [[ "$JAVA_HOME" == *"JavaAppletPlugin"* ]]; then
-        if [ -x "/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home/bin/java" ]; then
-            export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
-        else
-            export JAVA_HOME=$(/usr/libexec/java_home -v 1.8 2>/dev/null || /usr/libexec/java_home 2>/dev/null || true)
+        local _home=""
+        if [ "$(uname -m)" = "arm64" ]; then
+            for _home in \
+                "${HOME}/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home" \
+                "/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home" \
+                "/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+            do
+                if [ -x "${_home}/bin/javac" ] && file "${_home}/bin/java" 2>/dev/null | grep -q arm64; then
+                    export JAVA_HOME="$_home"
+                    break
+                fi
+            done
+        fi
+        if [ -z "$JAVA_HOME" ] || [[ "$JAVA_HOME" == *"JavaAppletPlugin"* ]]; then
+            if [ -x "/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home/bin/javac" ]; then
+                export JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
+            else
+                export JAVA_HOME=$(/usr/libexec/java_home -v 1.8 2>/dev/null || /usr/libexec/java_home 2>/dev/null || true)
+            fi
         fi
     fi
     
@@ -167,12 +189,12 @@ main() {
         exit 1
     fi
     
-    DOCEAR_APP="$PROJECT_DIR/docear_framework/build4mac/Docear.app"
+    TWIGMARK_APP="$PROJECT_DIR/docear_framework/build4mac/${APP_NAME}.app"
     
     # 检查是否需要构建
     if [ $skip_build -eq 0 ]; then
         echo ""
-        echo -e "${YELLOW}开始构建 Docear...${NC}"
+        echo -e "${YELLOW}开始构建 Twigmark...${NC}"
         echo ""
         
         # 先构建 freeplane_ant
@@ -189,9 +211,9 @@ main() {
             cd ..
         fi
         
-        # 现在构建完整的 Docear
+        # 现在构建完整的 Twigmark Mac 应用
         echo ""
-        echo -e "${YELLOW}步骤 2/4: 构建 Docear 应用...${NC}"
+        echo -e "${YELLOW}步骤 2/4: 构建 Twigmark 应用...${NC}"
         cd "$PROJECT_DIR/docear_framework"
         "$ANT_CMD" -f ant/build.xml clean macosxapp || {
             echo -e "${YELLOW}Trying just 'macosxapp' without clean...${NC}"
@@ -200,42 +222,42 @@ main() {
     fi
     
     # 验证构建成功
-    if [ ! -d "$DOCEAR_APP" ]; then
-        echo -e "${RED}错误: 构建失败，未找到 Docear.app 在 $DOCEAR_APP${NC}"
+    if [ ! -d "$TWIGMARK_APP" ]; then
+        echo -e "${RED}错误: 构建失败，未找到 ${APP_NAME}.app 在 $TWIGMARK_APP${NC}"
         exit 1
     fi
     
     echo ""
-    echo -e "${YELLOW}步骤 3/4: 修复 Docear.app 启动器...${NC}"
-    fix_docear_app "$DOCEAR_APP"
+    echo -e "${YELLOW}步骤 3/4: 修复 ${APP_NAME}.app 启动器...${NC}"
+    fix_mac_app "$TWIGMARK_APP"
     
     echo ""
     echo -e "${GREEN}构建成功！${NC}"
-    echo -e "${GREEN}应用位于: $DOCEAR_APP${NC}"
+    echo -e "${GREEN}应用位于: $TWIGMARK_APP${NC}"
     
     # 复制到 Temp 目录
     echo ""
     echo -e "${YELLOW}正在复制到 $TEMP_DIR ...${NC}"
     mkdir -p "$TEMP_DIR"
-    rm -rf "$TEMP_DIR/Docear.app"
-    cp -R "$DOCEAR_APP" "$TEMP_DIR/"
+    rm -rf "$TEMP_DIR/${APP_NAME}.app"
+    cp -R "$TWIGMARK_APP" "$TEMP_DIR/"
     
     # 安装到 /Applications
     if [ $install_applications -eq 1 ]; then
         echo ""
-        echo -e "${YELLOW}步骤 4/4: 安装到 $APPLICATIONS_DIR/Docear.app ...${NC}"
-        if [ -d "$APPLICATIONS_DIR/Docear.app" ]; then
-            # Quit running app if possible
-            osascript -e 'tell application "Docear" to quit' 2>/dev/null || true
-            sleep 1
-            rm -rf "$APPLICATIONS_DIR/Docear.app"
-        fi
-        if cp -R "$DOCEAR_APP" "$APPLICATIONS_DIR/Docear.app"; then
-            echo -e "${GREEN}已安装: $APPLICATIONS_DIR/Docear.app${NC}"
-            xattr -dr com.apple.quarantine "$APPLICATIONS_DIR/Docear.app" 2>/dev/null || true
+        echo -e "${YELLOW}步骤 4/4: 安装到 $APPLICATIONS_DIR/${APP_NAME}.app ...${NC}"
+        # Quit legacy Docear / Twigmark if running
+        osascript -e 'tell application "Twigmark" to quit' 2>/dev/null || true
+        osascript -e 'tell application "Docear" to quit' 2>/dev/null || true
+        sleep 1
+        rm -rf "$APPLICATIONS_DIR/${APP_NAME}.app"
+        rm -rf "$APPLICATIONS_DIR/Docear.app"
+        if cp -R "$TWIGMARK_APP" "$APPLICATIONS_DIR/${APP_NAME}.app"; then
+            echo -e "${GREEN}已安装: $APPLICATIONS_DIR/${APP_NAME}.app${NC}"
+            xattr -dr com.apple.quarantine "$APPLICATIONS_DIR/${APP_NAME}.app" 2>/dev/null || true
         else
             echo -e "${RED}复制到 /Applications 失败（可能需要权限）。可手动执行:${NC}"
-            echo "  rm -rf /Applications/Docear.app && cp -R \"$DOCEAR_APP\" /Applications/"
+            echo "  rm -rf /Applications/${APP_NAME}.app && cp -R \"$TWIGMARK_APP\" /Applications/"
             exit 1
         fi
     else
@@ -244,23 +266,23 @@ main() {
     fi
     
     # 验证复制
-    if [ -d "$TEMP_DIR/Docear.app" ]; then
+    if [ -d "$TEMP_DIR/${APP_NAME}.app" ]; then
         echo -e "${GREEN}========================================${NC}"
         echo -e "${GREEN}完成！${NC}"
-        echo -e "${GREEN}构建产物: $DOCEAR_APP${NC}"
-        echo -e "${GREEN}Temp 副本: $TEMP_DIR/Docear.app${NC}"
+        echo -e "${GREEN}构建产物: $TWIGMARK_APP${NC}"
+        echo -e "${GREEN}Temp 副本: $TEMP_DIR/${APP_NAME}.app${NC}"
         if [ $install_applications -eq 1 ]; then
-            echo -e "${GREEN}Applications: $APPLICATIONS_DIR/Docear.app${NC}"
+            echo -e "${GREEN}Applications: $APPLICATIONS_DIR/${APP_NAME}.app${NC}"
         fi
         echo -e "${GREEN}========================================${NC}"
         
         echo ""
         echo -e "${YELLOW}运行方式:${NC}"
         if [ $install_applications -eq 1 ]; then
-            echo "  open -a Docear"
-            echo "  或: open $APPLICATIONS_DIR/Docear.app"
+            echo "  open -a Twigmark"
+            echo "  或: open $APPLICATIONS_DIR/${APP_NAME}.app"
         fi
-        echo "  open $DOCEAR_APP"
+        echo "  open $TWIGMARK_APP"
     else
         echo -e "${RED}复制失败！${NC}"
         exit 1

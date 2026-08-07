@@ -1,7 +1,9 @@
 <project name="docear" default="docear-dist" basedir="..">
 	<!-- Keep Docear for launcher/script filenames (docear.exe/.bat) and zip naming.
-	     Product display name Twigmark is set in freeplane.properties / DocearController. -->
+	     Product display name Twigmark is set in freeplane.properties / DocearController.
+	     Mac .app bundle uses MacAppName=Twigmark. -->
 	<property name="ApplicationName" value="Docear" />
+	<property name="MacAppName" value="Twigmark" />
 	
 	<scriptdef name="toLowerCase" language="javascript">
 		<classpath>
@@ -25,8 +27,9 @@
 	<property name="build4mac" value="${root}/build4mac" />
 	<property name="build.plugins" value="${build}/plugins" />
 	<property name="dist" value="${root}/dist" />
-	<property name="macappfullpath" value="${build4mac}/${ApplicationName}.app" />
+	<property name="macappfullpath" value="${build4mac}/${MacAppName}.app" />
 	<toLowerCase property="ApplicationNameToLowerCase" value="${ApplicationName}" />
+	<toLowerCase property="MacAppNameToLowerCase" value="${MacAppName}" />
 
 	<property name="launcher_src" value="src" />
 	<property name="launcher_manifest" value="${root}/META-INF/LAUNCHER_MANIFEST.MF" />
@@ -648,23 +651,24 @@
 			<isset property="debugparams"/>
 		</condition>
 
-		<!-- Delete any existing Docear.app (it's a directory) -->
+		<!-- Delete any existing Twigmark.app / legacy Docear.app -->
 		<mkdir dir="${build4mac}"/>
+		<delete dir="${build4mac}/Twigmark.app"/>
 		<delete dir="${build4mac}/Docear.app"/>
 		<jarbundler dir="${build4mac}"
-                name="Docear"
+                name="${MacAppName}"
                 mainclass="org.knopflerfish.framework.Main"
                 version="${ver}"
-                infostring="${ApplicationName} ${ver}"
-                shortname="${ApplicationName}"
-                bundleid="org.${ApplicationNameToLowerCase}"
+                infostring="${MacAppName} ${ver}"
+                shortname="${MacAppName}"
+                bundleid="org.${MacAppNameToLowerCase}"
                 jvmversion="1.6+"
                 vmoptions="${debugparams} -Xmx512m ${macdefines}"
                 arguments="-xargs ./props.xargs -xargs ./init.xargs"
                 jar="${build}/framework.jar"
-                icon="${mac-jarbundler}/docear.icns"
+                icon="${mac-jarbundler}/twigmark.icns"
                 stubfile="${mac-jarbundler}/FreeplaneJavaApplicationStub"
-                signature="DCR"
+                signature="TWMK"
                 >
 			<!-- For OSGI we want the entire build/ tree except WIndows-related stuff
              Commented out to allow testing jar=framework.jar
@@ -680,7 +684,7 @@
 			<documenttype name="Mindmap"
                     extensions="mm"
                     ostypes="MM"
-                    iconfile="${mac-jarbundler}/${ApplicationNameToLowerCase}.icns"
+                    iconfile="${mac-jarbundler}/twigmark.icns"
                     role="Editor"/>
 		</jarbundler>
 		<chmod file="${macappfullpath}/Contents/MacOS/FreeplaneJavaApplicationStub" perm="ugo+rx" />
@@ -719,6 +723,9 @@
 				<exclude name="**/framework.jar" />
 			</fileset >
 		</copy>
+		<!-- Ensure Twigmark dock / branding PNG is present even when ApplicationName is still Docear -->
+		<copy file="${script}/twigmark.png" tofile="${macjavafullpath}/twigmark.png" failonerror="false" />
+		<copy file="${script}/twigmark.png" tofile="${macjavafullpath}/docear.png" failonerror="false" />
 
 		<!-- Restore the eXecutable permission flags on the Unix script -->
 		<echo message="Setting eXecutable permissions on ${macappfullpath}/Contents/Resources/Java/${ApplicationNameToLowerCase}.sh" />
@@ -726,18 +733,18 @@
 	</target>
 
 	<target name="zip4mac" depends="git_version_info, macosxapp">
-		<zip destfile="${dist}/${ApplicationNameToLowerCase}_macos.zip" compress="true">
-			<zipfileset dir="${build4mac}" prefix="${ApplicationNameToLowerCase}-${ver}">
+		<zip destfile="${dist}/${MacAppNameToLowerCase}_macos.zip" compress="true">
+			<zipfileset dir="${build4mac}" prefix="${MacAppNameToLowerCase}-${ver}">
 				<exclude name="${macappfullpath}/Contents/MacOS/FreeplaneJavaApplicationStub"/>
 			</zipfileset>
 			<zipfileset file="${macappfullpath}/Contents/MacOS/FreeplaneJavaApplicationStub" filemode="775"
-            	prefix="${ApplicationNameToLowerCase}-${ver}/${ApplicationName}.app/Contents/MacOS"/>
+            	prefix="${MacAppNameToLowerCase}-${ver}/${MacAppName}.app/Contents/MacOS"/>
 		</zip>
 	</target>
 	
 	<target name="dmg4mac"  depends="git_version_info, macosxapp" if="isMacOs" >
 		<exec executable="hdiutil">
-			<arg line="create -srcfolder ${macappfullpath} ${dist}/${ApplicationNameToLowerCase}.dmg"/>
+			<arg line="create -srcfolder ${macappfullpath} ${dist}/${MacAppNameToLowerCase}.dmg"/>
 		</exec>
 	</target>
 
@@ -775,7 +782,7 @@
 	
 	<target name="docear4mac"  depends="clean,  zip4mac" if="isMacOs" >
 		<exec executable="hdiutil">
-			<arg line="create -srcfolder ${macappfullpath} ${dist}/${ApplicationNameToLowerCase}.dmg"/>
+			<arg line="create -srcfolder ${macappfullpath} ${dist}/${MacAppNameToLowerCase}.dmg"/>
 		</exec>
 	</target>
     
