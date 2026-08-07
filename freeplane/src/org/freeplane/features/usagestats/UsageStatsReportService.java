@@ -10,23 +10,12 @@ import org.freeplane.view.swing.features.reports.ReportViewportService;
 
 /**
  * Shows usage statistics in a bottom document tab (mind-map area).
+ * Each open creates a new tab so other report tabs stay available.
  */
 public class UsageStatsReportService implements IExtension {
-	private UsageStatsReportPanel viewportPanel;
+	private UsageStatsReportPanel lastPanel;
 
 	public UsageStatsReportService() {
-	}
-
-	private UsageStatsReportPanel getViewportPanel() {
-		if (viewportPanel == null) {
-			viewportPanel = new UsageStatsReportPanel();
-			viewportPanel.setOnClose(new Runnable() {
-				public void run() {
-					setReportVisible(false);
-				}
-			});
-		}
-		return viewportPanel;
 	}
 
 	public static UsageStatsReportService get() {
@@ -52,15 +41,35 @@ public class UsageStatsReportService implements IExtension {
 			if (charts != null) {
 				charts.releaseSoftViewport();
 			}
-			final UsageStatsReportPanel panel = getViewportPanel();
+			final UsageStatsReportPanel panel = new UsageStatsReportPanel();
+			lastPanel = panel;
+			panel.setOnClose(new Runnable() {
+				public void run() {
+					ReportDocumentService.closeContent(panel);
+					if (lastPanel == panel) {
+						lastPanel = null;
+						ResourceController.getResourceController()
+						        .setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, false);
+						syncToggleAction(false);
+					}
+				}
+			});
 			panel.refresh();
-			ReportDocumentService.showInTab("活动报表", panel);
+			ReportDocumentService.openNew("活动报表", panel, "report://activity/" + System.nanoTime());
+			ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, true);
+			syncToggleAction(true);
 		}
 		else {
-			ReportDocumentService.closeTab();
+			if (lastPanel != null) {
+				ReportDocumentService.closeContent(lastPanel);
+				lastPanel = null;
+			}
+			else {
+				ReportDocumentService.closeTab();
+			}
+			ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, false);
+			syncToggleAction(false);
 		}
-		ResourceController.getResourceController().setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, visible);
-		syncToggleAction(visible);
 	}
 
 	private void syncToggleAction(final boolean visible) {
@@ -75,7 +84,7 @@ public class UsageStatsReportService implements IExtension {
 	}
 
 	public boolean isReportInViewport() {
-		return ReportDocumentService.isOpen() && viewportPanel != null && viewportPanel.getParent() != null;
+		return lastPanel != null && lastPanel.getParent() != null && ReportDocumentService.isOpen();
 	}
 
 	/** Stop soft-viewport fighting when another report tab takes over. */

@@ -1,5 +1,9 @@
 package org.freeplane.view.swing.features.reports;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
@@ -10,12 +14,62 @@ import org.freeplane.features.mode.mindmapmode.MModeController;
 import org.freeplane.features.usagestats.UsageStatsReportService;
 
 /**
- * Shows report charts via {@link ReportDocumentService} (bottom tab + mind-map area).
- * Opens the tab immediately with a loading shell, then fills data when generation finishes.
+ * Opens each chart report in its own bottom tab. Previous reports stay open until
+ * the user closes them. Loading progress is scoped per tab/session.
  */
 public final class ReportViewportService implements IExtension {
-	private ReportViewportPanel viewportPanel;
-	private volatile int loadGeneration;
+
+	/** One open (or loading) report tab. */
+	public static final class ReportLoadSession {
+		public final int id;
+		public final ReportViewportPanel panel;
+		public final ReportDocumentView view;
+		public final long startedAtMs;
+		private volatile String lastMessage = "正在加载…";
+		private volatile boolean finished;
+		private volatile boolean failed;
+
+		ReportLoadSession(final int id, final ReportViewportPanel panel, final ReportDocumentView view) {
+			this.id = id;
+			this.panel = panel;
+			this.view = view;
+			this.startedAtMs = System.currentTimeMillis();
+		}
+
+		public boolean isAlive() {
+			return view != null && !view.isClosed() && !finished;
+		}
+
+		public boolean isFinished() {
+			return finished || (view != null && view.isClosed());
+		}
+
+		public String getLastMessage() {
+			return lastMessage;
+		}
+
+		void setLastMessage(final String message) {
+			if (message != null && message.length() > 0) {
+				lastMessage = message;
+			}
+		}
+
+		void markFinished() {
+			finished = true;
+		}
+
+		void markFailed() {
+			failed = true;
+			finished = true;
+		}
+
+		public boolean isFailed() {
+			return failed;
+		}
+	}
+
+	private final Map sessionsById = Collections.synchronizedMap(new HashMap());
+	private int nextSessionId;
 
 	public static ReportViewportService get() {
 		final Controller controller = Controller.getCurrentController();
@@ -40,71 +94,66 @@ public final class ReportViewportService implements IExtension {
 		return service;
 	}
 
-	private ReportViewportPanel getViewportPanel() {
-		if (viewportPanel == null) {
-			viewportPanel = new ReportViewportPanel();
-			viewportPanel.setOnClose(new Runnable() {
-				public void run() {
-					ReportDocumentService.closeTab();
-				}
-			});
-			viewportPanel.setOnWrite(new Runnable() {
-				public void run() {
-					writeCurrentToSelection();
-				}
-			});
-		}
-		return viewportPanel;
-	}
-
 	/**
-	 * Open the report tab immediately with title / meta and a progress UI.
-	 * Returns a generation token; later updates must pass the same token.
+	 * Open a <b>new</b> report tab immediately with a loading shell.
+	 * Previous report tabs are left alone (they keep loading / showing independently).
 	 */
-	public int beginReport(final ReportDefinition def, final String subtitle) {
+	public ReportLoadSession beginReport(final ReportDefinition def, final String subtitle) {
 		final UsageStatsReportService activity = UsageStatsReportService.get();
 		if (activity != null) {
 			activity.releaseSoftViewport();
 		}
-		final int generation = ++loadGeneration;
-		final ReportViewportPanel panel = getViewportPanel();
+		final int id;
+		synchronized (this) {
+			id = ++nextSessionId;
+		}
 		final String title = def == null || def.title == null || def.title.length() == 0 ? "报表"
 		        : "报表 · " + def.title;
 		final String decision = def == null || def.decision == null ? "" : def.decision;
 		final String dataSource = def == null || def.dataSource == null ? "" : def.dataSource;
 		final String sub = subtitle == null ? "" : subtitle;
-		final Runnable open = new Runnable() {
+		final String assignKey = "report://" + (def == null || def.id == null ? "unknown" : def.id) + "/" + id;
+		final ReportViewportPanel panel = new ReportViewportPanel();
+		final ReportDocumentView[] viewRef = new ReportDocumentView[1];
+		panel.setOnClose(new Runnable() {
 			public void run() {
-				if (generation != loadGeneration) {
-					return;
+				final ReportDocumentView v = viewRef[0];
+				if (v != null) {
+					ReportDocumentService.close(v);
 				}
-				panel.showLoading(title, sub, decision, dataSource);
-				ReportDocumentService.showInTab(title + " · 加载中", panel);
 			}
-		};
-		if (SwingUtilities.isEventDispatchThread()) {
-			open.run();
-		}
-		else {
-			SwingUtilities.invokeLater(open);
-		}
-		return generation;
+		});
+		panel.setOnWrite(new Runnable() {
+			public void run() {
+				writeFromPanel(panel);
+			}
+		});
+		panel.showLoading(title, sub, decision, dataSource);
+		final ReportDocumentView view = ReportDocumentService.openNew(title + " · 加载中", panel, assignKey);
+		viewRef[0] = view;
+		final ReportLoadSession session = new ReportLoadSession(id, panel, view);
+		sessionsById.put(Integer.valueOf(id), session);
+		return session;
 	}
 
-	public boolean isCurrentGeneration(final int generation) {
-		return generation == loadGeneration;
+	public ReportLoadSession getSession(final int id) {
+		return (ReportLoadSession) sessionsById.get(Integer.valueOf(id));
 	}
 
-	public void updateProgress(final int generation, final String message, final int percent) {
-		if (generation != loadGeneration) {
+	public void updateProgress(final ReportLoadSession session, final String message, final int percent) {
+		if (session == null || session.isFinished()) {
 			return;
 		}
+		session.setLastMessage(message);
 		final Runnable update = new Runnable() {
 			public void run() {
-				if (generation != loadGeneration) {
+				if (session.isFinished()) {
 					return;
 				}
-				getViewportPanel().setLoadProgress(message, percent);
+				final long elapsedSec = Math.max(0L, (System.currentTimeMillis() - session.startedAtMs) / 1000L);
+				final String base = message == null || message.length() == 0 ? session.getLastMessage() : message;
+				final String withTime = elapsedSec > 0 ? base + " · 已用时 " + elapsedSec + "s" : base;
+				session.panel.setLoadProgress(withTime, percent);
 			}
 		};
 		if (SwingUtilities.isEventDispatchThread()) {
@@ -115,16 +164,24 @@ public final class ReportViewportService implements IExtension {
 		}
 	}
 
-	public void showReport(final int generation, final ReportViewModel model, final ReportNodeSpec tree) {
-		if (generation != loadGeneration) {
+	public void showReport(final ReportLoadSession session, final ReportViewModel model,
+	        final ReportNodeSpec tree) {
+		if (session == null) {
 			return;
 		}
 		final Runnable show = new Runnable() {
 			public void run() {
-				if (generation != loadGeneration) {
+				if (session.view == null || session.view.isClosed()) {
+					session.markFinished();
+					sessionsById.remove(Integer.valueOf(session.id));
 					return;
 				}
-				showReport(model, tree);
+				session.panel.showModel(model, tree);
+				final String title = model == null || model.title == null || model.title.length() == 0 ? "报表"
+				        : model.title;
+				session.view.setTabTitle(title);
+				session.markFinished();
+				sessionsById.remove(Integer.valueOf(session.id));
 			}
 		};
 		if (SwingUtilities.isEventDispatchThread()) {
@@ -135,18 +192,22 @@ public final class ReportViewportService implements IExtension {
 		}
 	}
 
-	public void showError(final int generation, final String message) {
-		if (generation != loadGeneration) {
+	public void showError(final ReportLoadSession session, final String message) {
+		if (session == null) {
 			return;
 		}
 		final String msg = message == null ? "生成失败" : message;
 		final Runnable show = new Runnable() {
 			public void run() {
-				if (generation != loadGeneration) {
+				if (session.view == null || session.view.isClosed()) {
+					session.markFailed();
+					sessionsById.remove(Integer.valueOf(session.id));
 					return;
 				}
-				getViewportPanel().showError("报表生成失败", msg);
-				ReportDocumentService.showInTab("报表 · 失败", getViewportPanel());
+				session.panel.showError("报表生成失败", msg);
+				session.view.setTabTitle("报表 · 失败");
+				session.markFailed();
+				sessionsById.remove(Integer.valueOf(session.id));
 			}
 		};
 		if (SwingUtilities.isEventDispatchThread()) {
@@ -157,51 +218,63 @@ public final class ReportViewportService implements IExtension {
 		}
 	}
 
+	/** Legacy helper: open a finished model in a brand-new tab. */
 	public void showReport(final ReportViewModel model, final ReportNodeSpec tree) {
 		final UsageStatsReportService activity = UsageStatsReportService.get();
 		if (activity != null) {
 			activity.releaseSoftViewport();
 		}
-		final ReportViewportPanel panel = getViewportPanel();
+		final ReportViewportPanel panel = new ReportViewportPanel();
+		final ReportDocumentView[] viewRef = new ReportDocumentView[1];
+		panel.setOnClose(new Runnable() {
+			public void run() {
+				if (viewRef[0] != null) {
+					ReportDocumentService.close(viewRef[0]);
+				}
+			}
+		});
+		panel.setOnWrite(new Runnable() {
+			public void run() {
+				writeFromPanel(panel);
+			}
+		});
 		panel.showModel(model, tree);
 		final String title = model == null || model.title == null || model.title.length() == 0 ? "报表"
 		        : model.title;
-		ReportDocumentService.showInTab(title, panel);
+		viewRef[0] = ReportDocumentService.openNew(title, panel, "report://direct/" + System.nanoTime());
 	}
 
-	/** @deprecated soft viewport flag removed; kept for callers that hide charts before opening another view */
 	public boolean isReportInViewport() {
-		return ReportDocumentService.isOpen() && viewportPanel != null
-		        && viewportPanel.getParent() != null;
+		return ReportDocumentService.isOpen();
 	}
 
 	public void hideFromMapViewport() {
 		ReportDocumentService.closeTab();
 	}
 
-	/** Stop fighting document tabs / map view changes (no-op soft state). */
 	public void releaseSoftViewport() {
-		// Intentionally empty: reports now live in ReportDocumentView tabs.
+		// Intentionally empty: reports live in independent ReportDocumentView tabs.
 	}
 
-	private void writeCurrentToSelection() {
-		final ReportNodeSpec tree = getViewportPanel().getCurrentTree();
+	private void writeFromPanel(final ReportViewportPanel panel) {
+		if (panel == null) {
+			return;
+		}
+		final ReportNodeSpec tree = panel.getCurrentTree();
 		if (tree == null) {
 			return;
 		}
 		try {
 			final NodeModel written = ReportMindMapWriter.writeUnderSelection(tree);
 			if (written == null) {
-				JOptionPane.showMessageDialog(getViewportPanel(), "请先在导图中选中一个节点", "写入报表",
+				JOptionPane.showMessageDialog(panel, "请先在导图中选中一个节点", "写入报表",
 				        JOptionPane.WARNING_MESSAGE);
 				return;
 			}
-			JOptionPane.showMessageDialog(getViewportPanel(), "已写入选中节点", "写入报表",
-			        JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(panel, "已写入选中节点", "写入报表", JOptionPane.INFORMATION_MESSAGE);
 		}
 		catch (Exception e) {
-			JOptionPane.showMessageDialog(getViewportPanel(), e.getMessage(), "写入报表",
-			        JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(panel, e.getMessage(), "写入报表", JOptionPane.ERROR_MESSAGE);
 		}
 	}
 }

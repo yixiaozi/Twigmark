@@ -29,6 +29,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge
 public final class ReportEngine {
 	private static final SimpleDateFormat TIME = new SimpleDateFormat("M/d HH:mm", Locale.CHINA);
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
+	/** Bound for the duration of {@link #generateView} so nested scanners can emit stage text. */
+	private static final ThreadLocal PROGRESS = new ThreadLocal();
 
 	private ReportEngine() {
 	}
@@ -54,7 +56,9 @@ public final class ReportEngine {
 	}
 
 	/**
-	 * Same as {@link #generateView(ReportDefinition, ReportQuery)} with optional coarse progress.
+	 * Same as {@link #generateView(ReportDefinition, ReportQuery)} with optional progress.
+	 * Heavy collection stages use indeterminate progress ({@code percent &lt; 0}); only the
+	 * final assemble steps report 90–100, because mid-scan percentages would be misleading.
 	 */
 	public static ReportViewModel generateView(final ReportDefinition def, final ReportQuery query,
 	        final ReportProgress progress) {
@@ -66,86 +70,87 @@ public final class ReportEngine {
 			return empty;
 		}
 		final ReportQuery q = query == null ? new ReportQuery(null, "", "") : query;
+		PROGRESS.set(progress);
 		try {
-			notifyProgress(progress, 8, "正在识别报表「" + def.title + "」…");
+			notifyProgress(progress, -1, "正在准备「" + def.title + "」…");
 			final ReportViewModel view;
 			if (ReportCatalog.ID_TODAY.equals(def.id)) {
-				notifyProgress(progress, 20, "正在汇总今日安排与逾期…");
+				notifyProgress(progress, -1, "正在汇总今日安排与逾期…");
 				view = viewToday(q);
 			}
 			else if (ReportCatalog.ID_PLAN_VS_ACTUAL.equals(def.id)) {
-				notifyProgress(progress, 20, "正在对比计划与实际…");
+				notifyProgress(progress, -1, "正在对比计划与实际…");
 				view = viewPlanVsActual(q);
 			}
 			else if (ReportCatalog.ID_USE_TIME.equals(def.id)) {
-				notifyProgress(progress, 20, "正在统计使用时长…");
+				notifyProgress(progress, -1, "正在统计使用时长…");
 				view = viewUseTime(q);
 			}
 			else if (ReportCatalog.ID_TIME_BLOCK.equals(def.id)) {
-				notifyProgress(progress, 20, "正在划分时间块…");
+				notifyProgress(progress, -1, "正在划分时间块…");
 				view = viewTimeBlock(q);
 			}
 			else if (ReportCatalog.ID_TREND.equals(def.id)) {
-				notifyProgress(progress, 20, "正在计算趋势…");
+				notifyProgress(progress, -1, "正在计算趋势…");
 				view = viewTrend(q);
 			}
 			else if (ReportCatalog.ID_MAP_LOAD.equals(def.id)) {
-				notifyProgress(progress, 20, "正在统计导图负载…");
+				notifyProgress(progress, -1, "正在统计导图负载…");
 				view = viewMapLoad(q);
 			}
 			else if (ReportCatalog.ID_OVERDUE.equals(def.id)) {
-				notifyProgress(progress, 20, "正在扫描逾期事项…");
+				notifyProgress(progress, -1, "正在扫描逾期事项…");
 				view = viewOverdue(q);
 			}
 			else if (ReportCatalog.ID_URGENT.equals(def.id)) {
-				notifyProgress(progress, 20, "正在扫描紧急事项…");
+				notifyProgress(progress, -1, "正在扫描紧急事项…");
 				view = viewUrgent(q);
 			}
 			else if (ReportCatalog.ID_TODOS.equals(def.id)) {
-				notifyProgress(progress, 20, "正在扫描待办…");
+				notifyProgress(progress, -1, "正在扫描待办…");
 				view = viewTodos(q);
 			}
 			else if (ReportCatalog.ID_FLAGS.equals(def.id)) {
-				notifyProgress(progress, 20, "正在汇总旗标…");
+				notifyProgress(progress, -1, "正在汇总旗标…");
 				view = viewFlags(q);
 			}
 			else if (ReportCatalog.ID_POMODORO.equals(def.id)) {
-				notifyProgress(progress, 20, "正在汇总番茄钟…");
+				notifyProgress(progress, -1, "正在汇总番茄钟…");
 				view = viewPomodoro(q);
 			}
 			else if (ReportCatalog.ID_DURATION.equals(def.id)) {
-				notifyProgress(progress, 20, "正在统计时长…");
+				notifyProgress(progress, -1, "正在统计时长…");
 				view = viewDuration(q);
 			}
 			else if (ReportCatalog.ID_TARGET.equals(def.id)) {
-				notifyProgress(progress, 20, "正在汇总目标…");
+				notifyProgress(progress, -1, "正在汇总目标…");
 				view = viewTarget(q);
 			}
 			else if (ReportCatalog.ID_MIND_PULSE.equals(def.id)) {
-				notifyProgress(progress, 20, "正在计算思维脉搏…");
+				notifyProgress(progress, -1, "正在计算思维脉搏…");
 				view = viewMindPulse(q);
 			}
 			else if (ReportCatalog.ID_KEYBOARD.equals(def.id)) {
-				notifyProgress(progress, 20, "正在统计键盘热度…");
+				notifyProgress(progress, -1, "正在统计键盘热度…");
 				view = viewKeyboard(q);
 			}
 			else if (ReportCatalog.ID_RECURRING.equals(def.id)) {
-				notifyProgress(progress, 20, "正在扫描周期事项…");
+				notifyProgress(progress, -1, "正在扫描周期事项…");
 				view = viewRecurring(q);
 			}
 			else if (ReportCatalog.ID_PUBLISHED.equals(def.id)) {
-				notifyProgress(progress, 20, "正在扫描已发布项…");
+				notifyProgress(progress, -1, "正在扫描已发布项…");
 				view = viewPublished(q);
 			}
 			else {
-				notifyProgress(progress, 40, "报表类型未实现");
+				notifyProgress(progress, -1, "报表类型未实现");
 				view = new ReportViewModel(def.title, def.description);
 				view.addDetail("未实现：" + def.title);
 			}
-			notifyProgress(progress, 85, "正在整理图表与明细…");
+			notifyProgress(progress, 90, "正在整理图表与明细…");
 			view.decision = def.decision == null ? "" : def.decision;
 			view.dataSource = def.dataSource == null ? "" : def.dataSource;
-			notifyProgress(progress, 95, "数据汇总完成");
+			notifyProgress(progress, 96, "数据汇总完成");
 			return view;
 		}
 		catch (Exception e) {
@@ -156,6 +161,13 @@ public final class ReportEngine {
 			fail.emptyHint = "请检查数据源后重试";
 			return fail;
 		}
+		finally {
+			PROGRESS.remove();
+		}
+	}
+
+	private static void stage(final String message) {
+		notifyProgress((ReportProgress) PROGRESS.get(), -1, message);
 	}
 
 	private static void notifyProgress(final ReportProgress progress, final int percent, final String message) {
@@ -288,6 +300,7 @@ public final class ReportEngine {
 			plannedByDay.put(day, Long.valueOf((sum == null ? 0L : sum.longValue()) + Math.max(0, ref.taskTimeMinutes)));
 		}
 		final Map usageByDay = new TreeMap();
+		stage("正在读取活动历史…");
 		final List records = UsageStatsManager.getInstance().loadAllRecords();
 		for (int i = 0; i < records.size(); i++) {
 			final UsageRecord rec = (UsageRecord) records.get(i);
@@ -371,6 +384,7 @@ public final class ReportEngine {
 	private static ReportViewModel viewUseTime(final ReportQuery q) {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_USE_TIME);
 		final ReportViewModel view = baseView(def, q);
+		stage("正在读取活动历史…");
 		final List records = UsageStatsManager.getInstance().loadAllRecords();
 		final Map byHour = new TreeMap();
 		final Map byMap = new HashMap();
@@ -2128,9 +2142,11 @@ public final class ReportEngine {
 	}
 
 	private static List loadOccurrences(final long start, final long end) {
+		stage("正在加载日程发生…");
 		final ReminderCalendarBridge.LoadBundle bundle = ReminderCalendarBridge.loadBundle(start, end, start, end);
 		final List list = new ArrayList(bundle.occurrences);
 		Collections.sort(list, occComparator());
+		stage("日程发生已加载（" + list.size() + "）");
 		return list;
 	}
 
@@ -2145,6 +2161,7 @@ public final class ReportEngine {
 	}
 
 	private static List filterOneTimeBefore(final long now) {
+		stage("正在扫描一次性提醒…");
 		final List all = MindMapWorkspaceContextScanner.scanOneTimeReminders();
 		final List out = new ArrayList();
 		for (int i = 0; i < all.size(); i++) {

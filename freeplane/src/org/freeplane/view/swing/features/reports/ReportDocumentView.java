@@ -9,7 +9,8 @@ import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.main.application.DocumentTabSupport;
 
 /**
- * Bottom-tab document that hosts report / activity / MCP audit UIs in the mind-map area.
+ * One bottom-tab document for a single report / activity / MCP audit instance.
+ * Each open creates a new view so previous reports stay available like mind maps.
  */
 public final class ReportDocumentView extends JPanel implements IDocumentTabView {
 
@@ -17,10 +18,15 @@ public final class ReportDocumentView extends JPanel implements IDocumentTabView
 
 	private String tabTitle = "报表";
 	private Component content;
+	private final String assignmentKey;
+	private boolean closed;
 
-	public ReportDocumentView() {
+	public ReportDocumentView(final String assignmentKey) {
 		super(new BorderLayout());
-		setName("report-document");
+		this.assignmentKey = assignmentKey == null || assignmentKey.length() == 0
+		        ? ("report://adhoc/" + System.nanoTime())
+		        : assignmentKey;
+		setName("report-document-" + this.assignmentKey);
 		setOpaque(true);
 	}
 
@@ -40,6 +46,19 @@ public final class ReportDocumentView extends JPanel implements IDocumentTabView
 		refreshTabTitle();
 	}
 
+	public void setTabTitle(final String title) {
+		this.tabTitle = title == null || title.length() == 0 ? "报表" : title;
+		refreshTabTitle();
+	}
+
+	public Component getContent() {
+		return content;
+	}
+
+	public boolean isClosed() {
+		return closed;
+	}
+
 	public String getTabTitle() {
 		return tabTitle;
 	}
@@ -52,6 +71,10 @@ public final class ReportDocumentView extends JPanel implements IDocumentTabView
 		return this;
 	}
 
+	public String getTabAssignmentKey() {
+		return assignmentKey;
+	}
+
 	public void onTabActivated() {
 		// Content already in this panel; DocumentTabSupport puts us in the scroll pane.
 	}
@@ -60,7 +83,9 @@ public final class ReportDocumentView extends JPanel implements IDocumentTabView
 	}
 
 	public boolean requestClose(final boolean force) {
+		closed = true;
 		DocumentTabSupport.closeDocumentTab(this);
+		ReportDocumentService.forget(this);
 		content = null;
 		removeAll();
 		return true;

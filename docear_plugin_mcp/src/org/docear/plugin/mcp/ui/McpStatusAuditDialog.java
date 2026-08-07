@@ -51,14 +51,26 @@ public final class McpStatusAuditDialog extends JDialog {
 			panel.setOnClose(new Runnable() {
 				public void run() {
 					try {
-						cls.getMethod("closeTab").invoke(null);
+						cls.getMethod("closeContent", Component.class).invoke(null, panel);
 					}
 					catch (Exception e) {
-						LogUtils.warn("MCP audit closeTab failed: " + e.getMessage());
+						try {
+							cls.getMethod("closeTab").invoke(null);
+						}
+						catch (Exception e2) {
+							LogUtils.warn("MCP audit close failed: " + e2.getMessage());
+						}
 					}
 				}
 			});
-			cls.getMethod("showInTab", String.class, Component.class).invoke(null, title, panel);
+			// Prefer openNew so each open gets its own tab (keeps previous reports).
+			try {
+				final String key = "report://mcp-audit/" + System.nanoTime();
+				cls.getMethod("openNew", String.class, Component.class, String.class).invoke(null, title, panel, key);
+			}
+			catch (NoSuchMethodException missing) {
+				cls.getMethod("showInTab", String.class, Component.class).invoke(null, title, panel);
+			}
 			return true;
 		}
 		catch (Throwable t) {
