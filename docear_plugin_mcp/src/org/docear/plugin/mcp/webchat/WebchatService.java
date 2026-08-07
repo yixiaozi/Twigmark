@@ -20,6 +20,9 @@ import org.freeplane.core.util.LogUtils;
  */
 public final class WebchatService {
 
+	/** Pre-login / desktop-shared owner when no web account exists yet. */
+	public static final String LOCAL_OWNER = "local";
+
 	private WebchatService() {
 	}
 
@@ -32,18 +35,36 @@ public final class WebchatService {
 	}
 
 	public static boolean anyUserExists() {
-		final List dbs = openAll();
-		for (int i = 0; i < dbs.size(); i++) {
-			try {
-				if (((WebchatDatabase) dbs.get(i)).hasAnyUser()) {
-					return true;
-				}
-			}
-			catch (Exception e) {
-				LogUtils.warn("webchat hasAnyUser failed: " + e.getMessage());
+		return findFirstRealUserAcross() != null;
+	}
+
+	/**
+	 * Shared owner for LLM profiles and desktop chat history.
+	 * Prefers the single registered web account; otherwise uses {@link #LOCAL_OWNER}.
+	 */
+	public static String getSharedOwnerUsername() {
+		try {
+			final Map across = findFirstRealUserAcross();
+			if (across != null) {
+				return (String) across.get("username");
 			}
 		}
-		return false;
+		catch (Exception e) {
+			LogUtils.warn("getSharedOwnerUsername: " + e.getMessage());
+		}
+		return LOCAL_OWNER;
+	}
+
+	public static boolean isSharedLlmConfigured() {
+		try {
+			final String owner = getSharedOwnerUsername();
+			final Map endpoint = resolveLlmEndpoint(owner, "");
+			final String key = nullToEmpty((String) endpoint.get("apiKey"));
+			return key.length() > 0;
+		}
+		catch (Exception e) {
+			return DocearMcpConfig.isWebLlmConfigured();
+		}
 	}
 
 	public static Map<String, Object> register(final String usernameRaw, final String password) throws Exception {
@@ -55,6 +76,9 @@ public final class WebchatService {
 		if (username.length() < 2) {
 			throw new IllegalArgumentException("username too short");
 		}
+		if (LOCAL_OWNER.equals(username)) {
+			throw new IllegalArgumentException("username reserved");
+		}
 		if (password == null || password.length() < 4) {
 			throw new IllegalArgumentException("password too short (min 4)");
 		}
@@ -64,6 +88,7 @@ public final class WebchatService {
 		final String salt = WebchatPassword.newSalt();
 		final String hash = WebchatPassword.hash(password, salt);
 		WebchatDatabase.local().insertUser(username, hash, salt);
+		migrateLocalOwnerTo(username);
 		ensureDefaultProfileFromConfig(username);
 		return login(username, password);
 	}
@@ -79,6 +104,7 @@ public final class WebchatService {
 		}
 		// Mirror user into local DB so this PC can keep sessions/profiles even if peer file disappears.
 		mirrorUserLocally(user, password);
+		migrateLocalOwnerTo(username);
 		ensureDefaultProfileFromConfig(username);
 		final long ttlHours = DocearMcpConfig.getWebchatSessionTtlHours();
 		final long expires = System.currentTimeMillis() + Math.max(1L, ttlHours) * 3600L * 1000L;
@@ -321,7 +347,9 @@ public final class WebchatService {
 			final Map remote = findConversationAcross(username, conversationId);
 			final String title = remote != null ? nullToEmpty((String) remote.get("title")) : titleFrom(userText);
 			final long created = remote != null ? ((Long) remote.get("createdAt")).longValue() : now;
-			WebchatDatabase.local().upsertConversation(conversationId, username, title, created, now);
+			final String source = remote != null ? nullToEmpty((String) remote.get("source")) : WebchatDatabase.SOURCE_WEB;
+			final String mapKey = remote != null ? nullToEmpty((String) remote.get("mapKey")) : "";
+			WebchatDatabase.local().upsertConversation(conversationId, username, title, created, now, source, mapKey);
 		}
 		else {
 			String title = nullToEmpty((String) conv.get("title"));
@@ -333,6 +361,94 @@ public final class WebchatService {
 		WebchatDatabase.local().insertMessage(WebchatPassword.newId(), conversationId, "user", userText, "", "");
 		WebchatDatabase.local().insertMessage(WebchatPassword.newId(), conversationId, "assistant", assistantText,
 				toolTraceJson == null ? "" : toolTraceJson, model == null ? "" : model);
+	}
+
+	/** Seed / refresh default shared LLM profile from Product Settings prefs. */
+	public static void syncLlmFromProductSettings(final String baseUrl, final String apiKey, final String model) {
+		try {
+			final String owner = getSharedOwnerUsername();
+			final String key = nullToEmpty(apiKey);
+			if (key.length() == 0 && !DocearMcpConfig.isWebLlmConfigured()) {
+				// Nothing to seed; keep existing DB profiles.
+				if (listProfiles(owner).isEmpty()) {
+					return;
+				}
+			}
+			final List profiles = listProfiles(owner);
+			String id = "";
+			for (int i = 0; i < profiles.size(); i++) {
+				final Map p = (Map) profiles.get(i);
+				if (Boolean.TRUE.equals(p.get("isDefault"))) {
+					id = nullToEmpty((String) p.get("id"));
+					break;
+				}
+			}
+			final Map jsonBody = new LinkedHashMap();
+			if (id.length() > 0) {
+				jsonBody.put("id", JsonValue.ofString(id));
+			}
+			jsonBody.put("name", JsonValue.ofString("OpenRouter"));
+			jsonBody.put("baseUrl", JsonValue.ofString(
+					baseUrl == null || baseUrl.trim().length() == 0 ? DocearMcpConfig.getWebLlmBaseUrl()
+							: baseUrl.trim()));
+			if (key.length() > 0) {
+				jsonBody.put("apiKey", JsonValue.ofString(key));
+			}
+			jsonBody.put("model", JsonValue.ofString(
+					model == null || model.trim().length() == 0 ? DocearMcpConfig.getWebLlmModel() : model.trim()));
+			jsonBody.put("isDefault", JsonValue.ofBoolean(true));
+			saveProfile(owner, jsonBody);
+		}
+		catch (Exception e) {
+			LogUtils.warn("syncLlmFromProductSettings: " + e.getMessage());
+		}
+	}
+
+	public static List loadDesktopMessages(final String mapKey) throws Exception {
+		final String owner = getSharedOwnerUsername();
+		final Map conv = findDesktopConversation(owner, mapKey);
+		if (conv == null) {
+			return new ArrayList();
+		}
+		final Map bundle = getConversationBundle(owner, (String) conv.get("id"));
+		final List messages = (List) bundle.get("messages");
+		return messages == null ? new ArrayList() : messages;
+	}
+
+	public static void appendDesktopChatTurn(final String mapKey, final String title, final String userText,
+			final String assistantText, final String model) throws Exception {
+		final String owner = getSharedOwnerUsername();
+		final String conversationId = ensureDesktopConversation(owner, mapKey, title);
+		appendChatTurn(owner, conversationId, userText, assistantText, "", model);
+	}
+
+	public static void clearDesktopConversation(final String mapKey) throws Exception {
+		final String owner = getSharedOwnerUsername();
+		final Map conv = findDesktopConversation(owner, mapKey);
+		if (conv == null) {
+			return;
+		}
+		final String id = (String) conv.get("id");
+		WebchatDatabase.local().deleteConversationMessages(id);
+		WebchatDatabase.local().deleteConversation(id);
+	}
+
+	public static String ensureDesktopConversation(final String username, final String mapKey, final String title)
+			throws Exception {
+		Map conv = findDesktopConversation(username, mapKey);
+		final long now = System.currentTimeMillis();
+		if (conv != null) {
+			final String id = (String) conv.get("id");
+			final String existingTitle = nullToEmpty((String) conv.get("title"));
+			final String nextTitle = title != null && title.trim().length() > 0 ? title.trim() : existingTitle;
+			WebchatDatabase.local().upsertConversation(id, username, nextTitle,
+					((Long) conv.get("createdAt")).longValue(), now, WebchatDatabase.SOURCE_DESKTOP, mapKey);
+			return id;
+		}
+		final String id = WebchatPassword.newId();
+		final String t = title == null || title.trim().length() == 0 ? "Desktop" : title.trim();
+		WebchatDatabase.local().upsertConversation(id, username, t, now, now, WebchatDatabase.SOURCE_DESKTOP, mapKey);
+		return id;
 	}
 
 	public static List toJsonMaps(final List rows) {
@@ -399,6 +515,62 @@ public final class WebchatService {
 		catch (Exception e) {
 			LogUtils.warn("ensureDefaultProfileFromConfig: " + e.getMessage());
 		}
+	}
+
+	private static void migrateLocalOwnerTo(final String username) {
+		try {
+			WebchatDatabase.local().reassignUsername(LOCAL_OWNER, username);
+			try {
+				WebchatDatabase.local().deleteUser(LOCAL_OWNER);
+			}
+			catch (Exception ignored) {
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("migrateLocalOwnerTo: " + e.getMessage());
+		}
+	}
+
+	private static Map findFirstRealUserAcross() {
+		final List dbs = openAll();
+		for (int i = 0; i < dbs.size(); i++) {
+			try {
+				final String u = ((WebchatDatabase) dbs.get(i)).findAnyUsername();
+				if (u != null && u.length() > 0 && !LOCAL_OWNER.equals(u)) {
+					final Map user = ((WebchatDatabase) dbs.get(i)).findUser(u);
+					if (user != null) {
+						return user;
+					}
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		return null;
+	}
+
+	private static Map findDesktopConversation(final String username, final String mapKey) {
+		if (mapKey == null || mapKey.length() == 0) {
+			return null;
+		}
+		final List dbs = openAll();
+		Map best = null;
+		for (int i = 0; i < dbs.size(); i++) {
+			try {
+				final WebchatDatabase db = (WebchatDatabase) dbs.get(i);
+				final Map row = db.findConversationByMapKey(username, mapKey);
+				if (row == null) {
+					continue;
+				}
+				if (best == null
+						|| ((Long) row.get("updatedAt")).longValue() >= ((Long) best.get("updatedAt")).longValue()) {
+					best = row;
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		return best;
 	}
 
 	private static void mirrorUserLocally(final Map user, final String password) {

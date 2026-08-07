@@ -8,9 +8,12 @@
 
 - API Key 生成与认证（`Authorization: Bearer` / `X-Api-Key`）；公网绑定（非 loopback）强制要求 Key
 - 网页版 `/web/`：账号密码登录（仅允许注册一次）；大模型配置与对话写入 `webchat-<MAC>.db`；同步后跨机汇总历史
+- 桌面右侧 AI 聊天支持 OpenRouter（及 OpenAI 兼容），可切换后端与模型；与网页共用 `llm_profiles`
+- 桌面聊天记录写入 webchat 数据库（按导图 `map_key`）；网页历史显示「桌面 / 网页」来源
+- 网页聊天 UI 重做：布局、Markdown 基础渲染、工具调用标记
 - Web 助手系统提示词：教模型正确使用 MCP（先读选中、批量 add_nodes、禁编造 ID 等）
 - 默认/预设支持 OpenRouter（`openrouter.ai/api/v1` + 厂商/模型名）；域名反代说明见 `docs/WEB_DOMAIN.md`
-- 产品设置 MCP 页：认证、公网一键绑定与 Web LLM 种子配置
+- 产品设置 MCP 页：认证、公网一键绑定与 Web LLM 种子配置（保存时同步到 webchat 库）
 
 ### 国际化
 

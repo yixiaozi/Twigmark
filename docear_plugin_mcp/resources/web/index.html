@@ -4,84 +4,124 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Twigmark Web</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div id="auth-view" class="auth-view">
-      <div class="auth-card">
-        <h1>Twigmark Web</h1>
-        <p class="muted" id="auth-hint">登录后可对话、配置大模型，并查看各电脑同步过来的历史。</p>
-        <label>账号 <input id="auth-user" autocomplete="username" /></label>
-        <label>密码 <input id="auth-pass" type="password" autocomplete="current-password" /></label>
-        <div class="auth-actions">
-          <button type="button" id="btn-login" class="primary">登录</button>
-          <button type="button" id="btn-register" class="ghost">注册</button>
+      <div class="auth-shell">
+        <div class="auth-brand">
+          <div class="logo-mark" aria-hidden="true"></div>
+          <h1>Twigmark</h1>
+          <p class="lede">导图工作台的网页对话端。大模型配置与桌面侧栏共用同一数据库。</p>
         </div>
-        <p id="auth-error" class="err"></p>
+        <div class="auth-card">
+          <p class="muted" id="auth-hint">登录后可对话、配置 OpenRouter，并汇总各电脑同步的历史。</p>
+          <label>账号 <input id="auth-user" autocomplete="username" /></label>
+          <label>密码 <input id="auth-pass" type="password" autocomplete="current-password" /></label>
+          <div class="auth-actions">
+            <button type="button" id="btn-login" class="primary">登录</button>
+            <button type="button" id="btn-register" class="ghost">首次注册</button>
+          </div>
+          <p id="auth-error" class="err"></p>
+        </div>
       </div>
     </div>
 
     <div id="app-view" class="app hidden">
       <aside class="sidebar">
+        <div class="side-brand">
+          <div class="logo-mark small" aria-hidden="true"></div>
+          <div>
+            <strong>Twigmark</strong>
+            <span class="muted tiny block" id="db-meta">…</span>
+          </div>
+        </div>
         <div class="side-top">
-          <strong>历史</strong>
+          <span class="side-label">对话</span>
           <button type="button" id="btn-new" class="ghost small">新对话</button>
         </div>
-        <p id="db-meta" class="muted tiny"></p>
         <div id="conv-list" class="conv-list"></div>
       </aside>
+
       <section class="main">
         <header class="top">
           <div class="brand">
-            <strong id="who">Twigmark Web</strong>
+            <div>
+              <strong id="who">Twigmark Web</strong>
+              <p class="muted tiny" id="conv-title">选择或创建对话</p>
+            </div>
             <span id="status-pill" class="pill">…</span>
           </div>
           <div class="top-actions">
-            <select id="profile-select" title="大模型配置"></select>
-            <button type="button" id="btn-llm" class="ghost">大模型</button>
+            <label class="inline-field">
+              <span>模型</span>
+              <select id="profile-select" title="大模型配置（与桌面共用）"></select>
+            </label>
+            <button type="button" id="btn-llm" class="ghost">配置</button>
             <button type="button" id="btn-logout" class="ghost">退出</button>
           </div>
         </header>
+
         <section id="llm-panel" class="settings hidden">
-          <h3>大模型配置（存入本机 webchat 数据库）</h3>
-          <label
-            >服务商
-            <select id="llm-provider">
-              <option value="openrouter">OpenRouter（推荐）</option>
-              <option value="openai">OpenAI 官方</option>
-              <option value="custom">自定义 OpenAI 兼容</option>
-            </select>
-          </label>
-          <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
-          <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
-          <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
-          <label
-            >模型
-            <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
-            <datalist id="llm-model-hints">
-              <option value="openai/gpt-4o-mini"></option>
-              <option value="openai/gpt-4o"></option>
-              <option value="anthropic/claude-3.5-sonnet"></option>
-              <option value="google/gemini-2.0-flash-001"></option>
-              <option value="deepseek/deepseek-chat"></option>
-            </datalist>
-          </label>
-          <p class="muted tiny">
-            OpenRouter：在 openrouter.ai 创建 Key，Base URL 用 https://openrouter.ai/api/v1，模型名形如
-            openai/gpt-4o-mini。
-          </p>
-          <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认</label>
+          <div class="settings-head">
+            <h3>大模型配置</h3>
+            <p class="muted tiny">写入本机 webchat 数据库，桌面右侧聊天可直接选用，无需重复填写。</p>
+          </div>
+          <div class="settings-grid">
+            <label
+              >服务商
+              <select id="llm-provider">
+                <option value="openrouter">OpenRouter（推荐）</option>
+                <option value="openai">OpenAI 官方</option>
+                <option value="custom">自定义 OpenAI 兼容</option>
+              </select>
+            </label>
+            <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
+            <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
+            <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
+            <label class="span-2"
+              >模型
+              <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
+              <datalist id="llm-model-hints">
+                <option value="openai/gpt-4o-mini"></option>
+                <option value="openai/gpt-4o"></option>
+                <option value="anthropic/claude-3.5-sonnet"></option>
+                <option value="google/gemini-2.0-flash-001"></option>
+                <option value="deepseek/deepseek-chat"></option>
+                <option value="qwen/qwen-2.5-72b-instruct"></option>
+              </datalist>
+            </label>
+          </div>
+          <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认（桌面与网页共用）</label>
           <div class="settings-row">
-            <button type="button" id="btn-llm-save" class="primary">保存到数据库</button>
-            <button type="button" id="btn-llm-new" class="ghost">新建配置</button>
-            <button type="button" id="btn-llm-del" class="ghost">删除当前</button>
+            <button type="button" id="btn-llm-save" class="primary">保存</button>
+            <button type="button" id="btn-llm-new" class="ghost">新建</button>
+            <button type="button" id="btn-llm-del" class="ghost">删除</button>
             <span id="llm-note" class="muted"></span>
           </div>
         </section>
-        <main id="chat" class="chat" aria-live="polite"></main>
+
+        <main id="chat" class="chat" aria-live="polite">
+          <div class="empty-state" id="empty-state">
+            <h2>从这里操作导图</h2>
+            <p>提问、整理节点或让模型调用 MCP 工具。历史与桌面侧栏写入同一 webchat 数据库。</p>
+          </div>
+        </main>
+
         <footer class="composer">
-          <textarea id="input" rows="3" placeholder="询问或操作导图…"></textarea>
-          <button type="button" id="btn-send" class="primary">发送</button>
+          <div class="composer-box">
+            <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <div class="composer-bar">
+              <span class="muted tiny" id="composer-hint">工具调用由服务端完成</span>
+              <button type="button" id="btn-send" class="primary">发送</button>
+            </div>
+          </div>
         </footer>
       </section>
     </div>

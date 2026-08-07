@@ -7,7 +7,7 @@
 | MCP API Key | 可选；公网绑定强制开启（保护 `/mcp`） |
 | 公网监听 | 主机设为 `0.0.0.0`（或非 loopback） |
 | 网页账号 | `/web/` **账号密码**；**只允许注册一次**（单人使用） |
-| 大模型 | 推荐 **OpenRouter**（`https://openrouter.ai/api/v1`，模型如 `openai/gpt-4o-mini`） |
+| 大模型 | 推荐 **OpenRouter**（`https://openrouter.ai/api/v1`，模型如 `openai/gpt-4o-mini`）；配置写入 `webchat-*.db` 的 `llm_profiles`，**桌面右侧聊天与网页共用** |
 | 大模型库 | 每台电脑 `webchat-<MAC>.db`；配置与对话写入本机库 |
 | 跨机历史 | 数据目录同步后，列表合并所有 `webchat-*.db` |
 | 单独域名 | 见 [WEB_DOMAIN.md](WEB_DOMAIN.md)（DNS + Caddy/Nginx 反代） |

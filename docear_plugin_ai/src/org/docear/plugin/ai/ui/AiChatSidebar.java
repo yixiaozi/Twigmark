@@ -14,7 +14,9 @@ import java.awt.event.KeyEvent;
 import java.util.List;
 
 import javax.swing.BorderFactory;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -24,6 +26,7 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 
+import org.docear.plugin.ai.DocearAiConfig;
 import org.docear.plugin.ai.DocearAiController;
 import org.docear.plugin.ai.backend.AiChatStreamListener;
 import org.docear.plugin.ai.chat.AiChatMessage;
@@ -32,6 +35,7 @@ import org.docear.plugin.ai.chat.AiChatSessionManager;
 import org.docear.plugin.ai.prompt.AiPromptBuilder;
 import org.docear.plugin.ai.prompt.AiPromptBuildProgress;
 import org.docear.plugin.ai.prompt.AiSelectedNodeExtractor;
+import org.docear.plugin.core.settings.McpRuntimeFacade;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -54,6 +58,9 @@ public class AiChatSidebar extends JPanel {
     private final AiChatStatusBar statusBar;
     private final AiKeywordButtonBar keywordBar;
     private final DocearAiController aiController;
+    private final JComboBox backendSelect;
+    private final JComboBox profileSelect;
+    private boolean suppressModelEvents;
 
     private MapModel currentMap;
     private NodeModel focusNode;
@@ -66,6 +73,33 @@ public class AiChatSidebar extends JPanel {
 
         statusBar = new AiChatStatusBar();
         keywordBar = new AiKeywordButtonBar();
+        backendSelect = new JComboBox(new String[] {
+                "OpenRouter / \u517c\u5bb9",
+                "Copilot CLI"
+        });
+        profileSelect = new JComboBox();
+        profileSelect.setToolTipText("\u4e0e\u7f51\u9875\u804a\u5929\u5171\u7528\u7684\u5927\u6a21\u578b\u914d\u7f6e\uff08webchat \u6570\u636e\u5e93\uff09");
+        backendSelect.setToolTipText("\u4fa7\u680f\u804a\u5929\u540e\u7aef\uff1aOpenRouter \u4e0e\u7f51\u9875\u5171\u7528\u914d\u7f6e");
+
+        JPanel modelRow = new JPanel(new BorderLayout(4, 0));
+        modelRow.setBorder(BorderFactory.createEmptyBorder(0, 4, 2, 4));
+        modelRow.setOpaque(false);
+        JPanel modelLeft = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+        modelLeft.setOpaque(false);
+        modelLeft.add(new JLabel("\u540e\u7aef"));
+        modelLeft.add(backendSelect);
+        modelRow.add(modelLeft, BorderLayout.WEST);
+        JPanel modelRight = new JPanel(new BorderLayout(4, 0));
+        modelRight.setOpaque(false);
+        modelRight.add(new JLabel("\u6a21\u578b"), BorderLayout.WEST);
+        modelRight.add(profileSelect, BorderLayout.CENTER);
+        modelRow.add(modelRight, BorderLayout.CENTER);
+
+        JPanel north = new JPanel(new BorderLayout());
+        north.setOpaque(false);
+        north.add(statusBar, BorderLayout.NORTH);
+        north.add(modelRow, BorderLayout.SOUTH);
+
         messagesPanel = new JPanel();
         messagesPanel.setLayout(new javax.swing.BoxLayout(messagesPanel, javax.swing.BoxLayout.Y_AXIS));
         messagesPanel.setBackground(DocearUiTheme.SURFACE);
@@ -108,11 +142,12 @@ public class AiChatSidebar extends JPanel {
         southPanel.add(inputScroll, BorderLayout.CENTER);
         southPanel.add(buttonRow, BorderLayout.SOUTH);
 
-        add(statusBar, BorderLayout.NORTH);
+        add(north, BorderLayout.NORTH);
         add(messagesScroll, BorderLayout.CENTER);
         add(southPanel, BorderLayout.SOUTH);
 
         bindActions();
+        reloadModelSelectors();
         reloadKeywordButtons();
         initializeForCurrentMap();
         LogUtils.info("AiChatSidebar initialized.");
@@ -150,6 +185,22 @@ public class AiChatSidebar extends JPanel {
                     aiController.getPromptBuilder().getTemplateStore().openTemplateFile();
                     reloadKeywordButtons();
                 }
+            }
+        });
+        backendSelect.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (suppressModelEvents) {
+                    return;
+                }
+                applyBackendSelection();
+            }
+        });
+        profileSelect.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                if (suppressModelEvents) {
+                    return;
+                }
+                applyProfileSelection();
             }
         });
         keywordBar.setKeywordActionListener(new AiKeywordButtonBar.KeywordActionListener() {
@@ -218,7 +269,12 @@ public class AiChatSidebar extends JPanel {
                         return;
                     }
                     if (!aiController.getBackend().isAvailable()) {
-                        finishWithError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002\u8bf7\u5148\u5b89\u88c5\u5e76\u767b\u5f55\u3002");
+                        if (aiController.isOpenRouterBackend()) {
+                            finishWithError("\u672a\u914d\u7f6e OpenRouter\u3002\u8bf7\u5728\u4ea7\u54c1\u8bbe\u7f6e \u2192 MCP \u6216\u7f51\u9875\u804a\u5929\u4e2d\u914d\u7f6e API Key\u3002");
+                        }
+                        else {
+                            finishWithError("\u672a\u68c0\u6d4b\u5230 Copilot CLI\u3002\u8bf7\u5148\u5b89\u88c5\u5e76\u767b\u5f55\uff0c\u6216\u5207\u6362\u5230 OpenRouter\u3002");
+                        }
                         return;
                     }
                     final AiPromptBuildProgress progress = new AiPromptBuildProgress() {
@@ -497,6 +553,98 @@ public class AiChatSidebar extends JPanel {
         keywordBar.setKeywords(keywords);
     }
 
+    public void reloadModelSelectors() {
+        suppressModelEvents = true;
+        try {
+            final DocearAiConfig config = new DocearAiConfig();
+            final String backend = config.getBackendType();
+            backendSelect.setSelectedIndex(
+                    "copilot_cli".equalsIgnoreCase(backend) ? 1 : 0);
+            final DefaultComboBoxModel model = new DefaultComboBoxModel();
+            final List profiles = McpRuntimeFacade.safeListProfiles();
+            final String selectedId = config.getLlmProfileId();
+            int selectedIndex = 0;
+            if (profiles == null || profiles.isEmpty()) {
+                model.addElement(new ProfileItem("", McpRuntimeFacade.safeIsLlmConfigured()
+                        ? "\u9ed8\u8ba4\uff08\u4ea7\u54c1\u8bbe\u7f6e\uff09"
+                        : "\u672a\u914d\u7f6e\uff08\u8bf7\u5148\u5728\u8bbe\u7f6e/\u7f51\u9875\u914d\u7f6e\uff09"));
+            }
+            else {
+                for (int i = 0; i < profiles.size(); i++) {
+                    final Object rowObj = profiles.get(i);
+                    if (!(rowObj instanceof java.util.Map)) {
+                        continue;
+                    }
+                    final java.util.Map row = (java.util.Map) rowObj;
+                    final String id = row.get("id") == null ? "" : String.valueOf(row.get("id"));
+                    final String name = row.get("name") == null ? "LLM" : String.valueOf(row.get("name"));
+                    final String modelName = row.get("model") == null ? "" : String.valueOf(row.get("model"));
+                    final boolean isDefault = Boolean.TRUE.equals(row.get("isDefault"));
+                    final String label = (isDefault ? "\u2605 " : "") + name
+                            + (modelName.length() > 0 ? (" · " + modelName) : "");
+                    model.addElement(new ProfileItem(id, label));
+                    if (selectedId != null && selectedId.equals(id)) {
+                        selectedIndex = model.getSize() - 1;
+                    }
+                    else if ((selectedId == null || selectedId.length() == 0) && isDefault) {
+                        selectedIndex = model.getSize() - 1;
+                    }
+                }
+            }
+            profileSelect.setModel(model);
+            if (model.getSize() > 0) {
+                profileSelect.setSelectedIndex(Math.max(0, Math.min(selectedIndex, model.getSize() - 1)));
+            }
+            final boolean openRouter = backendSelect.getSelectedIndex() == 0;
+            profileSelect.setEnabled(openRouter);
+        }
+        finally {
+            suppressModelEvents = false;
+        }
+    }
+
+    private void applyBackendSelection() {
+        final DocearAiConfig config = new DocearAiConfig();
+        if (backendSelect.getSelectedIndex() == 1) {
+            config.setBackendType("copilot_cli");
+        }
+        else {
+            config.setBackendType("openrouter");
+        }
+        profileSelect.setEnabled(backendSelect.getSelectedIndex() == 0);
+        if (aiController != null) {
+            aiController.reloadBackend();
+        }
+        refreshContextStatus();
+    }
+
+    private void applyProfileSelection() {
+        final Object item = profileSelect.getSelectedItem();
+        if (!(item instanceof ProfileItem)) {
+            return;
+        }
+        final DocearAiConfig config = new DocearAiConfig();
+        config.setLlmProfileId(((ProfileItem) item).id);
+        if (aiController != null) {
+            aiController.reloadBackend();
+        }
+        refreshContextStatus();
+    }
+
+    private static final class ProfileItem {
+        final String id;
+        final String label;
+
+        ProfileItem(final String id, final String label) {
+            this.id = id == null ? "" : id;
+            this.label = label == null ? "" : label;
+        }
+
+        public String toString() {
+            return label;
+        }
+    }
+
     private void restoreChatHistory(MapModel map) {
         if (aiController == null || map == null) {
             return;
@@ -675,6 +823,9 @@ public class AiChatSidebar extends JPanel {
 
     private String normalizeReply(String reply) {
         if (reply == null || reply.trim().length() == 0) {
+            if (aiController != null && aiController.isOpenRouterBackend()) {
+                return "\u672a\u6536\u5230\u6709\u6548\u56de\u590d\u3002\u8bf7\u68c0\u67e5 OpenRouter API Key\u3001\u6a21\u578b\u540d\u4e0e\u7f51\u7edc\u3002";
+            }
             return "\u672a\u6536\u5230\u6709\u6548\u56de\u590d\u3002\u8bf7\u5728 PowerShell \u4e2d\u6d4b\u8bd5\uff1acopilot -p \"\u6d4b\u8bd5\" -s";
         }
         return reply.replace("\r\n", "\n").replace('\r', '\n');

@@ -585,6 +585,10 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty("mcp.web.llm.model", model);
 		rc.setProperty("mcp.cursorPlugin.sync.enabled", mcpCursorSync.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.audit.enabled", mcpAuditEnabled.isSelected() ? "true" : "false");
+		final McpRuntimeFacade.Backend llmBackend = McpRuntimeFacade.get();
+		if (llmBackend != null) {
+			llmBackend.syncLlmFromProductSettings(baseUrl, passwordValue(mcpLlmApiKeyField), model);
+		}
 	}
 
 	private boolean validateMcpSettings() {
