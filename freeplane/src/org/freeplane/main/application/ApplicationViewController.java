@@ -559,10 +559,15 @@ class ApplicationViewController extends FrameController {
 		// Preserve the existing icon image under Mac OS X 
 		if (!Compat.isMacOsX()) {
 			final ImageIcon mWindowIcon;
+			final String appName = ResourceController.getResourceController().getProperty("ApplicationName", "Freeplane");
+			final boolean twigmark = "Twigmark".equals(appName) || "Docear".equals(appName);
 			if (Compat.isLowerJdk(Compat.VERSION_1_6_0)) {
-				if(ResourceController.getResourceController().getProperty("ApplicationName", "Freeplane").equals("Docear")) {
-					mWindowIcon = new ImageIcon(ResourceController.getResourceController().getResource(
-						    "/images/docear16.png"));
+				if (twigmark) {
+					java.net.URL iconUrl = ResourceController.getResourceController().getResource("/images/twigmark16.png");
+					if (iconUrl == null) {
+						iconUrl = ResourceController.getResourceController().getResource("/images/docear16.png");
+					}
+					mWindowIcon = new ImageIcon(iconUrl);
 				}
 				else {
 					mWindowIcon = new ImageIcon(ResourceController.getResourceController().getResource(
@@ -571,9 +576,12 @@ class ApplicationViewController extends FrameController {
 				
 			}
 			else {
-				if(ResourceController.getResourceController().getProperty("ApplicationName", "Freeplane").equals("Docear")) {
-					mWindowIcon = new ImageIcon(ResourceController.getResourceController().getResource(
-						    "/images/docear32.png"));
+				if (twigmark) {
+					java.net.URL iconUrl = ResourceController.getResourceController().getResource("/images/twigmark32.png");
+					if (iconUrl == null) {
+						iconUrl = ResourceController.getResourceController().getResource("/images/docear32.png");
+					}
+					mWindowIcon = new ImageIcon(iconUrl);
 				}
 				else {
 					mWindowIcon = new ImageIcon(ResourceController.getResourceController().getResource(

@@ -3,7 +3,7 @@
   <headerType>gui</headerType>
   <jar>freeplanelauncher.jar</jar>
   <outfile>docear.exe</outfile>
-  <errTitle></errTitle>
+  <errTitle>Twigmark</errTitle>
   <cmdLine></cmdLine>
   <chdir></chdir>
   <priority>normal</priority>
@@ -12,7 +12,7 @@
   <customProcName>false</customProcName>
   <stayAlive>true</stayAlive>
   <manifest></manifest>
-  <icon>docear.ico</icon>
+  <icon>twigmark.ico</icon>
   <jre>
     <path>jre</path>
     <minVersion>1.6.0</minVersion>
@@ -20,4 +20,16 @@
     <jdkPreference>preferJre</jdkPreference>
     <!-- Profile is {workingDirectory}/data; see working-directory.txt next to the exe. -->
   </jre>
+  <versionInfo>
+    <fileVersion>1.2.0.0</fileVersion>
+    <txtFileVersion>1.2.0</txtFileVersion>
+    <fileDescription>Twigmark</fileDescription>
+    <copyright>Mantou / GPL</copyright>
+    <productVersion>1.2.0.0</productVersion>
+    <txtProductVersion>1.2.0</txtProductVersion>
+    <productName>Twigmark</productName>
+    <companyName>Mantou</companyName>
+    <internalName>Twigmark</internalName>
+    <originalFilename>docear.exe</originalFilename>
+  </versionInfo>
 </launch4jConfig>

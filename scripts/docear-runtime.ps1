@@ -100,7 +100,10 @@ function Start-DocearFromInstallDir {
         return $true
     }
 
-    $launcherPath = Join-Path $InstallDir "docear.exe"
+    $launcherPath = Join-Path $InstallDir "twigmark.exe"
+    if (!(Test-Path $launcherPath)) {
+        $launcherPath = Join-Path $InstallDir "docear.exe"
+    }
     if (!(Test-Path $launcherPath)) {
         $launcherPath = Join-Path $InstallDir "Docear.exe"
     }
