@@ -67,7 +67,9 @@ public final class WebchatService {
 		}
 	}
 
-	public static Map<String, Object> register(final String usernameRaw, final String password) throws Exception {
+	public static Map<String, Object> register(final String usernameRaw, final String password,
+			final String registrationToken) throws Exception {
+		WebSecurity.validateRegistrationAllowed(registrationToken);
 		// Single-owner product: only the first account may be created.
 		if (anyUserExists()) {
 			throw new IllegalArgumentException("registration closed: only one account is allowed");
@@ -79,8 +81,9 @@ public final class WebchatService {
 		if (LOCAL_OWNER.equals(username)) {
 			throw new IllegalArgumentException("username reserved");
 		}
-		if (password == null || password.length() < 4) {
-			throw new IllegalArgumentException("password too short (min 4)");
+		final int minPass = WebSecurity.minPasswordLength();
+		if (password == null || password.length() < minPass) {
+			throw new IllegalArgumentException("password too short (min " + minPass + ")");
 		}
 		if (findUserAcross(username) != null) {
 			throw new IllegalArgumentException("username already exists");
@@ -114,8 +117,6 @@ public final class WebchatService {
 		result.put("token", token);
 		result.put("username", username);
 		result.put("expiresAt", Long.valueOf(expires));
-		result.put("localDb", localDbPath());
-		result.put("dbCount", Integer.valueOf(loadedDatabaseCount()));
 		return result;
 	}
 
@@ -192,6 +193,7 @@ public final class WebchatService {
 		if (baseUrl.endsWith("/")) {
 			baseUrl = baseUrl.substring(0, baseUrl.length() - 1);
 		}
+		WebSecurity.validateLlmBaseUrl(baseUrl);
 		String apiKey = body.containsKey("apiKey") ? nullToEmpty(body.get("apiKey").asString()) : "";
 		if (apiKey.length() == 0) {
 			// Keep existing secret if client omitted it
@@ -255,6 +257,7 @@ public final class WebchatService {
 		if (key.length() == 0) {
 			throw new IllegalStateException("LLM API key is empty for the selected profile.");
 		}
+		WebSecurity.validateLlmBaseUrl(nullToEmpty((String) secret.get("baseUrl")));
 		return secret;
 	}
 
@@ -327,8 +330,25 @@ public final class WebchatService {
 		});
 		final Map result = new LinkedHashMap();
 		result.put("conversation", conv);
-		result.put("messages", messages);
+		result.put("messages", sanitizeMessagesForWeb(messages));
 		return result;
+	}
+
+	/** Strip tool traces from web API responses — they may contain file paths and private context. */
+	private static List sanitizeMessagesForWeb(final List messages) {
+		final List out = new ArrayList();
+		for (int i = 0; i < messages.size(); i++) {
+			final Map src = (Map) messages.get(i);
+			final Map copy = new LinkedHashMap();
+			copy.put("id", src.get("id"));
+			copy.put("conversationId", src.get("conversationId"));
+			copy.put("role", src.get("role"));
+			copy.put("content", src.get("content"));
+			copy.put("model", src.get("model"));
+			copy.put("createdAt", src.get("createdAt"));
+			out.add(copy);
+		}
+		return out;
 	}
 
 	public static String createConversation(final String username, final String title) throws Exception {

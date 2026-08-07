@@ -293,8 +293,16 @@
         authHint.textContent = "请登录。推荐配置 OpenRouter 后即可对导图提问。";
         if (regBtn) regBtn.classList.add("hidden");
       }
-      dbMeta.textContent = (s.webchatDbCount || 1) + " 库 · " + (s.machineName || s.machineId || "");
-      if (token) setStatus("就绪", "ok");
+      if (token) {
+        return api("/me").then(function (meRes) {
+          if (meRes.ok && meRes.body) {
+            dbMeta.textContent =
+              (meRes.body.webchatDbCount || 1) + " 库 · " + (meRes.body.machineName || meRes.body.machineId || "");
+          }
+          setStatus("就绪", "ok");
+        });
+      }
+      dbMeta.textContent = "";
     });
   }
 

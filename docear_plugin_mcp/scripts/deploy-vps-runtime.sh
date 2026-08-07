@@ -58,6 +58,7 @@ exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xms256m -Xmx1024m -XX:+UseG1GC
   -Dmcp.auth.enabled=true \\
   -Dmcp.auth.apiKey=${MCP_API_KEY} \\
   -Dmcp.web.enabled=true \\
+  -Dmcp.web.readOnlyTools=true \\
   -Dmcp.skipFullTagScan=true \\
   -Dmcp.edtTimeoutMs=90000 \\
   -Duser.language=zh -Duser.country=CN \\

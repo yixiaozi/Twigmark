@@ -315,6 +315,10 @@ public final class McpHttpServer {
 		headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS, HEAD");
 		headers.put("Access-Control-Allow-Headers",
 				"Content-Type, Accept, Authorization, X-Api-Key, X-Session-Token, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
+		headers.put("X-Content-Type-Options", "nosniff");
+		headers.put("X-Frame-Options", "DENY");
+		headers.put("Referrer-Policy", "no-referrer");
+		headers.put("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
 		for (final Map.Entry<String, String> entry : headers.entrySet()) {
 			exchange.getResponseHeaders().set(entry.getKey(), entry.getValue());
 		}

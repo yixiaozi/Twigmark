@@ -75,7 +75,7 @@ public final class McpWebAgent {
 		}
 		messages.add(message("user", message));
 
-		final List<JsonValue> openaiTools = toOpenAiTools(protocol.getToolDefinitions());
+		final List<JsonValue> openaiTools = toOpenAiTools(protocol.getWebToolDefinitions());
 		final List<JsonValue> toolTrace = new ArrayList<JsonValue>();
 		String finalReply = "";
 		final int maxRounds = DocearMcpConfig.getWebLlmMaxToolRounds();
@@ -122,6 +122,9 @@ public final class McpWebAgent {
 				String toolText;
 				boolean ok = true;
 				try {
+					if (DocearMcpConfig.isWebReadOnlyTools() && McpProtocol.isWriteTool(toolName)) {
+						throw new IllegalStateException("write tools are disabled for web chat");
+					}
 					injectWebAudit(args);
 					toolText = protocol.invokeToolText(toolName, args);
 				}

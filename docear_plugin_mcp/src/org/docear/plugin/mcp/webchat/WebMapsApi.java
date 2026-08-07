@@ -70,7 +70,7 @@ public final class WebMapsApi {
 		}
 		catch (Exception e) {
 			LogUtils.warn("get map json failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 

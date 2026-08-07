@@ -956,7 +956,22 @@ public final class McpMindMapService {
 
 	private static JsonValue parseMindMapFileToJson(final File file, final int maxDepth, final boolean includeFolded)
 			throws Exception {
-		final SAXParser saxParser = SAXParserFactory.newInstance().newSAXParser();
+		final javax.xml.parsers.SAXParserFactory factory = javax.xml.parsers.SAXParserFactory.newInstance();
+		try {
+			factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+		}
+		catch (Exception ignored) {
+		}
+		try {
+			factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+			factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+			factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+		}
+		catch (Exception ignored) {
+		}
+		factory.setXIncludeAware(false);
+		factory.setNamespaceAware(true);
+		final SAXParser saxParser = factory.newSAXParser();
 		final List stack = new ArrayList();
 		final List roots = new ArrayList();
 		saxParser.parse(file, new DefaultHandler() {
@@ -1143,13 +1158,11 @@ public final class McpMindMapService {
 		final String cacheKey = normalizePathForMatch(trimmed);
 		final File cached = (File) PATH_RESOLVE_CACHE.get(cacheKey);
 		if (cached != null && cached.isFile()) {
-			return cached;
+			return assertAccessibleMindMap(cached);
 		}
 		final File direct = new File(trimmed);
 		if (direct.isFile() && direct.exists()) {
-			final File canonical = canonicalFile(direct);
-			PATH_RESOLVE_CACHE.put(cacheKey, canonical);
-			return canonical;
+			return rememberResolved(cacheKey, direct);
 		}
 
 		final List allFiles = new ArrayList();
@@ -1200,9 +1213,32 @@ public final class McpMindMapService {
 	}
 
 	private static File rememberResolved(final String cacheKey, final File file) {
-		final File canonical = canonicalFile(file);
+		final File canonical = assertAccessibleMindMap(canonicalFile(file));
 		PATH_RESOLVE_CACHE.put(cacheKey, canonical);
 		return canonical;
+	}
+
+	private static File assertAccessibleMindMap(final File file) {
+		if (file == null || !file.isFile()) {
+			throw new IllegalArgumentException("Mind map not found");
+		}
+		if (!file.getName().toLowerCase().endsWith(".mm")) {
+			throw new IllegalArgumentException("Mind map not found");
+		}
+		if (!isUnderAnyScanRoot(file)) {
+			throw new IllegalArgumentException("Mind map not found");
+		}
+		return file;
+	}
+
+	private static boolean isUnderAnyScanRoot(final File file) {
+		final File[] roots = MindMapDataRootResolver.getScanRoots();
+		for (int i = 0; i < roots.length; i++) {
+			if (isUnderProject(file, roots[i])) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static File disambiguateCandidates(final List candidates, final String hint) {
@@ -1233,7 +1269,7 @@ public final class McpMindMapService {
 		final StringBuilder message = new StringBuilder();
 		message.append("Ambiguous mind map path '").append(hint).append("'. Candidates:");
 		for (int i = 0; i < remaining.size(); i++) {
-			message.append("\n  - ").append(((File) remaining.get(i)).getAbsolutePath());
+			message.append("\n  - ").append(((File) remaining.get(i)).getName());
 		}
 		message.append("\nUse a full or partial path (e.g. project/subdir/file.mm) to disambiguate.");
 		throw new IllegalArgumentException(message.toString());

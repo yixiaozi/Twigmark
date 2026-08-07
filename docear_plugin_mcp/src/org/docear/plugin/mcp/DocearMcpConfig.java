@@ -96,6 +96,41 @@ public final class DocearMcpConfig {
 		return hours < 1 ? 1 : hours;
 	}
 
+	/**
+	 * When true, web chat only exposes read/search tools (no writes) unless
+	 * {@code mcp.readonly=false} and {@code mcp.web.readOnlyTools=false}.
+	 * Defaults to true on public bind or global readonly.
+	 */
+	public static boolean isWebReadOnlyTools() {
+		if (isReadOnly()) {
+			return true;
+		}
+		if (isPublicBind()) {
+			return getBoolean("web.readOnlyTools", true);
+		}
+		return getBoolean("web.readOnlyTools", false);
+	}
+
+	/** Required on public bind for the first account registration. */
+	public static String getWebRegistrationToken() {
+		return getString("web.registrationToken", "");
+	}
+
+	/** Comma-separated host allowlist for user LLM profiles (SSRF guard). */
+	public static String[] getWebLlmAllowedHosts() {
+		final String configured = getString("web.llm.allowedHosts",
+				"openrouter.ai,api.openai.com,api.openai.com.cn,api.deepseek.com,api.moonshot.cn,generativelanguage.googleapis.com,api.anthropic.com,api.groq.com,api.together.xyz,api.perplexity.ai,api.x.ai");
+		final String[] parts = configured.split(",");
+		final java.util.List list = new java.util.ArrayList();
+		for (int i = 0; i < parts.length; i++) {
+			final String host = parts[i] == null ? "" : parts[i].trim().toLowerCase();
+			if (host.length() > 0) {
+				list.add(host);
+			}
+		}
+		return (String[]) list.toArray(new String[list.size()]);
+	}
+
 	public static boolean isWebLlmConfigured() {
 		final String key = getWebLlmApiKey();
 		return key != null && key.trim().length() > 0;

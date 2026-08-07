@@ -12,7 +12,6 @@ import org.docear.plugin.mcp.audit.McpAuditMachineId;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
-import org.docear.plugin.mcp.server.McpAuth;
 import org.docear.plugin.mcp.server.McpWebAgent;
 import org.freeplane.core.util.LogUtils;
 
@@ -31,57 +30,48 @@ public final class WebchatApi {
 	public String handleStatus() {
 		final Map map = new LinkedHashMap();
 		map.put("service", JsonValue.ofString("twigmark-mcp"));
-		map.put("authRequired", JsonValue.ofBoolean(McpAuth.isAuthRequired()));
-		map.put("authConfigured", JsonValue.ofBoolean(McpAuth.hasConfiguredApiKey()));
 		map.put("webEnabled", JsonValue.ofBoolean(DocearMcpConfig.isWebEnabled()));
-		map.put("accountRequired", JsonValue.ofBoolean(true));
 		final boolean hasUsers = WebchatService.anyUserExists();
 		map.put("hasUsers", JsonValue.ofBoolean(hasUsers));
 		map.put("registrationOpen", JsonValue.ofBoolean(!hasUsers));
-		map.put("llmConfigured", JsonValue.ofBoolean(WebchatService.isSharedLlmConfigured()));
-		map.put("openRouterBaseUrl", JsonValue.ofString("https://openrouter.ai/api/v1"));
-		map.put("openRouterDefaultModel", JsonValue.ofString("openai/gpt-4o-mini"));
-		map.put("llmModel", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
-		map.put("publicBind", JsonValue.ofBoolean(DocearMcpConfig.isPublicBind()));
-		map.put("readonly", JsonValue.ofBoolean(DocearMcpConfig.isReadOnly()));
-		map.put("host", JsonValue.ofString(DocearMcpConfig.getHost()));
-		map.put("port", JsonValue.ofNumber(Integer.valueOf(DocearMcpConfig.getPort())));
-		map.put("webchatDb", JsonValue.ofString(WebchatService.localDbPath()));
-		map.put("webchatDbCount", JsonValue.ofNumber(Integer.valueOf(WebchatService.loadedDatabaseCount())));
-		map.put("machineId", JsonValue.ofString(McpAuditMachineId.getMachineId()));
-		map.put("machineName", JsonValue.ofString(McpAuditMachineId.getMachineName()));
+		map.put("accountRequired", JsonValue.ofBoolean(true));
 		return JsonWriter.write(JsonValue.ofMap(map));
 	}
 
 	public void handleRegister(final HttpExchange exchange, final String body) throws IOException {
 		try {
+			WebSecurity.requireRateLimit("register", exchange, 6);
 			final Map args = JsonParser.parse(body).asMap();
 			final String username = str(args, "username");
 			final String password = str(args, "password");
-			final Map result = WebchatService.register(username, password);
+			final String registrationToken = str(args, "registrationToken");
+			final Map result = WebchatService.register(username, password, registrationToken);
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(result))));
 		}
 		catch (IllegalArgumentException e) {
-			writeJson(exchange, 400, error(e.getMessage()));
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
 		}
 		catch (Exception e) {
-			LogUtils.warn("register failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			WebSecurity.logAndSanitize("register failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
 	public void handleLogin(final HttpExchange exchange, final String body) throws IOException {
 		try {
+			WebSecurity.requireRateLimit("login", exchange, 20);
 			final Map args = JsonParser.parse(body).asMap();
 			final Map result = WebchatService.login(str(args, "username"), str(args, "password"));
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(result))));
 		}
 		catch (IllegalArgumentException e) {
-			writeJson(exchange, 401, error(e.getMessage()));
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 401;
+			writeJson(exchange, code, error(e.getMessage()));
 		}
 		catch (Exception e) {
-			LogUtils.warn("login failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			WebSecurity.logAndSanitize("login failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
@@ -95,10 +85,12 @@ public final class WebchatApi {
 			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
 			final Map map = new LinkedHashMap();
 			map.put("username", JsonValue.ofString(username));
-			map.put("webchatDb", JsonValue.ofString(WebchatService.localDbPath()));
 			map.put("webchatDbCount", JsonValue.ofNumber(Integer.valueOf(WebchatService.loadedDatabaseCount())));
 			map.put("machineId", JsonValue.ofString(McpAuditMachineId.getMachineId()));
 			map.put("machineName", JsonValue.ofString(McpAuditMachineId.getMachineName()));
+			map.put("llmConfigured", JsonValue.ofBoolean(WebchatService.isSharedLlmConfigured()));
+			map.put("readonly", JsonValue.ofBoolean(DocearMcpConfig.isReadOnly()));
+			map.put("webReadOnlyTools", JsonValue.ofBoolean(DocearMcpConfig.isWebReadOnlyTools()));
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
 		}
 		catch (IllegalArgumentException e) {
@@ -281,19 +273,23 @@ public final class WebchatApi {
 
 	public void handlePublicShare(final HttpExchange exchange, final String token) throws IOException {
 		try {
+			WebSecurity.requireRateLimit("public-share", exchange, 120);
 			final Map share = WebchatService.getPublicShare(token);
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
 		}
 		catch (IllegalArgumentException e) {
-			writeJson(exchange, 404, error(e.getMessage()));
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 404;
+			writeJson(exchange, code, error(code == 404 ? "share not found" : e.getMessage()));
 		}
 		catch (Exception e) {
-			writeJson(exchange, 500, error(e.getMessage()));
+			WebSecurity.logAndSanitize("public share failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
 	public void handleListPublicShares(final HttpExchange exchange) throws IOException {
 		try {
+			WebSecurity.requireRateLimit("public-shares", exchange, 60);
 			final Map q = queryParams(exchange);
 			final int limit = intParam(q, "limit", 50);
 			final int offset = intParam(q, "offset", 0);
@@ -304,9 +300,13 @@ public final class WebchatApi {
 			out.put("offset", JsonValue.ofNumber(Integer.valueOf(offset)));
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
 		}
+		catch (IllegalArgumentException e) {
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
+		}
 		catch (Exception e) {
-			LogUtils.warn("list public shares failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			WebSecurity.logAndSanitize("list public shares failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
@@ -365,6 +365,7 @@ public final class WebchatApi {
 
 	public void handleChat(final HttpExchange exchange, final String body) throws IOException {
 		try {
+			WebSecurity.requireRateLimit("chat", exchange, 30);
 			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
 			final Map args = JsonParser.parse(body).asMap();
 			final String message = str(args, "message");
@@ -394,7 +395,6 @@ public final class WebchatApi {
 			final Map<String, JsonValue> out = new LinkedHashMap<String, JsonValue>();
 			out.put("reply", result.get("reply"));
 			out.put("model", result.get("model"));
-			out.put("toolTrace", result.get("toolTrace"));
 			out.put("conversationId", JsonValue.ofString(conversationId));
 			out.put("assistantMessageId", JsonValue.ofString(assistantMessageId));
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
@@ -402,14 +402,16 @@ public final class WebchatApi {
 		catch (IllegalArgumentException e) {
 			final boolean auth = e.getMessage() != null && (e.getMessage().indexOf("login") >= 0
 					|| e.getMessage().indexOf("session") >= 0);
-			writeJson(exchange, auth ? 401 : 400, error(e.getMessage()));
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429
+					: (auth ? 401 : 400);
+			writeJson(exchange, code, error(e.getMessage()));
 		}
 		catch (IllegalStateException e) {
 			writeJson(exchange, 400, error(e.getMessage()));
 		}
 		catch (Exception e) {
-			LogUtils.warn("webchat chat failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage() != null ? e.getMessage() : "chat failed"));
+			WebSecurity.logAndSanitize("webchat chat failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
@@ -446,11 +448,22 @@ public final class WebchatApi {
 		if (auth != null && auth.length() > 0) {
 			final String trimmed = auth.trim();
 			if (trimmed.length() >= 7 && "bearer ".equalsIgnoreCase(trimmed.substring(0, 7))) {
-				return trimmed.substring(7).trim();
+				final String token = trimmed.substring(7).trim();
+				if (token.startsWith("tm_")) {
+					return "";
+				}
+				return token;
 			}
 		}
 		final String session = header(exchange, "X-Session-Token");
-		return session != null ? session.trim() : "";
+		if (session != null) {
+			final String token = session.trim();
+			if (token.startsWith("tm_")) {
+				return "";
+			}
+			return token;
+		}
+		return "";
 	}
 
 	private static String header(final HttpExchange exchange, final String name) {
