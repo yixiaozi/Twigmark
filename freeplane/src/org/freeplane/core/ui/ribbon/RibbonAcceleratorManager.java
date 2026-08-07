@@ -10,10 +10,13 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Properties;
+
+import org.freeplane.core.ui.PlatformHotKeyGuide;
 
 import javax.swing.JComponent;
 import javax.swing.JMenuItem;
@@ -237,13 +240,60 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 		}
 	}
  	
+ 	/**
+	 * Per-OS preset file under {@code ribbons/} so Win / Mac / Linux can sync the same
+	 * data folder without overwriting each other's shortcuts.
+	 * Legacy {@code accelerator.properties} is copied once when the platform file is missing.
+	 */
  	public File getPresetsFile() {
- 		File ribbonsDir = new File(ResourceController.getResourceController().getFreeplaneUserDirectory(), "ribbons");
-		if(!ribbonsDir.exists()) {
+ 		final File ribbonsDir = new File(ResourceController.getResourceController().getFreeplaneUserDirectory(),
+ 		        "ribbons");
+		if (!ribbonsDir.exists()) {
 			ribbonsDir.mkdirs();
 		}
-		return new File(ribbonsDir, "accelerator.properties");
+		final File platformFile = new File(ribbonsDir, PlatformHotKeyGuide.getAcceleratorFileName());
+		if (!platformFile.exists()) {
+			final File legacy = new File(ribbonsDir, "accelerator.properties");
+			if (legacy.isFile()) {
+				copyFileQuietly(legacy, platformFile);
+				LogUtils.info("Migrated accelerator presets to " + platformFile.getName());
+			}
+		}
+		return platformFile;
  	}
+
+	private static void copyFileQuietly(final File from, final File to) {
+		java.io.InputStream in = null;
+		java.io.OutputStream out = null;
+		try {
+			in = new java.io.FileInputStream(from);
+			out = new java.io.FileOutputStream(to);
+			final byte[] buf = new byte[8192];
+			int n;
+			while ((n = in.read(buf)) >= 0) {
+				out.write(buf, 0, n);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Could not copy " + from + " -> " + to + ": " + e.getMessage());
+		}
+		finally {
+			if (in != null) {
+				try {
+					in.close();
+				}
+				catch (Exception e) {
+				}
+			}
+			if (out != null) {
+				try {
+					out.close();
+				}
+				catch (Exception e) {
+				}
+			}
+		}
+	}
  	
  	public void loadAcceleratorPresets(final InputStream in) {
 		final Properties prop = new Properties();
@@ -303,61 +353,25 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 	}
 
 	/**
-	 * Mac-friendly defaults for shortcuts that conflict with system / IME bindings
-	 * (e.g. Option+Space). Fills unbound keys, and migrates known Win/Linux conflict
-	 * strokes (Alt+Space) to the Mac alternative.
+	 * Mac-friendly defaults: fills unbound keys and migrates Insert / Alt+Space bindings
+	 * that Mac keyboards or the OS cannot use comfortably.
 	 */
 	public void applyPlatformDefaultAccelerators() {
 		if (!Compat.isMacOsX()) {
 			return;
 		}
+		final Map alternatives = PlatformHotKeyGuide.getMacDefaultAlternatives();
+		Properties fileProps = null;
 		InputStream in = null;
 		try {
 			in = RibbonAcceleratorManager.class.getResourceAsStream("/accelerator.default.mac.properties");
-			if (in == null) {
-				return;
-			}
-			final Properties mac = new Properties();
-			mac.load(in);
-			LogUtils.info("Applying Mac accelerator gap-fills (" + mac.size() + " candidates)");
-			final KeyStroke altSpace = parseKeyStroke("alt SPACE");
-			for (final Entry<Object, Object> property : mac.entrySet()) {
-				final String shortcutKey = (String) property.getKey();
-				final String keystrokeString = (String) property.getValue();
-				if (!shortcutKey.startsWith(SHORTCUT_PROPERTY_PREFIX) || keystrokeString == null
-				        || keystrokeString.length() == 0) {
-					continue;
-				}
-				final int pos = shortcutKey.indexOf("/", SHORTCUT_PROPERTY_PREFIX.length());
-				if (pos <= 0) {
-					continue;
-				}
-				final String itemKey = shortcutKey.substring(pos + 1);
-				final AFreeplaneAction action = builder.getMode().getAction(itemKey);
-				if (action == null) {
-					continue;
-				}
-				final KeyStroke keyStroke = parseKeyStroke(keystrokeString);
-				if (keyStroke == null) {
-					continue;
-				}
-				final KeyStroke current = actionMap.get(itemKey);
-				final boolean unbound = current == null;
-				final boolean migrateAltSpace = current != null && altSpace != null && current.equals(altSpace)
-				        && itemKey.equals("MapSwitcherAction");
-				if (!unbound && !migrateAltSpace) {
-					continue;
-				}
-				setAccelerator(action, keyStroke, false);
-				defaultProps.setProperty(shortcutKey, keystrokeString);
-				if (migrateAltSpace) {
-					keysetProps.setProperty(shortcutKey, keystrokeString);
-					LogUtils.info("Migrated MapSwitcherAction from alt SPACE to " + keystrokeString + " on Mac");
-				}
+			if (in != null) {
+				fileProps = new Properties();
+				fileProps.load(in);
 			}
 		}
-		catch (final Exception e) {
-			LogUtils.warn("Could not apply Mac accelerator presets: " + e.getMessage());
+		catch (Exception e) {
+			LogUtils.warn("Could not read accelerator.default.mac.properties: " + e.getMessage());
 		}
 		finally {
 			if (in != null) {
@@ -365,8 +379,51 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 					in.close();
 				}
 				catch (IOException e) {
-					LogUtils.warn(e);
 				}
+			}
+		}
+		LogUtils.info("Applying Mac accelerator alternatives (" + alternatives.size() + " actions)");
+		boolean dirty = false;
+		for (final Iterator it = alternatives.entrySet().iterator(); it.hasNext();) {
+			final Entry entry = (Entry) it.next();
+			final String itemKey = (String) entry.getKey();
+			String keystrokeString = (String) entry.getValue();
+			if (fileProps != null) {
+				final String fromFile = fileProps.getProperty(getPropertyKey(itemKey));
+				if (fromFile != null && fromFile.length() > 0) {
+					keystrokeString = fromFile;
+				}
+			}
+			final AFreeplaneAction action = builder.getMode().getAction(itemKey);
+			if (action == null) {
+				continue;
+			}
+			final KeyStroke current = actionMap.get(itemKey);
+			if (!PlatformHotKeyGuide.shouldApplyMacAlternative(itemKey, current)) {
+				continue;
+			}
+			final KeyStroke keyStroke = parseKeyStroke(keystrokeString);
+			if (keyStroke == null) {
+				continue;
+			}
+			final String shortcutKey = getPropertyKey(itemKey);
+			setAccelerator(action, keyStroke, false);
+			defaultProps.setProperty(shortcutKey, keystrokeString);
+			keysetProps.setProperty(shortcutKey, keystrokeString);
+			dirty = true;
+			if (current != null) {
+				LogUtils.info("Migrated " + itemKey + " from " + current + " to " + keystrokeString + " on Mac");
+			}
+		}
+		if (dirty) {
+			try {
+				if (!getPresetsFile().exists()) {
+					getPresetsFile().createNewFile();
+				}
+				storeAcceleratorPreset(new FileOutputStream(getPresetsFile()));
+			}
+			catch (IOException e) {
+				LogUtils.warn("Could not persist Mac accelerator alternatives: " + e.getMessage());
 			}
 		}
 	}
