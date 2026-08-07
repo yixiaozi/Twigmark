@@ -72,6 +72,17 @@ public class DoAutomaticSave extends TimerTask {
 		if (model.getNumberOfChangesSinceLastSave() == changeState) {
 			return;
 		}
+		// Never serialize while the inline node editor (or other blocked UI) is open.
+		// Typing / IME composition does not dirty the model until ok(), so idle-gate
+		// alone is not enough — and saving on the EDT can interrupt macOS IME.
+		try {
+			final ModeController modeController = Controller.getCurrentModeController();
+			if (modeController != null && modeController.isBlocked()) {
+				return;
+			}
+		}
+		catch (Exception e) {
+		}
 		// Stay out of the way while Insert / typing is in progress. Do not advance
 		// changeState so the next timer tick retries after the idle window.
 		final long lastChange = model.getLastContentChangeTimeMs();
@@ -96,6 +107,15 @@ public class DoAutomaticSave extends TimerTask {
 						final ModeController currentModeController = Controller.getCurrentModeController();
 						if(!(currentModeController instanceof MModeController))
 							return;
+						// Re-check on EDT: editor may have opened after the timer tick.
+						if (currentModeController.isBlocked()) {
+							return;
+						}
+						final long lastChangeOnEdt = model.getLastContentChangeTimeMs();
+						if (lastChangeOnEdt > 0L
+						        && System.currentTimeMillis() - lastChangeOnEdt < EDIT_IDLE_BEFORE_SAVE_MS) {
+							return;
+						}
 						MModeController modeController = ((MModeController) currentModeController);
 						final File pathToStore;
 						final URL url = model.getURL();
