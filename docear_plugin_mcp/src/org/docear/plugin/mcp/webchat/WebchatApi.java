@@ -208,6 +208,99 @@ public final class WebchatApi {
 		}
 	}
 
+	public void handleRenameConversation(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final String id = str(args, "id");
+			final String title = str(args, "title");
+			if (id.length() == 0) {
+				writeJson(exchange, 400, error("id is required"));
+				return;
+			}
+			WebchatService.renameConversation(username, id, title);
+			final Map map = new LinkedHashMap();
+			map.put("ok", JsonValue.ofBoolean(true));
+			map.put("id", JsonValue.ofString(id));
+			map.put("title", JsonValue.ofString(title == null || title.trim().length() == 0 ? "未命名对话" : title.trim()));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
+		}
+		catch (IllegalArgumentException e) {
+			final boolean auth = e.getMessage() != null && (e.getMessage().indexOf("login") >= 0
+					|| e.getMessage().indexOf("session") >= 0);
+			writeJson(exchange, auth ? 401 : 400, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
+	public void handleShareMessage(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final String messageId = str(args, "messageId");
+			if (messageId.length() == 0) {
+				writeJson(exchange, 400, error("messageId is required"));
+				return;
+			}
+			final boolean includeTitle = !"false".equalsIgnoreCase(str(args, "includeTitle"));
+			int expireDays = 30;
+			try {
+				final String raw = str(args, "expireDays");
+				if (raw.length() > 0) {
+					expireDays = Integer.parseInt(raw);
+				}
+			}
+			catch (NumberFormatException ignored) {
+			}
+			final Map share = WebchatService.createMessageShare(username, messageId, includeTitle, expireDays);
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
+		}
+		catch (IllegalArgumentException e) {
+			final boolean auth = e.getMessage() != null && (e.getMessage().indexOf("login") >= 0
+					|| e.getMessage().indexOf("session") >= 0);
+			writeJson(exchange, auth ? 401 : 400, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			LogUtils.warn("share message failed: " + e.getMessage(), e);
+			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
+	public void handleUnshareMessage(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final String token = str(args, "token");
+			WebchatService.revokeMessageShare(username, token);
+			final Map map = new LinkedHashMap();
+			map.put("ok", JsonValue.ofBoolean(true));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
+		}
+		catch (IllegalArgumentException e) {
+			final boolean auth = e.getMessage() != null && (e.getMessage().indexOf("login") >= 0
+					|| e.getMessage().indexOf("session") >= 0);
+			writeJson(exchange, auth ? 401 : 400, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
+	public void handlePublicShare(final HttpExchange exchange, final String token) throws IOException {
+		try {
+			final Map share = WebchatService.getPublicShare(token);
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
+		}
+		catch (IllegalArgumentException e) {
+			writeJson(exchange, 404, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(e.getMessage()));
+		}
+	}
+
 	public void handleChat(final HttpExchange exchange, final String body) throws IOException {
 		try {
 			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
@@ -234,12 +327,14 @@ public final class WebchatApi {
 			final String toolTraceJson = result.containsKey("toolTrace") && result.get("toolTrace") != null
 					? JsonWriter.write(result.get("toolTrace"))
 					: "[]";
-			WebchatService.appendChatTurn(username, conversationId, message, reply, toolTraceJson, model);
+			final String assistantMessageId = WebchatService.appendChatTurn(username, conversationId, message, reply,
+					toolTraceJson, model);
 			final Map<String, JsonValue> out = new LinkedHashMap<String, JsonValue>();
 			out.put("reply", result.get("reply"));
 			out.put("model", result.get("model"));
 			out.put("toolTrace", result.get("toolTrace"));
 			out.put("conversationId", JsonValue.ofString(conversationId));
+			out.put("assistantMessageId", JsonValue.ofString(assistantMessageId));
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
 		}
 		catch (IllegalArgumentException e) {

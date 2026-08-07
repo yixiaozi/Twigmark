@@ -338,7 +338,29 @@ public final class WebchatService {
 		return id;
 	}
 
-	public static void appendChatTurn(final String username, final String conversationId, final String userText,
+	public static void renameConversation(final String username, final String conversationId, final String titleRaw)
+			throws Exception {
+		final Map conv = findConversationAcross(username, conversationId);
+		if (conv == null) {
+			throw new IllegalArgumentException("conversation not found");
+		}
+		String title = titleRaw == null ? "" : titleRaw.trim();
+		if (title.length() > 120) {
+			title = title.substring(0, 120);
+		}
+		if (title.length() == 0) {
+			title = "未命名对话";
+		}
+		final long now = System.currentTimeMillis();
+		final String source = nullToEmpty((String) conv.get("source"));
+		final String mapKey = nullToEmpty((String) conv.get("mapKey"));
+		final long created = ((Long) conv.get("createdAt")).longValue();
+		WebchatDatabase.local().upsertConversation(conversationId, username, title, created, now,
+				source.length() == 0 ? WebchatDatabase.SOURCE_WEB : source, mapKey);
+	}
+
+	/** @return assistant message id */
+	public static String appendChatTurn(final String username, final String conversationId, final String userText,
 			final String assistantText, final String toolTraceJson, final String model) throws Exception {
 		final long now = System.currentTimeMillis();
 		Map conv = WebchatDatabase.local().getConversation(conversationId);
@@ -359,8 +381,119 @@ public final class WebchatService {
 			WebchatDatabase.local().touchConversation(conversationId, title, now);
 		}
 		WebchatDatabase.local().insertMessage(WebchatPassword.newId(), conversationId, "user", userText, "", "");
-		WebchatDatabase.local().insertMessage(WebchatPassword.newId(), conversationId, "assistant", assistantText,
+		final String assistantId = WebchatPassword.newId();
+		WebchatDatabase.local().insertMessage(assistantId, conversationId, "assistant", assistantText,
 				toolTraceJson == null ? "" : toolTraceJson, model == null ? "" : model);
+		return assistantId;
+	}
+
+	/**
+	 * Create a public share link for one assistant message.
+	 * Security: opaque token; public payload excludes tool traces, paths, and account secrets.
+	 */
+	public static Map<String, Object> createMessageShare(final String username, final String messageId,
+			final boolean includeTitle, final int expireDays) throws Exception {
+		final Map message = findMessageAcross(messageId);
+		if (message == null) {
+			throw new IllegalArgumentException("message not found");
+		}
+		final String role = nullToEmpty((String) message.get("role"));
+		if (!"assistant".equals(role)) {
+			throw new IllegalArgumentException("only assistant replies can be shared");
+		}
+		final String conversationId = nullToEmpty((String) message.get("conversationId"));
+		final Map conv = findConversationAcross(username, conversationId);
+		if (conv == null) {
+			throw new IllegalArgumentException("conversation not found");
+		}
+		final String token = "pub_" + WebchatPassword.newId() + WebchatPassword.newId();
+		final long now = System.currentTimeMillis();
+		final int days = expireDays < 1 ? 30 : (expireDays > 365 ? 365 : expireDays);
+		final long expiresAt = now + days * 24L * 60L * 60L * 1000L;
+		WebchatDatabase.local().upsertMessageShare(token, messageId, conversationId, username, now, expiresAt,
+				includeTitle);
+		final Map out = new LinkedHashMap();
+		out.put("token", token);
+		out.put("messageId", messageId);
+		out.put("expiresAt", Long.valueOf(expiresAt));
+		out.put("path", "/web/share.html?t=" + token);
+		return out;
+	}
+
+	public static void revokeMessageShare(final String username, final String token) throws Exception {
+		if (token == null || token.trim().length() < 8) {
+			throw new IllegalArgumentException("invalid token");
+		}
+		WebchatDatabase.local().revokeMessageShare(token.trim(), username);
+	}
+
+	/** Public read of a shared assistant message — minimal fields only. */
+	public static Map<String, Object> getPublicShare(final String tokenRaw) throws Exception {
+		final String token = tokenRaw == null ? "" : tokenRaw.trim();
+		if (token.length() < 16 || token.indexOf("..") >= 0) {
+			throw new IllegalArgumentException("invalid share token");
+		}
+		final List dbs = openAll();
+		Map share = null;
+		for (int i = 0; i < dbs.size(); i++) {
+			final Map row = ((WebchatDatabase) dbs.get(i)).getMessageShare(token);
+			if (row != null) {
+				share = row;
+				break;
+			}
+		}
+		if (share == null) {
+			throw new IllegalArgumentException("share not found");
+		}
+		if (Boolean.TRUE.equals(share.get("revoked"))) {
+			throw new IllegalArgumentException("share revoked");
+		}
+		final long expiresAt = ((Long) share.get("expiresAt")).longValue();
+		if (expiresAt > 0 && expiresAt < System.currentTimeMillis()) {
+			throw new IllegalArgumentException("share expired");
+		}
+		final String messageId = nullToEmpty((String) share.get("messageId"));
+		final Map message = findMessageAcross(messageId);
+		if (message == null || !"assistant".equals(nullToEmpty((String) message.get("role")))) {
+			throw new IllegalArgumentException("share not found");
+		}
+		final Map out = new LinkedHashMap();
+		out.put("content", nullToEmpty((String) message.get("content")));
+		out.put("model", nullToEmpty((String) message.get("model")));
+		out.put("createdAt", message.get("createdAt"));
+		out.put("expiresAt", Long.valueOf(expiresAt));
+		if (Boolean.TRUE.equals(share.get("includeTitle"))) {
+			final String username = nullToEmpty((String) share.get("username"));
+			final String conversationId = nullToEmpty((String) share.get("conversationId"));
+			try {
+				final Map conv = findConversationAcross(username, conversationId);
+				if (conv != null) {
+					out.put("title", nullToEmpty((String) conv.get("title")));
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		// Deliberately omit: username, tool traces, map paths, conversation id, message id.
+		return out;
+	}
+
+	private static Map findMessageAcross(final String messageId) {
+		if (messageId == null || messageId.length() == 0) {
+			return null;
+		}
+		final List dbs = openAll();
+		for (int i = 0; i < dbs.size(); i++) {
+			try {
+				final Map row = ((WebchatDatabase) dbs.get(i)).getMessage(messageId);
+				if (row != null) {
+					return row;
+				}
+			}
+			catch (Exception ignored) {
+			}
+		}
+		return null;
 	}
 
 	/** Seed / refresh default shared LLM profile from Product Settings prefs. */

@@ -161,6 +161,23 @@ public final class McpHttpServer {
 				webchatApi.handleGetConversation(exchange, id);
 				return;
 			}
+			if ("/api/conversations/rename".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleRenameConversation(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/messages/share".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleShareMessage(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/messages/unshare".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleUnshareMessage(exchange, readBody(exchange));
+				return;
+			}
+			if (path != null && path.startsWith("/api/public/share/") && "GET".equalsIgnoreCase(method)) {
+				final String token = path.substring("/api/public/share/".length());
+				webchatApi.handlePublicShare(exchange, token);
+				return;
+			}
 			if ("/api/chat".equals(path) && "POST".equalsIgnoreCase(method)) {
 				webchatApi.handleChat(exchange, readBody(exchange));
 				return;

@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>Twigmark · 公开回答</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="share-page">
+      <article class="share-card">
+        <div class="logo-mark small" aria-hidden="true"></div>
+        <h1 id="title">公开回答</h1>
+        <p class="share-meta" id="meta">加载中…</p>
+        <div class="share-body" id="body"></div>
+        <p class="share-foot">仅公开单条助手回答，不含工具轨迹、导图路径或账号信息。链接可由作者撤销。</p>
+      </article>
+    </div>
+    <script>
+      (function () {
+        function escapeHtml(text) {
+          return String(text || "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;");
+        }
+        function renderMarkdown(text) {
+          var raw = String(text || "");
+          var blocks = [];
+          raw = raw.replace(/```([\s\S]*?)```/g, function (_, code) {
+            var i = blocks.length;
+            blocks.push("<pre><code>" + escapeHtml(code.replace(/^\n/, "")) + "</code></pre>");
+            return "%%BLOCK" + i + "%%";
+          });
+          var html = escapeHtml(raw)
+            .replace(/`([^`]+)`/g, "<code>$1</code>")
+            .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+            .replace(/\n/g, "<br>");
+          return html.replace(/%%BLOCK(\d+)%%/g, function (_, idx) {
+            return blocks[Number(idx)] || "";
+          });
+        }
+        var params = new URLSearchParams(location.search);
+        var token = params.get("t") || "";
+        var titleEl = document.getElementById("title");
+        var metaEl = document.getElementById("meta");
+        var bodyEl = document.getElementById("body");
+        if (!token) {
+          metaEl.textContent = "缺少分享令牌";
+          return;
+        }
+        fetch("../api/public/share/" + encodeURIComponent(token), { cache: "no-store" })
+          .then(function (r) {
+            return r.json().then(function (body) {
+              return { ok: r.ok, body: body };
+            });
+          })
+          .then(function (res) {
+            if (!res.ok) {
+              metaEl.textContent = (res.body && res.body.error) || "无法打开分享";
+              return;
+            }
+            if (res.body.title) titleEl.textContent = res.body.title;
+            var bits = [];
+            if (res.body.model) bits.push(res.body.model);
+            if (res.body.createdAt) {
+              try {
+                bits.push(new Date(Number(res.body.createdAt)).toLocaleString());
+              } catch (e) {}
+            }
+            if (res.body.expiresAt) {
+              try {
+                bits.push("有效至 " + new Date(Number(res.body.expiresAt)).toLocaleDateString());
+              } catch (e) {}
+            }
+            metaEl.textContent = bits.join(" · ") || "公开回答";
+            bodyEl.innerHTML = renderMarkdown(res.body.content || "");
+          })
+          .catch(function () {
+            metaEl.textContent = "网络错误";
+          });
+      })();
+    </script>
+  </body>
+</html>

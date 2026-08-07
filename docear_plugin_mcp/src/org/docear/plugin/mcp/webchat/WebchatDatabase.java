@@ -21,7 +21,7 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 2;
+	private static final int SCHEMA_VERSION = 3;
 	public static final String SOURCE_WEB = "web";
 	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
@@ -587,16 +587,7 @@ public final class WebchatDatabase {
 			rs = ps.executeQuery();
 			final List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
 			while (rs.next()) {
-				final Map<String, Object> row = new LinkedHashMap<String, Object>();
-				row.put("id", rs.getString("id"));
-				row.put("conversationId", rs.getString("conversation_id"));
-				row.put("role", rs.getString("role"));
-				row.put("content", nullToEmpty(rs.getString("content")));
-				row.put("toolTraceJson", nullToEmpty(rs.getString("tool_trace_json")));
-				row.put("model", nullToEmpty(rs.getString("model")));
-				row.put("createdAt", Long.valueOf(rs.getLong("created_at")));
-				row.put("machineId", nullToEmpty(rs.getString("machine_id")));
-				items.add(row);
+				items.add(readMessage(rs));
 			}
 			return items;
 		}
@@ -605,6 +596,117 @@ public final class WebchatDatabase {
 			closeQuietly(ps);
 			closeQuietly(c);
 		}
+	}
+
+	public Map<String, Object> getMessage(final String messageId) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT id, conversation_id, role, content, tool_trace_json, model, created_at, machine_id"
+							+ " FROM messages WHERE id = ?");
+			ps.setString(1, messageId);
+			rs = ps.executeQuery();
+			if (!rs.next()) {
+				return null;
+			}
+			return readMessage(rs);
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void upsertMessageShare(final String token, final String messageId, final String conversationId,
+			final String username, final long createdAt, final long expiresAt, final boolean includeTitle)
+			throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("INSERT OR REPLACE INTO message_shares"
+					+ "(token, message_id, conversation_id, username, created_at, expires_at, revoked, include_title, machine_id)"
+					+ " VALUES(?,?,?,?,?,?,0,?,?)");
+			ps.setString(1, token);
+			ps.setString(2, messageId);
+			ps.setString(3, conversationId);
+			ps.setString(4, username);
+			ps.setLong(5, createdAt);
+			ps.setLong(6, expiresAt);
+			ps.setInt(7, includeTitle ? 1 : 0);
+			ps.setString(8, McpAuditMachineId.getMachineId());
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void revokeMessageShare(final String token, final String username) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"UPDATE message_shares SET revoked = 1 WHERE token = ? AND username = ?");
+			ps.setString(1, token);
+			ps.setString(2, username);
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public Map<String, Object> getMessageShare(final String token) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT token, message_id, conversation_id, username, created_at, expires_at, revoked, include_title"
+							+ " FROM message_shares WHERE token = ?");
+			ps.setString(1, token);
+			rs = ps.executeQuery();
+			if (!rs.next()) {
+				return null;
+			}
+			final Map<String, Object> row = new LinkedHashMap<String, Object>();
+			row.put("token", rs.getString("token"));
+			row.put("messageId", rs.getString("message_id"));
+			row.put("conversationId", rs.getString("conversation_id"));
+			row.put("username", rs.getString("username"));
+			row.put("createdAt", Long.valueOf(rs.getLong("created_at")));
+			row.put("expiresAt", Long.valueOf(rs.getLong("expires_at")));
+			row.put("revoked", Boolean.valueOf(rs.getInt("revoked") != 0));
+			row.put("includeTitle", Boolean.valueOf(rs.getInt("include_title") != 0));
+			return row;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	private Map<String, Object> readMessage(final ResultSet rs) throws SQLException {
+		final Map<String, Object> row = new LinkedHashMap<String, Object>();
+		row.put("id", rs.getString("id"));
+		row.put("conversationId", rs.getString("conversation_id"));
+		row.put("role", rs.getString("role"));
+		row.put("content", nullToEmpty(rs.getString("content")));
+		row.put("toolTraceJson", nullToEmpty(rs.getString("tool_trace_json")));
+		row.put("model", nullToEmpty(rs.getString("model")));
+		row.put("createdAt", Long.valueOf(rs.getLong("created_at")));
+		row.put("machineId", nullToEmpty(rs.getString("machine_id")));
+		return row;
 	}
 
 	private Map<String, Object> readConversation(final ResultSet rs) throws SQLException {
@@ -686,12 +788,24 @@ public final class WebchatDatabase {
 					+ "created_at INTEGER NOT NULL,"
 					+ "machine_id TEXT NOT NULL DEFAULT ''"
 					+ ")");
+			st.execute("CREATE TABLE IF NOT EXISTS message_shares ("
+					+ "token TEXT PRIMARY KEY,"
+					+ "message_id TEXT NOT NULL,"
+					+ "conversation_id TEXT NOT NULL,"
+					+ "username TEXT NOT NULL,"
+					+ "created_at INTEGER NOT NULL,"
+					+ "expires_at INTEGER NOT NULL DEFAULT 0,"
+					+ "revoked INTEGER NOT NULL DEFAULT 0,"
+					+ "include_title INTEGER NOT NULL DEFAULT 1,"
+					+ "machine_id TEXT NOT NULL DEFAULT ''"
+					+ ")");
 			ensureColumn(st, "conversations", "source", "TEXT NOT NULL DEFAULT 'web'");
 			ensureColumn(st, "conversations", "map_key", "TEXT NOT NULL DEFAULT ''");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_user ON conversations(username, updated_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_msg_conv ON messages(conversation_id, created_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_profile_user ON llm_profiles(username, is_default)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_map ON conversations(username, source, map_key)");
+			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_share_msg ON message_shares(message_id)");
 			st.execute("INSERT OR REPLACE INTO webchat_meta(key, value) VALUES('schema_version', '"
 					+ SCHEMA_VERSION + "')");
 		}
