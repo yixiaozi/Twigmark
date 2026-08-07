@@ -247,26 +247,128 @@ public final class McpAuditService {
 
 	/** UI helper: recent audit events as plain maps (string/number/boolean values). */
 	public static List<Map<String, Object>> listAuditEventsForUi(final int limit) {
-		try {
-			ensureDatabase();
-			return McpAuditDatabase.getInstance().listEventRows(limit);
-		}
-		catch (Exception e) {
-			LogUtils.warn("listAuditEventsForUi failed: " + e.getMessage(), e);
-			return Collections.emptyList();
-		}
+		return queryEventsForUi(McpAuditQuery.ofLimit(limit));
 	}
 
 	/** UI helper: recent traces as plain maps. */
 	public static List<Map<String, Object>> listAuditTracesForUi(final int limit) {
+		return queryTracesForUi(McpAuditQuery.ofLimit(limit));
+	}
+
+	public static List<Map<String, Object>> queryEventsForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().listTraceRows(limit);
+			return McpAuditDatabase.getInstance().queryEventRows(query);
 		}
 		catch (Exception e) {
-			LogUtils.warn("listAuditTracesForUi failed: " + e.getMessage(), e);
+			LogUtils.warn("queryEventsForUi failed: " + e.getMessage(), e);
 			return Collections.emptyList();
 		}
+	}
+
+	public static List<Map<String, Object>> queryTracesForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().queryTraceRows(query);
+		}
+		catch (Exception e) {
+			LogUtils.warn("queryTracesForUi failed: " + e.getMessage(), e);
+			return Collections.emptyList();
+		}
+	}
+
+	public static Map<String, Object> summarizeForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().summarize(query);
+		}
+		catch (Exception e) {
+			LogUtils.warn("summarizeForUi failed: " + e.getMessage(), e);
+			return Collections.emptyMap();
+		}
+	}
+
+	public static List<Map<String, Object>> statsByMachineForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().statsByMachine(query);
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static List<Map<String, Object>> statsByActionForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().statsByAction(query);
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static List<Map<String, Object>> statsByDayForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().statsByDay(query);
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static List<Map<String, Object>> listSlowEventsForUi(final McpAuditQuery query) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().listSlowEvents(query);
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static List<Map<String, Object>> listMachinesForUi() {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().listMachines();
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static List<String> distinctForUi(final String column) {
+		try {
+			ensureDatabase();
+			return McpAuditDatabase.getInstance().distinctValues(column);
+		}
+		catch (Exception e) {
+			return Collections.emptyList();
+		}
+	}
+
+	public static int exportAuditJsonl(final File target, final McpAuditQuery query) throws Exception {
+		ensureDatabase();
+		return McpAuditDatabase.getInstance().exportJsonl(target, query);
+	}
+
+	public static int importAuditJsonl(final File source) throws Exception {
+		ensureDatabase();
+		return McpAuditDatabase.getInstance().importJsonl(source);
+	}
+
+	public static int importAuditDb(final File otherDb) throws Exception {
+		ensureDatabase();
+		return McpAuditDatabase.getInstance().importFromDbFile(otherDb);
+	}
+
+	public static String getLocalMachineId() {
+		return McpAuditMachineId.getMachineId();
+	}
+
+	public static String getLocalMachineName() {
+		return McpAuditMachineId.getMachineName();
 	}
 
 	public static int countAuditEvents() {
@@ -290,6 +392,9 @@ public final class McpAuditService {
 
 	static Map<String, JsonValue> eventToMap(final McpAuditEvent event) {
 		final Map<String, JsonValue> map = new LinkedHashMap<String, JsonValue>();
+		map.put("eventId", JsonValue.ofString(event.eventId));
+		map.put("machineId", JsonValue.ofString(event.machineId));
+		map.put("machineName", JsonValue.ofString(event.machineName));
 		map.put("ts", JsonValue.ofNumber(Long.valueOf(event.ts)));
 		map.put("tenant", JsonValue.ofString(event.tenant));
 		map.put("actor", JsonValue.ofString(event.actor));
@@ -321,16 +426,23 @@ public final class McpAuditService {
 		catch (Exception e) {
 			intent = McpOperationIntent.UNKNOWN;
 		}
-		return new McpAuditEvent(map.containsKey("ts") ? map.get("ts").asLong(0L) : System.currentTimeMillis(),
+		final String eventId = firstNonEmpty(argString(map, "eventId", ""), argString(map, "event_id", ""));
+		final String machineId = firstNonEmpty(argString(map, "machineId", ""), argString(map, "machine_id", ""),
+		    McpAuditMachineId.getMachineId());
+		final String machineName = firstNonEmpty(argString(map, "machineName", ""), argString(map, "machine_name", ""),
+		    McpAuditMachineId.getMachineName());
+		final String error = firstNonEmpty(argString(map, "errorMessage", ""), argString(map, "error", ""));
+		return new McpAuditEvent(eventId, machineId, machineName,
+		    map.containsKey("ts") ? map.get("ts").asLong(0L) : System.currentTimeMillis(),
 		    argString(map, "tenant", "default"), argString(map, "actor", ""), argString(map, "action", ""),
-		    argString(map, "kind", ""), intent,
-		    argString(map, "traceId", ""), argString(map, "sessionId", ""), argString(map, "clientName", ""),
-		    argString(map, "osUser", ""), argString(map, "remoteAddress", ""), argString(map, "questionSummary", ""),
-		    argString(map, "operationGoal", ""), argString(map, "requestJson", "{}"),
-		    argString(map, "responseJson", ""), map.containsKey("responseBytes") ? map.get("responseBytes").asInt(0) : 0,
+		    argString(map, "kind", ""), intent, argString(map, "traceId", ""), argString(map, "sessionId", ""),
+		    argString(map, "clientName", ""), argString(map, "osUser", ""), argString(map, "remoteAddress", ""),
+		    argString(map, "questionSummary", ""), argString(map, "operationGoal", ""),
+		    argString(map, "requestJson", "{}"), argString(map, "responseJson", ""),
+		    map.containsKey("responseBytes") ? map.get("responseBytes").asInt(0) : 0,
 		    map.containsKey("responseTruncated") && map.get("responseTruncated").asBoolean(),
 		    !map.containsKey("success") || map.get("success").asBoolean(),
-		    map.containsKey("durationMs") ? map.get("durationMs").asLong(0L) : 0L, argString(map, "errorMessage", ""));
+		    map.containsKey("durationMs") ? map.get("durationMs").asLong(0L) : 0L, error);
 	}
 
 	private static void record(final String kind, final String operation, final McpOperationIntent intent,
@@ -353,8 +465,8 @@ public final class McpAuditService {
 		final String traceId = metadata.traceId;
 		final ResponsePayload response = normalizeResponse(responseText);
 
-		final McpAuditEvent event = new McpAuditEvent(System.currentTimeMillis(), metadata.tenant, actor, operation, kind,
-		    intent, traceId, sessionId, clientName, System.getProperty("user.name", "unknown"),
+		final McpAuditEvent event = McpAuditEvent.local(System.currentTimeMillis(), metadata.tenant, actor, operation,
+		    kind, intent, traceId, sessionId, clientName, System.getProperty("user.name", "unknown"),
 		    ctx != null ? nullToEmpty(ctx.getRemoteAddress()) : "unknown", questionSummary, operationGoal, requestJson,
 		    response.text, response.originalBytes, response.truncated, success, durationMs, truncate(errorMessage, 500));
 

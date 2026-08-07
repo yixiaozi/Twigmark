@@ -30,7 +30,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 }
 ```
 
-服务端会将**完整请求参数**（剥离 `_audit` 后）与**完整返回文本**（超大响应会截断并标记）异步写入 SQLite：`%APPDATA%\\Docear\\_data\\audit.db`（WAL 模式）。主进程仅入队，不阻塞 MCP。
+服务端会将**完整请求参数**（剥离 `_audit` 后）与**完整返回文本**（超大响应会截断并标记）异步写入 SQLite：`%APPDATA%\\Docear\\_data\\audit.db`（WAL 模式）。主进程仅入队，不阻塞 MCP。每条记录带本机 `machineId`/`eventId`；旧库启动时自动迁移。多机汇总请用窗体「导出 JSONL / 导入 JSONL 或另一台 audit.db」（按 `eventId` 去重合并），**不要**用网盘直接同步同一个 `audit.db`。
 
 | 字段 | 要求 |
 |------|------|
