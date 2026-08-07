@@ -55,6 +55,18 @@ public class DrawioDocumentView extends JPanel implements IDocumentTabView, Draw
 		return this;
 	}
 
+	public String getTabAssignmentKey() {
+		if (file == null) {
+			return null;
+		}
+		try {
+			return file.getCanonicalFile().getAbsolutePath().replace('\\', '/');
+		}
+		catch (Exception e) {
+			return file.getAbsolutePath().replace('\\', '/');
+		}
+	}
+
 	public void onTabActivated() {
 		browser.ensureLoaded();
 		if (editorReady) {

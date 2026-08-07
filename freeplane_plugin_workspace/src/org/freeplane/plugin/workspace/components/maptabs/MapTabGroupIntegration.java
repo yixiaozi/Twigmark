@@ -337,7 +337,8 @@ public final class MapTabGroupIntegration {
 			return normalizePath(model.getFile());
 		}
 		if (tabKey instanceof IDocumentTabView) {
-			return null;
+			// Reports / Draw.io: stable keys so tabs can be moved between groups like maps.
+			return ((IDocumentTabView) tabKey).getTabAssignmentKey();
 		}
 		return null;
 	}

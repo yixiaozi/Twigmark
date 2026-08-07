@@ -108,7 +108,7 @@ public final class ReportViewportPanel extends JPanel {
 		detailModel.clear();
 		detailModel.addElement("图表与明细生成完成后会显示在这里");
 		writeButton.setEnabled(false);
-		setLoadProgress("正在打开报表并汇总数据…", -1);
+		setLoadProgress("正在扫描数据源…", -1);
 		bodyCards.show(bodyHost, CARD_LOADING);
 		revalidate();
 		repaint();

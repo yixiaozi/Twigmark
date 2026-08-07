@@ -16,6 +16,13 @@ public interface IDocumentTabView {
 	/** Tab identity object stored in {@code MapViewTabs} (often the panel itself). */
 	Component getTabKey();
 
+	/**
+	 * Stable key for bottom-tab group assignment (like a mind-map file path).
+	 * Return {@code null} if this document should not appear in group move menus
+	 * (it still shows under「未分组」when a group filter is active).
+	 */
+	String getTabAssignmentKey();
+
 	void onTabActivated();
 
 	void onTabDeactivated();
