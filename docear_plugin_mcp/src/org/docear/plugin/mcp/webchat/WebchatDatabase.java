@@ -21,7 +21,7 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 4;
+	private static final int SCHEMA_VERSION = 5;
 	public static final String SOURCE_WEB = "web";
 	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
@@ -623,14 +623,15 @@ public final class WebchatDatabase {
 
 	public void upsertMessageShare(final String token, final String messageId, final String userMessageId,
 			final String questionText, final String conversationId, final String username, final long createdAt,
-			final long expiresAt, final boolean includeTitle) throws SQLException {
+			final long expiresAt, final boolean includeTitle, final boolean listed, final String gateQuestion,
+			final String gateAnswerSalt, final String gateAnswerHash) throws SQLException {
 		Connection c = null;
 		PreparedStatement ps = null;
 		try {
 			c = openConnection();
 			ps = c.prepareStatement("INSERT OR REPLACE INTO message_shares"
-					+ "(token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title, machine_id)"
-					+ " VALUES(?,?,?,?,?,?,?,?,0,?,?)");
+					+ "(token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title, listed, gate_question, gate_answer_salt, gate_answer_hash, machine_id)"
+					+ " VALUES(?,?,?,?,?,?,?,?,0,?,?,?,?,?,?)");
 			ps.setString(1, token);
 			ps.setString(2, messageId);
 			ps.setString(3, userMessageId == null ? "" : userMessageId);
@@ -640,10 +641,69 @@ public final class WebchatDatabase {
 			ps.setLong(7, createdAt);
 			ps.setLong(8, expiresAt);
 			ps.setInt(9, includeTitle ? 1 : 0);
-			ps.setString(10, McpAuditMachineId.getMachineId());
+			ps.setInt(10, listed ? 1 : 0);
+			ps.setString(11, gateQuestion == null ? "" : gateQuestion);
+			ps.setString(12, gateAnswerSalt == null ? "" : gateAnswerSalt);
+			ps.setString(13, gateAnswerHash == null ? "" : gateAnswerHash);
+			ps.setString(14, McpAuditMachineId.getMachineId());
 			ps.executeUpdate();
 		}
 		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void updateMessageShareSettings(final String token, final String username, final long expiresAt,
+			final boolean includeTitle, final boolean listed, final String gateQuestion,
+			final String gateAnswerSalt, final String gateAnswerHash) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("UPDATE message_shares SET expires_at = ?, include_title = ?, listed = ?,"
+					+ " gate_question = ?, gate_answer_salt = ?, gate_answer_hash = ?"
+					+ " WHERE token = ? AND username = ? AND revoked = 0");
+			ps.setLong(1, expiresAt);
+			ps.setInt(2, includeTitle ? 1 : 0);
+			ps.setInt(3, listed ? 1 : 0);
+			ps.setString(4, gateQuestion == null ? "" : gateQuestion);
+			ps.setString(5, gateAnswerSalt == null ? "" : gateAnswerSalt);
+			ps.setString(6, gateAnswerHash == null ? "" : gateAnswerHash);
+			ps.setString(7, token);
+			ps.setString(8, username);
+			final int updated = ps.executeUpdate();
+			if (updated == 0) {
+				throw new SQLException("share not found");
+			}
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public List<Map<String, Object>> listMessageSharesForUser(final String username, final int limit)
+			throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title, listed, gate_question, gate_answer_salt, gate_answer_hash"
+							+ " FROM message_shares WHERE username = ? ORDER BY created_at DESC LIMIT ?");
+			ps.setString(1, username);
+			ps.setInt(2, limit < 1 ? 100 : (limit > 200 ? 200 : limit));
+			rs = ps.executeQuery();
+			final List<Map<String, Object>> items = new ArrayList<Map<String, Object>>();
+			while (rs.next()) {
+				items.add(readMessageShare(rs));
+			}
+			return items;
+		}
+		finally {
+			closeQuietly(rs);
 			closeQuietly(ps);
 			closeQuietly(c);
 		}
@@ -673,7 +733,7 @@ public final class WebchatDatabase {
 		try {
 			c = openConnection();
 			ps = c.prepareStatement(
-					"SELECT token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title"
+					"SELECT token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title, listed, gate_question, gate_answer_salt, gate_answer_hash"
 							+ " FROM message_shares WHERE token = ?");
 			ps.setString(1, token);
 			rs = ps.executeQuery();
@@ -697,8 +757,8 @@ public final class WebchatDatabase {
 		try {
 			c = openConnection();
 			ps = c.prepareStatement(
-					"SELECT token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title"
-							+ " FROM message_shares WHERE revoked = 0 AND (expires_at = 0 OR expires_at > ?)"
+					"SELECT token, message_id, user_message_id, question_text, conversation_id, username, created_at, expires_at, revoked, include_title, listed, gate_question, gate_answer_salt, gate_answer_hash"
+							+ " FROM message_shares WHERE revoked = 0 AND listed = 1 AND (expires_at = 0 OR expires_at > ?)"
 							+ " ORDER BY created_at DESC LIMIT ? OFFSET ?");
 			ps.setLong(1, now);
 			ps.setInt(2, limit < 1 ? 50 : limit);
@@ -739,6 +799,30 @@ public final class WebchatDatabase {
 		row.put("expiresAt", Long.valueOf(rs.getLong("expires_at")));
 		row.put("revoked", Boolean.valueOf(rs.getInt("revoked") != 0));
 		row.put("includeTitle", Boolean.valueOf(rs.getInt("include_title") != 0));
+		try {
+			row.put("listed", Boolean.valueOf(rs.getInt("listed") != 0));
+		}
+		catch (SQLException e) {
+			row.put("listed", Boolean.TRUE);
+		}
+		try {
+			row.put("gateQuestion", nullToEmpty(rs.getString("gate_question")));
+		}
+		catch (SQLException e) {
+			row.put("gateQuestion", "");
+		}
+		try {
+			row.put("gateAnswerSalt", nullToEmpty(rs.getString("gate_answer_salt")));
+		}
+		catch (SQLException e) {
+			row.put("gateAnswerSalt", "");
+		}
+		try {
+			row.put("gateAnswerHash", nullToEmpty(rs.getString("gate_answer_hash")));
+		}
+		catch (SQLException e) {
+			row.put("gateAnswerHash", "");
+		}
 		return row;
 	}
 
@@ -845,10 +929,18 @@ public final class WebchatDatabase {
 					+ "expires_at INTEGER NOT NULL DEFAULT 0,"
 					+ "revoked INTEGER NOT NULL DEFAULT 0,"
 					+ "include_title INTEGER NOT NULL DEFAULT 1,"
+					+ "listed INTEGER NOT NULL DEFAULT 1,"
+					+ "gate_question TEXT NOT NULL DEFAULT '',"
+					+ "gate_answer_salt TEXT NOT NULL DEFAULT '',"
+					+ "gate_answer_hash TEXT NOT NULL DEFAULT '',"
 					+ "machine_id TEXT NOT NULL DEFAULT ''"
 					+ ")");
 			ensureColumn(st, "message_shares", "user_message_id", "TEXT NOT NULL DEFAULT ''");
 			ensureColumn(st, "message_shares", "question_text", "TEXT NOT NULL DEFAULT ''");
+			ensureColumn(st, "message_shares", "listed", "INTEGER NOT NULL DEFAULT 1");
+			ensureColumn(st, "message_shares", "gate_question", "TEXT NOT NULL DEFAULT ''");
+			ensureColumn(st, "message_shares", "gate_answer_salt", "TEXT NOT NULL DEFAULT ''");
+			ensureColumn(st, "message_shares", "gate_answer_hash", "TEXT NOT NULL DEFAULT ''");
 			ensureColumn(st, "conversations", "source", "TEXT NOT NULL DEFAULT 'web'");
 			ensureColumn(st, "conversations", "map_key", "TEXT NOT NULL DEFAULT ''");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_user ON conversations(username, updated_at)");

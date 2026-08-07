@@ -111,7 +111,7 @@
   }
 
   function switchView(name) {
-    ["library", "chat", "settings"].forEach(function (v) {
+    ["library", "chat", "settings", "shares"].forEach(function (v) {
       var el = document.getElementById("view-" + v);
       if (el) el.classList.toggle("hidden", v !== name);
     });
@@ -129,6 +129,9 @@
         if (creatingProfile) fillLlmForm(null, true);
         else fillLlmForm(selectedProfile() || currentProfile(), false);
       });
+    }
+    if (name === "shares") {
+      loadOwnShares();
     }
   }
 
@@ -254,30 +257,196 @@
     scrollToBottom(container);
   }
 
+  var pendingShareMessageId = "";
+
+  function openShareModal(messageId) {
+    pendingShareMessageId = messageId || "";
+    document.getElementById("share-expire").value = "0";
+    document.getElementById("share-listed").checked = true;
+    document.getElementById("share-gate-q").value = "";
+    document.getElementById("share-gate-a").value = "";
+    document.getElementById("share-modal").classList.remove("hidden");
+  }
+
+  function closeShareModal() {
+    pendingShareMessageId = "";
+    document.getElementById("share-modal").classList.add("hidden");
+  }
+
   function shareMessage(messageId) {
     if (!messageId) return;
+    openShareModal(messageId);
+  }
+
+  function confirmShare() {
+    if (!pendingShareMessageId) return;
+    var gateQ = document.getElementById("share-gate-q").value.trim();
+    var gateA = document.getElementById("share-gate-a").value.trim();
+    if (gateQ && !gateA) {
+      toast("设置访问问题时必须填写正确答案");
+      return;
+    }
     api("/messages/share", {
       method: "POST",
-      body: JSON.stringify({ messageId: messageId, includeTitle: true }),
+      body: JSON.stringify({
+        messageId: pendingShareMessageId,
+        includeTitle: true,
+        expireDays: Number(document.getElementById("share-expire").value) || 0,
+        listed: document.getElementById("share-listed").checked,
+        gateQuestion: gateQ,
+        gateAnswer: gateA,
+      }),
     }).then(function (res) {
       if (!res.ok) {
         toast((res.body && res.body.error) || "公开失败");
         return;
       }
+      closeShareModal();
       var path = (res.body && res.body.path) || "";
       var url = location.origin + path;
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(url).then(
           function () {
-            toast("已公开（含你的问题），链接已复制 · 可在公开问答库查看");
+            toast("已公开，链接已复制");
           },
           function () {
             toast("公开链接：" + url);
           }
         );
       } else {
-        window.prompt("公开链接（含问答）", url);
+        window.prompt("公开链接", url);
       }
+    });
+  }
+
+  function loadOwnShares() {
+    var listEl = document.getElementById("shares-manage-list");
+    if (!listEl) return;
+    listEl.innerHTML = '<p class="muted">加载中…</p>';
+    api("/messages/shares").then(function (res) {
+      if (!res.ok) {
+        listEl.innerHTML = '<p class="err">' + escapeHtml((res.body && res.body.error) || "加载失败") + "</p>";
+        return;
+      }
+      var items = (res.body && res.body.shares) || [];
+      if (!items.length) {
+        listEl.innerHTML = '<p class="muted">还没有公开问答。在对话里点「公开此问答」即可创建。</p>';
+        return;
+      }
+      listEl.innerHTML = "";
+      items.forEach(function (item) {
+        var card = document.createElement("article");
+        card.className = "share-manage-card";
+        var status = [];
+        if (item.revoked) status.push("已撤销");
+        else if (item.expired) status.push("已过期");
+        else status.push("有效");
+        if (item.gateEnabled) status.push("需答题");
+        if (item.listed === false) status.push("未入库");
+        var exp = "";
+        if (item.expiresAt && Number(item.expiresAt) > 0) {
+          exp = " · 至 " + formatTime(item.expiresAt);
+        } else if (!item.revoked && !item.expired) {
+          exp = " · 永久";
+        }
+        card.innerHTML =
+          '<div class="share-manage-main">' +
+          '<p class="share-manage-q">' +
+          escapeHtml(item.question || "(无问题)") +
+          "</p>" +
+          '<p class="muted tiny share-manage-a">' +
+          escapeHtml(item.answerPreview || "") +
+          "</p>" +
+          '<p class="muted tiny">' +
+          escapeHtml(status.join(" · ") + exp + " · " + formatTime(item.sharedAt)) +
+          "</p></div>" +
+          '<div class="share-manage-actions"></div>';
+        var actions = card.querySelector(".share-manage-actions");
+        if (!item.revoked && !item.expired) {
+          var copyBtn = document.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.className = "ghost small";
+          copyBtn.textContent = "复制链接";
+          copyBtn.addEventListener("click", function () {
+            var url = location.origin + (item.path || "");
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(url).then(function () {
+                toast("已复制");
+              });
+            } else {
+              window.prompt("链接", url);
+            }
+          });
+          actions.appendChild(copyBtn);
+          var editBtn = document.createElement("button");
+          editBtn.type = "button";
+          editBtn.className = "ghost small";
+          editBtn.textContent = "编辑";
+          editBtn.addEventListener("click", function () {
+            openShareEditModal(item);
+          });
+          actions.appendChild(editBtn);
+          var revokeBtn = document.createElement("button");
+          revokeBtn.type = "button";
+          revokeBtn.className = "ghost small err-text";
+          revokeBtn.textContent = "撤销";
+          revokeBtn.addEventListener("click", function () {
+            if (!confirm("确定撤销此公开链接？")) return;
+            api("/messages/unshare", {
+              method: "POST",
+              body: JSON.stringify({ token: item.token }),
+            }).then(function (r) {
+              if (r.ok) {
+                toast("已撤销");
+                loadOwnShares();
+              } else {
+                toast((r.body && r.body.error) || "撤销失败");
+              }
+            });
+          });
+          actions.appendChild(revokeBtn);
+        }
+        listEl.appendChild(card);
+      });
+    });
+  }
+
+  function openShareEditModal(item) {
+    document.getElementById("share-edit-token").value = item.token || "";
+    document.getElementById("share-edit-listed").checked = item.listed !== false;
+    document.getElementById("share-edit-gate-q").value = item.gateQuestion || "";
+    document.getElementById("share-edit-gate-a").value = "";
+    document.getElementById("share-edit-expire").value = "0";
+    document.getElementById("share-edit-modal").classList.remove("hidden");
+  }
+
+  function closeShareEditModal() {
+    document.getElementById("share-edit-modal").classList.add("hidden");
+  }
+
+  function saveShareEdit() {
+    var token = document.getElementById("share-edit-token").value.trim();
+    if (!token) return;
+    var gateQ = document.getElementById("share-edit-gate-q").value.trim();
+    var gateA = document.getElementById("share-edit-gate-a").value.trim();
+    var body = {
+      token: token,
+      expireDays: Number(document.getElementById("share-edit-expire").value) || 0,
+      listed: document.getElementById("share-edit-listed").checked,
+      clearGate: gateQ.length === 0,
+    };
+    if (gateQ) {
+      body.gateQuestion = gateQ;
+      if (gateA) body.gateAnswer = gateA;
+    }
+    api("/messages/share/update", { method: "POST", body: JSON.stringify(body) }).then(function (res) {
+      if (!res.ok) {
+        toast((res.body && res.body.error) || "保存失败");
+        return;
+      }
+      closeShareEditModal();
+      toast("已更新");
+      loadOwnShares();
     });
   }
 
@@ -1297,6 +1466,16 @@
         loadProfiles();
       }
     });
+  });
+
+  document.getElementById("btn-share-confirm").addEventListener("click", confirmShare);
+  document.getElementById("btn-share-edit-save").addEventListener("click", saveShareEdit);
+  document.getElementById("btn-refresh-shares").addEventListener("click", loadOwnShares);
+  document.querySelectorAll("[data-close-share-modal]").forEach(function (el) {
+    el.addEventListener("click", closeShareModal);
+  });
+  document.querySelectorAll("[data-close-share-edit]").forEach(function (el) {
+    el.addEventListener("click", closeShareEditModal);
   });
 
   bindBrowseKeys();

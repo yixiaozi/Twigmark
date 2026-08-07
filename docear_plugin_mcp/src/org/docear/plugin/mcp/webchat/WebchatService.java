@@ -408,11 +408,11 @@ public final class WebchatService {
 	}
 
 	/**
-	 * Create a permanent public share for one assistant message (includes paired user question).
+	 * Create a public share for one assistant message (includes paired user question).
 	 * Security: opaque token; public payload excludes tool traces, paths, and account secrets.
 	 */
 	public static Map<String, Object> createMessageShare(final String username, final String messageId,
-			final boolean includeTitle) throws Exception {
+			final Map shareOptions) throws Exception {
 		final Map message = findMessageAcross(messageId);
 		if (message == null) {
 			throw new IllegalArgumentException("message not found");
@@ -430,17 +430,81 @@ public final class WebchatService {
 				((Long) message.get("createdAt")).longValue());
 		final String userMessageId = userMsg == null ? "" : nullToEmpty((String) userMsg.get("id"));
 		final String questionText = userMsg == null ? "" : nullToEmpty((String) userMsg.get("content"));
+		final ShareSettings settings = parseShareSettings(shareOptions, true);
 		final String token = "pub_" + WebchatPassword.newId() + WebchatPassword.newId();
 		final long now = System.currentTimeMillis();
+		final long expiresAt = computeExpiresAt(settings.expireDays, now);
 		WebchatDatabase.local().upsertMessageShare(token, messageId, userMessageId, questionText, conversationId,
-				username, now, 0L, includeTitle);
-		final Map out = new LinkedHashMap();
-		out.put("token", token);
-		out.put("messageId", messageId);
-		out.put("expiresAt", Long.valueOf(0L));
-		out.put("path", "/web/share.html?t=" + token);
-		out.put("galleryPath", "/web/shares.html");
+				username, now, expiresAt, settings.includeTitle, settings.listed, settings.gateQuestion,
+				settings.gateAnswerSalt, settings.gateAnswerHash);
+		return buildShareResponse(token, messageId, expiresAt, settings);
+	}
+
+	public static Map<String, Object> updateMessageShare(final String username, final String tokenRaw,
+			final Map shareOptions) throws Exception {
+		final String token = tokenRaw == null ? "" : tokenRaw.trim();
+		if (token.length() < 16) {
+			throw new IllegalArgumentException("invalid token");
+		}
+		final Map share = findOwnedShare(username, token);
+		if (share == null) {
+			throw new IllegalArgumentException("share not found");
+		}
+		if (Boolean.TRUE.equals(share.get("revoked"))) {
+			throw new IllegalArgumentException("share revoked");
+		}
+		final ShareSettings settings = parseShareSettings(shareOptions, false);
+		if (shareOptions != null && shareOptions.containsKey("expireDays")) {
+			settings.expireDays = intOption(shareOptions, "expireDays", 0);
+		}
+		else {
+			final long oldExpires = ((Long) share.get("expiresAt")).longValue();
+			settings.computedExpiresAt = oldExpires;
+		}
+		if (settings.gateQuestion.length() > 0 && settings.gateAnswerHash.length() == 0) {
+			final String oldHash = nullToEmpty((String) share.get("gateAnswerHash"));
+			if (oldHash.length() == 0) {
+				throw new IllegalArgumentException("gate answer is required when gate question is set");
+			}
+			settings.gateAnswerSalt = nullToEmpty((String) share.get("gateAnswerSalt"));
+			settings.gateAnswerHash = oldHash;
+		}
+		if (settings.gateQuestion.length() == 0) {
+			settings.gateAnswerSalt = "";
+			settings.gateAnswerHash = "";
+		}
+		final long expiresAt = settings.computedExpiresAt > 0 ? settings.computedExpiresAt
+				: computeExpiresAt(settings.expireDays, ((Long) share.get("createdAt")).longValue());
+		WebchatDatabase.local().updateMessageShareSettings(token, username, expiresAt, settings.includeTitle,
+				settings.listed, settings.gateQuestion, settings.gateAnswerSalt, settings.gateAnswerHash);
+		final Map out = buildShareResponse(token, nullToEmpty((String) share.get("messageId")), expiresAt, settings);
+		out.put("updated", Boolean.TRUE);
 		return out;
+	}
+
+	public static List listOwnMessageShares(final String username) throws Exception {
+		final Map byToken = new LinkedHashMap();
+		final List dbs = openAll();
+		for (int i = 0; i < dbs.size(); i++) {
+			final List rows = ((WebchatDatabase) dbs.get(i)).listMessageSharesForUser(username, 200);
+			for (int j = 0; j < rows.size(); j++) {
+				final Map share = (Map) rows.get(j);
+				byToken.put(share.get("token"), share);
+			}
+		}
+		final List sorted = new ArrayList(byToken.values());
+		Collections.sort(sorted, new Comparator() {
+			public int compare(final Object a, final Object b) {
+				final long ua = ((Long) ((Map) a).get("createdAt")).longValue();
+				final long ub = ((Long) ((Map) b).get("createdAt")).longValue();
+				return ua > ub ? -1 : (ua < ub ? 1 : 0);
+			}
+		});
+		final List items = new ArrayList();
+		for (int i = 0; i < sorted.size(); i++) {
+			items.add(buildOwnShareListItem((Map) sorted.get(i)));
+		}
+		return items;
 	}
 
 	public static void revokeMessageShare(final String username, final String token) throws Exception {
@@ -452,6 +516,40 @@ public final class WebchatService {
 
 	/** Public read of a shared assistant message — minimal fields only. */
 	public static Map<String, Object> getPublicShare(final String tokenRaw) throws Exception {
+		return getPublicShare(tokenRaw, false);
+	}
+
+	public static Map<String, Object> unlockPublicShare(final String tokenRaw, final String answerRaw)
+			throws Exception {
+		final Map share = loadActiveShare(tokenRaw);
+		if (!isGateEnabled(share)) {
+			return getPublicShare(tokenRaw, true);
+		}
+		final String answer = normalizeGateAnswer(answerRaw);
+		if (answer.length() == 0) {
+			throw new IllegalArgumentException("answer is required");
+		}
+		if (!WebchatPassword.matches(answer, nullToEmpty((String) share.get("gateAnswerSalt")),
+				nullToEmpty((String) share.get("gateAnswerHash")))) {
+			throw new IllegalArgumentException("incorrect answer");
+		}
+		return buildPublicSharePayload(share, true);
+	}
+
+	private static Map<String, Object> getPublicShare(final String tokenRaw, final boolean includeContent)
+			throws Exception {
+		final Map share = loadActiveShare(tokenRaw);
+		final boolean gated = isGateEnabled(share);
+		if (gated && !includeContent) {
+			final Map out = buildPublicSharePayload(share, false);
+			out.put("locked", Boolean.TRUE);
+			out.put("gateQuestion", nullToEmpty((String) share.get("gateQuestion")));
+			return out;
+		}
+		return buildPublicSharePayload(share, true);
+	}
+
+	private static Map loadActiveShare(final String tokenRaw) throws Exception {
 		final String token = tokenRaw == null ? "" : tokenRaw.trim();
 		if (token.length() < 16 || token.indexOf("..") >= 0) {
 			throw new IllegalArgumentException("invalid share token");
@@ -475,6 +573,10 @@ public final class WebchatService {
 		if (expiresAt > 0 && expiresAt < System.currentTimeMillis()) {
 			throw new IllegalArgumentException("share expired");
 		}
+		return share;
+	}
+
+	private static Map buildPublicSharePayload(final Map share, final boolean includeContent) throws Exception {
 		final String messageId = nullToEmpty((String) share.get("messageId"));
 		final Map message = findMessageAcross(messageId);
 		if (message == null || !"assistant".equals(nullToEmpty((String) message.get("role")))) {
@@ -490,10 +592,18 @@ public final class WebchatService {
 		}
 		final Map out = new LinkedHashMap();
 		out.put("question", question);
-		out.put("content", nullToEmpty((String) message.get("content")));
 		out.put("model", nullToEmpty((String) message.get("model")));
 		out.put("createdAt", message.get("createdAt"));
 		out.put("sharedAt", share.get("createdAt"));
+		final long expiresAt = ((Long) share.get("expiresAt")).longValue();
+		out.put("expiresAt", Long.valueOf(expiresAt));
+		out.put("locked", Boolean.valueOf(isGateEnabled(share) && !includeContent));
+		if (isGateEnabled(share)) {
+			out.put("gateQuestion", nullToEmpty((String) share.get("gateQuestion")));
+		}
+		if (includeContent) {
+			out.put("content", nullToEmpty((String) message.get("content")));
+		}
 		if (Boolean.TRUE.equals(share.get("includeTitle"))) {
 			final String owner = nullToEmpty((String) share.get("username"));
 			final String conversationId = nullToEmpty((String) share.get("conversationId"));
@@ -506,7 +616,6 @@ public final class WebchatService {
 			catch (Exception ignored) {
 			}
 		}
-		// Deliberately omit: username, tool traces, map paths, conversation id, message id.
 		return out;
 	}
 
@@ -566,7 +675,13 @@ public final class WebchatService {
 			}
 		}
 		item.put("question", previewText(question, 240));
-		if (message != null) {
+		item.put("expiresAt", share.get("expiresAt"));
+		item.put("locked", Boolean.valueOf(isGateEnabled(share)));
+		if (isGateEnabled(share)) {
+			item.put("gateQuestion", previewText(nullToEmpty((String) share.get("gateQuestion")), 120));
+			item.put("answerPreview", "需回答访问问题后查看");
+		}
+		else if (message != null) {
 			item.put("answerPreview", previewText(nullToEmpty((String) message.get("content")), 320));
 			item.put("model", nullToEmpty((String) message.get("model")));
 			item.put("createdAt", message.get("createdAt"));
@@ -993,5 +1108,159 @@ public final class WebchatService {
 
 	private static String nullToEmpty(final String value) {
 		return value == null ? "" : value;
+	}
+
+	private static final class ShareSettings {
+		boolean includeTitle = true;
+		boolean listed = true;
+		int expireDays = 0;
+		long computedExpiresAt = 0L;
+		String gateQuestion = "";
+		String gateAnswerSalt = "";
+		String gateAnswerHash = "";
+	}
+
+	private static ShareSettings parseShareSettings(final Map options, final boolean creating) {
+		final ShareSettings s = new ShareSettings();
+		if (options == null) {
+			return s;
+		}
+		if (options.containsKey("includeTitle")) {
+			s.includeTitle = boolOption(options, "includeTitle", true);
+		}
+		if (options.containsKey("listed")) {
+			s.listed = boolOption(options, "listed", true);
+		}
+		s.expireDays = intOption(options, "expireDays", 0);
+		s.gateQuestion = strOption(options, "gateQuestion");
+		final String gateAnswer = strOption(options, "gateAnswer");
+		if (s.gateQuestion.length() > 0) {
+			if (gateAnswer.length() == 0 && creating) {
+				throw new IllegalArgumentException("gate answer is required when gate question is set");
+			}
+			if (gateAnswer.length() > 0) {
+				s.gateAnswerSalt = WebchatPassword.newSalt();
+				s.gateAnswerHash = WebchatPassword.hash(normalizeGateAnswer(gateAnswer), s.gateAnswerSalt);
+			}
+		}
+		if (options.containsKey("clearGate") && boolOption(options, "clearGate", false)) {
+			s.gateQuestion = "";
+			s.gateAnswerSalt = "";
+			s.gateAnswerHash = "";
+		}
+		return s;
+	}
+
+	private static Map buildShareResponse(final String token, final String messageId, final long expiresAt,
+			final ShareSettings settings) {
+		final Map out = new LinkedHashMap();
+		out.put("token", token);
+		if (messageId != null && messageId.length() > 0) {
+			out.put("messageId", messageId);
+		}
+		out.put("expiresAt", Long.valueOf(expiresAt));
+		out.put("includeTitle", Boolean.valueOf(settings.includeTitle));
+		out.put("listed", Boolean.valueOf(settings.listed));
+		out.put("gateEnabled", Boolean.valueOf(settings.gateQuestion.length() > 0));
+		out.put("path", "/web/share.html?t=" + token);
+		out.put("galleryPath", "/web/shares.html");
+		return out;
+	}
+
+	private static Map buildOwnShareListItem(final Map share) throws Exception {
+		final String token = nullToEmpty((String) share.get("token"));
+		final String messageId = nullToEmpty((String) share.get("messageId"));
+		final Map message = findMessageAcross(messageId);
+		final Map item = new LinkedHashMap();
+		item.put("token", token);
+		item.put("path", "/web/share.html?t=" + token);
+		item.put("sharedAt", share.get("createdAt"));
+		item.put("expiresAt", share.get("expiresAt"));
+		item.put("revoked", share.get("revoked"));
+		item.put("listed", share.get("listed"));
+		item.put("includeTitle", share.get("includeTitle"));
+		item.put("gateEnabled", Boolean.valueOf(isGateEnabled(share)));
+		item.put("gateQuestion", nullToEmpty((String) share.get("gateQuestion")));
+		item.put("question", previewText(nullToEmpty((String) share.get("questionText")), 240));
+		if (message != null) {
+			item.put("answerPreview", previewText(nullToEmpty((String) message.get("content")), 200));
+			item.put("model", nullToEmpty((String) message.get("model")));
+		}
+		final long expiresAt = ((Long) share.get("expiresAt")).longValue();
+		item.put("expired", Boolean.valueOf(expiresAt > 0 && expiresAt < System.currentTimeMillis()));
+		return item;
+	}
+
+	private static Map findOwnedShare(final String username, final String token) throws Exception {
+		final List dbs = openAll();
+		for (int i = 0; i < dbs.size(); i++) {
+			final Map row = ((WebchatDatabase) dbs.get(i)).getMessageShare(token);
+			if (row != null && username.equals(row.get("username"))) {
+				return row;
+			}
+		}
+		return null;
+	}
+
+	private static long computeExpiresAt(final int expireDays, final long baseMs) {
+		if (expireDays < 1) {
+			return 0L;
+		}
+		if (expireDays > 3650) {
+			return baseMs + 3650L * 86400000L;
+		}
+		return baseMs + ((long) expireDays) * 86400000L;
+	}
+
+	private static boolean isGateEnabled(final Map share) {
+		if (share == null) {
+			return false;
+		}
+		final String q = nullToEmpty((String) share.get("gateQuestion"));
+		final String h = nullToEmpty((String) share.get("gateAnswerHash"));
+		return q.length() > 0 && h.length() > 0;
+	}
+
+	private static String normalizeGateAnswer(final String raw) {
+		return raw == null ? "" : raw.trim().toLowerCase();
+	}
+
+	private static String strOption(final Map options, final String key) {
+		if (options == null || !options.containsKey(key) || options.get(key) == null) {
+			return "";
+		}
+		final Object v = options.get(key);
+		if (v instanceof org.docear.plugin.mcp.json.JsonValue) {
+			return nullToEmpty(((org.docear.plugin.mcp.json.JsonValue) v).asString()).trim();
+		}
+		return nullToEmpty(String.valueOf(v)).trim();
+	}
+
+	private static int intOption(final Map options, final String key, final int fallback) {
+		final String raw = strOption(options, key);
+		if (raw.length() == 0) {
+			return fallback;
+		}
+		try {
+			return Integer.parseInt(raw);
+		}
+		catch (NumberFormatException e) {
+			return fallback;
+		}
+	}
+
+	private static boolean boolOption(final Map options, final String key, final boolean fallback) {
+		if (options == null || !options.containsKey(key) || options.get(key) == null) {
+			return fallback;
+		}
+		final Object v = options.get(key);
+		if (v instanceof org.docear.plugin.mcp.json.JsonValue) {
+			return ((org.docear.plugin.mcp.json.JsonValue) v).asBoolean();
+		}
+		if (v instanceof Boolean) {
+			return ((Boolean) v).booleanValue();
+		}
+		final String s = String.valueOf(v);
+		return !"false".equalsIgnoreCase(s) && !"0".equals(s);
 	}
 }

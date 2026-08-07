@@ -23,7 +23,19 @@
           <p class="share-q-label">问</p>
           <div class="share-q-body" id="question"></div>
         </section>
-        <section class="share-qa-block">
+        <section class="share-qa-block" id="gate-section" hidden>
+          <p class="share-q-label">访问问题</p>
+          <p class="share-gate-prompt" id="gate-prompt"></p>
+          <form id="gate-form" class="share-gate-form">
+            <label
+              >你的回答
+              <input id="gate-answer" type="text" autocomplete="off" placeholder="回答正确后可见答案" />
+            </label>
+            <button type="submit" class="primary small">查看答案</button>
+            <p id="gate-error" class="err tiny"></p>
+          </form>
+        </section>
+        <section class="share-qa-block" id="answer-section">
           <p class="share-a-label">答</p>
           <div class="share-body" id="body"></div>
         </section>
@@ -55,16 +67,86 @@
             return blocks[Number(idx)] || "";
           });
         }
+        function fmtExpiry(expiresAt) {
+          if (!expiresAt) return "";
+          try {
+            return "有效期至 " + new Date(Number(expiresAt)).toLocaleString();
+          } catch (e) {
+            return "";
+          }
+        }
         var params = new URLSearchParams(location.search);
         var token = params.get("t") || "";
         var titleEl = document.getElementById("title");
         var metaEl = document.getElementById("meta");
         var questionEl = document.getElementById("question");
         var bodyEl = document.getElementById("body");
+        var gateSection = document.getElementById("gate-section");
+        var gatePrompt = document.getElementById("gate-prompt");
+        var gateForm = document.getElementById("gate-form");
+        var gateAnswer = document.getElementById("gate-answer");
+        var gateError = document.getElementById("gate-error");
+        var answerSection = document.getElementById("answer-section");
+
+        function renderShare(data) {
+          if (data.title) titleEl.textContent = data.title;
+          var bits = [];
+          if (data.model) bits.push(data.model);
+          if (data.sharedAt) {
+            try {
+              bits.push("公开于 " + new Date(Number(data.sharedAt)).toLocaleString());
+            } catch (e) {}
+          }
+          var exp = fmtExpiry(data.expiresAt);
+          if (exp) bits.push(exp);
+          metaEl.textContent = bits.join(" · ") || "公开问答";
+          questionEl.innerHTML = renderMarkdown(data.question || "(无问题文本)");
+          if (data.locked) {
+            answerSection.hidden = true;
+            gateSection.hidden = false;
+            gatePrompt.textContent = data.gateQuestion || "请回答问题";
+            gateAnswer.value = "";
+            gateError.textContent = "";
+          } else {
+            gateSection.hidden = true;
+            answerSection.hidden = false;
+            bodyEl.innerHTML = renderMarkdown(data.content || "");
+          }
+        }
+
         if (!token) {
           metaEl.textContent = "缺少分享令牌";
+          answerSection.hidden = true;
           return;
         }
+
+        gateForm.addEventListener("submit", function (e) {
+          e.preventDefault();
+          gateError.textContent = "";
+          fetch("../api/public/share/" + encodeURIComponent(token) + "/unlock", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ answer: gateAnswer.value }),
+            cache: "no-store",
+          })
+            .then(function (r) {
+              return r.json().then(function (body) {
+                return { ok: r.ok, status: r.status, body: body };
+              });
+            })
+            .then(function (res) {
+              if (!res.ok) {
+                gateError.textContent =
+                  (res.body && res.body.error) || (res.status === 403 ? "回答不正确" : "无法解锁");
+                return;
+              }
+              renderShare(res.body);
+            })
+            .catch(function () {
+              gateError.textContent = "网络错误";
+            });
+        });
+
         fetch("../api/public/share/" + encodeURIComponent(token), { cache: "no-store" })
           .then(function (r) {
             return r.json().then(function (body) {
@@ -74,19 +156,11 @@
           .then(function (res) {
             if (!res.ok) {
               metaEl.textContent = (res.body && res.body.error) || "无法打开分享";
+              answerSection.hidden = true;
+              gateSection.hidden = true;
               return;
             }
-            if (res.body.title) titleEl.textContent = res.body.title;
-            var bits = [];
-            if (res.body.model) bits.push(res.body.model);
-            if (res.body.sharedAt) {
-              try {
-                bits.push("公开于 " + new Date(Number(res.body.sharedAt)).toLocaleString());
-              } catch (e) {}
-            }
-            metaEl.textContent = bits.join(" · ") || "公开问答";
-            questionEl.innerHTML = renderMarkdown(res.body.question || "(无问题文本)");
-            bodyEl.innerHTML = renderMarkdown(res.body.content || "");
+            renderShare(res.body);
           })
           .catch(function () {
             metaEl.textContent = "网络错误";

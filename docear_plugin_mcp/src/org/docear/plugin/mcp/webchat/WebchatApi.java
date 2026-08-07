@@ -236,8 +236,7 @@ public final class WebchatApi {
 				writeJson(exchange, 400, error("messageId is required"));
 				return;
 			}
-			final boolean includeTitle = !"false".equalsIgnoreCase(str(args, "includeTitle"));
-			final Map share = WebchatService.createMessageShare(username, messageId, includeTitle);
+			final Map share = WebchatService.createMessageShare(username, messageId, args);
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
 		}
 		catch (IllegalArgumentException e) {
@@ -247,7 +246,48 @@ public final class WebchatApi {
 		}
 		catch (Exception e) {
 			LogUtils.warn("share message failed: " + e.getMessage(), e);
-			writeJson(exchange, 500, error(e.getMessage()));
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleUpdateShareMessage(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final String token = str(args, "token");
+			if (token.length() == 0) {
+				writeJson(exchange, 400, error("token is required"));
+				return;
+			}
+			final Map share = WebchatService.updateMessageShare(username, token, args);
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
+		}
+		catch (IllegalArgumentException e) {
+			final boolean auth = e.getMessage() != null && (e.getMessage().indexOf("login") >= 0
+					|| e.getMessage().indexOf("session") >= 0);
+			writeJson(exchange, auth ? 401 : 400, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			WebSecurity.logAndSanitize("update share failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleListOwnShares(final HttpExchange exchange) throws IOException {
+		try {
+			final String username = WebchatService.requireUsername(extractSessionToken(exchange));
+			final List items = WebchatService.listOwnMessageShares(username);
+			final Map out = new LinkedHashMap();
+			out.put("shares", JsonValue.ofList(WebchatService.toJsonMaps(items)));
+			out.put("count", JsonValue.ofNumber(Integer.valueOf(items.size())));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
+		}
+		catch (IllegalArgumentException e) {
+			writeJson(exchange, 401, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			WebSecurity.logAndSanitize("list own shares failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}
 
@@ -283,6 +323,34 @@ public final class WebchatApi {
 		}
 		catch (Exception e) {
 			WebSecurity.logAndSanitize("public share failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handlePublicShareUnlock(final HttpExchange exchange, final String token, final String body)
+			throws IOException {
+		try {
+			WebSecurity.requireRateLimit("public-share-unlock", exchange, 30);
+			final Map args = body != null && body.trim().length() > 0 ? JsonParser.parse(body).asMap()
+					: new LinkedHashMap();
+			final Map share = WebchatService.unlockPublicShare(token, str(args, "answer"));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(share))));
+		}
+		catch (IllegalArgumentException e) {
+			final int code;
+			if (e.getMessage() != null && e.getMessage().indexOf("too many") >= 0) {
+				code = 429;
+			}
+			else if (e.getMessage() != null && e.getMessage().indexOf("incorrect") >= 0) {
+				code = 403;
+			}
+			else {
+				code = 404;
+			}
+			writeJson(exchange, code, error(code == 404 ? "share not found" : e.getMessage()));
+		}
+		catch (Exception e) {
+			WebSecurity.logAndSanitize("public share unlock failed", e);
 			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
 		}
 	}

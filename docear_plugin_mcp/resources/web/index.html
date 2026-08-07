@@ -47,6 +47,7 @@
         <nav class="app-nav" aria-label="主导航">
           <button type="button" class="nav-btn active" data-view="library">导图库</button>
           <button type="button" class="nav-btn" data-view="chat">对话</button>
+          <button type="button" class="nav-btn" data-view="shares">公开</button>
           <button type="button" class="nav-btn" data-view="settings">模型</button>
         </nav>
         <div class="app-bar-right">
@@ -170,6 +171,21 @@
         </div>
       </section>
 
+      <section id="view-shares" class="view hidden">
+        <div class="settings-page shares-manage-page">
+          <header class="shares-manage-head">
+            <div>
+              <h2>公开问答管理</h2>
+              <p class="muted tiny">管理已公开的问答：有效期、访问问题、撤销或复制链接。</p>
+            </div>
+            <button type="button" id="btn-refresh-shares" class="ghost small">刷新</button>
+          </header>
+          <div id="shares-manage-list" class="shares-manage-list">
+            <p class="muted">加载中…</p>
+          </div>
+        </div>
+      </section>
+
       <section id="view-settings" class="view hidden">
         <div class="settings-page settings-split">
           <aside class="profile-list-panel">
@@ -221,8 +237,74 @@
       <nav class="mobile-nav" aria-label="移动导航">
         <button type="button" class="nav-btn active" data-view="library">导图</button>
         <button type="button" class="nav-btn" data-view="chat">对话</button>
+        <button type="button" class="nav-btn" data-view="shares">公开</button>
         <button type="button" class="nav-btn" data-view="settings">模型</button>
       </nav>
+    </div>
+
+    <div id="share-modal" class="modal hidden" role="dialog" aria-labelledby="share-modal-title">
+      <div class="modal-backdrop" data-close-share-modal></div>
+      <div class="modal-card share-modal-card">
+        <h3 id="share-modal-title">公开此问答</h3>
+        <p class="muted tiny">将同时公开你的提问与 AI 回答。可设有效期与访问问题。</p>
+        <div class="settings-grid share-modal-grid">
+          <label
+            >有效期
+            <select id="share-expire">
+              <option value="0">永久</option>
+              <option value="1">1 天</option>
+              <option value="7">7 天</option>
+              <option value="30">30 天</option>
+              <option value="90">90 天</option>
+            </select>
+          </label>
+          <label class="check span-2"
+            ><input id="share-listed" type="checkbox" checked /> 显示在公开问答库</label
+          >
+          <label class="span-2"
+            >访问问题 <span class="muted tiny">（可选，答对才可见答案）</span>
+            <input id="share-gate-q" placeholder="例如：我的宠物叫什么？" />
+          </label>
+          <label class="span-2"
+            >正确答案
+            <input id="share-gate-a" type="text" autocomplete="off" placeholder="与问题配套，不区分大小写" />
+          </label>
+        </div>
+        <div class="settings-row">
+          <button type="button" class="ghost" data-close-share-modal>取消</button>
+          <button type="button" id="btn-share-confirm" class="primary">公开并复制链接</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="share-edit-modal" class="modal hidden" role="dialog">
+      <div class="modal-backdrop" data-close-share-edit></div>
+      <div class="modal-card share-modal-card">
+        <h3>编辑公开设置</h3>
+        <input type="hidden" id="share-edit-token" />
+        <div class="settings-grid share-modal-grid">
+          <label
+            >有效期
+            <select id="share-edit-expire">
+              <option value="0">永久</option>
+              <option value="1">1 天</option>
+              <option value="7">7 天</option>
+              <option value="30">30 天</option>
+              <option value="90">90 天</option>
+            </select>
+          </label>
+          <label class="check span-2"><input id="share-edit-listed" type="checkbox" /> 显示在公开问答库</label>
+          <label class="span-2">访问问题 <input id="share-edit-gate-q" placeholder="留空则取消访问限制" /></label>
+          <label class="span-2"
+            >新正确答案 <span class="muted tiny">（留空则保留原答案）</span>
+            <input id="share-edit-gate-a" type="text" autocomplete="off" />
+          </label>
+        </div>
+        <div class="settings-row">
+          <button type="button" class="ghost" data-close-share-edit>取消</button>
+          <button type="button" id="btn-share-edit-save" class="primary">保存</button>
+        </div>
+      </div>
     </div>
 
     <div id="toast" class="toast hidden" role="status"></div>
