@@ -62,6 +62,35 @@ public final class WorkspaceSideTabScanCache {
 		}
 	}
 
+	/**
+	 * Prefer the background preload snapshot; if not ready, scan synchronously and
+	 * publish into the cache so subsequent MCP queries avoid another full walk.
+	 */
+	public static List<File> getMindMapFilesOrCollect() {
+		final List<File> snapshot = getMindMapFilesSnapshot();
+		if (snapshot != null) {
+			return snapshot;
+		}
+		final List<File> files = new ArrayList<File>();
+		MindMapDataRootResolver.collectMindmapFiles(files);
+		sortByLastModifiedDesc(files);
+		synchronized (WorkspaceSideTabScanCache.class) {
+			mindMapFiles = files;
+			mindMapScanComplete = true;
+		}
+		return new ArrayList<File>(files);
+	}
+
+	/** Drop cached file lists so the next call rescans (e.g. after large imports). */
+	public static void invalidate() {
+		synchronized (WorkspaceSideTabScanCache.class) {
+			mindMapFiles = Collections.emptyList();
+			allFiles = Collections.emptyList();
+			mindMapScanComplete = false;
+			allFilesScanComplete = false;
+		}
+	}
+
 	public static List<File> getAllFilesSnapshot() {
 		if (!allFilesScanComplete) {
 			return null;

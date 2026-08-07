@@ -55,11 +55,26 @@ public final class McpRelationshipGraphService {
 
 	public static String getGraphSummary(final boolean refresh) throws Exception {
 		final Map<String, JsonValue> root = new LinkedHashMap<String, JsonValue>();
+		// Fast modes only by default — map_nodes/tags are full-library SAX and must be
+		// requested explicitly via get_relationship_graph (unless already warm in cache).
 		root.put("mapFiles", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_MAP_FILES, refresh)));
-		root.put("mapNodes", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_MAP_NODES, refresh)));
-		root.put("tags", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_TAGS, refresh)));
 		root.put("favorites", JsonValue.ofMap(buildModeSummary(RelationshipGraphScanner.MODE_FAVORITES, refresh)));
+		root.put("mapNodes", JsonValue.ofMap(summaryOrSkipped(RelationshipGraphScanner.MODE_MAP_NODES, refresh)));
+		root.put("tags", JsonValue.ofMap(summaryOrSkipped(RelationshipGraphScanner.MODE_TAGS, refresh)));
 		return JsonValue.ofMap(root).toJson();
+	}
+
+	private static Map<String, JsonValue> summaryOrSkipped(final int mode, final boolean refresh) throws Exception {
+		if (!refresh && isCacheFresh(mode)) {
+			return buildModeSummary(mode, false);
+		}
+		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
+		item.put("mode", JsonValue.ofString(modeName(mode)));
+		item.put("skipped", JsonValue.ofBoolean(true));
+		item.put("reason", JsonValue.ofString(
+				"Heavy mode omitted from summary; call get_relationship_graph with mode=" + modeName(mode)));
+		item.put("cached", JsonValue.ofBoolean(false));
+		return item;
 	}
 
 	private static Map<String, JsonValue> buildModeSummary(final int mode, final boolean refresh) throws Exception {

@@ -134,6 +134,7 @@ final class McpMapWriteSession {
 		try {
 			final MFileManager fileManager = (MFileManager) MFileManager.getController();
 			if (fileManager.save(map, file)) {
+				invalidateSearchCaches();
 				return;
 			}
 			final MMapIO mapIO = (MMapIO) MModeController.getMModeController().getExtension(
@@ -141,10 +142,20 @@ final class McpMapWriteSession {
 			mapIO.writeToFile(map, file);
 			map.setURL(Compat.fileToUrl(file));
 			map.setSaved(true);
+			invalidateSearchCaches();
 		}
 		catch (Exception e) {
 			LogUtils.warn("MCP save failed for " + file.getAbsolutePath() + ": " + e.getMessage());
 			throw new RuntimeException("Failed to save mind map: " + file.getAbsolutePath(), e);
+		}
+	}
+
+	private void invalidateSearchCaches() {
+		try {
+			org.freeplane.core.util.MindMapNodeSearchIndex.invalidate(file);
+			org.freeplane.core.util.MindMapWorkspaceContextScanner.invalidateFileCache(file);
+		}
+		catch (Exception e) {
 		}
 	}
 

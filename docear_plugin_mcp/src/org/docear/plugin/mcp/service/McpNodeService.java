@@ -78,17 +78,33 @@ public final class McpNodeService {
 	}
 
 	public static String listPublished(final int limit) {
-		final List items = MindMapWorkspaceContextScanner.scanPublishedItems();
+		final WorkspaceSideTabSnapshot snapshot = WorkspaceSideTabSnapshotRegistry.getSnapshot();
+		List items = snapshot.getPublishedEntries();
+		if (items == null || items.isEmpty()) {
+			items = MindMapWorkspaceContextScanner.scanPublishedItems();
+		}
 		final List<JsonValue> json = new ArrayList<JsonValue>();
 		for (int i = 0; i < items.size(); i++) {
 			if (limit > 0 && json.size() >= limit) {
 				break;
 			}
-			final IconItem item = (IconItem) items.get(i);
+			final Object raw = items.get(i);
 			final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
-			row.put("mapFile", JsonValue.ofString(McpContextService.pathOf(item.mapFile)));
-			row.put("nodeId", JsonValue.ofString(item.nodeId));
-			row.put("nodeText", JsonValue.ofString(item.nodeText));
+			if (raw instanceof IconItem) {
+				final IconItem item = (IconItem) raw;
+				row.put("mapFile", JsonValue.ofString(McpContextService.pathOf(item.mapFile)));
+				row.put("nodeId", JsonValue.ofString(item.nodeId));
+				row.put("nodeText", JsonValue.ofString(item.nodeText));
+			}
+			else if (raw instanceof WorkspaceSideTabSnapshot.ItemEntry) {
+				final WorkspaceSideTabSnapshot.ItemEntry item = (WorkspaceSideTabSnapshot.ItemEntry) raw;
+				row.put("mapFile", JsonValue.ofString(McpContextService.pathOf(item.mapFile)));
+				row.put("nodeId", JsonValue.ofString(item.nodeId));
+				row.put("nodeText", JsonValue.ofString(item.nodeText));
+			}
+			else {
+				continue;
+			}
 			json.add(JsonValue.ofMap(row));
 		}
 		return JsonValue.ofList(json).toJson();

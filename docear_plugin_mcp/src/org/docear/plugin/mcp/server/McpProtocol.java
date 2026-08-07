@@ -22,6 +22,10 @@ import org.docear.plugin.mcp.service.McpWorkspaceService;
 
 public final class McpProtocol {
 
+	private static volatile List<JsonValue> cachedTools;
+	private static volatile List<JsonValue> cachedResources;
+	private static volatile List<JsonValue> cachedPrompts;
+
 	public String handle(final JsonValue request) throws Exception {
 		final Map<String, JsonValue> map = request.asMap();
 		final String method = map.containsKey("method") ? map.get("method").asString() : "";
@@ -75,6 +79,19 @@ public final class McpProtocol {
 	}
 
 	private List<JsonValue> listTools() {
+		if (cachedTools != null) {
+			return cachedTools;
+		}
+		synchronized (McpProtocol.class) {
+			if (cachedTools != null) {
+				return cachedTools;
+			}
+			cachedTools = buildTools();
+			return cachedTools;
+		}
+	}
+
+	private List<JsonValue> buildTools() {
 		final List<JsonValue> tools = new ArrayList<JsonValue>();
 		tools.add(tool("list_todos", "List all todo items across the workspace."));
 		tools.add(tool("list_reminders", "List reminders. Optional filters: oneTimeOnly, recurringOnly.",
@@ -208,19 +225,19 @@ public final class McpProtocol {
 				schema("reportId", "string", false), schema("from", "string", false), schema("to", "string", false),
 				schema("showInViewport", "boolean", false)));
 		tools.add(tool("search_nodes",
-				"Search nodes by keyword via silent SAX. Filters by node MODIFIED (not global Top-N). "
-						+ "Use modifiedWithinDays, filePath, or projectId to narrow large workspaces.",
+				"Fast keyword search over node TEXT (indexed + disk spill). Default modifiedWithinDays=365. "
+						+ "Pass 0 for unlimited. Prefer filePath/projectId on large workspaces.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false), schema("filePath", "string", false),
 				schema("projectId", "string", false)));
 		tools.add(tool("list_recently_modified",
-				"List recently modified nodes (node MODIFIED per file). Optional keyword filter.",
+				"List recently modified nodes (node MODIFIED). Uses search index; default modifiedWithinDays=365.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false)));
 		tools.add(tool("get_relationship_graph",
-				"Silent relationship graph across workspace .mm files. "
-						+ "Modes: map_files (default), map_nodes (slower), tags (tag hubs↔nodes), favorites (favorite tags↔maps). "
-						+ "Use filePath/nodeId + hops for local neighborhood; query for label search. Cached ~10min unless refresh=true.",
+				"Silent relationship graph. Modes: map_files (default, fast), favorites (fast), "
+						+ "map_nodes/tags (slower full-library). Prefer map_files unless node-level edges needed. "
+						+ "Cached ~10min unless refresh=true.",
 				schema("mode", "string", false), schema("query", "string", false),
 				schema("filePath", "string", false), schema("nodeId", "string", false),
 				schema("hops", "number", false), schema("showIsolated", "boolean", false),
@@ -525,9 +542,11 @@ public final class McpProtocol {
 					argBool(args, "showInViewport", false));
 		}
 		else if ("search_nodes".equals(name)) {
+			final String filePath = argString(args, "filePath", "");
+			final int defaultDays = (filePath != null && filePath.trim().length() > 0) ? 0 : 365;
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
-					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", 0),
-					argString(args, "filePath", ""), argString(args, "projectId", ""));
+					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", defaultDays),
+					filePath, argString(args, "projectId", ""));
 		}
 		else if ("list_recently_modified".equals(name)) {
 			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
@@ -660,24 +679,39 @@ public final class McpProtocol {
 	}
 
 	private List<JsonValue> listResources() {
-		final List<JsonValue> resources = new ArrayList<JsonValue>();
-		resources.add(resource("docear://manifest", "Capability manifest", "application/json"));
-		resources.add(resource("docear://workspace/overview", "Workspace overview", "application/json"));
-		resources.add(resource("docear://workspace/plan", "Workspace plan summary", "text/plain"));
-		resources.add(resource("docear://tasks/today", "Today's reminders", "application/json"));
-		resources.add(resource("docear://tasks/todos", "All todos", "application/json"));
-		resources.add(resource("docear://tasks/reminders", "All reminders", "application/json"));
-		resources.add(resource("docear://tasks/overdue", "Overdue reminders", "application/json"));
-		resources.add(resource("docear://context/selection", "Current selection", "application/json"));
-		resources.add(resource("docear://context/active-map", "Active mind map JSON", "application/json"));
-		resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
-		resources.add(resource("docear://graph/summary", "Relationship graph summary (file + node modes)", "application/json"));
-		resources.add(resource("docear://tags/catalog", "Tag groups + tags + favorite tags catalog", "application/json"));
-		resources.add(resource("docear://pomodoro/running", "Currently running pomodoro / focus session", "application/json"));
-		resources.add(resource("docear://pomodoro/stats", "Pomodoro today/week/total stats (all open maps)", "application/json"));
-		resources.add(resource("docear://finance/summary", "Current-month personal finance summary", "application/json"));
-		resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
-		return resources;
+		if (cachedResources != null) {
+			return cachedResources;
+		}
+		synchronized (McpProtocol.class) {
+			if (cachedResources != null) {
+				return cachedResources;
+			}
+			final List<JsonValue> resources = new ArrayList<JsonValue>();
+			resources.add(resource("docear://manifest", "Capability manifest", "application/json"));
+			resources.add(resource("docear://workspace/overview", "Workspace overview", "application/json"));
+			resources.add(resource("docear://workspace/plan", "Workspace plan summary", "text/plain"));
+			resources.add(resource("docear://tasks/today", "Today's reminders", "application/json"));
+			resources.add(resource("docear://tasks/todos", "All todos", "application/json"));
+			resources.add(resource("docear://tasks/reminders", "All reminders", "application/json"));
+			resources.add(resource("docear://tasks/overdue", "Overdue reminders", "application/json"));
+			resources.add(resource("docear://context/selection", "Current selection", "application/json"));
+			resources.add(resource("docear://context/active-map", "Active mind map JSON", "application/json"));
+			resources.add(resource("docear://context/recent", "Recently modified nodes", "application/json"));
+			resources.add(resource("docear://graph/summary",
+					"Relationship graph summary (map_files+favorites; heavy modes skipped unless cached)",
+					"application/json"));
+			resources.add(resource("docear://tags/catalog", "Tag groups + tags + favorite tags catalog",
+					"application/json"));
+			resources.add(resource("docear://pomodoro/running", "Currently running pomodoro / focus session",
+					"application/json"));
+			resources.add(resource("docear://pomodoro/stats",
+					"Pomodoro today/week/total stats (all open maps)", "application/json"));
+			resources.add(resource("docear://finance/summary", "Current-month personal finance summary",
+					"application/json"));
+			resources.add(resource("docear://inbox", "Inbox capture hint", "application/json"));
+			cachedResources = resources;
+			return cachedResources;
+		}
 	}
 
 	private JsonValue readResource(final JsonValue params) throws Exception {
@@ -790,17 +824,27 @@ public final class McpProtocol {
 	}
 
 	private List<JsonValue> listPrompts() {
-		final List<JsonValue> prompts = new ArrayList<JsonValue>();
-		prompts.add(prompt("daily-review", "Review today's reminders, todos and overdue items."));
-		prompts.add(prompt("plan-my-day", "Plan the day based on reminders, todos and priorities."));
-		prompts.add(prompt("break-down-task", "Break the selected node into actionable subtasks."));
-		prompts.add(prompt("project-status", "Summarize project progress from workspace mind maps."));
-		prompts.add(prompt("inbox-triage", "Triage inbox captures into projects and todos."));
-		prompts.add(prompt("weekly-review", "Weekly review of completed and pending work."));
-		prompts.add(prompt("focus-status", "Summarize what the user is focusing on now and recent pomodoro history."));
-		prompts.add(prompt("finance-review",
-				"Review this month's personal finance: income, expense, budgets, subscriptions and coupons."));
-		return prompts;
+		if (cachedPrompts != null) {
+			return cachedPrompts;
+		}
+		synchronized (McpProtocol.class) {
+			if (cachedPrompts != null) {
+				return cachedPrompts;
+			}
+			final List<JsonValue> prompts = new ArrayList<JsonValue>();
+			prompts.add(prompt("daily-review", "Review today's reminders, todos and overdue items."));
+			prompts.add(prompt("plan-my-day", "Plan the day based on reminders, todos and priorities."));
+			prompts.add(prompt("break-down-task", "Break the selected node into actionable subtasks."));
+			prompts.add(prompt("project-status", "Summarize project progress from workspace mind maps."));
+			prompts.add(prompt("inbox-triage", "Triage inbox captures into projects and todos."));
+			prompts.add(prompt("weekly-review", "Weekly review of completed and pending work."));
+			prompts.add(prompt("focus-status",
+					"Summarize what the user is focusing on now and recent pomodoro history."));
+			prompts.add(prompt("finance-review",
+					"Review this month's personal finance: income, expense, budgets, subscriptions and coupons."));
+			cachedPrompts = prompts;
+			return cachedPrompts;
+		}
 	}
 
 	private JsonValue getPrompt(final JsonValue params) throws Exception {

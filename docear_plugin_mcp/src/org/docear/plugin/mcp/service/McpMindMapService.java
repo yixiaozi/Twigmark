@@ -33,6 +33,10 @@ import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
+import org.freeplane.core.util.MindMapNodeSearchIndex;
+import org.freeplane.core.util.MindMapNodeSearchIndex.Hit;
+import org.freeplane.core.util.MindMapWorkspaceContextScanner;
+import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.MindIconFactory;
@@ -66,27 +70,13 @@ public final class McpMindMapService {
 	/** Caps for {@link #addNodes} to keep one MCP call bounded. */
 	private static final int ADD_NODES_MAX_COUNT = 300;
 	private static final int ADD_NODES_MAX_DEPTH = 20;
-
-	private static final class SearchMatch {
-		private final File mapFile;
-		private final String nodeId;
-		private final String nodeText;
-		private final long modifiedAt;
-		private final String parentNodeId;
-		private final String parentPath;
-		private final int depth;
-
-		private SearchMatch(final File mapFile, final String nodeId, final String nodeText, final long modifiedAt,
-				final String parentNodeId, final String parentPath, final int depth) {
-			this.mapFile = mapFile;
-			this.nodeId = nodeId;
-			this.nodeText = nodeText;
-			this.modifiedAt = modifiedAt;
-			this.parentNodeId = parentNodeId;
-			this.parentPath = parentPath;
-			this.depth = depth;
+	/** Path-hint → resolved File (absolute path keys). Soft cache for repeated MCP lookups. */
+	private static final int PATH_RESOLVE_CACHE_MAX = 256;
+	private static final Map PATH_RESOLVE_CACHE = Collections.synchronizedMap(new LinkedHashMap(64, 0.75f, true) {
+		protected boolean removeEldestEntry(final Map.Entry eldest) {
+			return size() > PATH_RESOLVE_CACHE_MAX;
 		}
-	}
+	});
 
 	private McpMindMapService() {
 	}
@@ -131,16 +121,16 @@ public final class McpMindMapService {
 		}
 		if (filePath != null && filePath.trim().length() > 0) {
 			final File file = resolveMindMapFileByPath(filePath.trim());
-			final List matches = new ArrayList();
-			collectMatchesInFile(file, needle, matches, 0L);
-			sortMatchesByModifiedDesc(matches);
-			return JsonValue.ofList(toSearchMatchJson(limitMatches(matches, limit))).toJson();
+			final List files = new ArrayList();
+			files.add(file);
+			final List hits = MindMapNodeSearchIndex.search(files, needle, limit, 0L);
+			return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 		}
 		final long cutoff = modifiedWithinDays > 0
 				? System.currentTimeMillis() - modifiedWithinDays * MILLIS_PER_DAY
 				: 0L;
-		final List matches = searchAllNodesSorted(needle, limit, cutoff, projectId);
-		return JsonValue.ofList(toSearchMatchJson(matches)).toJson();
+		final List hits = searchAllNodesSorted(needle, limit, cutoff, projectId);
+		return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 	}
 
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays) {
@@ -152,8 +142,8 @@ public final class McpMindMapService {
 		final long cutoff = modifiedWithinDays > 0
 				? System.currentTimeMillis() - modifiedWithinDays * MILLIS_PER_DAY
 				: 0L;
-		final List matches = searchAllNodesSorted(needle, limit, cutoff, null);
-		return JsonValue.ofList(toSearchMatchJson(matches)).toJson();
+		final List hits = searchAllNodesSorted(needle, limit, cutoff, null);
+		return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 	}
 
 	private static List searchAllNodesSorted(final String needle, final int limit, final long modifiedAfterMillis,
@@ -161,21 +151,18 @@ public final class McpMindMapService {
 		final File projectRoot = resolveProjectRoot(projectId);
 		final List files = collectSearchScopeFiles(projectRoot);
 		sortFilesByModifiedDesc(files);
-		final List matches = new ArrayList();
-		for (int i = 0; i < files.size(); i++) {
-			final File file = (File) files.get(i);
-			if (modifiedAfterMillis > 0L && file.lastModified() < modifiedAfterMillis) {
-				continue;
-			}
-			collectMatchesInFile(file, needle, matches, modifiedAfterMillis);
-		}
-		sortMatchesByModifiedDesc(matches);
-		return limitMatches(matches, limit);
+		return MindMapNodeSearchIndex.search(files, needle, limit, modifiedAfterMillis);
 	}
 
 	private static List collectSearchScopeFiles(final File projectRoot) {
 		final List files = new ArrayList();
-		MindMapDataRootResolver.collectMindmapFiles(files);
+		final List cached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
+		if (cached != null && !cached.isEmpty()) {
+			files.addAll(cached);
+		}
+		else {
+			MindMapDataRootResolver.collectMindmapFiles(files);
+		}
 		if (projectRoot == null) {
 			return files;
 		}
@@ -199,10 +186,10 @@ public final class McpMindMapService {
 		});
 	}
 
-	private static List<JsonValue> toSearchMatchJson(final List matches) {
+	private static List<JsonValue> toSearchHitJson(final List hits) {
 		final List<JsonValue> json = new ArrayList<JsonValue>();
-		for (int i = 0; i < matches.size(); i++) {
-			final SearchMatch match = (SearchMatch) matches.get(i);
+		for (int i = 0; i < hits.size(); i++) {
+			final Hit match = (Hit) hits.get(i);
 			final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
 			item.put("mapFile", JsonValue.ofString(match.mapFile.getAbsolutePath()));
 			item.put("nodeId", JsonValue.ofString(match.nodeId));
@@ -215,13 +202,6 @@ public final class McpMindMapService {
 			json.add(JsonValue.ofMap(item));
 		}
 		return json;
-	}
-
-	private static List limitMatches(final List matches, final int limit) {
-		if (limit > 0 && matches.size() > limit) {
-			return new ArrayList(matches.subList(0, limit));
-		}
-		return matches;
 	}
 
 	private static File resolveProjectRoot(final String projectId) {
@@ -258,16 +238,6 @@ public final class McpMindMapService {
 		catch (Exception e) {
 			return file.getAbsolutePath().startsWith(projectRoot.getAbsolutePath());
 		}
-	}
-
-	private static void sortMatchesByModifiedDesc(final List matches) {
-		Collections.sort(matches, new Comparator() {
-			public int compare(final Object o1, final Object o2) {
-				final long a = ((SearchMatch) o1).modifiedAt;
-				final long b = ((SearchMatch) o2).modifiedAt;
-				return a < b ? 1 : (a > b ? -1 : 0);
-			}
-		});
 	}
 
 	private static long parseModifiedAt(final Attributes attributes, final File file) {
@@ -995,19 +965,32 @@ public final class McpMindMapService {
 			throw new IllegalArgumentException("filePath is required.");
 		}
 		final String trimmed = filePath.trim();
+		final String cacheKey = normalizePathForMatch(trimmed);
+		final File cached = (File) PATH_RESOLVE_CACHE.get(cacheKey);
+		if (cached != null && cached.isFile()) {
+			return cached;
+		}
 		final File direct = new File(trimmed);
 		if (direct.isFile() && direct.exists()) {
-			return canonicalFile(direct);
+			final File canonical = canonicalFile(direct);
+			PATH_RESOLVE_CACHE.put(cacheKey, canonical);
+			return canonical;
 		}
 
 		final List allFiles = new ArrayList();
-		MindMapDataRootResolver.collectMindmapFiles(allFiles);
-		final String normalizedHint = normalizePathForMatch(trimmed);
+		final List scanCached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
+		if (scanCached != null && !scanCached.isEmpty()) {
+			allFiles.addAll(scanCached);
+		}
+		else {
+			MindMapDataRootResolver.collectMindmapFiles(allFiles);
+		}
+		final String normalizedHint = cacheKey;
 
 		for (int i = 0; i < allFiles.size(); i++) {
 			final File candidate = (File) allFiles.get(i);
 			if (pathsEqual(normalizePathForMatch(candidate.getAbsolutePath()), normalizedHint)) {
-				return canonicalFile(candidate);
+				return rememberResolved(cacheKey, candidate);
 			}
 		}
 
@@ -1020,10 +1003,10 @@ public final class McpMindMapService {
 				}
 			}
 			if (suffixMatches.size() == 1) {
-				return canonicalFile((File) suffixMatches.get(0));
+				return rememberResolved(cacheKey, (File) suffixMatches.get(0));
 			}
 			if (suffixMatches.size() > 1) {
-				return disambiguateCandidates(suffixMatches, trimmed);
+				return rememberResolved(cacheKey, disambiguateCandidates(suffixMatches, trimmed));
 			}
 		}
 
@@ -1038,7 +1021,13 @@ public final class McpMindMapService {
 		if (nameMatches.isEmpty()) {
 			throw new IllegalArgumentException("Mind map not found: " + filePath);
 		}
-		return disambiguateCandidates(nameMatches, trimmed);
+		return rememberResolved(cacheKey, disambiguateCandidates(nameMatches, trimmed));
+	}
+
+	private static File rememberResolved(final String cacheKey, final File file) {
+		final File canonical = canonicalFile(file);
+		PATH_RESOLVE_CACHE.put(cacheKey, canonical);
+		return canonical;
 	}
 
 	private static File disambiguateCandidates(final List candidates, final String hint) {
@@ -1182,67 +1171,6 @@ public final class McpMindMapService {
 
 	private static File resolveMindMapFileQuiet(final String filePath) {
 		return resolveMindMapFileByPath(filePath);
-	}
-
-	private static void collectMatchesInFile(final File file, final String needle, final List matches,
-			final long modifiedAfterMillis) {
-		if (file == null || !file.isFile() || !file.exists()) {
-			return;
-		}
-		try {
-			final SAXParser saxParser = SAXParserFactory.newInstance().newSAXParser();
-			saxParser.parse(file, new DefaultHandler() {
-				private final List nodeStack = new ArrayList();
-
-				public void startElement(final String uri, final String localName, final String qName,
-						final Attributes attributes) {
-					if (!"node".equals(qName)) {
-						return;
-					}
-					final String id = attributes.getValue("ID");
-					final String text = attributes.getValue("TEXT");
-					if (id == null || text == null) {
-						nodeStack.add(null);
-						return;
-					}
-					final String plain = HtmlUtils.removeHtmlTagsFromString(text);
-					final String nodeText = plain != null ? plain.trim() : "";
-					final long modifiedAt = parseModifiedAt(attributes, file);
-					String parentNodeId = "";
-					final StringBuilder parentPath = new StringBuilder();
-					for (int i = 0; i < nodeStack.size(); i++) {
-						final String[] ancestor = (String[]) nodeStack.get(i);
-						if (ancestor == null) {
-							continue;
-						}
-						if (parentPath.length() > 0) {
-							parentPath.append(" / ");
-						}
-						parentPath.append(ancestor[1]);
-						parentNodeId = ancestor[0];
-					}
-					final int depth = nodeStack.size();
-					nodeStack.add(new String[] { id, nodeText });
-					if (modifiedAfterMillis > 0L && modifiedAt < modifiedAfterMillis) {
-						return;
-					}
-					if (needle.length() > 0 && nodeText.toLowerCase().indexOf(needle) < 0) {
-						return;
-					}
-					matches.add(new SearchMatch(file, id, nodeText, modifiedAt, parentNodeId, parentPath.toString(),
-							depth));
-				}
-
-				public void endElement(final String uri, final String localName, final String qName) {
-					if ("node".equals(qName) && !nodeStack.isEmpty()) {
-						nodeStack.remove(nodeStack.size() - 1);
-					}
-				}
-			});
-		}
-		catch (Exception e) {
-			LogUtils.warn("MCP search failed for " + file.getAbsolutePath() + ": " + e.getMessage());
-		}
 	}
 
 	static boolean isSameFile(final File file1, final File file2) {
