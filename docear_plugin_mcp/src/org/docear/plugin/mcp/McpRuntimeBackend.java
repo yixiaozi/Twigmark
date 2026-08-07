@@ -32,7 +32,12 @@ final class McpRuntimeBackend implements McpRuntimeFacade.Backend {
 		}
 		HttpURLConnection connection = null;
 		try {
-			final URL url = new URL("http://" + DocearMcpConfig.getHost() + ":" + DocearMcpConfig.getPort() + "/health");
+			// When bound to 0.0.0.0 / LAN IP, probe via loopback.
+			String host = DocearMcpConfig.getHost();
+			if (DocearMcpConfig.isPublicBind()) {
+				host = "127.0.0.1";
+			}
+			final URL url = new URL("http://" + host + ":" + DocearMcpConfig.getPort() + "/health");
 			connection = (HttpURLConnection) url.openConnection();
 			connection.setConnectTimeout(800);
 			connection.setReadTimeout(800);

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twigmark Web</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top">
+        <div class="brand">
+          <strong>Twigmark Web</strong>
+          <span id="status-pill" class="pill">checking…</span>
+        </div>
+        <div class="top-actions">
+          <button type="button" id="btn-settings" class="ghost">连接设置</button>
+          <button type="button" id="btn-clear" class="ghost">清空对话</button>
+        </div>
+      </header>
+
+      <section id="settings" class="settings hidden">
+        <label>
+          MCP API Key
+          <input id="mcp-key" type="password" autocomplete="off" placeholder="tm_…" />
+        </label>
+        <p class="hint">
+          公网或开启认证时需要。在 Twigmark「产品设置 → MCP」生成。大模型 Key 只保存在服务器端，不会出现在此页。
+        </p>
+        <div class="settings-row">
+          <button type="button" id="btn-save-key" class="primary">保存</button>
+          <span id="settings-note" class="muted"></span>
+        </div>
+      </section>
+
+      <main id="chat" class="chat" aria-live="polite"></main>
+
+      <footer class="composer">
+        <textarea
+          id="input"
+          rows="3"
+          placeholder="询问或操作导图，例如：当前选中了什么？在下方加三个子节点…"
+        ></textarea>
+        <button type="button" id="btn-send" class="primary">发送</button>
+      </footer>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

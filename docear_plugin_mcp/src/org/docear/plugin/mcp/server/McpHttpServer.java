@@ -1,10 +1,15 @@
 package org.docear.plugin.mcp.server;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,21 +29,37 @@ public final class McpHttpServer {
 
 	private static final Charset UTF8 = Charset.forName("UTF-8");
 	private final McpProtocol protocol = new McpProtocol();
+	private final McpWebAgent webAgent = new McpWebAgent(protocol);
 	private HttpServer server;
 	private ExecutorService executor;
 
 	public void start() throws IOException {
+		McpAuth.validateServerStart();
 		final String host = DocearMcpConfig.getHost();
 		final int port = DocearMcpConfig.getPort();
 		server = HttpServer.create(new InetSocketAddress(host, port), 0);
 		server.createContext("/mcp", new McpHandler());
 		server.createContext("/health", new HealthHandler());
-		server.createContext("/", new HealthHandler());
+		server.createContext("/api/status", new ApiStatusHandler());
+		server.createContext("/api/chat", new ApiChatHandler());
+		if (DocearMcpConfig.isWebEnabled()) {
+			server.createContext("/web", new StaticWebHandler());
+		}
+		server.createContext("/", new RootHandler());
 		// Keep health/list responsive even when a few write tools block on EDT.
 		executor = Executors.newFixedThreadPool(16);
 		server.setExecutor(executor);
 		server.start();
-		LogUtils.info("Docear MCP server listening on http://" + host + ":" + port + "/mcp");
+		final StringBuilder msg = new StringBuilder();
+		msg.append("Twigmark MCP server listening on http://").append(host).append(':').append(port);
+		msg.append(" /mcp");
+		if (DocearMcpConfig.isWebEnabled()) {
+			msg.append(" and /web/");
+		}
+		if (McpAuth.isAuthRequired()) {
+			msg.append(" (API key required)");
+		}
+		LogUtils.info(msg.toString());
 	}
 
 	public void stop() {
@@ -52,9 +73,162 @@ public final class McpHttpServer {
 		}
 	}
 
+	private final class RootHandler implements HttpHandler {
+		public void handle(final HttpExchange exchange) throws IOException {
+			addCorsHeaders(exchange);
+			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(204, -1);
+				exchange.close();
+				return;
+			}
+			final String path = exchange.getRequestURI().getPath();
+			if (DocearMcpConfig.isWebEnabled() && ("/".equals(path) || "".equals(path))
+					&& "GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.getResponseHeaders().set("Location", "/web/");
+				exchange.sendResponseHeaders(302, -1);
+				exchange.close();
+				return;
+			}
+			writeJson(exchange, 200, healthJson());
+		}
+	}
+
 	private final class HealthHandler implements HttpHandler {
 		public void handle(final HttpExchange exchange) throws IOException {
-			writeJson(exchange, 200, "{\"status\":\"ok\",\"service\":\"docear-mcp\"}");
+			addCorsHeaders(exchange);
+			writeJson(exchange, 200, healthJson());
+		}
+	}
+
+	private final class ApiStatusHandler implements HttpHandler {
+		public void handle(final HttpExchange exchange) throws IOException {
+			addCorsHeaders(exchange);
+			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(204, -1);
+				exchange.close();
+				return;
+			}
+			if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+				writeJson(exchange, 405, apiError("Only GET is supported on /api/status"));
+				return;
+			}
+			// Status is readable without key so the web UI can learn authRequired;
+			// it never returns secrets.
+			final Map<String, JsonValue> status = new LinkedHashMap<String, JsonValue>();
+			status.put("service", JsonValue.ofString("twigmark-mcp"));
+			status.put("authRequired", JsonValue.ofBoolean(McpAuth.isAuthRequired()));
+			status.put("authConfigured", JsonValue.ofBoolean(McpAuth.hasConfiguredApiKey()));
+			status.put("webEnabled", JsonValue.ofBoolean(DocearMcpConfig.isWebEnabled()));
+			status.put("llmConfigured", JsonValue.ofBoolean(DocearMcpConfig.isWebLlmConfigured()));
+			status.put("llmModel", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));
+			status.put("publicBind", JsonValue.ofBoolean(DocearMcpConfig.isPublicBind()));
+			status.put("readonly", JsonValue.ofBoolean(DocearMcpConfig.isReadOnly()));
+			status.put("host", JsonValue.ofString(DocearMcpConfig.getHost()));
+			status.put("port", JsonValue.ofNumber(Integer.valueOf(DocearMcpConfig.getPort())));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(status)));
+		}
+	}
+
+	private final class ApiChatHandler implements HttpHandler {
+		public void handle(final HttpExchange exchange) throws IOException {
+			addCorsHeaders(exchange);
+			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(204, -1);
+				exchange.close();
+				return;
+			}
+			if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+				writeJson(exchange, 405, apiError("Only POST is supported on /api/chat"));
+				return;
+			}
+			if (!DocearMcpConfig.isWebEnabled()) {
+				writeJson(exchange, 403, apiError("Web UI is disabled"));
+				return;
+			}
+			if (!McpAuth.isAuthorized(exchange)) {
+				writeJson(exchange, 401, apiError("Unauthorized: provide Authorization: Bearer <mcp-api-key>"));
+				return;
+			}
+			final String body = readBody(exchange);
+			try {
+				final JsonValue request = JsonParser.parse(body);
+				final Map<String, JsonValue> map = request.asMap();
+				final String message = map.containsKey("message") ? map.get("message").asString() : "";
+				List<JsonValue> history = new ArrayList<JsonValue>();
+				if (map.containsKey("history")) {
+					history = map.get("history").asList();
+				}
+				final Map<String, JsonValue> result = webAgent.chat(message, history);
+				writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(result)));
+			}
+			catch (IllegalArgumentException e) {
+				writeJson(exchange, 400, apiError(e.getMessage()));
+			}
+			catch (IllegalStateException e) {
+				writeJson(exchange, 400, apiError(e.getMessage()));
+			}
+			catch (Exception e) {
+				LogUtils.warn("Web chat failed: " + e.getMessage(), e);
+				writeJson(exchange, 500, apiError(e.getMessage() != null ? e.getMessage() : "chat failed"));
+			}
+		}
+	}
+
+	private final class StaticWebHandler implements HttpHandler {
+		public void handle(final HttpExchange exchange) throws IOException {
+			addCorsHeaders(exchange);
+			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(204, -1);
+				exchange.close();
+				return;
+			}
+			if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())
+					&& !"HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+				writeJson(exchange, 405, apiError("Only GET is supported on /web"));
+				return;
+			}
+			String path = exchange.getRequestURI().getPath();
+			if (path == null) {
+				path = "/web/";
+			}
+			if ("/web".equals(path)) {
+				exchange.getResponseHeaders().set("Location", "/web/");
+				exchange.sendResponseHeaders(302, -1);
+				exchange.close();
+				return;
+			}
+			String relative = path.startsWith("/web/") ? path.substring("/web/".length()) : "";
+			if (relative.length() == 0) {
+				relative = "index.html";
+			}
+			try {
+				relative = URLDecoder.decode(relative, "UTF-8");
+			}
+			catch (Exception e) {
+				// keep raw
+			}
+			if (relative.indexOf("..") >= 0 || relative.startsWith("/") || relative.indexOf('\\') >= 0) {
+				writeJson(exchange, 400, apiError("Invalid path"));
+				return;
+			}
+			final String resourcePath = "web/" + relative;
+			final InputStream stream = McpHttpServer.class.getClassLoader().getResourceAsStream(resourcePath);
+			if (stream == null) {
+				writeJson(exchange, 404, apiError("Not found: " + relative));
+				return;
+			}
+			final byte[] bytes = readAllBytes(stream);
+			exchange.getResponseHeaders().set("Content-Type", contentType(relative));
+			exchange.getResponseHeaders().set("Cache-Control", "no-cache");
+			if ("HEAD".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(200, -1);
+				exchange.close();
+				return;
+			}
+			exchange.sendResponseHeaders(200, bytes.length);
+			final OutputStream out = exchange.getResponseBody();
+			out.write(bytes);
+			out.close();
 		}
 	}
 
@@ -68,6 +242,10 @@ public final class McpHttpServer {
 			}
 			if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
 				writeJson(exchange, 405, errorBody(-32000, "Only POST is supported on /mcp"));
+				return;
+			}
+			if (!McpAuth.isAuthorized(exchange)) {
+				writeJson(exchange, 401, errorBody(-32001, "Unauthorized: provide Authorization: Bearer <mcp-api-key> or X-Api-Key"));
 				return;
 			}
 			final String body = readBody(exchange);
@@ -94,27 +272,41 @@ public final class McpHttpServer {
 		}
 	}
 
+	private static String healthJson() {
+		final Map<String, JsonValue> map = new LinkedHashMap<String, JsonValue>();
+		map.put("status", JsonValue.ofString("ok"));
+		map.put("service", JsonValue.ofString("docear-mcp"));
+		map.put("web", JsonValue.ofBoolean(DocearMcpConfig.isWebEnabled()));
+		map.put("authRequired", JsonValue.ofBoolean(McpAuth.isAuthRequired()));
+		return JsonWriter.write(JsonValue.ofMap(map));
+	}
+
 	private static void addCorsHeaders(final HttpExchange exchange) {
 		final Map<String, String> headers = new LinkedHashMap<String, String>();
 		headers.put("Access-Control-Allow-Origin", "*");
-		headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+		headers.put("Access-Control-Allow-Methods", "POST, GET, OPTIONS, HEAD");
 		headers.put("Access-Control-Allow-Headers",
-		    "Content-Type, Accept, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
+				"Content-Type, Accept, Authorization, X-Api-Key, Mcp-Session-Id, X-Docear-Audit-Caller, X-Docear-Audit-Question");
 		for (final Map.Entry<String, String> entry : headers.entrySet()) {
 			exchange.getResponseHeaders().set(entry.getKey(), entry.getValue());
 		}
 	}
 
 	private static String readBody(final HttpExchange exchange) throws IOException {
-		final java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+		return new String(readAllBytes(exchange.getRequestBody()), UTF8);
+	}
+
+	private static byte[] readAllBytes(final InputStream in) throws IOException {
+		final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 		final byte[] chunk = new byte[4096];
 		int read;
-		while ((read = exchange.getRequestBody().read(chunk)) >= 0) {
+		while ((read = in.read(chunk)) >= 0) {
 			if (read > 0) {
 				buffer.write(chunk, 0, read);
 			}
 		}
-		return new String(buffer.toByteArray(), UTF8);
+		in.close();
+		return buffer.toByteArray();
 	}
 
 	private static void writeJson(final HttpExchange exchange, final int status, final String body) throws IOException {
@@ -126,6 +318,12 @@ public final class McpHttpServer {
 		stream.close();
 	}
 
+	private static String apiError(final String message) {
+		final Map<String, JsonValue> map = new LinkedHashMap<String, JsonValue>();
+		map.put("error", JsonValue.ofString(message != null ? message : "error"));
+		return JsonWriter.write(JsonValue.ofMap(map));
+	}
+
 	private static String errorBody(final int code, final String message) {
 		final Map<String, JsonValue> error = new LinkedHashMap<String, JsonValue>();
 		error.put("code", JsonValue.ofNumber(Integer.valueOf(code)));
@@ -134,6 +332,29 @@ public final class McpHttpServer {
 		response.put("jsonrpc", JsonValue.ofString("2.0"));
 		response.put("error", JsonValue.ofMap(error));
 		return JsonWriter.write(JsonValue.ofMap(response));
+	}
+
+	private static String contentType(final String relative) {
+		final String lower = relative.toLowerCase();
+		if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+			return "text/html; charset=utf-8";
+		}
+		if (lower.endsWith(".js")) {
+			return "application/javascript; charset=utf-8";
+		}
+		if (lower.endsWith(".css")) {
+			return "text/css; charset=utf-8";
+		}
+		if (lower.endsWith(".png")) {
+			return "image/png";
+		}
+		if (lower.endsWith(".svg")) {
+			return "image/svg+xml";
+		}
+		if (lower.endsWith(".json")) {
+			return "application/json; charset=utf-8";
+		}
+		return "application/octet-stream";
 	}
 
 	private static String extractMethodHint(final JsonValue request) {

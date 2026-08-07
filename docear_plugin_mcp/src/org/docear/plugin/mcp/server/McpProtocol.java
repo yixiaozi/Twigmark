@@ -78,6 +78,46 @@ public final class McpProtocol {
 		return JsonValue.ofMap(result);
 	}
 
+	/** Public tool catalog for the in-process web agent / OpenAI tool bridge. */
+	public List<JsonValue> getToolDefinitions() {
+		return listTools();
+	}
+
+	/**
+	 * Invoke a tool in-process (same path as MCP {@code tools/call}), returning the
+	 * text payload from the tool result.
+	 */
+	public String invokeToolText(final String name, final Map<String, JsonValue> arguments) throws Exception {
+		final Map<String, JsonValue> params = new LinkedHashMap<String, JsonValue>();
+		params.put("name", JsonValue.ofString(name));
+		params.put("arguments",
+				JsonValue.ofMap(arguments != null ? arguments : new LinkedHashMap<String, JsonValue>()));
+		final JsonValue result = callTool(JsonValue.ofMap(params));
+		return extractToolText(result);
+	}
+
+	private static String extractToolText(final JsonValue result) {
+		if (result == null || result.isNull()) {
+			return "";
+		}
+		final Map<String, JsonValue> map = result.asMap();
+		if (!map.containsKey("content")) {
+			return result.toJson();
+		}
+		final List<JsonValue> content = map.get("content").asList();
+		final StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < content.size(); i++) {
+			final Map<String, JsonValue> item = content.get(i).asMap();
+			if (item.containsKey("text")) {
+				if (sb.length() > 0) {
+					sb.append('\n');
+				}
+				sb.append(item.get("text").asString());
+			}
+		}
+		return sb.length() > 0 ? sb.toString() : result.toJson();
+	}
+
 	private List<JsonValue> listTools() {
 		if (cachedTools != null) {
 			return cachedTools;
