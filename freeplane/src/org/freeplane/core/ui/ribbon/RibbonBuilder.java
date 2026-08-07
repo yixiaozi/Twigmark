@@ -127,6 +127,8 @@ public class RibbonBuilder {
 		
 		try {
 			getAcceleratorManager().loadAcceleratorPresets(new FileInputStream(getAcceleratorManager().getPresetsFile()));
+			// Keep factory defaults available for the editor even when the user remapped keys.
+			getAcceleratorManager().seedDefaultAcceleratorPresets();
 			// User file may omit Mac-safe alternatives; fill platform gaps without overwriting.
 			getAcceleratorManager().applyPlatformDefaultAccelerators();
 		}

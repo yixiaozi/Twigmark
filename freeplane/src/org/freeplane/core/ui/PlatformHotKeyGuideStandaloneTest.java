@@ -27,10 +27,14 @@ public final class PlatformHotKeyGuideStandaloneTest {
 			throw new IllegalStateException("NewChild Mac default");
 		}
 		final String html = PlatformHotKeyGuide.buildEditorLegendHtml();
-		if (html.indexOf("Ctrl") < 0 || html.indexOf("Command") < 0) {
+		if (html.indexOf("Ctrl") < 0 || html.indexOf("Cmd") < 0) {
 			throw new IllegalStateException("legend missing modifier map");
 		}
+		final String macAlt = PlatformHotKeyGuide.formatMacAltReadable("meta shift O");
+		if (macAlt.indexOf("Cmd") < 0 || macAlt.indexOf('\u2318') >= 0) {
+			throw new IllegalStateException("Mac alt should be ASCII Cmd…, got: " + macAlt);
+		}
 		System.out.println("PlatformHotKeyGuideStandaloneTest OK platform="
-		        + PlatformHotKeyGuide.getPlatformDisplayName());
+		        + PlatformHotKeyGuide.getPlatformDisplayName() + " macAlt=" + macAlt);
 	}
 }
