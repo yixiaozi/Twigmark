@@ -22,10 +22,13 @@ import java.util.Set;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JDialog;
+import javax.swing.JEditorPane;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTable;
@@ -42,6 +45,7 @@ import javax.swing.tree.DefaultMutableTreeNode;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.MenuBuilder;
+import org.freeplane.core.ui.PlatformHotKeyGuide;
 import org.freeplane.core.ui.components.FreeplaneMenuBar;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.ribbon.RibbonAcceleratorManager;
@@ -57,7 +61,7 @@ import org.freeplane.features.mode.mindmapmode.MModeController;
 
 /**
  * Editable, searchable shortcuts editor. Source of truth is
- * {@link RibbonAcceleratorManager} (Docear ribbon); menu tree supplies categories.
+ * {@link RibbonAcceleratorManager}; presets are stored per OS.
  */
 public final class HotKeyEditorDialog extends JDialog {
 
@@ -71,6 +75,7 @@ public final class HotKeyEditorDialog extends JDialog {
 	private TableRowSorter sorter;
 	private final JTextField searchField = new JTextField();
 	private final JCheckBox boundOnly = new JCheckBox();
+	private final JCheckBox platformNotesOnly = new JCheckBox();
 	private final JLabel statusLabel = new JLabel(" ");
 
 	public static void showDialog(final Frame owner) {
@@ -93,14 +98,15 @@ public final class HotKeyEditorDialog extends JDialog {
 
 	private HotKeyEditorDialog(final Frame owner, final ModeController modeController,
 	        final RibbonAcceleratorManager acceleratorManager) {
-		super(owner, TextUtils.getText("hot_keys_editor.title", TextUtils.getText("hot_keys_table")), true);
+		super(owner, TextUtils.getText("hot_keys_editor.title", "快捷键设置") + " · "
+		        + PlatformHotKeyGuide.getPlatformDisplayName(), true);
 		this.modeController = modeController;
 		this.acceleratorManager = acceleratorManager;
 		setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 		buildUi();
 		reload();
 		pack();
-		setSize(Math.max(820, getWidth()), Math.max(560, getHeight()));
+		setSize(Math.max(960, getWidth()), Math.max(640, getHeight()));
 		setLocationRelativeTo(owner != null ? owner : UITools.getFrame());
 	}
 
@@ -108,22 +114,28 @@ public final class HotKeyEditorDialog extends JDialog {
 		final JPanel root = new JPanel(new BorderLayout(8, 8));
 		root.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
 
-		final JPanel top = new JPanel(new BorderLayout(8, 4));
-		final JLabel hint = new JLabel(Compat.isMacOsX()
-		        ? TextUtils.getText("hot_keys_editor.hint_mac",
-		                "双击或点「修改」可重新绑定。Mac 上 ⌘ 对应 Command；已避开 Option+Space 等系统占用键。")
-		        : TextUtils.getText("hot_keys_editor.hint",
-		                "双击或点「修改」可重新绑定。列表来自当前软件全部动作（含 Ribbon 与菜单）。"));
-		top.add(hint, BorderLayout.NORTH);
+		final JPanel top = new JPanel();
+		top.setLayout(new BoxLayout(top, BoxLayout.Y_AXIS));
+		final JEditorPane legend = new JEditorPane("text/html", PlatformHotKeyGuide.buildEditorLegendHtml());
+		legend.setEditable(false);
+		legend.setOpaque(false);
+		legend.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+		legend.setAlignmentX(0f);
+		top.add(legend);
 
 		final JPanel filter = new JPanel(new BorderLayout(8, 0));
+		filter.setAlignmentX(0f);
 		searchField.putClientProperty("JTextField.placeholderText",
 		        TextUtils.getText("hot_keys_editor.search", "搜索名称 / 快捷键 / 动作…"));
 		filter.add(searchField, BorderLayout.CENTER);
+		final JPanel checks = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
 		boundOnly.setText(TextUtils.getText("hot_keys_editor.bound_only", "仅显示已绑定"));
 		boundOnly.setSelected(true);
-		filter.add(boundOnly, BorderLayout.EAST);
-		top.add(filter, BorderLayout.SOUTH);
+		platformNotesOnly.setText(TextUtils.getText("hot_keys_editor.platform_notes_only", "仅跨平台差异"));
+		checks.add(boundOnly);
+		checks.add(platformNotesOnly);
+		filter.add(checks, BorderLayout.EAST);
+		top.add(filter);
 		root.add(top, BorderLayout.NORTH);
 
 		table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -131,10 +143,11 @@ public final class HotKeyEditorDialog extends JDialog {
 		table.getTableHeader().setReorderingAllowed(false);
 		sorter = new TableRowSorter(tableModel);
 		table.setRowSorter(sorter);
-		table.getColumnModel().getColumn(0).setPreferredWidth(180);
-		table.getColumnModel().getColumn(1).setPreferredWidth(260);
-		table.getColumnModel().getColumn(2).setPreferredWidth(160);
-		table.getColumnModel().getColumn(3).setPreferredWidth(120);
+		table.getColumnModel().getColumn(0).setPreferredWidth(150);
+		table.getColumnModel().getColumn(1).setPreferredWidth(200);
+		table.getColumnModel().getColumn(2).setPreferredWidth(120);
+		table.getColumnModel().getColumn(3).setPreferredWidth(280);
+		table.getColumnModel().getColumn(4).setPreferredWidth(110);
 		table.addMouseListener(new MouseAdapter() {
 			public void mouseClicked(final MouseEvent e) {
 				if (e.getClickCount() == 2) {
@@ -158,10 +171,16 @@ public final class HotKeyEditorDialog extends JDialog {
 
 		final JPanel bottom = new JPanel(new BorderLayout());
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
+		final JButton mapBtn = new JButton(TextUtils.getText("hot_keys_editor.platform_map", "平台键位对照…"));
 		final JButton editBtn = new JButton(TextUtils.getText("hot_keys_editor.edit", "修改…"));
 		final JButton clearBtn = new JButton(TextUtils.getText("hot_keys_editor.clear", "清除"));
 		final JButton refreshBtn = new JButton(TextUtils.getText("hot_keys_editor.refresh", "刷新"));
 		final JButton closeBtn = new JButton(TextUtils.getText("ok", "确定"));
+		mapBtn.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				showPlatformMapDialog();
+			}
+		});
 		editBtn.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				editSelected();
@@ -182,6 +201,7 @@ public final class HotKeyEditorDialog extends JDialog {
 				dispose();
 			}
 		});
+		buttons.add(mapBtn);
 		buttons.add(editBtn);
 		buttons.add(clearBtn);
 		buttons.add(refreshBtn);
@@ -204,11 +224,13 @@ public final class HotKeyEditorDialog extends JDialog {
 			}
 		};
 		searchField.getDocument().addDocumentListener(filterListener);
-		boundOnly.addActionListener(new ActionListener() {
+		final ActionListener checkListener = new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				applyFilter();
 			}
-		});
+		};
+		boundOnly.addActionListener(checkListener);
+		platformNotesOnly.addActionListener(checkListener);
 
 		getRootPane().setDefaultButton(closeBtn);
 		getRootPane().getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(
@@ -222,6 +244,33 @@ public final class HotKeyEditorDialog extends JDialog {
 		setContentPane(root);
 	}
 
+	private void showPlatformMapDialog() {
+		final StringBuffer sb = new StringBuffer();
+		sb.append("<html><body style='width:520px;font-family:sans-serif'>");
+		sb.append("<h3>修饰键对应</h3><ul>");
+		sb.append("<li><b>Ctrl</b>（Windows/Linux）↔ <b>⌘ Command</b>（Mac）</li>");
+		sb.append("<li><b>Alt</b>（Windows/Linux）↔ <b>⌥ Option</b>（Mac）</li>");
+		sb.append("<li><b>Shift</b> ↔ <b>⇧ Shift</b>（各平台相同）</li>");
+		sb.append("</ul><h3>Mac 没有 / 易冲突的键 → 默认替代</h3><table border='1' cellpadding='4' cellspacing='0'>");
+		sb.append("<tr><th>Windows / Linux</th><th>动作</th><th>Mac 默认</th></tr>");
+		sb.append("<tr><td>Insert</td><td>新建子节点</td><td>Tab</td></tr>");
+		sb.append("<tr><td>⇧Insert</td><td>新建父节点</td><td>⇧Tab</td></tr>");
+		sb.append("<tr><td>Alt+⇧Insert</td><td>总结节点</td><td>⌘⇧I</td></tr>");
+		sb.append("<tr><td>Alt+Space</td><td>切换导图</td><td>⌘⇧O（避开输入法）</td></tr>");
+		sb.append("<tr><td>Ctrl+⇧Space</td><td>快速捕获</td><td>⌘⇧Space</td></tr>");
+		sb.append("<tr><td>⇧Space</td><td>快速命令</td><td>⌘⇧.</td></tr>");
+		sb.append("</table>");
+		sb.append("<p>Home / End / PgUp / PgDn 在 Mac 笔记本上通常需按 <b>Fn</b>。</p>");
+		sb.append("<p>本机配置文件：<code>ribbons/")
+		        .append(PlatformHotKeyGuide.getAcceleratorFileName())
+		        .append("</code>（按操作系统分开，同步目录下互不覆盖）。</p>");
+		sb.append("</body></html>");
+		final JEditorPane pane = new JEditorPane("text/html", sb.toString());
+		pane.setEditable(false);
+		JOptionPane.showMessageDialog(this, new JScrollPane(pane),
+		        TextUtils.getText("hot_keys_editor.platform_map", "平台键位对照"), JOptionPane.INFORMATION_MESSAGE);
+	}
+
 	private void reload() {
 		rows.clear();
 		final Map byAction = new HashMap();
@@ -232,6 +281,10 @@ public final class HotKeyEditorDialog extends JDialog {
 			public int compare(final Object a, final Object b) {
 				final HotKeyRow ra = (HotKeyRow) a;
 				final HotKeyRow rb = (HotKeyRow) b;
+				final int note = (rb.platformNote.length() == 0 ? 0 : 1) - (ra.platformNote.length() == 0 ? 0 : 1);
+				if (note != 0) {
+					return note;
+				}
 				final int c = ra.category.compareToIgnoreCase(rb.category);
 				if (c != 0) {
 					return c;
@@ -312,7 +365,6 @@ public final class HotKeyEditorDialog extends JDialog {
 			if (action == null || actionKey.startsWith("LoadAcceleratorPresetsAction.")) {
 				continue;
 			}
-			// Skip noise: internal / property-toggle actions without a readable title.
 			final String title = RibbonActionContributorFactory.getActionTitle(action);
 			if (title == null || title.length() == 0 || title.startsWith("[")) {
 				continue;
@@ -339,19 +391,60 @@ public final class HotKeyEditorDialog extends JDialog {
 			row.category = category;
 		}
 		row.keyStroke = resolveStroke(action);
+		row.platformNote = platformNoteFor(row.actionKey, row.keyStroke);
 	}
 
 	private KeyStroke resolveStroke(final AFreeplaneAction action) {
 		if (acceleratorManager != null) {
-			final KeyStroke ribbon = acceleratorManager.getAccelerator(action.getKey());
-			if (ribbon != null) {
-				return ribbon;
-			}
+			return acceleratorManager.getAccelerator(action.getKey());
 		}
 		return null;
 	}
 
-	/** Menu path keys end with the action key segment. */
+	static String platformNoteFor(final String actionKey, final KeyStroke stroke) {
+		final String macAlt = (String) PlatformHotKeyGuide.getMacDefaultAlternatives().get(actionKey);
+		if (Compat.isMacOsX()) {
+			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)) {
+				return macAlt != null
+				        ? TextUtils.getText("hot_keys_editor.note.insert_mac", "Mac 无 Insert → 建议 ") + formatAlt(macAlt)
+				        : TextUtils.getText("hot_keys_editor.note.insert_generic", "Mac 无 Insert，请改绑");
+			}
+			if (PlatformHotKeyGuide.isAltSpace(stroke)) {
+				return TextUtils.getText("hot_keys_editor.note.alt_space", "与输入法冲突 → 建议 ⌘⇧O");
+			}
+			if (macAlt != null && stroke == null) {
+				return TextUtils.getText("hot_keys_editor.note.mac_default", "Mac 默认 ") + formatAlt(macAlt);
+			}
+			return "";
+		}
+		// Windows / Linux: explain what Mac will use
+		if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke) && macAlt != null) {
+			return TextUtils.getText("hot_keys_editor.note.win_insert", "Mac 无此键 → 默认 ") + formatAlt(macAlt);
+		}
+		if (PlatformHotKeyGuide.isAltSpace(stroke)) {
+			return TextUtils.getText("hot_keys_editor.note.win_alt_space", "Mac 上改为 ⌘⇧O");
+		}
+		if (macAlt != null && stroke != null) {
+			final KeyStroke macStroke = RibbonAcceleratorManager.parseKeyStroke(macAlt);
+			if (macStroke != null && !macStroke.equals(stroke)) {
+				return TextUtils.getText("hot_keys_editor.note.mac_uses", "Mac 默认 ") + formatAlt(macAlt);
+			}
+		}
+		return "";
+	}
+
+	/** Format a Mac-alternative stroke for display without remapping meta↔control. */
+	private static String formatAlt(final String strokeString) {
+		if (strokeString == null) {
+			return "";
+		}
+		final KeyStroke ks = KeyStroke.getKeyStroke(strokeString);
+		if (ks == null) {
+			return strokeString;
+		}
+		return formatMacStroke(ks);
+	}
+
 	private static String guessActionKey(final String menuPath) {
 		if (menuPath == null || menuPath.length() == 0) {
 			return null;
@@ -363,18 +456,24 @@ public final class HotKeyEditorDialog extends JDialog {
 	private void applyFilter() {
 		final String q = searchField.getText() == null ? "" : searchField.getText().trim().toLowerCase();
 		final boolean onlyBound = boundOnly.isSelected();
+		final boolean onlyNotes = platformNotesOnly.isSelected();
 		sorter.setRowFilter(new RowFilter() {
 			public boolean include(final Entry entry) {
 				final HotKeyRow row = (HotKeyRow) rows.get(((Integer) entry.getIdentifier()).intValue());
 				if (onlyBound && row.keyStroke == null) {
 					return false;
 				}
+				if (onlyNotes && (row.platformNote == null || row.platformNote.length() == 0)) {
+					return false;
+				}
 				if (q.length() == 0) {
 					return true;
 				}
 				final String stroke = row.keyStroke == null ? "" : formatStroke(row.keyStroke).toLowerCase();
+				final String note = row.platformNote == null ? "" : row.platformNote.toLowerCase();
 				return row.label.toLowerCase().indexOf(q) >= 0 || row.category.toLowerCase().indexOf(q) >= 0
-				        || row.actionKey.toLowerCase().indexOf(q) >= 0 || stroke.indexOf(q) >= 0;
+				        || row.actionKey.toLowerCase().indexOf(q) >= 0 || stroke.indexOf(q) >= 0
+				        || note.indexOf(q) >= 0;
 			}
 		});
 		updateStatus();
@@ -383,16 +482,27 @@ public final class HotKeyEditorDialog extends JDialog {
 	private void updateStatus() {
 		final int visible = table.getRowCount();
 		final int bound = countBound();
-		final String os = Compat.isMacOsX() ? "macOS" : (Compat.isWindowsOS() ? "Windows" : "Linux");
-		statusLabel.setText(TextUtils.getText("hot_keys_editor.status", "显示 {0} 条 · 已绑定 {1} · 平台 {2}")
-		        .replace("{0}", String.valueOf(visible)).replace("{1}", String.valueOf(bound))
-		        .replace("{2}", os));
+		final int notes = countNotes();
+		final String file = PlatformHotKeyGuide.getAcceleratorFileName();
+		statusLabel.setText("显示 " + visible + " · 已绑定 " + bound + " · 跨平台差异 " + notes + " · "
+		        + PlatformHotKeyGuide.getPlatformDisplayName() + " · " + file);
 	}
 
 	private int countBound() {
 		int n = 0;
 		for (int i = 0; i < rows.size(); i++) {
 			if (((HotKeyRow) rows.get(i)).keyStroke != null) {
+				n++;
+			}
+		}
+		return n;
+	}
+
+	private int countNotes() {
+		int n = 0;
+		for (int i = 0; i < rows.size(); i++) {
+			final String note = ((HotKeyRow) rows.get(i)).platformNote;
+			if (note != null && note.length() > 0) {
 				n++;
 			}
 		}
@@ -421,14 +531,7 @@ public final class HotKeyEditorDialog extends JDialog {
 			return;
 		}
 		acceleratorManager.newAccelerator(row.action, null);
-		row.keyStroke = resolveStroke(row.action);
-		// Refresh all strokes — conflict replace may clear another row.
-		for (int i = 0; i < rows.size(); i++) {
-			final HotKeyRow r = (HotKeyRow) rows.get(i);
-			r.keyStroke = resolveStroke(r.action);
-		}
-		tableModel.fireTableDataChanged();
-		applyFilter();
+		refreshStrokes();
 		reselect(row.actionKey);
 	}
 
@@ -438,10 +541,18 @@ public final class HotKeyEditorDialog extends JDialog {
 			return;
 		}
 		acceleratorManager.clearAccelerator(row.action);
-		row.keyStroke = null;
+		refreshStrokes();
+		reselect(row.actionKey);
+	}
+
+	private void refreshStrokes() {
+		for (int i = 0; i < rows.size(); i++) {
+			final HotKeyRow r = (HotKeyRow) rows.get(i);
+			r.keyStroke = resolveStroke(r.action);
+			r.platformNote = platformNoteFor(r.actionKey, r.keyStroke);
+		}
 		tableModel.fireTableDataChanged();
 		applyFilter();
-		reselect(row.actionKey);
 	}
 
 	private void reselect(final String actionKey) {
@@ -515,7 +626,8 @@ public final class HotKeyEditorDialog extends JDialog {
 		private final String[] columns = new String[] {
 		        TextUtils.getText("hot_keys_editor.col.category", "分类"),
 		        TextUtils.getText("hot_keys_editor.col.action", "动作"),
-		        TextUtils.getText("hot_keys_editor.col.shortcut", "快捷键"),
+		        TextUtils.getText("hot_keys_editor.col.shortcut", "本机快捷键"),
+		        TextUtils.getText("hot_keys_editor.col.platform_note", "平台说明"),
 		        TextUtils.getText("hot_keys_editor.col.action_key", "动作 ID") };
 
 		public int getRowCount() {
@@ -540,6 +652,8 @@ public final class HotKeyEditorDialog extends JDialog {
 				case 2:
 					return formatStroke(row.keyStroke);
 				case 3:
+					return row.platformNote;
+				case 4:
 					return row.actionKey;
 				default:
 					return "";
@@ -551,6 +665,7 @@ public final class HotKeyEditorDialog extends JDialog {
 		String actionKey;
 		String category = "";
 		String label = "";
+		String platformNote = "";
 		AFreeplaneAction action;
 		KeyStroke keyStroke;
 	}
