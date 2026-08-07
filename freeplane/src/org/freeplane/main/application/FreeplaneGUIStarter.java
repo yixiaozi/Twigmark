@@ -251,6 +251,12 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 		            
 		            @Override
 		            public void windowDeactivated(WindowEvent e) {
+		                // Opening in-app dialogs also deactivates the frame — that must NOT
+		                // end the usage session (it was a major under-count of activity time).
+		                final java.awt.Window opposite = e.getOppositeWindow();
+		                if (opposite != null && isSameAppWindow(frame, opposite)) {
+		                    return;
+		                }
 		                statsManager.onWindowDeactivated();
 		            }
 		            
@@ -489,5 +495,24 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 		}
 		catch (Exception e) {
 		}
+	}
+
+	/** True when focus moved between the main frame and one of its owned dialogs/windows. */
+	private static boolean isSameAppWindow(final java.awt.Window frame, final java.awt.Window other) {
+		if (frame == null || other == null) {
+			return false;
+		}
+		return isInOwnerChain(other, frame) || isInOwnerChain(frame, other) || frame == other;
+	}
+
+	private static boolean isInOwnerChain(final java.awt.Window start, final java.awt.Window target) {
+		java.awt.Window current = start;
+		while (current != null) {
+			if (current == target) {
+				return true;
+			}
+			current = current.getOwner();
+		}
+		return false;
 	}
 }
