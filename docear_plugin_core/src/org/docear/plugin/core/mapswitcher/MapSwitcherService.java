@@ -7,13 +7,16 @@ import javax.swing.KeyStroke;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.components.UITools;
+import org.freeplane.core.ui.ribbon.RibbonAcceleratorManager;
 import org.freeplane.core.ui.ribbon.RibbonBuilder;
+import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 
 /**
- * Alt+Space open-map switcher (Windows system menu is overridden while Docear runs).
+ * Open-map switcher. Default: Alt+Space on Windows/Linux; ⌘⇧O on Mac
+ * (Option+Space usually switches input sources).
  */
 public final class MapSwitcherService {
 	private static final long DIALOG_DEBOUNCE_MS = 300L;
@@ -84,9 +87,14 @@ public final class MapSwitcherService {
 			if (ribbonBuilder == null) {
 				return;
 			}
-			final KeyStroke keyStroke = UITools.getKeyStroke("alt SPACE");
+			final RibbonAcceleratorManager accel = ribbonBuilder.getAcceleratorManager();
+			if (accel.getAccelerator(MapSwitcherAction.KEY) != null) {
+				return;
+			}
+			final String stroke = Compat.isMacOsX() ? "meta shift O" : "alt SPACE";
+			final KeyStroke keyStroke = UITools.getKeyStroke(stroke);
 			if (keyStroke != null) {
-				ribbonBuilder.getAcceleratorManager().setAccelerator(action, keyStroke);
+				accel.setAccelerator(action, keyStroke);
 			}
 		}
 		catch (Exception e) {

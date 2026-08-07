@@ -55,6 +55,11 @@ import org.freeplane.features.ui.INodeViewLifeCycleListener;
 public class ModeController extends AController {
 // // 	final private Controller controller;
 	private final ExtensionContainer extensionContainer;
+
+	/** All registered action keys (for shortcuts editor / diagnostics). */
+	public Set<String> getActionKeys() {
+		return java.util.Collections.unmodifiableSet(getActions().keySet());
+	}
 	private final Collection<IExtensionCopier> copiers;
 	private boolean isBlocked = false;
 	private MapController mapController;
