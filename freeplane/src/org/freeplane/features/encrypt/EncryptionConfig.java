@@ -118,6 +118,8 @@ public final class EncryptionConfig {
 	}
 
 	private static File localPropertiesFile() {
-		return new File(Compat.getApplicationUserDirectory(), "encryption.local.properties");
+		final File dir = new File(Compat.getApplicationUserDirectory());
+		return org.freeplane.core.util.LocalMachineId.migrateLegacyFile(dir, "encryption.local.properties",
+		        "encryption.local", ".properties");
 	}
 }

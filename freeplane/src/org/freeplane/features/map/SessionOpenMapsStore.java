@@ -11,6 +11,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Properties;
 
+import org.freeplane.core.util.LocalMachineId;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkingDirectoryMapPaths;
@@ -18,8 +19,9 @@ import org.freeplane.core.util.WorkingDirectoryMapPaths;
 /**
  * Crash-safe session of currently open mind maps.
  * <p>
- * Stored as {@code {workingDirectory}/data/session-open-maps.properties} and rewritten on every
- * open / close / focus change so a crash still restores the full open set next launch.
+ * Stored as {@code {workingDirectory}/data/session-open-maps-&lt;mac&gt;.properties} (per PC) and
+ * rewritten on every open / close / focus change so a crash still restores the full open set
+ * next launch. Legacy shared {@code session-open-maps.properties} is renamed once.
  * During application quit the store is {@link #freeze() frozen} after the last good
  * snapshot so closing tabs one-by-one cannot wipe the file to {@code open.count=0}.
  * Does not store last-selected node ids (those live in each {@code .mm} as
@@ -27,7 +29,9 @@ import org.freeplane.core.util.WorkingDirectoryMapPaths;
  */
 public final class SessionOpenMapsStore {
 
-	private static final String FILE_NAME = "session-open-maps.properties";
+	private static final String FILE_PREFIX = "session-open-maps";
+	private static final String FILE_SUFFIX = ".properties";
+	private static final String LEGACY_FILE_NAME = "session-open-maps.properties";
 	private static final String CHARSET = "UTF-8";
 	private static final String KEY_LAST_MAP = "last.map";
 	private static final String KEY_OPEN_COUNT = "open.count";
@@ -221,7 +225,7 @@ public final class SessionOpenMapsStore {
 			LogUtils.warn("Could not create session-open-maps dir: " + dir.getAbsolutePath());
 			return null;
 		}
-		return new File(dir, FILE_NAME);
+		return LocalMachineId.migrateLegacyFile(dir, LEGACY_FILE_NAME, FILE_PREFIX, FILE_SUFFIX);
 	}
 
 	private void load() {

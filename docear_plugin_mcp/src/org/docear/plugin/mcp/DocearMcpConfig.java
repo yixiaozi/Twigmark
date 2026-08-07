@@ -86,6 +86,26 @@ public final class DocearMcpConfig {
 	}
 
 	/**
+	 * Per-PC overflow spill when the SQLite writer queue is full:
+	 * {@code audit_overflow-&lt;mac&gt;.jsonl}. Legacy shared file is renamed once.
+	 */
+	public static File getAuditOverflowFile() {
+		final File dir = getAuditDataDir();
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+		final String macHex = org.docear.plugin.mcp.audit.McpAuditMachineId.getMacHex();
+		final File local = new File(dir, "audit_overflow-" + macHex + ".jsonl");
+		if (!local.exists()) {
+			final File legacy = new File(dir, "audit_overflow.jsonl");
+			if (legacy.isFile()) {
+				legacy.renameTo(local);
+			}
+		}
+		return local;
+	}
+
+	/**
 	 * All audit SQLite files in the data dir (this PC + synced peers):
 	 * {@code audit-*.db} and legacy {@code audit.db}.
 	 */

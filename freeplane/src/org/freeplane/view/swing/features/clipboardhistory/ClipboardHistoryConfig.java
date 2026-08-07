@@ -4,9 +4,11 @@ import java.io.File;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
+import org.freeplane.core.util.LocalMachineId;
 
 /**
  * Settings for text-only clipboard history (SQLite under the working-directory data folder).
+ * Each PC writes {@code clipboard_history-&lt;mac&gt;.db}; UI can aggregate peer files in the same folder.
  */
 public final class ClipboardHistoryConfig {
 	private static final String PREFIX = "clipboard.history.";
@@ -57,12 +59,30 @@ public final class ClipboardHistoryConfig {
 		return n;
 	}
 
+	public static File getDataDir() {
+		return new File(Compat.getApplicationUserDirectory());
+	}
+
+	/** Local writable DB for this PC. */
 	public static File getDbFile() {
 		final String configured = getString("dbPath", "");
 		if (configured.length() > 0) {
 			return new File(configured);
 		}
-		return new File(Compat.getApplicationUserDirectory(), "clipboard_history.db");
+		final File dir = getDataDir();
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+		return LocalMachineId.migrateLegacyFile(dir, "clipboard_history.db", "clipboard_history", ".db");
+	}
+
+	/** This PC + synced peer clipboard DBs. */
+	public static File[] listDbFiles() {
+		final String configured = getString("dbPath", "");
+		if (configured.length() > 0) {
+			return new File[] { new File(configured) };
+		}
+		return LocalMachineId.listMachineFiles(getDataDir(), "clipboard_history", ".db", "clipboard_history.db");
 	}
 
 	public static void setEnabled(final boolean enabled) {

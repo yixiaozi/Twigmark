@@ -15,6 +15,10 @@ public final class DocearMcpConfig {
 		return new File(getAuditDataDir(), "audit-testmac0001.db");
 	}
 
+	public static File getAuditOverflowFile() {
+		return new File(getAuditDataDir(), "audit_overflow-testmac0001.jsonl");
+	}
+
 	public static File[] listAuditDbFiles() {
 		final File dir = getAuditDataDir();
 		final File[] kids = dir.listFiles();

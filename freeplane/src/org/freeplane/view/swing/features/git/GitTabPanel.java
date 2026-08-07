@@ -888,7 +888,7 @@ public class GitTabPanel extends JPanel {
 								    repository.getAbsolutePath());
 								checkRemoteSync(true);
 							} else {
-								setStatusMessage("未找到 Git 仓库，请在用户配置目录的 git.local.properties 中设置 git.repo.path=<仓库路径>");
+								setStatusMessage("未找到 Git 仓库，请在用户配置目录的 git.local-<mac>.properties 中设置 git.repo.path=<仓库路径>");
 							}
 							if (unchanged) {
 								selectAllCheckBox.setSelected(!loaded.isEmpty());

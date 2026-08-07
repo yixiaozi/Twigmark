@@ -13,29 +13,55 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.freeplane.core.util.LocalMachineId;
 import org.freeplane.core.util.LogUtils;
 
 /**
  * SQLite store for clipboard texts. Same content hashes to one row; re-copy only
  * bumps {@code last_ts} / {@code hit_count}.
+ * Each PC writes its own {@code clipboard_history-&lt;mac&gt;.db}; peers are opened read-mostly for aggregate views.
  */
 final class ClipboardHistoryDatabase {
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
 	private static volatile ClipboardHistoryDatabase INSTANCE;
 
 	private final File dbFile;
+	private final String machineId;
+	private final boolean localMachine;
 
 	static synchronized ClipboardHistoryDatabase getInstance() {
 		if (INSTANCE == null) {
-			INSTANCE = new ClipboardHistoryDatabase(ClipboardHistoryConfig.getDbFile());
+			INSTANCE = new ClipboardHistoryDatabase(ClipboardHistoryConfig.getDbFile(), true);
 		}
 		return INSTANCE;
 	}
 
-	ClipboardHistoryDatabase(final File dbFile) {
+	static synchronized void resetForTests(final File dbFile) {
+		INSTANCE = new ClipboardHistoryDatabase(dbFile, true);
+	}
+
+	/** Open a peer (or local) DB file. Creates schema only for the local writable DB. */
+	static ClipboardHistoryDatabase open(final File dbFile, final boolean localMachine) {
+		if (dbFile == null) {
+			return null;
+		}
+		if (localMachine) {
+			return getInstance();
+		}
+		if (!dbFile.isFile()) {
+			return null;
+		}
+		return new ClipboardHistoryDatabase(dbFile, false);
+	}
+
+	ClipboardHistoryDatabase(final File dbFile, final boolean localMachine) {
 		this.dbFile = dbFile;
-		ensureParent();
-		ensureSchema();
+		this.localMachine = localMachine;
+		this.machineId = guessMachineId(dbFile);
+		if (localMachine) {
+			ensureParent();
+			ensureSchema();
+		}
 	}
 
 	File getDbFile() {
@@ -360,7 +386,7 @@ final class ClipboardHistoryDatabase {
 		}
 	}
 
-	private static ClipboardHistoryEntry readRow(final ResultSet rs) throws SQLException {
+	private ClipboardHistoryEntry readRow(final ResultSet rs) throws SQLException {
 		final ClipboardHistoryEntry entry = new ClipboardHistoryEntry();
 		entry.id = rs.getLong("id");
 		entry.contentHash = nullToEmpty(rs.getString("content_hash"));
@@ -369,7 +395,28 @@ final class ClipboardHistoryDatabase {
 		entry.firstTs = rs.getLong("first_ts");
 		entry.lastTs = rs.getLong("last_ts");
 		entry.hitCount = rs.getInt("hit_count");
+		entry.sourceDbPath = dbFile != null ? dbFile.getAbsolutePath() : "";
+		entry.machineId = machineId;
+		entry.localMachine = localMachine;
 		return entry;
+	}
+
+	static String guessMachineId(final File dbFile) {
+		if (dbFile == null) {
+			return LocalMachineId.getId();
+		}
+		final String name = dbFile.getName();
+		final String prefix = "clipboard_history-";
+		final String suffix = ".db";
+		if (name.regionMatches(true, 0, prefix, 0, prefix.length()) && name.regionMatches(true,
+		        name.length() - suffix.length(), suffix, 0, suffix.length())
+		        && name.length() > prefix.length() + suffix.length()) {
+			return "mac-" + name.substring(prefix.length(), name.length() - suffix.length()).toLowerCase();
+		}
+		if ("clipboard_history.db".equalsIgnoreCase(name)) {
+			return "legacy";
+		}
+		return LocalMachineId.getId();
 	}
 
 	static String normalizeAndTruncate(final String rawText) {

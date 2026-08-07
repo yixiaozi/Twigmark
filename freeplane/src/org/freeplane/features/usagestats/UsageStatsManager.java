@@ -61,8 +61,8 @@ public class UsageStatsManager {
     
     public static File getStatsRootDir() {
         try {
-            // Shared project metadata: _data/{projectId}/.docear_stats
-            // Per-computer isolation is under data/{deviceId}/ — see DeviceIdentifier.
+            // Shared project metadata: data/{projectId}/.docear_stats (or legacy _data/...)
+            // Per-computer isolation is under data/{mac-<hex>}/ — see DeviceIdentifier / LocalMachineId.
             File baseDir = org.freeplane.core.util.MindMapDataRootResolver.getProjectDataDirectory();
             if (baseDir == null) {
                 baseDir = new File(org.freeplane.core.util.Compat.getApplicationUserDirectory());
@@ -90,6 +90,8 @@ public class UsageStatsManager {
             if (!dataDir.exists()) {
                 dataDir.mkdirs();
             }
+            // Align folder name with LocalMachineId (mac-*); rename legacy hash folder once.
+            DeviceIdentifier.migrateLegacyStatsFolder(dataDir);
             return dataDir;
         } catch (Exception e) {
             return null;

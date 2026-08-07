@@ -412,12 +412,12 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		if (ok != JOptionPane.OK_OPTION) {
 			return;
 		}
-		ClipboardHistoryService.getInstance().delete(entry.id);
+		ClipboardHistoryService.getInstance().delete(entry);
 		reloadAsync(true);
 	}
 
 	private void clearAll() {
-		final int ok = JOptionPane.showConfirmDialog(this, "清空全部剪贴板历史？此操作不可恢复。", "清空",
+		final int ok = JOptionPane.showConfirmDialog(this, "清空本机剪贴板历史？同步过来的其他电脑记录不会删除。", "清空",
 				JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
 		if (ok != JOptionPane.OK_OPTION) {
 			return;
