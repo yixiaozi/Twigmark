@@ -36,7 +36,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 			public void actionPerformed(ActionEvent e) {
 				if ("open_url".equals(e.getActionCommand())) {
 					try {
-						Controller.getCurrentController().getViewController().openDocument(new URI("http://www.docear.org/support/forums/docear-support-forums-group3/general-feedback-questions-forum5/"));
+						Controller.getCurrentController().getViewController().openDocument(new URI("https://github.com/yixiaozi/docear-desktop/issues"));
 					}
 					catch (Exception ex) {
 						LogUtils.warn("LinkTypeChangedPage.LinkTypeChangedPage().new ActionListener() {...}.actionPerformed(): " + ex.getMessage());
