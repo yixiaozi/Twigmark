@@ -34,3 +34,5 @@ Docear 内置 AI 面板的 Copilot 通过 `docear_plugin_ai` 连接同一 MCP UR
 ## API Key / 公网 / 网页版
 
 见 [MCP_AUTH_AND_WEB.md](MCP_AUTH_AND_WEB.md)。启用认证或公网绑定后，客户端需发送 `Authorization: Bearer <mcp-api-key>`。
+
+单独域名与 HTTPS 反代：[WEB_DOMAIN.md](WEB_DOMAIN.md)。

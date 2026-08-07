@@ -88,10 +88,14 @@
     return api("/status").then(function (res) {
       if (!res.ok) return;
       var s = res.body;
-      if (!s.hasUsers) {
-        authHint.textContent = "还没有账号：请先注册。对话与大模型配置会写入本机 webchat-<MAC>.db；同步数据目录后，历史可在各电脑汇总查看。";
+      var regBtn = document.getElementById("btn-register");
+      if (s.registrationOpen) {
+        authHint.textContent =
+          "首次使用请注册唯一账号（此后不可再注册）。对话与大模型配置写入 webchat-<MAC>.db。";
+        if (regBtn) regBtn.classList.remove("hidden");
       } else {
-        authHint.textContent = "登录后可对话、配置大模型，并查看各电脑同步过来的历史。";
+        authHint.textContent = "请登录。本产品仅允许一个账号；大模型推荐使用 OpenRouter。";
+        if (regBtn) regBtn.classList.add("hidden");
       }
       dbMeta.textContent =
         "本机库已加载 " + (s.webchatDbCount || 1) + " 个 · " + (s.machineName || s.machineId || "");
@@ -158,12 +162,43 @@
     return profiles[0] || null;
   }
 
-  function fillLlmForm(p) {
-    document.getElementById("llm-name").value = (p && p.name) || "Default";
-    document.getElementById("llm-base").value = (p && p.baseUrl) || "https://api.openai.com/v1";
+  function detectProvider(base) {
+    var u = (base || "").toLowerCase();
+    if (u.indexOf("openrouter.ai") >= 0) return "openrouter";
+    if (u.indexOf("api.openai.com") >= 0) return "openai";
+    return "custom";
+  }
+
+  function applyProviderPreset(provider) {
+    var base = document.getElementById("llm-base");
+    var model = document.getElementById("llm-model");
+    var name = document.getElementById("llm-name");
+    if (provider === "openrouter") {
+      base.value = "https://openrouter.ai/api/v1";
+      if (!model.value || model.value.indexOf("/") < 0) model.value = "openai/gpt-4o-mini";
+      if (!name.value || name.value === "Default" || name.value === "OpenAI") name.value = "OpenRouter";
+    } else if (provider === "openai") {
+      base.value = "https://api.openai.com/v1";
+      if (!model.value || model.value.indexOf("/") >= 0) model.value = "gpt-4o-mini";
+      if (!name.value || name.value === "OpenRouter") name.value = "OpenAI";
+    }
+  }
+
+  function fillLlmForm(p, asNew) {
+    document.getElementById("llm-name").value = asNew ? "OpenRouter" : (p && p.name) || "OpenRouter";
+    document.getElementById("llm-base").value =
+      asNew || !p ? "https://openrouter.ai/api/v1" : p.baseUrl || "https://openrouter.ai/api/v1";
     document.getElementById("llm-key").value = "";
-    document.getElementById("llm-model").value = (p && p.model) || "gpt-4o-mini";
-    document.getElementById("llm-default").checked = !p || !!p.isDefault;
+    document.getElementById("llm-model").value =
+      asNew || !p ? "openai/gpt-4o-mini" : p.model || "openai/gpt-4o-mini";
+    document.getElementById("llm-default").checked = asNew ? true : !p || !!p.isDefault;
+    document.getElementById("llm-provider").value = detectProvider(
+      document.getElementById("llm-base").value
+    );
+    if (asNew) {
+      // clear id by deselecting known profile — save without id creates new
+      profileSelect.value = "";
+    }
   }
 
   function loadConversations() {
@@ -288,17 +323,25 @@
   document.getElementById("btn-new").addEventListener("click", newConversation);
   document.getElementById("btn-llm").addEventListener("click", function () {
     llmPanel.classList.toggle("hidden");
-    fillLlmForm(currentProfile());
+    fillLlmForm(currentProfile(), false);
   });
   profileSelect.addEventListener("change", function () {
-    fillLlmForm(currentProfile());
+    fillLlmForm(currentProfile(), false);
+  });
+  document.getElementById("llm-provider").addEventListener("change", function () {
+    applyProviderPreset(document.getElementById("llm-provider").value);
+  });
+  document.getElementById("btn-llm-new").addEventListener("click", function () {
+    fillLlmForm(null, true);
+    llmNote.textContent = "填写后保存即可新建配置";
   });
   document.getElementById("btn-llm-save").addEventListener("click", function () {
     var cur = currentProfile();
+    var creatingNew = !profileSelect.value;
     api("/llm-profiles", {
       method: "POST",
       body: JSON.stringify({
-        id: cur ? cur.id : "",
+        id: creatingNew ? "" : cur ? cur.id : "",
         name: document.getElementById("llm-name").value.trim(),
         baseUrl: document.getElementById("llm-base").value.trim(),
         apiKey: document.getElementById("llm-key").value,

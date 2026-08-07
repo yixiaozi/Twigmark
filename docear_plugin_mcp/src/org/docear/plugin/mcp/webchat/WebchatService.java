@@ -47,6 +47,10 @@ public final class WebchatService {
 	}
 
 	public static Map<String, Object> register(final String usernameRaw, final String password) throws Exception {
+		// Single-owner product: only the first account may be created.
+		if (anyUserExists()) {
+			throw new IllegalArgumentException("registration closed: only one account is allowed");
+		}
 		final String username = normalizeUsername(usernameRaw);
 		if (username.length() < 2) {
 			throw new IllegalArgumentException("username too short");
@@ -385,7 +389,7 @@ public final class WebchatService {
 				return;
 			}
 			final Map jsonBody = new LinkedHashMap();
-			jsonBody.put("name", JsonValue.ofString("Default"));
+			jsonBody.put("name", JsonValue.ofString("OpenRouter"));
 			jsonBody.put("baseUrl", JsonValue.ofString(DocearMcpConfig.getWebLlmBaseUrl()));
 			jsonBody.put("apiKey", JsonValue.ofString(DocearMcpConfig.getWebLlmApiKey()));
 			jsonBody.put("model", JsonValue.ofString(DocearMcpConfig.getWebLlmModel()));

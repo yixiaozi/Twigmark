@@ -44,13 +44,36 @@
         </header>
         <section id="llm-panel" class="settings hidden">
           <h3>大模型配置（存入本机 webchat 数据库）</h3>
-          <label>名称 <input id="llm-name" placeholder="Default" /></label>
-          <label>Base URL <input id="llm-base" placeholder="https://api.openai.com/v1" /></label>
-          <label>API Key <input id="llm-key" type="password" placeholder="留空则保留原 Key" /></label>
-          <label>模型 <input id="llm-model" placeholder="gpt-4o-mini" /></label>
+          <label
+            >服务商
+            <select id="llm-provider">
+              <option value="openrouter">OpenRouter（推荐）</option>
+              <option value="openai">OpenAI 官方</option>
+              <option value="custom">自定义 OpenAI 兼容</option>
+            </select>
+          </label>
+          <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
+          <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
+          <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
+          <label
+            >模型
+            <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
+            <datalist id="llm-model-hints">
+              <option value="openai/gpt-4o-mini"></option>
+              <option value="openai/gpt-4o"></option>
+              <option value="anthropic/claude-3.5-sonnet"></option>
+              <option value="google/gemini-2.0-flash-001"></option>
+              <option value="deepseek/deepseek-chat"></option>
+            </datalist>
+          </label>
+          <p class="muted tiny">
+            OpenRouter：在 openrouter.ai 创建 Key，Base URL 用 https://openrouter.ai/api/v1，模型名形如
+            openai/gpt-4o-mini。
+          </p>
           <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认</label>
           <div class="settings-row">
             <button type="button" id="btn-llm-save" class="primary">保存到数据库</button>
+            <button type="button" id="btn-llm-new" class="ghost">新建配置</button>
             <button type="button" id="btn-llm-del" class="ghost">删除当前</button>
             <span id="llm-note" class="muted"></span>
           </div>
