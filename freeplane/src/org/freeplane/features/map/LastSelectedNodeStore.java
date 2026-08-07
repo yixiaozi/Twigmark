@@ -9,6 +9,7 @@ import java.util.Properties;
 import java.util.Timer;
 import java.util.TimerTask;
 
+import org.freeplane.core.util.LocalMachineId;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.SysUtils;
@@ -17,10 +18,13 @@ import org.freeplane.core.util.SysUtils;
  * Lightweight persistence for {@code last_selected_id} without dirtying / rewriting the
  * whole {@code .mm}. Clicking around nodes updates memory immediately and flushes this
  * sidecar after a short idle delay on a background timer.
+ * Per-PC file {@code last-selected-nodes-&lt;mac&gt;.properties}; legacy shared name is renamed once.
  */
 public final class LastSelectedNodeStore {
 
-	private static final String FILE_NAME = "last-selected-nodes.properties";
+	private static final String FILE_PREFIX = "last-selected-nodes";
+	private static final String FILE_SUFFIX = ".properties";
+	private static final String LEGACY_FILE_NAME = "last-selected-nodes.properties";
 	private static final String CHARSET = "UTF-8";
 	private static final long FLUSH_DELAY_MS = 800L;
 
@@ -120,7 +124,7 @@ public final class LastSelectedNodeStore {
 			LogUtils.warn("Could not create last-selected-nodes dir: " + dir.getAbsolutePath());
 			return null;
 		}
-		return new File(dir, FILE_NAME);
+		return LocalMachineId.migrateLegacyFile(dir, LEGACY_FILE_NAME, FILE_PREFIX, FILE_SUFFIX);
 	}
 
 	private void load() {

@@ -76,7 +76,8 @@ final class LocalMachineSecretCodec {
 
 	private static SecretKeySpec deriveKey() throws Exception {
 		final MessageDigest md = MessageDigest.getInstance("SHA-256");
-		final String material = DeviceIdentifier.getDeviceId() + "|" + KEY_SALT;
+		// Keep legacy fingerprint so existing encrypted secrets still decrypt after MAC-based device ids.
+		final String material = DeviceIdentifier.getLegacyFingerprintHash() + "|" + KEY_SALT;
 		final byte[] digest = md.digest(material.getBytes(UTF8));
 		final byte[] key = new byte[KEY_BYTES];
 		System.arraycopy(digest, 0, key, 0, KEY_BYTES);

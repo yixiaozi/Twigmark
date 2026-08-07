@@ -424,14 +424,17 @@ public final class MindMapNodeSearchIndex {
 				if (rc != null) {
 					final String user = rc.getFreeplaneUserDirectory();
 					if (user != null && user.length() > 0) {
-						base = new File(user, "mcp-node-search-index");
+						// Per-PC cache under synced data dir (avoid WAL/lock fights across machines).
+						base = new File(new File(user, "mcp-node-search-index"),
+						        org.freeplane.core.util.LocalMachineId.getId());
 					}
 				}
 			}
 			catch (Throwable t) {
 			}
 			if (base == null) {
-				base = new File(System.getProperty("java.io.tmpdir"), "docear-mcp-node-search-index");
+				base = new File(new File(System.getProperty("java.io.tmpdir"), "docear-mcp-node-search-index"),
+				        org.freeplane.core.util.LocalMachineId.getId());
 			}
 			if (!base.isDirectory()) {
 				base.mkdirs();

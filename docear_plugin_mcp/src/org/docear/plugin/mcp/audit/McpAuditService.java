@@ -50,7 +50,7 @@ public final class McpAuditService {
 			return;
 		}
 		final McpAuditDatabase database = McpAuditDatabase.getInstance();
-		final File overflowFile = new File(DocearMcpConfig.getAuditDataDir(), "audit_overflow.jsonl");
+		final File overflowFile = DocearMcpConfig.getAuditOverflowFile();
 		WRITER = new McpAuditWriter(database, overflowFile);
 		WRITER.start();
 		STARTED = true;

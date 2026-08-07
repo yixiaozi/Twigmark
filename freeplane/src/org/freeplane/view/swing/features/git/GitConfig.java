@@ -223,7 +223,9 @@ public final class GitConfig {
 	}
 
 	private static File localPropertiesFile() {
-		return new File(Compat.getApplicationUserDirectory(), "git.local.properties");
+		final File dir = new File(Compat.getApplicationUserDirectory());
+		return org.freeplane.core.util.LocalMachineId.migrateLegacyFile(dir, "git.local.properties", "git.local",
+		        ".properties");
 	}
 
 	private static void closeQuietly(final java.io.Closeable closeable) {

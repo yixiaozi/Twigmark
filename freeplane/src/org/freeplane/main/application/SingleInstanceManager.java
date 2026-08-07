@@ -14,11 +14,13 @@ import java.net.UnknownHostException;
 import org.apache.commons.lang.StringUtils;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
+import org.freeplane.core.util.LocalMachineId;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.main.application.CommandLineParser.Options;
 
 public class SingleInstanceManager {
-	private File lockFile = new File(Compat.getApplicationUserDirectory(), "single_instance.lock");
+	private File lockFile = LocalMachineId.migrateLegacyFile(
+	        new File(Compat.getApplicationUserDirectory()), "single_instance.lock", "single_instance", ".lock");
 	private boolean isSingleInstanceMode;
 	private boolean isSingleInstanceForceMode;
 	private Integer port;

@@ -13,25 +13,65 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.List;
 
+import org.freeplane.core.util.LocalMachineId;
+import org.freeplane.core.util.LogUtils;
+
 /**
  * Per-computer id for usage-stats folders under {@code .docear_stats/data/{deviceId}/}.
  * <p>
- * Computed from this machine's hardware fingerprint (MAC addresses + optional board/OS
- * machine UUID), then kept only in memory. No file on disk — so a synced project tree
- * cannot leak identity across PCs, and a reinstall on the same hardware yields the same id.
+ * Folder / record id is {@link LocalMachineId#getId()} ({@code mac-&lt;hex&gt;}), matching MCP audit
+ * and clipboard DBs. Legacy SHA-256 fingerprint folders are renamed once when possible.
+ * {@link #getLegacyFingerprintHash()} remains for local-secret key derivation (must not change).
  */
 public class DeviceIdentifier {
-	private static String cachedDeviceId = null;
+	private static String cachedLegacyHash = null;
 
-	public static synchronized String getDeviceId() {
-		if (cachedDeviceId != null) {
-			return cachedDeviceId;
+	/** Stats folder / record id: {@code mac-aabbccddeeff}. */
+	public static String getDeviceId() {
+		return LocalMachineId.getId();
+	}
+
+	/**
+	 * Ensure {@code data/mac-&lt;hex&gt;/} exists; rename legacy fingerprint folder when the new one
+	 * is missing. Safe to call repeatedly.
+	 */
+	public static void migrateLegacyStatsFolder(final File dataDir) {
+		if (dataDir == null) {
+			return;
 		}
-		cachedDeviceId = hashString(buildFingerprintMaterial());
-		if (cachedDeviceId == null) {
-			cachedDeviceId = "unknown-device";
+		if (!dataDir.isDirectory() && !dataDir.mkdirs()) {
+			return;
 		}
-		return cachedDeviceId;
+		final File macDir = new File(dataDir, getDeviceId());
+		if (macDir.isDirectory()) {
+			return;
+		}
+		final String legacy = getLegacyFingerprintHash();
+		if (legacy == null || legacy.length() == 0 || "unknown-device".equals(legacy)) {
+			return;
+		}
+		final File legacyDir = new File(dataDir, legacy);
+		if (!legacyDir.isDirectory()) {
+			return;
+		}
+		if (legacyDir.renameTo(macDir)) {
+			LogUtils.info("Usage stats folder migrated: " + legacy + " -> " + getDeviceId());
+		}
+	}
+
+	/**
+	 * Historical fingerprint hash (SHA-256 prefix). Kept for
+	 * {@code LocalMachineSecretCodec} so existing encrypted local secrets still decrypt.
+	 */
+	public static synchronized String getLegacyFingerprintHash() {
+		if (cachedLegacyHash != null) {
+			return cachedLegacyHash;
+		}
+		cachedLegacyHash = hashString(buildFingerprintMaterial());
+		if (cachedLegacyHash == null) {
+			cachedLegacyHash = "unknown-device";
+		}
+		return cachedLegacyHash;
 	}
 
 	/**
@@ -291,14 +331,7 @@ public class DeviceIdentifier {
 	}
 
 	public static String getDeviceName() {
-		String computerName = System.getenv("COMPUTERNAME");
-		if (computerName == null) {
-			computerName = System.getenv("HOSTNAME");
-		}
-		if (computerName == null) {
-			computerName = "Unknown";
-		}
-		return computerName;
+		return LocalMachineId.getHostName();
 	}
 
 	public static String getPlatform() {

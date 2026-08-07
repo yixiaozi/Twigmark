@@ -9,6 +9,10 @@ public final class ClipboardHistoryEntry {
 	public long firstTs;
 	public long lastTs;
 	public int hitCount = 1;
+	/** Source DB absolute path (for multi-PC aggregate / delete). */
+	public String sourceDbPath = "";
+	public String machineId = "";
+	public boolean localMachine = true;
 
 	public String preview(final int maxChars) {
 		if (content == null) {
