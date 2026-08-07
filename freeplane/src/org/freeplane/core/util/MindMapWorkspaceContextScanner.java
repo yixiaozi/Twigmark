@@ -4,8 +4,8 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -120,9 +120,30 @@ public final class MindMapWorkspaceContextScanner {
 
 	private static final String TODO_ICON_NAME = "hourglass";
 	private static final String PUBLISH_ICON_NAME = "internet";
-	private static final Map fileCache = new HashMap();
+	/** Bound LRU — full workspace caches must not retain every .mm forever. */
+	private static final int MAX_FILE_CACHE_ENTRIES = 200;
+	private static final Map fileCache = new LinkedHashMap(64, 0.75f, true) {
+		protected boolean removeEldestEntry(final Map.Entry eldest) {
+			return size() > MAX_FILE_CACHE_ENTRIES;
+		}
+	};
 
 	private MindMapWorkspaceContextScanner() {
+	}
+
+	/** Drop one file from the SAX result cache after a write. */
+	public static void invalidateFileCache(final File file) {
+		if (file == null) {
+			return;
+		}
+		synchronized (fileCache) {
+			fileCache.remove(file.getAbsolutePath());
+			try {
+				fileCache.remove(file.getCanonicalPath());
+			}
+			catch (Exception e) {
+			}
+		}
 	}
 
 	public static WorkspaceScanResult scanAll() {
@@ -361,7 +382,13 @@ public final class MindMapWorkspaceContextScanner {
 
 	private static List collectMindmapFiles() {
 		final List files = new ArrayList();
-		MindMapDataRootResolver.collectMindmapFiles(files);
+		final List cached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
+		if (cached != null && !cached.isEmpty()) {
+			files.addAll(cached);
+		}
+		else {
+			MindMapDataRootResolver.collectMindmapFiles(files);
+		}
 		for (int i = files.size() - 1; i >= 0; i--) {
 			if (!isValidMindmapFile((File) files.get(i))) {
 				files.remove(i);

@@ -368,19 +368,50 @@ public final class McpContextService {
 	public static String getTodayTimelineJson() {
 		final long dayStart = startOfToday();
 		final long dayEnd = endOfToday();
-		final List reminders = MindMapWorkspaceContextScanner.scanAllReminders();
+		final WorkspaceSideTabSnapshot snapshot = WorkspaceSideTabSnapshotRegistry.getSnapshot();
+		List reminders = new ArrayList();
+		if (snapshot.getOneTimeReminders() != null) {
+			reminders.addAll(snapshot.getOneTimeReminders());
+		}
+		if (snapshot.getRecurringReminders() != null) {
+			reminders.addAll(snapshot.getRecurringReminders());
+		}
+		if (reminders.isEmpty()) {
+			reminders = MindMapWorkspaceContextScanner.scanAllReminders();
+		}
 		final List<JsonValue> list = new ArrayList<JsonValue>();
 		for (final Iterator it = reminders.iterator(); it.hasNext();) {
-			final ReminderItem reminder = (ReminderItem) it.next();
-			if (!reminder.recurring && (reminder.remindAt < dayStart || reminder.remindAt >= dayEnd)) {
+			final Object raw = it.next();
+			final File mapFile;
+			final String nodeId;
+			final String nodeText;
+			final long remindAt;
+			final boolean recurring;
+			if (raw instanceof ReminderEntry) {
+				final ReminderEntry reminder = (ReminderEntry) raw;
+				mapFile = reminder.mapFile;
+				nodeId = reminder.nodeId;
+				nodeText = reminder.nodeText;
+				remindAt = reminder.remindAt;
+				recurring = reminder.recurring;
+			}
+			else {
+				final ReminderItem reminder = (ReminderItem) raw;
+				mapFile = reminder.mapFile;
+				nodeId = reminder.nodeId;
+				nodeText = reminder.nodeText;
+				remindAt = reminder.remindAt;
+				recurring = reminder.recurring;
+			}
+			if (!recurring && (remindAt < dayStart || remindAt >= dayEnd)) {
 				continue;
 			}
 			final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
-			item.put("nodeText", JsonValue.ofString(reminder.nodeText));
-			item.put("mapFile", JsonValue.ofString(pathOf(reminder.mapFile)));
-			item.put("nodeId", JsonValue.ofString(reminder.nodeId));
-			item.put("remindAt", JsonValue.ofString(DATE_TIME.format(new Date(reminder.remindAt))));
-			item.put("recurring", JsonValue.ofBoolean(reminder.recurring));
+			item.put("nodeText", JsonValue.ofString(nodeText));
+			item.put("mapFile", JsonValue.ofString(pathOf(mapFile)));
+			item.put("nodeId", JsonValue.ofString(nodeId));
+			item.put("remindAt", JsonValue.ofString(DATE_TIME.format(new Date(remindAt))));
+			item.put("recurring", JsonValue.ofBoolean(recurring));
 			list.add(JsonValue.ofMap(item));
 		}
 		return JsonValue.ofList(list).toJson();

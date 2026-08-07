@@ -82,14 +82,14 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 问题类型 | 推荐 MCP 调用 |
 |----------|----------------|
 | 当前状态、最近想法、「现在喜欢谁」 | 先 `list_recently_modified`（默认近 365 天），再 `search_nodes` 且 `modifiedWithinDays: 365` |
-| 历史全文、考古 | `search_nodes` 不设 `modifiedWithinDays`（按节点 MODIFIED 新→旧；会扫全库，建议加 `projectId`） |
+| 历史全文、考古 | `search_nodes` 传 `modifiedWithinDays: 0`（不限时间；按节点 MODIFIED 新→旧；建议加 `projectId`） |
 | 只在某个文件里搜 | `search_nodes` 传 `filePath`（可用 `子目录/文件名.mm` 消歧） |
 
 结果字段：`modifiedAt` / `modifiedAtMillis`、`parentPath`、`depth`、`parentNodeId`。
 
 **搜索语义**：`modifiedWithinDays` 按每个节点的 XML `MODIFIED` 过滤，不再用全局「最近修改 Top 5000」预截断。
 
-**性能**：无时间窗会 SAX 扫全部 `.mm`；大库请用 `modifiedWithinDays`、`filePath` 或 `projectId`。有时间窗时跳过 `lastModified` 早于 cutoff 的文件。
+**性能**：无 `filePath` 时默认 `modifiedWithinDays=365`（传 `0` 表示不限）。节点 TEXT 有进程内 LRU + 磁盘 spill 索引，重复查询走热缓存；大库仍建议加 `filePath` / `projectId`。侧栏类查询（提醒/逾期/今日时间线/已发布）优先快照，避免全库 SAX。
 
 **路径消歧**：仅 `文件名.mm` 且有多份同名时，优先已打开标签 → 当前导图同目录 → 主项目 → 唯一最新文件；仍歧义则报错并列候选路径。建议传 partial path。
 
