@@ -127,6 +127,8 @@ public class RibbonBuilder {
 		
 		try {
 			getAcceleratorManager().loadAcceleratorPresets(new FileInputStream(getAcceleratorManager().getPresetsFile()));
+			// User file may omit Mac-safe alternatives; fill platform gaps without overwriting.
+			getAcceleratorManager().applyPlatformDefaultAccelerators();
 		}
 		catch (IOException ex) {
 			LogUtils.info("User accelerator.properties not found, loading defaults");

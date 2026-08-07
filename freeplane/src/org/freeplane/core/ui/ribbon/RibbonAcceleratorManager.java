@@ -152,6 +152,32 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
  		KeyStroke ks = actionMap.get(actionKey);
  		return ks;
  	}
+
+	/** Snapshot of actionKey → accelerator (for the shortcuts editor). */
+	public Map<String, KeyStroke> getActionAccelerators() {
+		return new HashMap<String, KeyStroke>(actionMap);
+	}
+
+	/**
+	 * Clear accelerator for an action and persist. Used by the shortcuts editor.
+	 */
+	public void clearAccelerator(final AFreeplaneAction action) {
+		if (action == null) {
+			return;
+		}
+		final String shortcutKey = getPropertyKey(action.getKey());
+		setAccelerator(action, null);
+		keysetProps.setProperty(shortcutKey, "");
+		try {
+			if (!getPresetsFile().exists()) {
+				getPresetsFile().createNewFile();
+			}
+			storeAcceleratorPreset(new FileOutputStream(getPresetsFile()));
+		}
+		catch (IOException e) {
+			LogUtils.warn("Could not persist cleared accelerator: " + e.getMessage());
+		}
+	}
  	
  	public void addAcceleratorChangeListener(IAcceleratorChangeListener changeListener) {
 		synchronized (changeListeners) {
@@ -272,16 +298,90 @@ public class RibbonAcceleratorManager implements IKeyStrokeProcessor, IAccelerat
 	}
 
 	public void loadDefaultAcceleratorPresets() {
+		loadAcceleratorPresetsResource("/accelerator.default.properties", "default");
+		applyPlatformDefaultAccelerators();
+	}
+
+	/**
+	 * Mac-friendly defaults for shortcuts that conflict with system / IME bindings
+	 * (e.g. Option+Space). Fills unbound keys, and migrates known Win/Linux conflict
+	 * strokes (Alt+Space) to the Mac alternative.
+	 */
+	public void applyPlatformDefaultAccelerators() {
+		if (!Compat.isMacOsX()) {
+			return;
+		}
 		InputStream in = null;
 		try {
-			in = RibbonAcceleratorManager.class.getResourceAsStream("/accelerator.default.properties");
+			in = RibbonAcceleratorManager.class.getResourceAsStream("/accelerator.default.mac.properties");
+			if (in == null) {
+				return;
+			}
+			final Properties mac = new Properties();
+			mac.load(in);
+			LogUtils.info("Applying Mac accelerator gap-fills (" + mac.size() + " candidates)");
+			final KeyStroke altSpace = parseKeyStroke("alt SPACE");
+			for (final Entry<Object, Object> property : mac.entrySet()) {
+				final String shortcutKey = (String) property.getKey();
+				final String keystrokeString = (String) property.getValue();
+				if (!shortcutKey.startsWith(SHORTCUT_PROPERTY_PREFIX) || keystrokeString == null
+				        || keystrokeString.length() == 0) {
+					continue;
+				}
+				final int pos = shortcutKey.indexOf("/", SHORTCUT_PROPERTY_PREFIX.length());
+				if (pos <= 0) {
+					continue;
+				}
+				final String itemKey = shortcutKey.substring(pos + 1);
+				final AFreeplaneAction action = builder.getMode().getAction(itemKey);
+				if (action == null) {
+					continue;
+				}
+				final KeyStroke keyStroke = parseKeyStroke(keystrokeString);
+				if (keyStroke == null) {
+					continue;
+				}
+				final KeyStroke current = actionMap.get(itemKey);
+				final boolean unbound = current == null;
+				final boolean migrateAltSpace = current != null && altSpace != null && current.equals(altSpace)
+				        && itemKey.equals("MapSwitcherAction");
+				if (!unbound && !migrateAltSpace) {
+					continue;
+				}
+				setAccelerator(action, keyStroke, false);
+				defaultProps.setProperty(shortcutKey, keystrokeString);
+				if (migrateAltSpace) {
+					keysetProps.setProperty(shortcutKey, keystrokeString);
+					LogUtils.info("Migrated MapSwitcherAction from alt SPACE to " + keystrokeString + " on Mac");
+				}
+			}
+		}
+		catch (final Exception e) {
+			LogUtils.warn("Could not apply Mac accelerator presets: " + e.getMessage());
+		}
+		finally {
 			if (in != null) {
-				LogUtils.info("Loading default accelerator presets");
+				try {
+					in.close();
+				}
+				catch (IOException e) {
+					LogUtils.warn(e);
+				}
+			}
+		}
+	}
+
+	private void loadAcceleratorPresetsResource(final String resourcePath, final String label) {
+		InputStream in = null;
+		try {
+			in = RibbonAcceleratorManager.class.getResourceAsStream(resourcePath);
+			if (in != null) {
+				LogUtils.info("Loading " + label + " accelerator presets from " + resourcePath);
 				loadAcceleratorPresets(in);
 			}
 		}
 		catch (final Exception e) {
-			LogUtils.warn("Could not load default accelerator presets: "+e.getMessage());
+			LogUtils.warn("Could not load " + label + " accelerator presets: " + e.getMessage());
 		}
 		finally {
 			if (in != null) {
