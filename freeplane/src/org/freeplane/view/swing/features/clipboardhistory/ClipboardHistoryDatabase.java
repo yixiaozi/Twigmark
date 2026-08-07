@@ -17,12 +17,15 @@ import org.freeplane.core.util.LocalMachineId;
 import org.freeplane.core.util.LogUtils;
 
 /**
- * SQLite store for clipboard texts. Same content hashes to one row; re-copy only
- * bumps {@code last_ts} / {@code hit_count}.
+ * SQLite store for clipboard texts. Same content hashes to one row; re-copy bumps
+ * {@code last_ts} / {@code hit_count} and appends a row in {@code clipboard_hit}
+ * so every occurrence time is kept.
  * Each PC writes its own {@code clipboard_history-&lt;mac&gt;.db}; peers are opened read-mostly for aggregate views.
  */
 final class ClipboardHistoryDatabase {
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
+	/** Cap per-entry history shown / stored queries (keeps UI snappy). */
+	static final int HIT_LIST_LIMIT = 200;
 	private static volatile ClipboardHistoryDatabase INSTANCE;
 
 	private final File dbFile;
@@ -74,6 +77,7 @@ final class ClipboardHistoryDatabase {
 
 	/**
 	 * Insert or bump hit for truncated text. Returns true when a new row was created.
+	 * Every occurrence appends a {@code clipboard_hit} timestamp.
 	 */
 	boolean recordText(final String rawText) throws SQLException {
 		final String content = normalizeAndTruncate(rawText);
@@ -94,7 +98,9 @@ final class ClipboardHistoryDatabase {
 			select.setString(1, hash);
 			rs = select.executeQuery();
 			boolean created;
+			long entryId;
 			if (rs.next()) {
+				entryId = rs.getLong(1);
 				update = connection.prepareStatement(
 						"UPDATE clipboard_entry SET last_ts = ?, hit_count = hit_count + 1 WHERE content_hash = ?");
 				update.setLong(1, now);
@@ -105,15 +111,30 @@ final class ClipboardHistoryDatabase {
 			else {
 				insert = connection.prepareStatement(
 						"INSERT INTO clipboard_entry (content_hash, content, char_len, first_ts, last_ts, hit_count)"
-								+ " VALUES (?,?,?,?,?,1)");
+								+ " VALUES (?,?,?,?,?,1)",
+						Statement.RETURN_GENERATED_KEYS);
 				insert.setString(1, hash);
 				insert.setString(2, content);
 				insert.setInt(3, content.length());
 				insert.setLong(4, now);
 				insert.setLong(5, now);
 				insert.executeUpdate();
+				ResultSet keys = null;
+				try {
+					keys = insert.getGeneratedKeys();
+					if (keys != null && keys.next()) {
+						entryId = keys.getLong(1);
+					}
+					else {
+						entryId = lookupIdByHash(connection, hash);
+					}
+				}
+				finally {
+					closeQuietly(keys);
+				}
 				created = true;
 			}
+			insertHit(connection, entryId, now);
 			pruneIfNeeded(connection);
 			connection.commit();
 			return created;
@@ -133,6 +154,38 @@ final class ClipboardHistoryDatabase {
 			closeQuietly(select);
 			closeQuietly(update);
 			closeQuietly(insert);
+			closeQuietly(connection);
+		}
+	}
+
+	/** Hit timestamps for one entry, newest first. Empty if table missing (old peer DB). */
+	List listHitTimes(final long entryId, final int limit) throws SQLException {
+		Connection connection = null;
+		PreparedStatement statement = null;
+		ResultSet rs = null;
+		try {
+			connection = openConnection();
+			statement = connection.prepareStatement(
+					"SELECT hit_ts FROM clipboard_hit WHERE entry_id = ? ORDER BY hit_ts DESC LIMIT ?");
+			statement.setLong(1, entryId);
+			statement.setInt(2, limit > 0 ? limit : HIT_LIST_LIMIT);
+			rs = statement.executeQuery();
+			final List times = new ArrayList();
+			while (rs.next()) {
+				times.add(Long.valueOf(rs.getLong(1)));
+			}
+			return times;
+		}
+		catch (SQLException e) {
+			final String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+			if (msg.indexOf("clipboard_hit") >= 0 || msg.indexOf("no such table") >= 0) {
+				return new ArrayList();
+			}
+			throw e;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(statement);
 			closeQuietly(connection);
 		}
 	}
@@ -191,14 +244,32 @@ final class ClipboardHistoryDatabase {
 
 	boolean deleteById(final long id) throws SQLException {
 		Connection connection = null;
+		PreparedStatement deleteHits = null;
 		PreparedStatement statement = null;
 		try {
 			connection = openConnection();
+			connection.setAutoCommit(false);
+			deleteHits = connection.prepareStatement("DELETE FROM clipboard_hit WHERE entry_id = ?");
+			deleteHits.setLong(1, id);
+			deleteHits.executeUpdate();
 			statement = connection.prepareStatement("DELETE FROM clipboard_entry WHERE id = ?");
 			statement.setLong(1, id);
-			return statement.executeUpdate() > 0;
+			final boolean ok = statement.executeUpdate() > 0;
+			connection.commit();
+			return ok;
+		}
+		catch (SQLException e) {
+			if (connection != null) {
+				try {
+					connection.rollback();
+				}
+				catch (SQLException ignore) {
+				}
+			}
+			throw e;
 		}
 		finally {
+			closeQuietly(deleteHits);
 			closeQuietly(statement);
 			closeQuietly(connection);
 		}
@@ -210,6 +281,7 @@ final class ClipboardHistoryDatabase {
 		try {
 			connection = openConnection();
 			statement = connection.createStatement();
+			statement.executeUpdate("DELETE FROM clipboard_hit");
 			statement.executeUpdate("DELETE FROM clipboard_entry");
 			statement.executeUpdate("VACUUM");
 		}
@@ -293,6 +365,17 @@ final class ClipboardHistoryDatabase {
 				return;
 			}
 			final int remove = count - max;
+			PreparedStatement deleteHits = null;
+			try {
+				deleteHits = connection.prepareStatement(
+						"DELETE FROM clipboard_hit WHERE entry_id IN ("
+								+ "SELECT id FROM clipboard_entry ORDER BY last_ts ASC LIMIT ?)");
+				deleteHits.setInt(1, remove);
+				deleteHits.executeUpdate();
+			}
+			finally {
+				closeQuietly(deleteHits);
+			}
 			delete = connection.prepareStatement(
 					"DELETE FROM clipboard_entry WHERE id IN (SELECT id FROM clipboard_entry ORDER BY last_ts ASC LIMIT ?)");
 			delete.setInt(1, remove);
@@ -330,6 +413,12 @@ final class ClipboardHistoryDatabase {
 					+ "hit_count INTEGER NOT NULL DEFAULT 1)");
 			statement.execute("CREATE INDEX IF NOT EXISTS idx_clip_last_ts ON clipboard_entry(last_ts DESC)");
 			statement.execute("CREATE INDEX IF NOT EXISTS idx_clip_hit ON clipboard_entry(hit_count DESC)");
+			statement.execute("CREATE TABLE IF NOT EXISTS clipboard_hit ("
+					+ "id INTEGER PRIMARY KEY AUTOINCREMENT,"
+					+ "entry_id INTEGER NOT NULL,"
+					+ "hit_ts INTEGER NOT NULL)");
+			statement.execute("CREATE INDEX IF NOT EXISTS idx_clip_hit_entry ON clipboard_hit(entry_id, hit_ts DESC)");
+			ensureHitBackfill(connection);
 			LogUtils.info("Clipboard history database ready: " + dbFile.getAbsolutePath());
 		}
 		catch (SQLException e) {
@@ -338,6 +427,62 @@ final class ClipboardHistoryDatabase {
 		finally {
 			closeQuietly(statement);
 			closeQuietly(connection);
+		}
+	}
+
+	/**
+	 * One-time backfill for entries created before per-hit timestamps existed:
+	 * seed first_ts (and last_ts when different). Intermediate times cannot be recovered.
+	 */
+	private void ensureHitBackfill(final Connection connection) throws SQLException {
+		Statement statement = null;
+		try {
+			statement = connection.createStatement();
+			statement.executeUpdate(
+					"INSERT INTO clipboard_hit (entry_id, hit_ts) "
+							+ "SELECT e.id, e.first_ts FROM clipboard_entry e "
+							+ "WHERE e.first_ts > 0 AND NOT EXISTS ("
+							+ "SELECT 1 FROM clipboard_hit h WHERE h.entry_id = e.id)");
+			statement.executeUpdate(
+					"INSERT INTO clipboard_hit (entry_id, hit_ts) "
+							+ "SELECT e.id, e.last_ts FROM clipboard_entry e "
+							+ "WHERE e.last_ts > 0 AND e.last_ts <> e.first_ts AND NOT EXISTS ("
+							+ "SELECT 1 FROM clipboard_hit h WHERE h.entry_id = e.id AND h.hit_ts = e.last_ts)");
+		}
+		finally {
+			closeQuietly(statement);
+		}
+	}
+
+	private static void insertHit(final Connection connection, final long entryId, final long hitTs)
+	        throws SQLException {
+		if (entryId <= 0L || hitTs <= 0L) {
+			return;
+		}
+		PreparedStatement insert = null;
+		try {
+			insert = connection.prepareStatement("INSERT INTO clipboard_hit (entry_id, hit_ts) VALUES (?,?)");
+			insert.setLong(1, entryId);
+			insert.setLong(2, hitTs);
+			insert.executeUpdate();
+		}
+		finally {
+			closeQuietly(insert);
+		}
+	}
+
+	private static long lookupIdByHash(final Connection connection, final String hash) throws SQLException {
+		PreparedStatement select = null;
+		ResultSet rs = null;
+		try {
+			select = connection.prepareStatement("SELECT id FROM clipboard_entry WHERE content_hash = ?");
+			select.setString(1, hash);
+			rs = select.executeQuery();
+			return rs.next() ? rs.getLong(1) : 0L;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(select);
 		}
 	}
 

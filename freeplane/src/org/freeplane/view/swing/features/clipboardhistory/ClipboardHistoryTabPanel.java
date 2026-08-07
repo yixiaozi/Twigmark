@@ -60,6 +60,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
 	private static final int DISPLAY_LIMIT = 300;
 	private static final SimpleDateFormat TIME = new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA);
+	private static final SimpleDateFormat TIME_SEC = new SimpleDateFormat("MM-dd HH:mm:ss", Locale.CHINA);
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
 	private final JTextField searchField = new JTextField();
@@ -67,10 +68,12 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private final DefaultListModel listModel = new DefaultListModel();
 	private final JList list = new JList(listModel);
 	private final JTextArea detailArea = new JTextArea();
+	private final JTextArea hitTimesArea = new JTextArea();
 	private final Timer reloadDebounce;
 	private final Timer softUpdateDebounce;
 	private volatile boolean reloading;
 	private volatile int generation;
+	private volatile int detailGeneration;
 	private volatile long lastFullStatusAt;
 
 	public ClipboardHistoryTabPanel() {
@@ -171,14 +174,29 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		detailArea.setBackground(DocearUiTheme.SURFACE);
 		detailArea.setBorder(new EmptyBorder(8, 10, 8, 10));
 
+		hitTimesArea.setEditable(false);
+		hitTimesArea.setLineWrap(true);
+		hitTimesArea.setWrapStyleWord(true);
+		hitTimesArea.setFont(DocearUiTheme.font(11f));
+		hitTimesArea.setForeground(DocearUiTheme.TEXT_MUTED);
+		hitTimesArea.setBackground(DocearUiTheme.SURFACE);
+		hitTimesArea.setBorder(new EmptyBorder(6, 10, 6, 10));
+		hitTimesArea.setRows(4);
+
 		final JScrollPane listScroll = new JScrollPane(list);
 		DocearUiTheme.styleScrollPane(listScroll);
+		final JScrollPane hitScroll = new JScrollPane(hitTimesArea);
+		DocearUiTheme.styleScrollPane(hitScroll);
+		hitScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "出现时间"));
 		final JScrollPane detailScroll = new JScrollPane(detailArea);
 		DocearUiTheme.styleScrollPane(detailScroll);
 		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "全文"));
 
-		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, listScroll, detailScroll);
-		split.setResizeWeight(0.62);
+		final JSplitPane detailSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, hitScroll, detailScroll);
+		detailSplit.setResizeWeight(0.35);
+		detailSplit.setBorder(null);
+		final JSplitPane split = new JSplitPane(JSplitPane.VERTICAL_SPLIT, listScroll, detailSplit);
+		split.setResizeWeight(0.55);
 		split.setBorder(null);
 		add(split, BorderLayout.CENTER);
 		add(buildActions(), BorderLayout.SOUTH);
@@ -188,7 +206,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		final JPanel header = new JPanel(new BorderLayout(6, 6));
 		header.setOpaque(false);
 		final JLabel title = DocearUiTheme.titleLabel("剪贴板");
-		final JLabel hint = DocearUiTheme.mutedLabel("仅文字 · 相同内容只更新时间/次数 · 不限条数");
+		final JLabel hint = DocearUiTheme.mutedLabel("仅文字 · 相同内容合并并记录每次出现时间 · 不限条数");
 		hint.setFont(DocearUiTheme.font(11f));
 		final JPanel titleCol = new JPanel();
 		titleCol.setOpaque(false);
@@ -352,6 +370,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 								: "暂无记录 · 复制文字后自动收录");
 						statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
 						detailArea.setText("");
+						hitTimesArea.setText("");
 					}
 					else {
 						for (int i = 0; i < rows.size(); i++) {
@@ -385,11 +404,62 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		final Object value = list.getSelectedValue();
 		if (!(value instanceof ClipboardHistoryEntry)) {
 			detailArea.setText("");
+			hitTimesArea.setText("");
 			return;
 		}
 		final ClipboardHistoryEntry entry = (ClipboardHistoryEntry) value;
 		detailArea.setText(entry.content);
 		detailArea.setCaretPosition(0);
+		hitTimesArea.setText("加载出现时间…");
+		final int gen = ++detailGeneration;
+		new SwingWorker() {
+			private List times;
+
+			protected Object doInBackground() throws Exception {
+				times = ClipboardHistoryService.getInstance().listHitTimes(entry);
+				return null;
+			}
+
+			protected void done() {
+				if (gen != detailGeneration) {
+					return;
+				}
+				hitTimesArea.setText(formatHitTimes(entry, times));
+				hitTimesArea.setCaretPosition(0);
+			}
+		}.execute();
+	}
+
+	private String formatHitTimes(final ClipboardHistoryEntry entry, final List times) {
+		final StringBuffer sb = new StringBuffer();
+		final int recorded = times == null ? 0 : times.size();
+		sb.append("共 ×").append(entry.hitCount).append(" 次");
+		if (recorded > 0) {
+			sb.append(" · 已记录 ").append(recorded).append(" 个时间点");
+		}
+		if (entry.hitCount > recorded && recorded > 0) {
+			sb.append("（升级前部分次数未逐条记时，仅保留首末）");
+		}
+		sb.append('\n');
+		if (recorded == 0) {
+			sb.append("暂无时间点");
+			return sb.toString();
+		}
+		for (int i = 0; i < recorded; i++) {
+			final long ts = ((Long) times.get(i)).longValue();
+			sb.append(i + 1).append(". ").append(TIME_SEC.format(new Date(ts)));
+			if (i == 0) {
+				sb.append("（最近）");
+			}
+			else if (i == recorded - 1 && entry.firstTs == ts) {
+				sb.append("（首次）");
+			}
+			sb.append('\n');
+		}
+		if (recorded >= ClipboardHistoryDatabase.HIT_LIST_LIMIT) {
+			sb.append("…仅显示最近 ").append(ClipboardHistoryDatabase.HIT_LIST_LIMIT).append(" 条");
+		}
+		return sb.toString().trim();
 	}
 
 	private void copySelected() {
