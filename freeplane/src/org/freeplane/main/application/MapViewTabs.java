@@ -338,6 +338,43 @@ class MapViewTabs implements IMapViewChangeListener {
 		}
 	}
 
+	/**
+	 * Ctrl+Tab / Ctrl+Shift+Tab: cycle among tabs currently shown on the strip
+	 * (active group filter + visual order after drag-reorder), not the full
+	 * creation-order {@code mapViewVector}.
+	 *
+	 * @return true if a different tab was selected
+	 */
+	boolean selectAdjacentVisibleTab(final boolean forward) {
+		final int count = visibleTabKeys.size();
+		if (count <= 1) {
+			return false;
+		}
+		int current = mTabbedPane.getSelectedIndex();
+		if (current < 0 || current >= count) {
+			final Component active = resolveActiveTabKey();
+			current = active != null ? visibleTabKeys.indexOf(active) : -1;
+		}
+		if (current < 0) {
+			current = forward ? count - 1 : 0;
+		}
+		final int next = forward ? (current + 1) % count : (current - 1 + count) % count;
+		if (next == current) {
+			return false;
+		}
+		switchToTab(next);
+		return true;
+	}
+
+	/** Current strip selection, or the live map/document when the strip index is stale. */
+	private Component resolveActiveTabKey() {
+		final IDocumentTabView doc = DocumentTabSupport.getActiveDocumentView();
+		if (doc != null) {
+			return doc.getTabKey();
+		}
+		return Controller.getCurrentController().getMapViewManager().getMapViewComponent();
+	}
+
 	public void openDocumentTab(final IDocumentTabView documentView) {
 		if (documentView == null) {
 			return;

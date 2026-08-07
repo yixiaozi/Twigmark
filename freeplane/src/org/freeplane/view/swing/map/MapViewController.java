@@ -557,6 +557,10 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	 * @see org.freeplane.core.frame.IMapViewController#nextMapView()
 	 */
 	public void nextMapView() {
+		// Prefer visible tab strip order (active group + drag-reorder), not mapViewVector.
+		if (org.freeplane.main.application.MapViewTabOrder.selectAdjacentVisibleTab(true)) {
+			return;
+		}
 		int index;
 		final int size = mapViewVector.size();
 		if (getMapView() != null) {
@@ -577,6 +581,9 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	 * @see org.freeplane.core.frame.IMapViewController#previousMapView()
 	 */
 	public void previousMapView() {
+		if (org.freeplane.main.application.MapViewTabOrder.selectAdjacentVisibleTab(false)) {
+			return;
+		}
 		int index;
 		final int size = mapViewVector.size();
 		if (getMapView() != null) {
