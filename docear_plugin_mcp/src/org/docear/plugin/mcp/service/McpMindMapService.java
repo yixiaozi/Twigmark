@@ -113,6 +113,113 @@ public final class McpMindMapService {
 		return getMindmapJson(filePath, maxDepth, true);
 	}
 
+	/**
+	 * Lightweight catalog for the web library (session-auth HTTP layer).
+	 * Returns JSON list: path, name, relativePath, size, modifiedAt, modifiedAtMillis.
+	 */
+	public static String listMindMapsForWeb(final String query, final int limit) {
+		final String needle = query == null ? "" : query.trim().toLowerCase();
+		final int max = limit < 1 ? 500 : (limit > 2000 ? 2000 : limit);
+		final List files = new ArrayList();
+		final List cached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
+		if (cached != null && !cached.isEmpty()) {
+			files.addAll(cached);
+		}
+		else {
+			MindMapDataRootResolver.collectMindmapFiles(files);
+		}
+		sortFilesByModifiedDesc(files);
+		File rootDir = null;
+		try {
+			rootDir = MindMapDataRootResolver.getWorkingDirectory();
+		}
+		catch (Exception ignored) {
+		}
+		final String rootPath = rootDir != null ? canonicalPath(rootDir) : "";
+		final List<JsonValue> items = new ArrayList<JsonValue>();
+		for (int i = 0; i < files.size() && items.size() < max; i++) {
+			final File file = (File) files.get(i);
+			if (file == null || !file.isFile()) {
+				continue;
+			}
+			final String name = file.getName();
+			final String abs = file.getAbsolutePath();
+			final String rel = relativeToRoot(abs, rootPath);
+			if (needle.length() > 0) {
+				final String hay = (name + " " + rel + " " + abs).toLowerCase();
+				if (hay.indexOf(needle) < 0) {
+					continue;
+				}
+			}
+			final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
+			item.put("path", JsonValue.ofString(abs));
+			item.put("name", JsonValue.ofString(name));
+			item.put("title", JsonValue.ofString(stripMmExtension(name)));
+			item.put("relativePath", JsonValue.ofString(rel));
+			item.put("size", JsonValue.ofNumber(Long.valueOf(file.length())));
+			item.put("modifiedAtMillis", JsonValue.ofNumber(Long.valueOf(file.lastModified())));
+			item.put("modifiedAt", JsonValue.ofString(MODIFIED_DATE_FORMAT.format(new Date(file.lastModified()))));
+			items.add(JsonValue.ofMap(item));
+		}
+		final Map<String, JsonValue> out = new LinkedHashMap<String, JsonValue>();
+		out.put("maps", JsonValue.ofList(items));
+		out.put("count", JsonValue.ofNumber(Integer.valueOf(items.size())));
+		out.put("root", JsonValue.ofString(rootPath));
+		return JsonValue.ofMap(out).toJson();
+	}
+
+	/** Compact outline JSON for web chat map focus (bounded size). */
+	public static String getMindmapOutlineForWeb(final String filePath, final int maxDepth, final int maxChars)
+			throws Exception {
+		final int depth = maxDepth < 1 ? 1 : (maxDepth > 8 ? 8 : maxDepth);
+		final String json = getMindmapJson(filePath, depth, true);
+		final int cap = maxChars < 2000 ? 2000 : maxChars;
+		if (json.length() <= cap) {
+			return json;
+		}
+		return json.substring(0, cap) + "...\"truncated\":true}";
+	}
+
+	private static String relativeToRoot(final String absPath, final String rootPath) {
+		if (absPath == null) {
+			return "";
+		}
+		if (rootPath == null || rootPath.length() == 0) {
+			return absPath;
+		}
+		final String a = absPath.replace('\\', '/');
+		String r = rootPath.replace('\\', '/');
+		if (!r.endsWith("/")) {
+			r = r + "/";
+		}
+		if (a.startsWith(r)) {
+			return a.substring(r.length());
+		}
+		if (a.toLowerCase().startsWith(r.toLowerCase())) {
+			return a.substring(r.length());
+		}
+		return absPath;
+	}
+
+	private static String stripMmExtension(final String name) {
+		if (name == null) {
+			return "";
+		}
+		if (name.toLowerCase().endsWith(".mm")) {
+			return name.substring(0, name.length() - 3);
+		}
+		return name;
+	}
+
+	private static String canonicalPath(final File file) {
+		try {
+			return file.getCanonicalPath();
+		}
+		catch (Exception e) {
+			return file.getAbsolutePath();
+		}
+	}
+
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
 			final String filePath, final String projectId) {
 		final String needle = query == null ? "" : query.trim().toLowerCase();

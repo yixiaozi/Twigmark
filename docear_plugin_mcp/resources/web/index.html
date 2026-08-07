@@ -2,8 +2,9 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Twigmark Web</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1220" />
+    <title>Twigmark</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -18,10 +19,10 @@
         <div class="auth-brand">
           <div class="logo-mark" aria-hidden="true"></div>
           <h1>Twigmark</h1>
-          <p class="lede">导图工作台的网页对话端。大模型配置与桌面侧栏共用同一数据库。</p>
+          <p class="lede">导图库网页版：浏览、搜索，并对任意导图提问。手机也能用。</p>
         </div>
         <div class="auth-card">
-          <p class="muted" id="auth-hint">登录后可对话、配置 OpenRouter，并汇总各电脑同步的历史。</p>
+          <p class="muted" id="auth-hint">登录后访问导图库与对话。</p>
           <label>账号 <input id="auth-user" autocomplete="username" /></label>
           <label>密码 <input id="auth-pass" type="password" autocomplete="current-password" /></label>
           <div class="auth-actions">
@@ -34,96 +35,171 @@
     </div>
 
     <div id="app-view" class="app hidden">
-      <aside class="sidebar">
-        <div class="side-brand">
+      <header class="app-bar">
+        <div class="app-brand">
           <div class="logo-mark small" aria-hidden="true"></div>
           <div>
             <strong>Twigmark</strong>
             <span class="muted tiny block" id="db-meta">…</span>
           </div>
         </div>
-        <div class="side-top">
-          <span class="side-label">对话</span>
-          <button type="button" id="btn-new" class="ghost small">新对话</button>
+        <nav class="app-nav" aria-label="主导航">
+          <button type="button" class="nav-btn active" data-view="library">导图库</button>
+          <button type="button" class="nav-btn" data-view="chat">对话</button>
+          <button type="button" class="nav-btn" data-view="settings">设置</button>
+        </nav>
+        <div class="app-bar-right">
+          <span id="who" class="pill">…</span>
+          <button type="button" id="btn-logout" class="ghost small">退出</button>
         </div>
-        <div id="conv-list" class="conv-list"></div>
-      </aside>
+      </header>
 
-      <section class="main">
-        <header class="top">
-          <div class="brand">
-            <div>
-              <strong id="who">Twigmark Web</strong>
-              <p class="muted tiny" id="conv-title">选择或创建对话</p>
+      <!-- Library -->
+      <section id="view-library" class="view">
+        <div class="library-layout" id="library-layout">
+          <aside class="library-side">
+            <div class="side-head">
+              <h2>导图库</h2>
+              <button type="button" id="btn-refresh-maps" class="ghost small">刷新</button>
             </div>
-            <span id="status-pill" class="pill">…</span>
-          </div>
-          <div class="top-actions">
-            <label class="inline-field">
-              <span>模型</span>
-              <select id="profile-select" title="大模型配置（与桌面共用）"></select>
+            <label class="search-field">
+              <span class="sr-only">搜索导图</span>
+              <input id="map-filter" placeholder="搜索文件名 / 路径…" />
             </label>
-            <button type="button" id="btn-llm" class="ghost">配置</button>
-            <button type="button" id="btn-logout" class="ghost">退出</button>
-          </div>
-        </header>
+            <p class="muted tiny" id="map-count">加载中…</p>
+            <div id="map-list" class="map-list"></div>
+          </aside>
 
-        <section id="llm-panel" class="settings hidden">
-          <div class="settings-head">
-            <h3>大模型配置</h3>
-            <p class="muted tiny">写入本机 webchat 数据库，桌面右侧聊天可直接选用，无需重复填写。</p>
-          </div>
-          <div class="settings-grid">
-            <label
-              >服务商
-              <select id="llm-provider">
-                <option value="openrouter">OpenRouter（推荐）</option>
-                <option value="openai">OpenAI 官方</option>
-                <option value="custom">自定义 OpenAI 兼容</option>
-              </select>
-            </label>
-            <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
-            <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
-            <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
-            <label class="span-2"
-              >模型
-              <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
-              <datalist id="llm-model-hints">
-                <option value="openai/gpt-4o-mini"></option>
-                <option value="openai/gpt-4o"></option>
-                <option value="anthropic/claude-3.5-sonnet"></option>
-                <option value="google/gemini-2.0-flash-001"></option>
-                <option value="deepseek/deepseek-chat"></option>
-                <option value="qwen/qwen-2.5-72b-instruct"></option>
-              </datalist>
-            </label>
-          </div>
-          <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认（桌面与网页共用）</label>
-          <div class="settings-row">
-            <button type="button" id="btn-llm-save" class="primary">保存</button>
-            <button type="button" id="btn-llm-new" class="ghost">新建</button>
-            <button type="button" id="btn-llm-del" class="ghost">删除</button>
-            <span id="llm-note" class="muted"></span>
-          </div>
-        </section>
+          <div class="library-main" id="library-main">
+            <div id="library-empty" class="empty-state">
+              <h2>选择一张导图</h2>
+              <p>从左侧打开任意导图，浏览节点树，或直接对它提问。</p>
+            </div>
 
-        <main id="chat" class="chat" aria-live="polite">
-          <div class="empty-state" id="empty-state">
-            <h2>从这里操作导图</h2>
-            <p>提问、整理节点或让模型调用 MCP 工具。历史与桌面侧栏写入同一 webchat 数据库。</p>
-          </div>
-        </main>
-
-        <footer class="composer">
-          <div class="composer-box">
-            <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送，Shift+Enter 换行）"></textarea>
-            <div class="composer-bar">
-              <span class="muted tiny" id="composer-hint">工具调用由服务端完成</span>
-              <button type="button" id="btn-send" class="primary">发送</button>
+            <div id="map-viewer" class="map-viewer hidden">
+              <header class="viewer-head">
+                <div class="viewer-titles">
+                  <h2 id="viewer-title">导图</h2>
+                  <p class="muted tiny" id="viewer-path"></p>
+                </div>
+                <div class="viewer-actions">
+                  <label class="search-field compact">
+                    <input id="node-filter" placeholder="在图内筛选节点…" />
+                  </label>
+                  <button type="button" id="btn-expand-all" class="ghost small">展开</button>
+                  <button type="button" id="btn-collapse-all" class="ghost small">折叠</button>
+                  <button type="button" id="btn-ask-map" class="primary small">提问</button>
+                </div>
+              </header>
+              <div class="viewer-body">
+                <div id="tree" class="tree" role="tree"></div>
+                <aside id="ask-panel" class="ask-panel">
+                  <div class="ask-head">
+                    <strong>针对此图提问</strong>
+                    <button type="button" id="btn-close-ask" class="ghost small hide-desktop">关闭</button>
+                  </div>
+                  <div id="ask-chat" class="ask-chat" aria-live="polite"></div>
+                  <div class="ask-composer">
+                    <textarea id="ask-input" rows="3" placeholder="例如：总结这张图的结构 / 找出待办…"></textarea>
+                    <div class="ask-bar">
+                      <select id="ask-profile" title="模型"></select>
+                      <button type="button" id="btn-ask-send" class="primary">发送</button>
+                    </div>
+                  </div>
+                </aside>
+              </div>
             </div>
           </div>
-        </footer>
+        </div>
       </section>
+
+      <!-- Global chat -->
+      <section id="view-chat" class="view hidden">
+        <div class="chat-layout">
+          <aside class="sidebar">
+            <div class="side-top">
+              <span class="side-label">历史</span>
+              <button type="button" id="btn-new" class="ghost small">新对话</button>
+            </div>
+            <div id="conv-list" class="conv-list"></div>
+          </aside>
+          <section class="main">
+            <header class="top">
+              <div class="brand">
+                <div>
+                  <strong>对话</strong>
+                  <p class="muted tiny" id="conv-title">通用助手（可读写导图）</p>
+                </div>
+                <span id="status-pill" class="pill">…</span>
+              </div>
+              <div class="top-actions">
+                <label class="inline-field">
+                  <span>模型</span>
+                  <select id="profile-select"></select>
+                </label>
+              </div>
+            </header>
+            <main id="chat" class="chat" aria-live="polite"></main>
+            <footer class="composer">
+              <div class="composer-box">
+                <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送）"></textarea>
+                <div class="composer-bar">
+                  <span class="muted tiny">服务端可调用 MCP 工具</span>
+                  <button type="button" id="btn-send" class="primary">发送</button>
+                </div>
+              </div>
+            </footer>
+          </section>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="view-settings" class="view hidden">
+        <div class="settings-page">
+          <h2>大模型配置</h2>
+          <p class="muted">写入 webchat 数据库，桌面侧栏与网页共用，无需重复配置。</p>
+          <section class="settings">
+            <div class="settings-grid">
+              <label
+                >服务商
+                <select id="llm-provider">
+                  <option value="openrouter">OpenRouter（推荐）</option>
+                  <option value="openai">OpenAI 官方</option>
+                  <option value="custom">自定义 OpenAI 兼容</option>
+                </select>
+              </label>
+              <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
+              <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
+              <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
+              <label class="span-2"
+                >模型
+                <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
+                <datalist id="llm-model-hints">
+                  <option value="openai/gpt-4o-mini"></option>
+                  <option value="openai/gpt-4o"></option>
+                  <option value="anthropic/claude-3.5-sonnet"></option>
+                  <option value="google/gemini-2.0-flash-001"></option>
+                  <option value="deepseek/deepseek-chat"></option>
+                  <option value="qwen/qwen-2.5-72b-instruct"></option>
+                </datalist>
+              </label>
+            </div>
+            <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认</label>
+            <div class="settings-row">
+              <button type="button" id="btn-llm-save" class="primary">保存</button>
+              <button type="button" id="btn-llm-new" class="ghost">新建</button>
+              <button type="button" id="btn-llm-del" class="ghost">删除当前</button>
+              <span id="llm-note" class="muted"></span>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <nav class="mobile-nav" aria-label="移动导航">
+        <button type="button" class="nav-btn active" data-view="library">导图</button>
+        <button type="button" class="nav-btn" data-view="chat">对话</button>
+        <button type="button" class="nav-btn" data-view="settings">设置</button>
+      </nav>
     </div>
     <script src="./app.js"></script>
   </body>
