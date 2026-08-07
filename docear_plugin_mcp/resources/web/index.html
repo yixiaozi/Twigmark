@@ -19,7 +19,7 @@
         <div class="auth-brand">
           <div class="logo-mark" aria-hidden="true"></div>
           <h1>Twigmark</h1>
-          <p class="lede">导图库网页版：画布浏览、搜索，并对任意导图提问。手机也能用。</p>
+              <p class="lede">导图库网页版：键盘友好浏览、搜索，并对任意导图提问。</p>
         </div>
         <form class="auth-card" id="auth-form" autocomplete="on">
           <p class="muted" id="auth-hint">登录后访问导图库与对话。</p>
@@ -72,7 +72,7 @@
           <div class="library-main" id="library-main">
             <div id="library-empty" class="empty-state">
               <h2>选择一张导图</h2>
-              <p>从左侧打开任意导图。可用画布拖拽浏览，或切换到树状视图；也可以直接提问。</p>
+              <p>从左侧打开任意导图。滚轮浏览大纲，键盘 ↑↓ 移动、←→ 展开折叠，右侧看详情。</p>
             </div>
 
             <div id="map-viewer" class="map-viewer hidden">
@@ -82,29 +82,32 @@
                   <p class="muted tiny" id="viewer-path"></p>
                 </div>
                 <div class="viewer-actions">
-                  <div class="seg" role="group" aria-label="视图模式">
-                    <button type="button" class="seg-btn active" data-mode="canvas" id="btn-mode-canvas">画布</button>
-                    <button type="button" class="seg-btn" data-mode="tree" id="btn-mode-tree">树状</button>
-                  </div>
                   <label class="search-field compact">
-                    <input id="node-filter" placeholder="筛选节点…" />
+                    <input id="node-filter" placeholder="筛选节点 ( / )" />
                   </label>
-                  <button type="button" id="btn-fit-canvas" class="ghost small">适应</button>
-                  <button type="button" id="btn-expand-all" class="ghost small">展开</button>
-                  <button type="button" id="btn-collapse-all" class="ghost small">折叠</button>
-                  <button type="button" id="btn-ask-map" class="primary small">提问</button>
+                  <button type="button" id="btn-expand-all" class="ghost small" title="全部展开">展开</button>
+                  <button type="button" id="btn-collapse-all" class="ghost small" title="全部折叠">折叠</button>
+                  <button type="button" id="btn-ask-map" class="primary small" title="提问 ( ? )">提问</button>
                 </div>
               </header>
-              <div class="viewer-body">
-                <div class="viewer-stage">
-                  <div id="canvas-wrap" class="canvas-wrap">
-                    <div id="canvas-hint" class="canvas-hint">拖拽平移 · 滚轮缩放 · 双击节点展开/折叠</div>
-                    <div id="canvas-stage" class="canvas-stage">
-                      <svg id="canvas-edges" class="canvas-edges" xmlns="http://www.w3.org/2000/svg"></svg>
-                      <div id="canvas-nodes" class="canvas-nodes"></div>
+              <div class="viewer-body browse-body">
+                <div class="browse-layout" id="browse-layout">
+                  <section class="browse-main">
+                    <div class="browse-bar">
+                      <nav id="browse-crumb" class="browse-crumb" aria-label="路径"></nav>
+                      <span class="browse-hint muted tiny">↑↓ 移动 · ←→ 折叠 · Enter 展开 · / 搜索 · A 提问</span>
                     </div>
-                  </div>
-                  <div id="tree" class="tree hidden" role="tree"></div>
+                    <div id="outline-list" class="outline-list" tabindex="0" role="tree" aria-label="节点大纲"></div>
+                  </section>
+                  <aside id="node-detail" class="node-detail">
+                    <p class="muted tiny detail-empty">选中左侧节点查看详情</p>
+                    <div id="node-detail-body" class="hidden">
+                      <h3 id="detail-title"></h3>
+                      <p id="detail-meta" class="muted tiny"></p>
+                      <div id="detail-note" class="detail-note"></div>
+                      <div id="detail-children" class="detail-children"></div>
+                    </div>
+                  </aside>
                 </div>
                 <aside id="ask-panel" class="ask-panel">
                   <div class="ask-head">

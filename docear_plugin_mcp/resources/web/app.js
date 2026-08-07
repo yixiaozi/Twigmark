@@ -1,7 +1,6 @@
 (function () {
   var TOKEN_KEY = "twigmark.web.session";
   var PROFILE_KEY = "twigmark.web.profileId";
-  var VIEW_MODE_KEY = "twigmark.web.mapMode";
 
   var authView = document.getElementById("auth-view");
   var appView = document.getElementById("app-view");
@@ -19,11 +18,13 @@
   var mapViewer = document.getElementById("map-viewer");
   var viewerTitle = document.getElementById("viewer-title");
   var viewerPath = document.getElementById("viewer-path");
-  var treeEl = document.getElementById("tree");
-  var canvasWrap = document.getElementById("canvas-wrap");
-  var canvasStage = document.getElementById("canvas-stage");
-  var canvasEdges = document.getElementById("canvas-edges");
-  var canvasNodes = document.getElementById("canvas-nodes");
+  var outlineList = document.getElementById("outline-list");
+  var browseCrumb = document.getElementById("browse-crumb");
+  var nodeDetailBody = document.getElementById("node-detail-body");
+  var detailTitle = document.getElementById("detail-title");
+  var detailMeta = document.getElementById("detail-meta");
+  var detailNote = document.getElementById("detail-note");
+  var detailChildren = document.getElementById("detail-children");
   var nodeFilter = document.getElementById("node-filter");
   var askPanel = document.getElementById("ask-panel");
   var askChat = document.getElementById("ask-chat");
@@ -55,13 +56,14 @@
   var filterTimer = null;
   var nodeFilterTimer = null;
   var mapsWarmPoll = null;
-  var viewMode = localStorage.getItem(VIEW_MODE_KEY) || "canvas";
   var editingProfileId = "";
   var creatingProfile = false;
 
-  var cam = { x: 80, y: 80, scale: 1 };
-  var pan = { active: false, moved: false, sx: 0, sy: 0, ox: 0, oy: 0 };
-  var layoutCache = null;
+  var nodeById = {};
+  var parentById = {};
+  var flatRows = [];
+  var focusIdx = 0;
+  var selectedNodeId = "";
 
   function api(path, opts) {
     opts = opts || {};
@@ -556,51 +558,6 @@
     });
   }
 
-  function setViewMode(mode) {
-    viewMode = mode === "tree" ? "tree" : "canvas";
-    localStorage.setItem(VIEW_MODE_KEY, viewMode);
-    document.getElementById("btn-mode-canvas").classList.toggle("active", viewMode === "canvas");
-    document.getElementById("btn-mode-tree").classList.toggle("active", viewMode === "tree");
-    canvasWrap.classList.toggle("hidden", viewMode !== "canvas");
-    treeEl.classList.toggle("hidden", viewMode !== "tree");
-    document.getElementById("btn-fit-canvas").classList.toggle("hidden", viewMode !== "canvas");
-    if (viewMode === "tree") renderTree();
-    else renderCanvas();
-  }
-
-  function openMap(m) {
-    currentMap = m;
-    askConversationId = "";
-    expanded = {};
-    layoutCache = null;
-    libraryEmpty.classList.add("hidden");
-    mapViewer.classList.remove("hidden");
-    viewerTitle.textContent = m.title || m.name || "导图";
-    viewerPath.textContent = m.relativePath || m.path || "";
-    treeEl.innerHTML = '<p class="muted tiny">加载结构…</p>';
-    canvasNodes.innerHTML = "";
-    canvasEdges.innerHTML = "";
-    askChat.innerHTML = "";
-    addMessage(askChat, "system", "可针对「" + (m.title || m.name) + "」提问。模型会优先阅读这张图。");
-    renderMapList();
-    setViewMode(viewMode);
-    api("/maps/json?path=" + encodeURIComponent(m.path) + "&maxDepth=18").then(function (res) {
-      if (!res.ok) {
-        treeEl.innerHTML = "";
-        addMessage(askChat, "system", (res.body && res.body.error) || "无法加载导图");
-        return;
-      }
-      currentTree = res.body.root || null;
-      if (currentTree && currentTree.id) expanded[currentTree.id] = true;
-      // Auto-expand first level for canvas readability
-      (currentTree && currentTree.children ? currentTree.children : []).forEach(function (c) {
-        if (c && c.id) expanded[c.id] = true;
-      });
-      renderTree();
-      renderCanvas(true);
-    });
-  }
-
   function nodeMatches(node, needle) {
     if (!needle) return true;
     var text = String(node.text || "").toLowerCase();
@@ -611,64 +568,363 @@
     return false;
   }
 
-  function renderTree() {
-    treeEl.innerHTML = "";
-    if (!currentTree) {
-      treeEl.innerHTML = '<p class="muted tiny">空导图</p>';
-      return;
+  function buildNodeIndex(root) {
+    nodeById = {};
+    parentById = {};
+    function walk(node, parentId) {
+      if (!node) return;
+      var id = node.id || "root";
+      nodeById[id] = node;
+      if (parentId) parentById[id] = parentId;
+      (node.children || []).forEach(function (c) {
+        if (c) walk(c, id);
+      });
     }
-    var needle = (nodeFilter.value || "").trim().toLowerCase();
-    var ul = document.createElement("ul");
-    ul.className = "tree-node";
-    ul.appendChild(renderNode(currentTree, 0, needle));
-    treeEl.appendChild(ul);
+    walk(root, "");
   }
 
-  function renderNode(node, depth, needle) {
-    var li = document.createElement("li");
-    li.className = "tree-node";
-    var kids = node.children || [];
-    var hasKids = kids.length > 0;
-    var id = node.id || "n-" + depth + "-" + Math.random();
-    var open = !!expanded[id] || (!!needle && hasKids);
-    if (needle && !nodeMatches(node, needle)) {
-      li.style.display = "none";
-      return li;
+  function isExpanded(id) {
+    return !!expanded[id];
+  }
+
+  function toggleExpand(id) {
+    if (!nodeById[id] || !(nodeById[id].children || []).length) return;
+    expanded[id] = !expanded[id];
+    renderBrowse();
+  }
+
+  function expandAncestors(id) {
+    var cur = id;
+    while (cur && parentById[cur]) {
+      expanded[parentById[cur]] = true;
+      cur = parentById[cur];
     }
-    var row = document.createElement("div");
-    row.className = "tree-row" + (needle && String(node.text || "").toLowerCase().indexOf(needle) >= 0 ? " hit" : "");
-    var toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "tree-toggle" + (hasKids ? "" : " leaf");
-    toggle.textContent = hasKids ? (open ? "▾" : "▸") : "·";
-    toggle.addEventListener("click", function () {
-      if (!hasKids) return;
-      expanded[id] = !expanded[id];
-      renderTree();
-      renderCanvas();
-    });
-    var text = document.createElement("div");
-    text.className = "tree-text";
-    text.textContent = node.text || "(空节点)";
-    row.appendChild(toggle);
-    row.appendChild(text);
-    li.appendChild(row);
-    var note = node.notePlain || node.note;
-    if (note && (!needle || String(note).toLowerCase().indexOf(needle) >= 0 || open)) {
-      var noteEl = document.createElement("div");
-      noteEl.className = "tree-note";
-      noteEl.textContent = String(note).slice(0, 400);
-      li.appendChild(noteEl);
-    }
-    if (hasKids && open) {
-      var cul = document.createElement("ul");
-      cul.className = "tree-children";
-      kids.forEach(function (child) {
-        cul.appendChild(renderNode(child, depth + 1, needle));
+  }
+
+  function buildFlatRows() {
+    flatRows = [];
+    if (!currentTree) return;
+    var needle = (nodeFilter.value || "").trim().toLowerCase();
+
+    function pushRow(node, depth) {
+      var id = node.id || "root";
+      var kids = node.children || [];
+      var hasKids = kids.length > 0;
+      var open = isExpanded(id) || (!!needle && hasKids);
+      flatRows.push({
+        id: id,
+        node: node,
+        depth: depth,
+        hasKids: hasKids,
+        open: open,
+        hit: !!(needle && String(node.text || "").toLowerCase().indexOf(needle) >= 0),
       });
-      li.appendChild(cul);
+      if (hasKids && open) {
+        kids.forEach(function (c) {
+          if (!c) return;
+          if (needle && !nodeMatches(c, needle) && !hasVisibleDescendant(c, needle)) return;
+          pushRow(c, depth + 1);
+        });
+      }
     }
-    return li;
+
+    function hasVisibleDescendant(node, needle) {
+      if (!node) return false;
+      if (String(node.text || "").toLowerCase().indexOf(needle) >= 0) return true;
+      var kids = node.children || [];
+      for (var i = 0; i < kids.length; i++) {
+        if (hasVisibleDescendant(kids[i], needle)) return true;
+      }
+      return false;
+    }
+
+    if (needle && !nodeMatches(currentTree, needle) && !hasVisibleDescendant(currentTree, needle)) {
+      return;
+    }
+    pushRow(currentTree, 0);
+  }
+
+  function renderBrowse() {
+    buildFlatRows();
+    outlineList.innerHTML = "";
+    if (!flatRows.length) {
+      outlineList.innerHTML = '<p class="muted tiny outline-empty">没有可显示的节点</p>';
+      return;
+    }
+    if (focusIdx >= flatRows.length) focusIdx = flatRows.length - 1;
+    if (focusIdx < 0) focusIdx = 0;
+
+    flatRows.forEach(function (row, idx) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "outline-row" +
+        (idx === focusIdx ? " focused" : "") +
+        (row.id === selectedNodeId ? " selected" : "") +
+        (row.hit ? " hit" : "") +
+        (row.depth === 0 ? " root" : "");
+      btn.setAttribute("role", "treeitem");
+      btn.setAttribute("data-id", row.id);
+      btn.style.paddingLeft = 0.65 + row.depth * 1.15 + "rem";
+      btn.innerHTML =
+        '<span class="o-chev"></span><span class="o-text"></span><span class="o-meta"></span>';
+      btn.querySelector(".o-chev").textContent = row.hasKids ? (row.open ? "▾" : "▸") : "·";
+      btn.querySelector(".o-text").textContent = row.node.text || "(空节点)";
+      var meta = row.hasKids ? row.node.children.length + " 项" : "";
+      if (row.node.notePlain || row.node.note) meta = (meta ? meta + " · " : "") + "有备注";
+      btn.querySelector(".o-meta").textContent = meta;
+      btn.addEventListener("click", function () {
+        focusIdx = idx;
+        selectNode(row.id, true);
+        renderBrowse();
+      });
+      btn.addEventListener("dblclick", function (e) {
+        e.preventDefault();
+        if (row.hasKids) toggleExpand(row.id);
+      });
+      outlineList.appendChild(btn);
+    });
+
+    scrollFocusIntoView();
+    renderDetail(selectedNodeId || flatRows[focusIdx].id);
+    renderCrumb(selectedNodeId || flatRows[focusIdx].id);
+  }
+
+  function scrollFocusIntoView() {
+    var el = outlineList.querySelector(".outline-row.focused");
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }
+
+  function selectNode(id, fromClick) {
+    selectedNodeId = id;
+    var idx = -1;
+    for (var i = 0; i < flatRows.length; i++) {
+      if (flatRows[i].id === id) {
+        idx = i;
+        break;
+      }
+    }
+    if (idx >= 0) focusIdx = idx;
+    renderDetail(id);
+    renderCrumb(id);
+    if (!fromClick && outlineList) outlineList.focus();
+  }
+
+  function renderCrumb(id) {
+    if (!browseCrumb) return;
+    browseCrumb.innerHTML = "";
+    var chain = [];
+    var cur = id;
+    while (cur && nodeById[cur]) {
+      chain.unshift({ id: cur, text: nodeById[cur].text || "(空)" });
+      cur = parentById[cur] || "";
+    }
+    chain.forEach(function (c, i) {
+      if (i > 0) {
+        var sep = document.createElement("span");
+        sep.className = "crumb-sep";
+        sep.textContent = "›";
+        browseCrumb.appendChild(sep);
+      }
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "crumb-btn";
+      btn.textContent = c.text.length > 24 ? c.text.slice(0, 24) + "…" : c.text;
+      btn.addEventListener("click", function () {
+        expandAncestors(c.id);
+        selectNode(c.id);
+        renderBrowse();
+      });
+      browseCrumb.appendChild(btn);
+    });
+  }
+
+  function renderDetail(id) {
+    var node = nodeById[id];
+    var emptyEl = document.querySelector(".detail-empty");
+    if (!node) {
+      if (nodeDetailBody) nodeDetailBody.classList.add("hidden");
+      if (emptyEl) emptyEl.classList.remove("hidden");
+      return;
+    }
+    if (emptyEl) emptyEl.classList.add("hidden");
+    if (nodeDetailBody) nodeDetailBody.classList.remove("hidden");
+    detailTitle.textContent = node.text || "(空节点)";
+    var kids = node.children || [];
+    var bits = [];
+    bits.push("层级 " + (chainDepth(id) + 1));
+    if (kids.length) bits.push(kids.length + " 个子节点");
+    detailMeta.textContent = bits.join(" · ");
+    var note = node.notePlain || node.note;
+    if (note) {
+      detailNote.classList.remove("hidden");
+      detailNote.textContent = String(note);
+    } else {
+      detailNote.classList.add("hidden");
+      detailNote.textContent = "";
+    }
+    detailChildren.innerHTML = "";
+    if (kids.length) {
+      var label = document.createElement("p");
+      label.className = "detail-sub muted tiny";
+      label.textContent = "子节点";
+      detailChildren.appendChild(label);
+      kids.slice(0, 12).forEach(function (c) {
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "detail-chip";
+        chip.textContent = c.text || "(空)";
+        chip.addEventListener("click", function () {
+          if (c.id) {
+            expandAncestors(c.id);
+            expanded[parentById[c.id] || id] = true;
+            selectNode(c.id);
+            renderBrowse();
+          }
+        });
+        detailChildren.appendChild(chip);
+      });
+      if (kids.length > 12) {
+        var more = document.createElement("span");
+        more.className = "muted tiny";
+        more.textContent = "还有 " + (kids.length - 12) + " 项…";
+        detailChildren.appendChild(more);
+      }
+    }
+  }
+
+  function chainDepth(id) {
+    var d = 0;
+    var cur = id;
+    while (parentById[cur]) {
+      d++;
+      cur = parentById[cur];
+    }
+    return d;
+  }
+
+  function moveFocus(delta) {
+    if (!flatRows.length) return;
+    focusIdx = Math.max(0, Math.min(flatRows.length - 1, focusIdx + delta));
+    selectNode(flatRows[focusIdx].id);
+    renderBrowse();
+  }
+
+  function browseKeyAction(key, shift) {
+    if (!flatRows.length || !mapViewer || mapViewer.classList.contains("hidden")) return false;
+    if (isTypingTarget(document.activeElement) && key !== "/") return false;
+
+    var row = flatRows[focusIdx];
+    if (!row) return false;
+
+    if (key === "ArrowDown" || key === "j") {
+      moveFocus(1);
+      return true;
+    }
+    if (key === "ArrowUp" || key === "k") {
+      moveFocus(-1);
+      return true;
+    }
+    if (key === "ArrowRight" || key === "l") {
+      if (row.hasKids && !row.open) {
+        expanded[row.id] = true;
+        renderBrowse();
+      } else if (row.hasKids && row.open && focusIdx + 1 < flatRows.length) {
+        moveFocus(1);
+      }
+      return true;
+    }
+    if (key === "ArrowLeft" || key === "h") {
+      if (row.hasKids && row.open) {
+        expanded[row.id] = false;
+        renderBrowse();
+      } else if (parentById[row.id]) {
+        selectNode(parentById[row.id]);
+        renderBrowse();
+      }
+      return true;
+    }
+    if (key === "Enter") {
+      if (row.hasKids) {
+        expanded[row.id] = !row.open;
+        renderBrowse();
+      }
+      return true;
+    }
+    if (key === " ") {
+      if (row.hasKids) {
+        expanded[row.id] = !row.open;
+        renderBrowse();
+      }
+      return true;
+    }
+    if (key === "Home") {
+      focusIdx = 0;
+      selectNode(flatRows[0].id);
+      renderBrowse();
+      return true;
+    }
+    if (key === "End") {
+      focusIdx = flatRows.length - 1;
+      selectNode(flatRows[focusIdx].id);
+      renderBrowse();
+      return true;
+    }
+    if (key === "/" && !shift) {
+      nodeFilter.focus();
+      nodeFilter.select();
+      return true;
+    }
+    if (key === "?" || (key === "/" && shift)) {
+      openAskPanel();
+      return true;
+    }
+    if (key === "a" && !shift) {
+      openAskPanel();
+      return true;
+    }
+    return false;
+  }
+
+  function isTypingTarget(el) {
+    if (!el) return false;
+    var tag = (el.tagName || "").toLowerCase();
+    return tag === "input" || tag === "textarea" || tag === "select" || el.isContentEditable;
+  }
+
+  function openMap(m) {
+    currentMap = m;
+    askConversationId = "";
+    expanded = {};
+    focusIdx = 0;
+    selectedNodeId = "";
+    libraryEmpty.classList.add("hidden");
+    mapViewer.classList.remove("hidden");
+    viewerTitle.textContent = m.title || m.name || "导图";
+    viewerPath.textContent = m.relativePath || m.path || "";
+    outlineList.innerHTML = '<p class="muted tiny outline-empty">加载结构…</p>';
+    askChat.innerHTML = "";
+    addMessage(askChat, "system", "可针对「" + (m.title || m.name) + "」提问。模型会优先阅读这张图。");
+    renderMapList();
+    api("/maps/json?path=" + encodeURIComponent(m.path) + "&maxDepth=18").then(function (res) {
+      if (!res.ok) {
+        outlineList.innerHTML = "";
+        addMessage(askChat, "system", (res.body && res.body.error) || "无法加载导图");
+        return;
+      }
+      currentTree = res.body.root || null;
+      buildNodeIndex(currentTree);
+      if (currentTree && currentTree.id) expanded[currentTree.id] = true;
+      (currentTree && currentTree.children ? currentTree.children : []).forEach(function (c) {
+        if (c && c.id) expanded[c.id] = true;
+      });
+      focusIdx = 0;
+      selectedNodeId = currentTree && currentTree.id ? currentTree.id : "";
+      renderBrowse();
+      if (outlineList) outlineList.focus();
+    });
   }
 
   function setExpandAll(open) {
@@ -679,242 +935,34 @@
     }
     walk(currentTree);
     if (currentTree && currentTree.id) expanded[currentTree.id] = true;
-    renderTree();
-    renderCanvas(true);
+    renderBrowse();
   }
 
-  /* ---- Canvas layout (horizontal mindmap) ---- */
-  var NODE_W = 180;
-  var NODE_H = 44;
-  var GAP_X = 56;
-  var GAP_Y = 18;
-
-  function measureSubtree(node, needle) {
-    var kids = (node.children || []).filter(function (c) {
-      return !needle || nodeMatches(c, needle);
-    });
-    var id = node.id || "";
-    var open = !id || !!expanded[id] || !!needle;
-    if (!kids.length || !open) {
-      return { height: NODE_H + GAP_Y, kids: [] };
-    }
-    var childMeasures = kids.map(function (c) {
-      return measureSubtree(c, needle);
-    });
-    var h = 0;
-    childMeasures.forEach(function (m) {
-      h += m.height;
-    });
-    return { height: Math.max(NODE_H + GAP_Y, h), kids: childMeasures, childNodes: kids };
-  }
-
-  function placeNodes(node, x, yCenter, needle, out, measure) {
-    var id = node.id || "anon-" + out.length;
-    out.push({
-      id: id,
-      node: node,
-      x: x,
-      y: yCenter,
-      text: node.text || "(空)",
-      hasKids: !!(node.children && node.children.length),
-      open: !!expanded[id] || !!needle,
-      hit: !!(needle && String(node.text || "").toLowerCase().indexOf(needle) >= 0),
-      root: out.length === 0,
-    });
-    if (!measure || !measure.kids || !measure.kids.length) return;
-    var kids = measure.childNodes || [];
-    var total = 0;
-    measure.kids.forEach(function (m) {
-      total += m.height;
-    });
-    var y = yCenter - total / 2;
-    for (var i = 0; i < kids.length; i++) {
-      var mh = measure.kids[i].height;
-      var cy = y + mh / 2;
-      placeNodes(kids[i], x + NODE_W + GAP_X, cy, needle, out, measure.kids[i]);
-      y += mh;
-    }
-  }
-
-  function applyCamera() {
-    canvasStage.style.transform =
-      "translate(" + cam.x + "px," + cam.y + "px) scale(" + cam.scale + ")";
-  }
-
-  function fitCanvas() {
-    if (!layoutCache || !layoutCache.length) return;
-    var minX = Infinity,
-      minY = Infinity,
-      maxX = -Infinity,
-      maxY = -Infinity;
-    layoutCache.forEach(function (n) {
-      minX = Math.min(minX, n.x - NODE_W / 2);
-      maxX = Math.max(maxX, n.x + NODE_W / 2);
-      minY = Math.min(minY, n.y - NODE_H / 2);
-      maxY = Math.max(maxY, n.y + NODE_H / 2);
-    });
-    var vw = canvasWrap.clientWidth || 600;
-    var vh = canvasWrap.clientHeight || 400;
-    var bw = Math.max(1, maxX - minX + 80);
-    var bh = Math.max(1, maxY - minY + 80);
-    var s = Math.min(1.2, Math.max(0.35, Math.min((vw - 40) / bw, (vh - 40) / bh)));
-    cam.scale = s;
-    cam.x = (vw - bw * s) / 2 - minX * s + 20;
-    cam.y = (vh - bh * s) / 2 - minY * s + 10;
-    applyCamera();
-  }
-
-  function renderCanvas(shouldFit) {
-    if (viewMode !== "canvas") return;
-    canvasNodes.innerHTML = "";
-    canvasEdges.innerHTML = "";
-    if (!currentTree) {
-      canvasNodes.innerHTML = '<div class="muted tiny" style="padding:1rem">空导图</div>';
-      return;
-    }
-    var needle = (nodeFilter.value || "").trim().toLowerCase();
-    if (needle && !nodeMatches(currentTree, needle)) {
-      canvasNodes.innerHTML = '<div class="muted tiny" style="padding:1rem">无匹配节点</div>';
-      return;
-    }
-    var measure = measureSubtree(currentTree, needle);
-    var placed = [];
-    placeNodes(currentTree, 0, 0, needle, placed, measure);
-    layoutCache = placed;
-
-    var byId = {};
-    placed.forEach(function (n) {
-      byId[n.id] = n;
-    });
-
-    var minX = 0,
-      minY = 0,
-      maxX = 0,
-      maxY = 0;
-    placed.forEach(function (n) {
-      minX = Math.min(minX, n.x - NODE_W);
-      maxX = Math.max(maxX, n.x + NODE_W);
-      minY = Math.min(minY, n.y - NODE_H);
-      maxY = Math.max(maxY, n.y + NODE_H);
-    });
-    var pad = 120;
-    var width = maxX - minX + pad * 2;
-    var height = maxY - minY + pad * 2;
-    canvasEdges.setAttribute("width", String(width));
-    canvasEdges.setAttribute("height", String(height));
-    canvasEdges.style.left = minX - pad + "px";
-    canvasEdges.style.top = minY - pad + "px";
-
-    function edge(parent, child) {
-      var x1 = parent.x - minX + pad + NODE_W / 2 - 8;
-      var y1 = parent.y - minY + pad;
-      var x2 = child.x - minX + pad - NODE_W / 2 + 8;
-      var y2 = child.y - minY + pad;
-      var mx = (x1 + x2) / 2;
-      var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", "M " + x1 + " " + y1 + " C " + mx + " " + y1 + ", " + mx + " " + y2 + ", " + x2 + " " + y2);
-      canvasEdges.appendChild(path);
-    }
-
-    function walkEdges(node) {
-      var id = node.id;
-      if (!id || !byId[id]) return;
-      var open = !!expanded[id] || !!needle;
-      var kids = node.children || [];
-      if (!open) return;
-      kids.forEach(function (c) {
-        if (!c.id || !byId[c.id]) return;
-        edge(byId[id], byId[c.id]);
-        walkEdges(c);
-      });
-    }
-    walkEdges(currentTree);
-
-    placed.forEach(function (n) {
-      var el = document.createElement("button");
-      el.type = "button";
-      el.className = "mm-node" + (n.root ? " root" : "") + (n.hit ? " hit" : "");
-      el.style.left = n.x + "px";
-      el.style.top = n.y + "px";
-      var text = document.createElement("span");
-      text.className = "mm-text";
-      text.textContent = n.text;
-      el.appendChild(text);
-      if (n.hasKids) {
-        var badge = document.createElement("span");
-        badge.className = "mm-badge";
-        badge.textContent = n.open ? "▾ 已展开" : "▸ 双击展开";
-        el.appendChild(badge);
-      }
-      el.addEventListener("click", function (e) {
-        e.stopPropagation();
-        if (pan.moved) return;
-      });
-      el.addEventListener("dblclick", function (e) {
-        e.stopPropagation();
-        if (!n.hasKids) return;
-        expanded[n.id] = !expanded[n.id];
-        renderTree();
-        renderCanvas();
-      });
-      canvasNodes.appendChild(el);
-    });
-
-    applyCamera();
-    if (shouldFit) fitCanvas();
-  }
-
-  function bindCanvasPanZoom() {
-    canvasWrap.addEventListener("pointerdown", function (e) {
-      if (e.button !== 0 && e.pointerType === "mouse") return;
-      pan.active = true;
-      pan.moved = false;
-      pan.sx = e.clientX;
-      pan.sy = e.clientY;
-      pan.ox = cam.x;
-      pan.oy = cam.y;
-      canvasWrap.classList.add("panning");
-      try {
-        canvasWrap.setPointerCapture(e.pointerId);
-      } catch (err) {}
-    });
-    canvasWrap.addEventListener("pointermove", function (e) {
-      if (!pan.active) return;
-      var dx = e.clientX - pan.sx;
-      var dy = e.clientY - pan.sy;
-      if (Math.abs(dx) + Math.abs(dy) > 3) pan.moved = true;
-      cam.x = pan.ox + dx;
-      cam.y = pan.oy + dy;
-      applyCamera();
-    });
-    function endPan(e) {
-      if (!pan.active) return;
-      pan.active = false;
-      canvasWrap.classList.remove("panning");
-      try {
-        canvasWrap.releasePointerCapture(e.pointerId);
-      } catch (err) {}
-    }
-    canvasWrap.addEventListener("pointerup", endPan);
-    canvasWrap.addEventListener("pointercancel", endPan);
-    canvasWrap.addEventListener(
-      "wheel",
-      function (e) {
+  function bindBrowseKeys() {
+    document.addEventListener("keydown", function (e) {
+      if (browseKeyAction(e.key, e.shiftKey)) {
         e.preventDefault();
-        var rect = canvasWrap.getBoundingClientRect();
-        var mx = e.clientX - rect.left;
-        var my = e.clientY - rect.top;
-        var before = cam.scale;
-        var next = Math.min(2.2, Math.max(0.25, before * (e.deltaY > 0 ? 0.9 : 1.1)));
-        var wx = (mx - cam.x) / before;
-        var wy = (my - cam.y) / before;
-        cam.scale = next;
-        cam.x = mx - wx * next;
-        cam.y = my - wy * next;
-        applyCamera();
-      },
-      { passive: false }
-    );
+      }
+    });
+    if (outlineList) {
+      outlineList.addEventListener("keydown", function (e) {
+        if (browseKeyAction(e.key, e.shiftKey)) {
+          e.preventDefault();
+        }
+      });
+    }
+    nodeFilter.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") {
+        nodeFilter.value = "";
+        renderBrowse();
+        outlineList.focus();
+        e.preventDefault();
+      }
+      if (e.key === "ArrowDown") {
+        outlineList.focus();
+        e.preventDefault();
+      }
+    });
   }
 
   function openAskPanel() {
@@ -1128,17 +1176,24 @@
   nodeFilter.addEventListener("input", function () {
     clearTimeout(nodeFilterTimer);
     nodeFilterTimer = setTimeout(function () {
-      renderTree();
-      renderCanvas();
+      if (nodeFilter.value.trim()) {
+        function expandForFilter(node) {
+          if (!node) return false;
+          var id = node.id || "";
+          var selfHit =
+            String(node.text || "").toLowerCase().indexOf(nodeFilter.value.trim().toLowerCase()) >= 0;
+          var childHit = false;
+          (node.children || []).forEach(function (c) {
+            if (expandForFilter(c)) childHit = true;
+          });
+          if (childHit && id) expanded[id] = true;
+          return selfHit || childHit;
+        }
+        expandForFilter(currentTree);
+      }
+      renderBrowse();
     }, 120);
   });
-  document.getElementById("btn-mode-canvas").addEventListener("click", function () {
-    setViewMode("canvas");
-  });
-  document.getElementById("btn-mode-tree").addEventListener("click", function () {
-    setViewMode("tree");
-  });
-  document.getElementById("btn-fit-canvas").addEventListener("click", fitCanvas);
   document.getElementById("btn-expand-all").addEventListener("click", function () {
     setExpandAll(true);
   });
@@ -1236,8 +1291,7 @@
     });
   });
 
-  bindCanvasPanZoom();
-  setViewMode(viewMode);
+  bindBrowseKeys();
 
   refreshStatus().then(function () {
     if (!token) {
