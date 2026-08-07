@@ -2,6 +2,8 @@ package org.docear.plugin.core.quickcommand;
 
 import java.io.File;
 
+import org.freeplane.core.util.TextUtils;
+
 /**
  * One row in the Shift+Space command palette suggestion list.
  */
@@ -39,7 +41,7 @@ final class QuickCommandCandidate {
 
 	static QuickCommandCandidate map(final String mapName, final File mapFile, final boolean recent,
 	        final int historyRank, final long modifiedAt) {
-		return new QuickCommandCandidate(Kind.MAP, mapName, "导图", mapFile, null, null, null, recent, historyRank,
+		return new QuickCommandCandidate(Kind.MAP, mapName, TextUtils.getText("QuickCommand.kind.map"), mapFile, null, null, null, recent, historyRank,
 		        modifiedAt);
 	}
 
@@ -57,7 +59,7 @@ final class QuickCommandCandidate {
 
 	static QuickCommandCandidate launch(final String label, final File file) {
 		final long modified = file != null ? file.lastModified() : 0L;
-		return new QuickCommandCandidate(Kind.LAUNCH, label, "启动", null, null, file, null, false, -1, modified);
+		return new QuickCommandCandidate(Kind.LAUNCH, label, TextUtils.getText("QuickCommand.kind.launch"), null, null, file, null, false, -1, modified);
 	}
 
 	static QuickCommandCandidate command(final String command, final String detail) {
@@ -71,15 +73,15 @@ final class QuickCommandCandidate {
 	String kindBadge() {
 		switch (kind) {
 			case MAP:
-				return "导图";
+				return TextUtils.getText("QuickCommand.kind.map");
 			case ICON_NODE:
-				return "节点";
+				return TextUtils.getText("QuickCommand.kind.node");
 			case FILE:
-				return "文件";
+				return TextUtils.getText("QuickCommand.kind.file");
 			case LAUNCH:
-				return "启动";
+				return TextUtils.getText("QuickCommand.kind.launch");
 			case COMMAND:
-				return "命令";
+				return TextUtils.getText("QuickCommand.kind.command");
 			default:
 				return "";
 		}

@@ -8,6 +8,7 @@ import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
 
 import org.freeplane.core.extension.IExtension;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
@@ -27,17 +28,19 @@ public final class ReportViewportService implements IExtension {
 		public final ReportViewportPanel panel;
 		public final ReportDocumentView view;
 		public final long startedAtMs;
-		private volatile String lastMessage = "正在加载…";
+		private volatile String lastMessage;
 		private volatile boolean finished;
 		private volatile boolean failed;
 
 		ReportLoadSession(final int id, final String shortTitle, final ReportViewportPanel panel,
 		        final ReportDocumentView view) {
 			this.id = id;
-			this.shortTitle = shortTitle == null || shortTitle.length() == 0 ? "报表" : shortTitle;
+			this.shortTitle = shortTitle == null || shortTitle.length() == 0
+			        ? TextUtils.getText("ReportViewport.title.default") : shortTitle;
 			this.panel = panel;
 			this.view = view;
 			this.startedAtMs = System.currentTimeMillis();
+			this.lastMessage = TextUtils.getText("ReportViewport.loading");
 		}
 
 		public boolean isAlive() {
@@ -110,7 +113,8 @@ public final class ReportViewportService implements IExtension {
 		synchronized (this) {
 			id = ++nextSessionId;
 		}
-		final String shortTitle = def == null || def.title == null || def.title.length() == 0 ? "报表" : def.title;
+		final String shortTitle = def == null || def.title == null || def.title.length() == 0
+		        ? TextUtils.getText("ReportViewport.title.default") : def.title;
 		final String decision = def == null || def.decision == null ? "" : def.decision;
 		final String dataSource = def == null || def.dataSource == null ? "" : def.dataSource;
 		final String sub = subtitle == null ? "" : subtitle;
@@ -187,7 +191,8 @@ public final class ReportViewportService implements IExtension {
 				}
 				final long elapsedSec = Math.max(0L, (System.currentTimeMillis() - session.startedAtMs) / 1000L);
 				final String base = message == null || message.length() == 0 ? session.getLastMessage() : message;
-				final String withTime = elapsedSec > 0 ? base + " · 已用时 " + elapsedSec + "s" : base;
+				final String withTime = elapsedSec > 0
+				        ? TextUtils.format("ReportViewport.elapsed", base, Long.valueOf(elapsedSec)) : base;
 				session.panel.setLoadProgress(withTime, percent);
 			}
 		};
@@ -233,7 +238,7 @@ public final class ReportViewportService implements IExtension {
 		if (session == null) {
 			return;
 		}
-		final String msg = message == null ? "生成失败" : message;
+		final String msg = message == null ? TextUtils.getText("ReportViewport.error.generateFailed") : message;
 		final Runnable show = new Runnable() {
 			public void run() {
 				if (session.view == null || session.view.isClosed()) {
@@ -244,7 +249,7 @@ public final class ReportViewportService implements IExtension {
 				if (session.isFinished() && !session.isFailed()) {
 					return;
 				}
-				session.panel.showError("报表生成失败", msg);
+				session.panel.showError(TextUtils.getText("ReportViewport.error.title"), msg);
 				session.view.setTabTitle(session.shortTitle);
 				session.markFailed();
 				sessionsById.remove(Integer.valueOf(session.id));
@@ -264,8 +269,8 @@ public final class ReportViewportService implements IExtension {
 		if (activity != null) {
 			activity.releaseSoftViewport();
 		}
-		final String shortTitle = model == null || model.title == null || model.title.length() == 0 ? "报表"
-		        : stripReportPrefix(model.title);
+		final String shortTitle = model == null || model.title == null || model.title.length() == 0
+		        ? TextUtils.getText("ReportViewport.title.default") : stripReportPrefix(model.title);
 		final String assignKey = ReportDocumentService.keyForReportId(shortTitle);
 		final ReportDocumentView existing = ReportDocumentService.findByAssignmentKey(assignKey);
 		final ReportViewportPanel panel;
@@ -295,6 +300,11 @@ public final class ReportViewportService implements IExtension {
 	}
 
 	private static String stripReportPrefix(final String title) {
+		final String prefix = TextUtils.getText("ReportViewport.title.prefix");
+		if (title.startsWith(prefix)) {
+			return title.substring(prefix.length());
+		}
+		// Legacy Chinese prefix from older report titles.
 		if (title.startsWith("报表 · ")) {
 			return title.substring("报表 · ".length());
 		}
@@ -324,14 +334,16 @@ public final class ReportViewportService implements IExtension {
 		try {
 			final NodeModel written = ReportMindMapWriter.writeUnderSelection(tree);
 			if (written == null) {
-				JOptionPane.showMessageDialog(panel, "请先在导图中选中一个节点", "写入报表",
-				        JOptionPane.WARNING_MESSAGE);
+				JOptionPane.showMessageDialog(panel, TextUtils.getText("ReportViewport.write.needSelection"),
+				        TextUtils.getText("ReportViewport.write.dialogTitle"), JOptionPane.WARNING_MESSAGE);
 				return;
 			}
-			JOptionPane.showMessageDialog(panel, "已写入选中节点", "写入报表", JOptionPane.INFORMATION_MESSAGE);
+			JOptionPane.showMessageDialog(panel, TextUtils.getText("ReportViewport.write.done"),
+			        TextUtils.getText("ReportViewport.write.dialogTitle"), JOptionPane.INFORMATION_MESSAGE);
 		}
 		catch (Exception e) {
-			JOptionPane.showMessageDialog(panel, e.getMessage(), "写入报表", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(panel, e.getMessage(), TextUtils.getText("ReportViewport.write.dialogTitle"),
+			        JOptionPane.ERROR_MESSAGE);
 		}
 	}
 }

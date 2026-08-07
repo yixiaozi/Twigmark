@@ -38,7 +38,7 @@ final class HotKeyCategoryResolver {
 	}
 
 	private static String other() {
-		return TextUtils.getText("hot_keys_editor.category_other", "其他");
+		return TextUtils.getText("hot_keys_editor.category_other");
 	}
 
 	private static Map load() {
@@ -118,50 +118,50 @@ final class HotKeyCategoryResolver {
 	 */
 	static String resolveCategory(final String taskName, final String bandName) {
 		if ("icons".equals(bandName)) {
-			return TextUtils.getText("ribbon.band.icons", "图标");
+			return TextUtils.getText("ribbon.band.icons");
 		}
 		if ("links".equals(bandName)) {
-			return TextUtils.getText("ribbon.band.links", "链接");
+			return TextUtils.getText("ribbon.band.links");
 		}
 		if ("images".equals(bandName)) {
-			return TextUtils.getText("ribbon.band.images", "图像");
+			return TextUtils.getText("ribbon.band.images");
 		}
 		if ("notes".equals(bandName)) {
-			return TextUtils.getText("ribbon.band.notes", "备注");
+			return TextUtils.getText("ribbon.band.notes");
 		}
 		if ("cloud".equals(bandName)) {
-			return TextUtils.getText("ribbon.band.cloud", "云");
+			return TextUtils.getText("ribbon.band.cloud");
 		}
 		if ("nodes".equals(taskName) || "nodes".equals(bandName) || "add_node".equals(bandName)
 		        || "edit_node".equals(bandName) || "node_details".equals(bandName)
 		        || "node_settings".equals(bandName)) {
-			return TextUtils.getText("ribbon.nodes", "节点");
+			return TextUtils.getText("ribbon.nodes");
 		}
 		if ("basics".equals(bandName) || "file_management".equals(bandName)) {
-			return TextUtils.getText("hot_keys_editor.category_file", "文件");
+			return TextUtils.getText("hot_keys_editor.category_file");
 		}
 		if ("formatting".equals(taskName) || "font".equals(bandName) || "manage_styles".equals(bandName)
 		        || "EdgeProperties".equals(bandName)) {
-			return TextUtils.getText("ribbon.formatting", "格式");
+			return TextUtils.getText("ribbon.formatting");
 		}
 		if ("view".equals(taskName) || "view_mode".equals(bandName) || "elements".equals(bandName)
 		        || "toolbars".equals(bandName) || "tooltips".equals(bandName)) {
-			return TextUtils.getText("ribbon.view", "视图");
+			return TextUtils.getText("ribbon.view");
 		}
 		if ("search_and_filter".equals(taskName) || "filter".equals(bandName) || "navigate_main".equals(bandName)
 		        || "navigate_nodes".equals(bandName) || "navigate_select".equals(bandName)
 		        || "goto".equals(bandName)) {
-			return TextUtils.getText("hot_keys_editor.category_nav", "导航与筛选");
+			return TextUtils.getText("hot_keys_editor.category_nav");
 		}
 		if ("tools_and_settings".equals(taskName) || "tools_misc".equals(bandName) || "help_misc".equals(bandName)
 		        || "add_ons".equals(bandName)) {
-			return TextUtils.getText("hot_keys_editor.category_tools", "工具");
+			return TextUtils.getText("hot_keys_editor.category_tools");
 		}
 		if ("home".equals(taskName)) {
-			return TextUtils.getText("ribbon.home", "主页");
+			return TextUtils.getText("ribbon.home");
 		}
 		if ("resources".equals(taskName)) {
-			return TextUtils.getText("ribbon.resources", "资源");
+			return TextUtils.getText("ribbon.resources");
 		}
 		final String bandLabel = TextUtils.getText("ribbon.band." + bandName, "");
 		if (bandLabel != null && bandLabel.length() > 0 && !bandLabel.startsWith("ribbon.band.")) {

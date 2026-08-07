@@ -16,6 +16,7 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
 import org.xml.sax.Attributes;
@@ -301,7 +302,7 @@ final class QuickCommandIndex {
 		if (!iconsReady.get()) {
 			ensureIconsAsync();
 			final List pending = new ArrayList();
-			pending.add(QuickCommandCandidate.hint("正在索引图标节点…", "完成后继续输入即可筛选；或输入 allicons 强制重建"));
+			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.icons"), TextUtils.getText("QuickCommand.index.icons.detail")));
 			return pending;
 		}
 		final QuickCommandHistory history = QuickCommandHistory.getInstance();
@@ -402,7 +403,7 @@ final class QuickCommandIndex {
 		if (!filesReady.get()) {
 			ensureFilesAsync();
 			final List pending = new ArrayList();
-			pending.add(QuickCommandCandidate.hint("正在扫描导图系统内文件…", "完成后继续输入；或输入 allfiles 强制重建"));
+			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.files"), TextUtils.getText("QuickCommand.index.files.detail")));
 			return pending;
 		}
 		final QuickCommandHistory history = QuickCommandHistory.getInstance();
@@ -463,7 +464,7 @@ final class QuickCommandIndex {
 		if (!allNodesReady.get()) {
 			ensureAllNodesAsync();
 			final List pending = new ArrayList();
-			pending.add(QuickCommandCandidate.hint("正在索引全库节点…", "完成后继续输入；或输入 allnodes 强制重建"));
+			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.nodes"), TextUtils.getText("QuickCommand.index.nodes.detail")));
 			return pending;
 		}
 		final QuickCommandHistory history = QuickCommandHistory.getInstance();

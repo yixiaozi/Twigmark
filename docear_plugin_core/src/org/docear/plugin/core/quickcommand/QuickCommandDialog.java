@@ -1,6 +1,7 @@
 package org.docear.plugin.core.quickcommand;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
+import org.freeplane.core.util.TextUtils;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -273,22 +274,22 @@ final class QuickCommandDialog extends JDialog {
 	private void updateHint() {
 		final String text = input.getText() == null ? "" : input.getText();
 		if (text.indexOf("@@") >= 0) {
-			hintLabel.setText("@@ 图标节点 · Enter 打开/添加 · Shift+Enter 提醒 · 空查询仅最近使用 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.iconNodes"));
 		}
 		else if (text.indexOf('*') >= 0) {
-			hintLabel.setText("* 全库节点 · Enter 打开 · 左侧写文字可添加子节点 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.allNodes"));
 		}
 		else if (text.indexOf('#') >= 0) {
-			hintLabel.setText("# 系统内文件 · Enter 打开 · 空查询最近文件 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.files"));
 		}
 		else if (text.indexOf('@') >= 0) {
-			hintLabel.setText("@ 导图 · 拼音/首字母/混输均可 · 结果按修改时间倒序 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.maps"));
 		}
 		else if (text.trim().length() == 0) {
-			hintLabel.setText("最近选择 · @ 导图 · @@ 图标节点 · # 文件 · * 全库节点 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.recent"));
 		}
 		else {
-			hintLabel.setText("快速启动 · 支持拼音模糊 · Esc 关闭");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.launch"));
 		}
 	}
 
@@ -310,7 +311,7 @@ final class QuickCommandDialog extends JDialog {
 		}
 		else {
 			refreshSuggestions();
-			hintLabel.setText("已执行。可继续输入，或 Esc 关闭。");
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.executed"));
 		}
 	}
 

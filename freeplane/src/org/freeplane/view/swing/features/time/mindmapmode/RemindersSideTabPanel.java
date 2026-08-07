@@ -64,6 +64,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.ui.IMapViewManager;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Left sidebar tab: all workspace reminders grouped by date, with search and
@@ -99,10 +100,11 @@ public class RemindersSideTabPanel extends JPanel {
 	private final JTextField searchField = new JTextField();
 	private final JLabel nextLabel = new JLabel(" ");
 	private final JLabel countLabel = DocearUiTheme.mutedLabel(" ");
-	private final JTree tree = new JTree(new DefaultMutableTreeNode("提醒"));
+	private final JTree tree = new JTree(new DefaultMutableTreeNode(TextUtils.getText("reminders.root")));
 	private final SimpleDateFormat clockFmt = new SimpleDateFormat("HH:mm", Locale.CHINA);
 	private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.CHINA);
-	private final SimpleDateFormat dayFmt = new SimpleDateFormat("M月d日 E", Locale.CHINA);
+	private final SimpleDateFormat dayFmt = new SimpleDateFormat(
+			TextUtils.getText("reminders.day_format"), Locale.getDefault());
 	private final SimpleDateFormat dayKeyFmt = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
 	private final List allRows = new ArrayList();
@@ -240,7 +242,7 @@ public class RemindersSideTabPanel extends JPanel {
 		header.setOpaque(false);
 
 		DocearUiTheme.styleSearchField(searchField);
-		searchField.setToolTipText("搜索提醒标题或导图名");
+		searchField.setToolTipText(TextUtils.getText("reminders.search.tip"));
 		searchField.getDocument().addDocumentListener(new DocumentListener() {
 			public void insertUpdate(final DocumentEvent e) {
 				rebuildTreeFromCache();
@@ -457,7 +459,7 @@ public class RemindersSideTabPanel extends JPanel {
 		final long tomorrowStart = todayStart + 24L * 60L * 60L * 1000L;
 		final long dayAfterStart = tomorrowStart + 24L * 60L * 60L * 1000L;
 
-		final DefaultMutableTreeNode root = new DefaultMutableTreeNode("提醒");
+		final DefaultMutableTreeNode root = new DefaultMutableTreeNode(TextUtils.getText("reminders.root"));
 		final Map groupNodes = new LinkedHashMap();
 		DefaultMutableTreeNode restoreNode = null;
 
@@ -468,17 +470,17 @@ public class RemindersSideTabPanel extends JPanel {
 			final boolean overdue;
 			if (ref.occurrenceAt < todayStart) {
 				groupKey = "overdue";
-				groupText = "已过期";
+				groupText = TextUtils.getText("reminders.group.overdue");
 				overdue = true;
 			}
 			else if (ref.occurrenceAt < tomorrowStart) {
 				groupKey = "today";
-				groupText = "今天  " + dayFmt.format(new Date(todayStart));
+				groupText = TextUtils.format("reminders.group.today", dayFmt.format(new Date(todayStart)));
 				overdue = false;
 			}
 			else if (ref.occurrenceAt < dayAfterStart) {
 				groupKey = "tomorrow";
-				groupText = "明天  " + dayFmt.format(new Date(tomorrowStart));
+				groupText = TextUtils.format("reminders.group.tomorrow", dayFmt.format(new Date(tomorrowStart)));
 				overdue = false;
 			}
 			else {
@@ -515,8 +517,8 @@ public class RemindersSideTabPanel extends JPanel {
 			tree.scrollPathToVisible(path);
 		}
 
-		final String qHint = query.length() > 0 ? " · 筛选 " + filtered.size() : "";
-		countLabel.setText("共 " + allRows.size() + " 条" + qHint);
+		final String qHint = query.length() > 0 ? TextUtils.format("reminders.count.filter", Integer.valueOf((int) (filtered.size()))) : "";
+		countLabel.setText(TextUtils.format("reminders.count", Integer.valueOf((int) (allRows.size())), qHint));
 		updateNextBannerFrom(filtered);
 	}
 
@@ -544,22 +546,21 @@ public class RemindersSideTabPanel extends JPanel {
 			}
 			overdueNearest = ref;
 		}
-		final String nowText = "现在 " + clockFmt.format(new Date(now));
+		final String nowText = TextUtils.format("reminders.now", clockFmt.format(new Date(now)));
 		if (nextUp != null) {
 			final long mins = Math.max(0L, (nextUp.occurrenceAt - now) / 60000L);
-			final String eta = mins < 60 ? mins + " 分钟后"
-					: (mins < 24 * 60 ? (mins / 60) + " 小时后" : dayFmt.format(new Date(nextUp.occurrenceAt)));
-			nextLabel.setText("<html>" + nowText + " · 下一件 <b>" + timeFmt.format(new Date(nextUp.occurrenceAt))
-					+ "</b> " + escape(plain(nextUp.nodeText)) + " <span style='color:#64748B'>(" + eta
-					+ ")</span></html>");
+			final String eta = mins < 60 ? TextUtils.format("reminders.eta.minutes", Integer.valueOf((int) (mins)))
+					: (mins < 24 * 60 ? TextUtils.format("reminders.eta.hours", Integer.valueOf((int) (mins / 60))) : dayFmt.format(new Date(nextUp.occurrenceAt)));
+			nextLabel.setText(TextUtils.format("reminders.next", nowText, timeFmt.format(new Date(nextUp.occurrenceAt)),
+					escape(plain(nextUp.nodeText)), eta));
 		}
 		else if (overdueNearest != null) {
-			nextLabel.setText("<html>" + nowText + " · 最近逾期 <b>" + timeFmt.format(new Date(overdueNearest.occurrenceAt))
-					+ "</b> " + escape(plain(overdueNearest.nodeText)) + "</html>");
+			nextLabel.setText(TextUtils.format("reminders.overdue_nearest", nowText,
+					timeFmt.format(new Date(overdueNearest.occurrenceAt)), escape(plain(overdueNearest.nodeText))));
 			nextUp = overdueNearest;
 		}
 		else {
-			nextLabel.setText(nowText + " · 暂无安排");
+			nextLabel.setText(TextUtils.format("reminders.none", nowText));
 		}
 	}
 
@@ -580,12 +581,12 @@ public class RemindersSideTabPanel extends JPanel {
 		final TreePath path = tree.getPathForLocation(e.getX(), e.getY());
 		if (path == null) {
 			final JPopupMenu emptyMenu = new JPopupMenu();
-			emptyMenu.add(menuItem("刷新", new Runnable() {
+			emptyMenu.add(menuItem(TextUtils.getText("reminders.menu.refresh"), new Runnable() {
 				public void run() {
 					refreshSilent(true);
 				}
 			}));
-			emptyMenu.add(menuItem("打开安排中心", new Runnable() {
+			emptyMenu.add(menuItem(TextUtils.getText("reminders.menu.open_center"), new Runnable() {
 				public void run() {
 					openScheduleCenter();
 				}
@@ -600,12 +601,12 @@ public class RemindersSideTabPanel extends JPanel {
 
 		if (user instanceof Row) {
 			final ReminderCalendarBridge.OccurrenceRef ref = ((Row) user).ref;
-			menu.add(menuItem("打开节点", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.open_node"), new Runnable() {
 				public void run() {
 					ReminderCalendarBridge.openNode(ref.file, ref.nodeId);
 				}
 			}));
-			menu.add(menuItem("编辑安排", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.edit"), new Runnable() {
 				public void run() {
 					final Boolean ok = ReminderCalendarBridge.promptAndUpdateReminderTask(RemindersSideTabPanel.this,
 							ref);
@@ -614,7 +615,7 @@ public class RemindersSideTabPanel extends JPanel {
 					}
 				}
 			}));
-			menu.add(menuItem("打卡 / 完成", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.checkin"), new Runnable() {
 				public void run() {
 					if (ReminderCalendarBridge.checkIn(ref.file, ref.nodeId, ref.occurrenceAt)) {
 						scheduleSilentRefresh(true);
@@ -622,12 +623,12 @@ public class RemindersSideTabPanel extends JPanel {
 				}
 			}));
 			menu.addSeparator();
-			menu.add(menuItem("打开文件夹", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.open_folder"), new Runnable() {
 				public void run() {
 					openContainingFolder(ref.file);
 				}
 			}));
-			menu.add(menuItem("复制", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.copy"), new Runnable() {
 				public void run() {
 					copyText(timeFmt.format(new Date(ref.occurrenceAt)) + " " + plain(ref.nodeText)
 							+ (ref.file == null ? "" : " (" + ref.file.getName() + ")"));
@@ -635,19 +636,19 @@ public class RemindersSideTabPanel extends JPanel {
 			}));
 		}
 		else {
-			menu.add(menuItem("复制分组", new Runnable() {
+			menu.add(menuItem(TextUtils.getText("reminders.menu.copy_group"), new Runnable() {
 				public void run() {
 					copyGroup(node);
 				}
 			}));
 		}
 		menu.addSeparator();
-		menu.add(menuItem("刷新", new Runnable() {
+		menu.add(menuItem(TextUtils.getText("reminders.menu.refresh"), new Runnable() {
 			public void run() {
 				refreshSilent(true);
 			}
 		}));
-		menu.add(menuItem("打开安排中心", new Runnable() {
+		menu.add(menuItem(TextUtils.getText("reminders.menu.open_center"), new Runnable() {
 			public void run() {
 				openScheduleCenter();
 			}

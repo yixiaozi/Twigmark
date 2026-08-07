@@ -1,5 +1,7 @@
 package org.freeplane.view.swing.features.reports;
 
+import org.freeplane.core.util.TextUtils;
+
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
@@ -46,7 +48,7 @@ public final class ReportTimeRange {
 				start = cal.getTimeInMillis();
 				cal.add(Calendar.DAY_OF_MONTH, 1);
 				end = cal.getTimeInMillis();
-				label = "昨天";
+				label = TextUtils.getText("ReportTimeRange.yesterday");
 				break;
 			case PRESET_THIS_WEEK:
 				cal.setFirstDayOfWeek(Calendar.MONDAY);
@@ -54,33 +56,33 @@ public final class ReportTimeRange {
 				start = cal.getTimeInMillis();
 				cal.add(Calendar.DAY_OF_MONTH, 7);
 				end = cal.getTimeInMillis();
-				label = "本周";
+				label = TextUtils.getText("ReportTimeRange.thisWeek");
 				break;
 			case PRESET_LAST_7_DAYS:
 				end = cal.getTimeInMillis() + 24L * 60L * 60L * 1000L;
 				cal.add(Calendar.DAY_OF_MONTH, -6);
 				start = cal.getTimeInMillis();
-				label = "近7天";
+				label = TextUtils.getText("ReportTimeRange.last7");
 				break;
 			case PRESET_THIS_MONTH:
 				cal.set(Calendar.DAY_OF_MONTH, 1);
 				start = cal.getTimeInMillis();
 				cal.add(Calendar.MONTH, 1);
 				end = cal.getTimeInMillis();
-				label = "本月";
+				label = TextUtils.getText("ReportTimeRange.thisMonth");
 				break;
 			case PRESET_LAST_30_DAYS:
 				end = cal.getTimeInMillis() + 24L * 60L * 60L * 1000L;
 				cal.add(Calendar.DAY_OF_MONTH, -29);
 				start = cal.getTimeInMillis();
-				label = "近30天";
+				label = TextUtils.getText("ReportTimeRange.last30");
 				break;
 			case PRESET_TODAY:
 			default:
 				start = cal.getTimeInMillis();
 				cal.add(Calendar.DAY_OF_MONTH, 1);
 				end = cal.getTimeInMillis();
-				label = "今天";
+				label = TextUtils.getText("ReportTimeRange.today");
 				break;
 		}
 		return new ReportTimeRange(preset, start, end, label + "（" + DAY.format(new Date(start)) + "～"
@@ -106,7 +108,7 @@ public final class ReportTimeRange {
 		if (e <= s) {
 			e = s + 24L * 60L * 60L * 1000L;
 		}
-		final String label = "自定义（" + DAY.format(new Date(s)) + "～" + DAY.format(new Date(e - 1)) + "）";
+		final String label = TextUtils.format("ReportTimeRange.custom", DAY.format(new Date(s)), DAY.format(new Date(e - 1)));
 		return new ReportTimeRange(PRESET_CUSTOM, s, e, label);
 	}
 

@@ -22,6 +22,8 @@ import java.util.Locale;
 import javax.swing.JPanel;
 import javax.swing.Scrollable;
 
+import org.freeplane.core.util.TextUtils;
+
 /**
  * Timed multi-day grid. Snap precision is 1 minute; vertical scale is
  * pixels-per-minute (fit to viewport or mouse-wheel zoom). Hour range can be
@@ -390,7 +392,7 @@ final class DayViewPanel extends JPanel implements Scrollable {
 	}
 
 	String getRangeLabel() {
-		return rangeStartHour + ":00–" + rangeEndHour + ":00 · 1分钟";
+		return TextUtils.format("CalendarViewport.rangeLabel", Integer.valueOf(rangeStartHour), Integer.valueOf(rangeEndHour));
 	}
 
 	/** Fit the visible hour range into {@code viewportHeight} pixels (fills the screen). */

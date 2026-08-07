@@ -98,7 +98,7 @@ public final class HotKeyEditorDialog extends JDialog {
 
 	private HotKeyEditorDialog(final Frame owner, final ModeController modeController,
 	        final RibbonAcceleratorManager acceleratorManager) {
-		super(owner, TextUtils.getText("hot_keys_editor.title", "快捷键设置") + " · "
+		super(owner, TextUtils.getText("hot_keys_editor.title") + " · "
 		        + PlatformHotKeyGuide.getPlatformDisplayName(), true);
 		this.modeController = modeController;
 		this.acceleratorManager = acceleratorManager;
@@ -126,12 +126,12 @@ public final class HotKeyEditorDialog extends JDialog {
 		final JPanel filter = new JPanel(new BorderLayout(8, 0));
 		filter.setAlignmentX(0f);
 		searchField.putClientProperty("JTextField.placeholderText",
-		        TextUtils.getText("hot_keys_editor.search", "搜索名称 / 快捷键 / 动作…"));
+		        TextUtils.getText("hot_keys_editor.search"));
 		filter.add(searchField, BorderLayout.CENTER);
 		final JPanel checks = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-		boundOnly.setText(TextUtils.getText("hot_keys_editor.bound_only", "仅显示已绑定"));
+		boundOnly.setText(TextUtils.getText("hot_keys_editor.bound_only"));
 		boundOnly.setSelected(true);
-		platformNotesOnly.setText(TextUtils.getText("hot_keys_editor.platform_notes_only", "仅跨平台差异"));
+		platformNotesOnly.setText(TextUtils.getText("hot_keys_editor.platform_notes_only"));
 		checks.add(boundOnly);
 		checks.add(platformNotesOnly);
 		filter.add(checks, BorderLayout.EAST);
@@ -171,11 +171,11 @@ public final class HotKeyEditorDialog extends JDialog {
 
 		final JPanel bottom = new JPanel(new BorderLayout());
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
-		final JButton mapBtn = new JButton(TextUtils.getText("hot_keys_editor.platform_map", "平台键位对照…"));
-		final JButton editBtn = new JButton(TextUtils.getText("hot_keys_editor.edit", "修改…"));
-		final JButton clearBtn = new JButton(TextUtils.getText("hot_keys_editor.clear", "清除"));
-		final JButton refreshBtn = new JButton(TextUtils.getText("hot_keys_editor.refresh", "刷新"));
-		final JButton closeBtn = new JButton(TextUtils.getText("ok", "确定"));
+		final JButton mapBtn = new JButton(TextUtils.getText("hot_keys_editor.platform_map"));
+		final JButton editBtn = new JButton(TextUtils.getText("hot_keys_editor.edit"));
+		final JButton clearBtn = new JButton(TextUtils.getText("hot_keys_editor.clear"));
+		final JButton refreshBtn = new JButton(TextUtils.getText("hot_keys_editor.refresh"));
+		final JButton closeBtn = new JButton(TextUtils.getText("ok"));
 		mapBtn.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				showPlatformMapDialog();
@@ -245,30 +245,12 @@ public final class HotKeyEditorDialog extends JDialog {
 	}
 
 	private void showPlatformMapDialog() {
-		final StringBuffer sb = new StringBuffer();
-		sb.append("<html><body style='width:520px;font-family:sans-serif'>");
-		sb.append("<h3>修饰键对应</h3><ul>");
-		sb.append("<li><b>Ctrl</b>（Windows/Linux）↔ <b>Cmd</b>（Mac）</li>");
-		sb.append("<li><b>Alt</b>（Windows/Linux）↔ <b>Option</b>（Mac）</li>");
-		sb.append("<li><b>Shift</b> 各平台相同</li>");
-		sb.append("</ul><h3>Mac 没有 / 易冲突的键 → 默认替代</h3><table border='1' cellpadding='4' cellspacing='0'>");
-		sb.append("<tr><th>Windows / Linux</th><th>动作</th><th>Mac 默认</th></tr>");
-		sb.append("<tr><td>Insert</td><td>新建子节点</td><td>Tab</td></tr>");
-		sb.append("<tr><td>Shift+Insert</td><td>新建父节点</td><td>Shift+Tab</td></tr>");
-		sb.append("<tr><td>Alt+Shift+Insert</td><td>总结节点</td><td>Cmd+Shift+I</td></tr>");
-		sb.append("<tr><td>Alt+Space</td><td>切换导图</td><td>Cmd+Shift+O（避开输入法）</td></tr>");
-		sb.append("<tr><td>Ctrl+Shift+Space</td><td>快速捕获</td><td>Cmd+Shift+Space</td></tr>");
-		sb.append("<tr><td>Shift+Space</td><td>快速命令</td><td>Cmd+Shift+.</td></tr>");
-		sb.append("</table>");
-		sb.append("<p>Home / End / PgUp / PgDn 在 Mac 笔记本上通常需按 <b>Fn</b>。</p>");
-		sb.append("<p><b>当前平台改键只写入：</b><code>ribbons/")
-		        .append(PlatformHotKeyGuide.getAcceleratorFileName())
-		        .append("</code>（Win / Mac / Linux 分文件，互不覆盖）。</p>");
-		sb.append("</body></html>");
-		final JEditorPane pane = new JEditorPane("text/html", sb.toString());
+		final String html = TextUtils.format("hot_keys_editor.platform_map_html",
+		        PlatformHotKeyGuide.getAcceleratorFileName());
+		final JEditorPane pane = new JEditorPane("text/html", html);
 		pane.setEditable(false);
 		JOptionPane.showMessageDialog(this, new JScrollPane(pane),
-		        TextUtils.getText("hot_keys_editor.platform_map", "平台键位对照"), JOptionPane.INFORMATION_MESSAGE);
+		        TextUtils.getText("hot_keys_editor.platform_map"), JOptionPane.INFORMATION_MESSAGE);
 	}
 
 	private void reload() {
@@ -383,7 +365,7 @@ public final class HotKeyEditorDialog extends JDialog {
 			}
 			// Only list unbound actions that we can categorize (avoids dumping hundreds of internals).
 			final String category = HotKeyCategoryResolver.categoryFor(actionKey);
-			if (TextUtils.getText("hot_keys_editor.category_other", "其他").equals(category)) {
+			if (TextUtils.getText("hot_keys_editor.category_other").equals(category)) {
 				continue;
 			}
 			addOrMerge(byAction, action, category, title);
@@ -406,8 +388,8 @@ public final class HotKeyEditorDialog extends JDialog {
 		else {
 			row.category = resolvedCategory;
 			if (category != null && category.length() > 0
-			        && TextUtils.getText("hot_keys_editor.category_other", "其他").equals(row.category)
-			        && !TextUtils.getText("hot_keys_editor.category_other", "其他").equals(category)) {
+			        && TextUtils.getText("hot_keys_editor.category_other").equals(row.category)
+			        && !TextUtils.getText("hot_keys_editor.category_other").equals(category)) {
 				row.category = category;
 			}
 		}
@@ -436,15 +418,15 @@ public final class HotKeyEditorDialog extends JDialog {
 		if (Compat.isMacOsX()) {
 			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)) {
 				note.append(macAlt != null
-				        ? TextUtils.getText("hot_keys_editor.note.insert_mac", "Mac 无 Insert → 建议 ")
+				        ? TextUtils.getText("hot_keys_editor.note.insert_mac")
 				                + PlatformHotKeyGuide.formatMacAltReadable(macAlt)
-				        : TextUtils.getText("hot_keys_editor.note.insert_generic", "Mac 无 Insert，请改绑"));
+				        : TextUtils.getText("hot_keys_editor.note.insert_generic"));
 			}
 			else if (PlatformHotKeyGuide.isAltSpace(stroke)) {
-				note.append(TextUtils.getText("hot_keys_editor.note.alt_space", "与输入法冲突 → 建议 Cmd+Shift+O"));
+				note.append(TextUtils.getText("hot_keys_editor.note.alt_space"));
 			}
 			else if (macAlt != null && stroke == null) {
-				note.append(TextUtils.getText("hot_keys_editor.note.mac_default", "Mac 默认 "))
+				note.append(TextUtils.getText("hot_keys_editor.note.mac_default"))
 				        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
 			}
 		}
@@ -453,17 +435,17 @@ public final class HotKeyEditorDialog extends JDialog {
 			if (PlatformHotKeyGuide.usesMacUnavailableKey(stroke)
 			        || PlatformHotKeyGuide.usesMacUnavailableKey(defaultStroke)) {
 				if (macAlt != null) {
-					note.append(TextUtils.getText("hot_keys_editor.note.win_insert", "Mac 无此键 → 默认 "))
+					note.append(TextUtils.getText("hot_keys_editor.note.win_insert"))
 					        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
 				}
 			}
 			else if (PlatformHotKeyGuide.isAltSpace(stroke) || PlatformHotKeyGuide.isAltSpace(defaultStroke)) {
-				note.append(TextUtils.getText("hot_keys_editor.note.win_alt_space", "Mac 上改为 Cmd+Shift+O"));
+				note.append(TextUtils.getText("hot_keys_editor.note.win_alt_space"));
 			}
 			else if (macAlt != null && stroke != null) {
 				final KeyStroke macStroke = RibbonAcceleratorManager.parseKeyStroke(macAlt);
 				if (macStroke != null && !sameStroke(macStroke, stroke)) {
-					note.append(TextUtils.getText("hot_keys_editor.note.mac_uses", "Mac 默认 "))
+					note.append(TextUtils.getText("hot_keys_editor.note.mac_uses"))
 					        .append(PlatformHotKeyGuide.formatMacAltReadable(macAlt));
 				}
 			}
@@ -472,7 +454,7 @@ public final class HotKeyEditorDialog extends JDialog {
 			if (note.length() > 0) {
 				note.append(" · ");
 			}
-			note.append(TextUtils.getText("hot_keys_editor.note.remapped", "已改绑（出厂 "))
+			note.append(TextUtils.getText("hot_keys_editor.note.remapped"))
 			        .append(formatStroke(defaultStroke)).append("）");
 		}
 		return note.toString();
@@ -529,8 +511,9 @@ public final class HotKeyEditorDialog extends JDialog {
 		final int bound = countBound();
 		final int notes = countNotes();
 		final String file = PlatformHotKeyGuide.getAcceleratorFileName();
-		statusLabel.setText("显示 " + visible + " · 已绑定 " + bound + " · 跨平台差异 " + notes + " · "
-		        + PlatformHotKeyGuide.getPlatformDisplayName() + " · " + file);
+		statusLabel.setText(TextUtils.format("hot_keys_editor.status_detail", Integer.valueOf(visible),
+		        Integer.valueOf(bound), Integer.valueOf(notes),
+		        PlatformHotKeyGuide.getPlatformDisplayName(), file));
 	}
 
 	private int countBound() {
@@ -572,7 +555,7 @@ public final class HotKeyEditorDialog extends JDialog {
 			return;
 		}
 		if (acceleratorManager == null) {
-			statusLabel.setText(TextUtils.getText("hot_keys_editor.no_ribbon", "当前模式没有 Ribbon 快捷键管理器，无法修改。"));
+			statusLabel.setText(TextUtils.getText("hot_keys_editor.no_ribbon"));
 			return;
 		}
 		acceleratorManager.newAccelerator(row.action, null);
@@ -649,11 +632,11 @@ public final class HotKeyEditorDialog extends JDialog {
 	private final class HotKeyTableModel extends AbstractTableModel {
 		private static final long serialVersionUID = 1L;
 		private final String[] columns = new String[] {
-		        TextUtils.getText("hot_keys_editor.col.category", "分类"),
-		        TextUtils.getText("hot_keys_editor.col.action", "动作"),
-		        TextUtils.getText("hot_keys_editor.col.shortcut", "本机快捷键"),
-		        TextUtils.getText("hot_keys_editor.col.default", "默认快捷键"),
-		        TextUtils.getText("hot_keys_editor.col.platform_note", "平台说明") };
+		        TextUtils.getText("hot_keys_editor.col.category"),
+		        TextUtils.getText("hot_keys_editor.col.action"),
+		        TextUtils.getText("hot_keys_editor.col.shortcut"),
+		        TextUtils.getText("hot_keys_editor.col.default"),
+		        TextUtils.getText("hot_keys_editor.col.platform_note") };
 
 		public int getRowCount() {
 			return rows.size();

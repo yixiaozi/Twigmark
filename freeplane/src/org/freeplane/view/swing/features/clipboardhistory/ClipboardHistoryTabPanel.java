@@ -43,6 +43,7 @@ import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.view.swing.features.reports.ReportChartSeries;
 import org.freeplane.view.swing.features.reports.ReportEngine;
 import org.freeplane.view.swing.features.reports.ReportKpi;
@@ -141,9 +142,11 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 				setFont(DocearUiTheme.font(12f));
 				if (value instanceof ClipboardHistoryEntry) {
 					final ClipboardHistoryEntry entry = (ClipboardHistoryEntry) value;
+					final String meta = TextUtils.format("ClipboardHistory.list.meta",
+					        TIME.format(new Date(entry.lastTs)), Integer.valueOf(entry.hitCount),
+					        Integer.valueOf(entry.charLen));
 					setText("<html><b>" + escape(entry.preview(72)) + "</b><br/>"
-							+ "<span style='color:#64748B'>" + TIME.format(new Date(entry.lastTs)) + " · ×"
-							+ entry.hitCount + " · " + entry.charLen + "字</span></html>");
+							+ "<span style='color:#64748B'>" + escape(meta) + "</span></html>");
 					if (!isSelected) {
 						setForeground(DocearUiTheme.TEXT);
 					}
@@ -187,10 +190,12 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		DocearUiTheme.styleScrollPane(listScroll);
 		final JScrollPane hitScroll = new JScrollPane(hitTimesArea);
 		DocearUiTheme.styleScrollPane(hitScroll);
-		hitScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "出现时间"));
+		hitScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+				TextUtils.getText("ClipboardHistory.hitTimes.border")));
 		final JScrollPane detailScroll = new JScrollPane(detailArea);
 		DocearUiTheme.styleScrollPane(detailScroll);
-		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "全文"));
+		detailScroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(),
+				TextUtils.getText("ClipboardHistory.fullText.border")));
 
 		final JSplitPane detailSplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, hitScroll, detailScroll);
 		detailSplit.setResizeWeight(0.35);
@@ -205,8 +210,8 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private JPanel buildHeader() {
 		final JPanel header = new JPanel(new BorderLayout(6, 6));
 		header.setOpaque(false);
-		final JLabel title = DocearUiTheme.titleLabel("剪贴板");
-		final JLabel hint = DocearUiTheme.mutedLabel("仅文字 · 相同内容合并并记录每次出现时间 · 不限条数");
+		final JLabel title = DocearUiTheme.titleLabel(TextUtils.getText("ClipboardHistory.title"));
+		final JLabel hint = DocearUiTheme.mutedLabel(TextUtils.getText("ClipboardHistory.hint"));
 		hint.setFont(DocearUiTheme.font(11f));
 		final JPanel titleCol = new JPanel();
 		titleCol.setOpaque(false);
@@ -219,7 +224,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		header.add(titleCol, BorderLayout.NORTH);
 
 		DocearUiTheme.styleSearchField(searchField);
-		searchField.setToolTipText("搜索剪贴板文字");
+		searchField.setToolTipText(TextUtils.getText("ClipboardHistory.search.tooltip"));
 		searchField.getDocument().addDocumentListener(new DocumentListener() {
 			public void insertUpdate(final DocumentEvent e) {
 				reloadDebounce.restart();
@@ -240,27 +245,27 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private JPanel buildActions() {
 		final JPanel actions = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
 		actions.setOpaque(false);
-		actions.add(primaryButton("复制", new Runnable() {
+		actions.add(primaryButton(TextUtils.getText("ClipboardHistory.action.copy"), new Runnable() {
 			public void run() {
 				copySelected();
 			}
 		}));
-		actions.add(softButton("删除", new Runnable() {
+		actions.add(softButton(TextUtils.getText("ClipboardHistory.action.delete"), new Runnable() {
 			public void run() {
 				deleteSelected();
 			}
 		}));
-		actions.add(softButton("刷新", new Runnable() {
+		actions.add(softButton(TextUtils.getText("ClipboardHistory.action.refresh"), new Runnable() {
 			public void run() {
 				reloadAsync(true);
 			}
 		}));
-		actions.add(softButton("统计报表", new Runnable() {
+		actions.add(softButton(TextUtils.getText("ClipboardHistory.action.stats"), new Runnable() {
 			public void run() {
 				showStatsReport();
 			}
 		}));
-		actions.add(softButton("清空", new Runnable() {
+		actions.add(softButton(TextUtils.getText("ClipboardHistory.action.clear"), new Runnable() {
 			public void run() {
 				clearAll();
 			}
@@ -294,7 +299,8 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 					return;
 				}
 				applyLatest(latest);
-				statusLabel.setText("最近 " + listModel.getSize() + " 条 · 共 " + total + " 条唯一");
+				statusLabel.setText(TextUtils.format("ClipboardHistory.status.recent",
+						Integer.valueOf(listModel.getSize()), Integer.valueOf(total)));
 				statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 				SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_CLIPBOARD, total);
 			}
@@ -366,8 +372,9 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 				try {
 					listModel.clear();
 					if (rows == null || rows.isEmpty()) {
-						statusLabel.setText(query != null && query.trim().length() > 0 ? "无匹配结果"
-								: "暂无记录 · 复制文字后自动收录");
+						statusLabel.setText(query != null && query.trim().length() > 0
+								? TextUtils.getText("ClipboardHistory.status.noMatch")
+								: TextUtils.getText("ClipboardHistory.status.empty"));
 						statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
 						detailArea.setText("");
 						hitTimesArea.setText("");
@@ -377,11 +384,13 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 							listModel.addElement(rows.get(i));
 						}
 						if (hits >= 0L) {
-							statusLabel.setText("显示 " + rows.size() + " 条 · 共 " + total + " 条唯一 · 命中 " + hits
-									+ " 次 · 库 " + formatBytes(dbBytes));
+							statusLabel.setText(TextUtils.format("ClipboardHistory.status.full",
+									Integer.valueOf(rows.size()), Integer.valueOf(total), Long.valueOf(hits),
+									formatBytes(dbBytes)));
 						}
 						else {
-							statusLabel.setText("显示 " + rows.size() + " 条 · 共 " + total + " 条唯一");
+							statusLabel.setText(TextUtils.format("ClipboardHistory.status.basic",
+									Integer.valueOf(rows.size()), Integer.valueOf(total)));
 						}
 						statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 						if (list.getSelectedIndex() < 0 && listModel.getSize() > 0) {
@@ -410,7 +419,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		final ClipboardHistoryEntry entry = (ClipboardHistoryEntry) value;
 		detailArea.setText(entry.content);
 		detailArea.setCaretPosition(0);
-		hitTimesArea.setText("加载出现时间…");
+		hitTimesArea.setText(TextUtils.getText("ClipboardHistory.hitTimes.loading"));
 		final int gen = ++detailGeneration;
 		new SwingWorker() {
 			private List times;
@@ -433,31 +442,32 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private String formatHitTimes(final ClipboardHistoryEntry entry, final List times) {
 		final StringBuffer sb = new StringBuffer();
 		final int recorded = times == null ? 0 : times.size();
-		sb.append("共 ×").append(entry.hitCount).append(" 次");
+		sb.append(TextUtils.format("ClipboardHistory.hitTimes.summary", Integer.valueOf(entry.hitCount)));
 		if (recorded > 0) {
-			sb.append(" · 已记录 ").append(recorded).append(" 个时间点");
+			sb.append(TextUtils.format("ClipboardHistory.hitTimes.recorded", Integer.valueOf(recorded)));
 		}
 		if (entry.hitCount > recorded && recorded > 0) {
-			sb.append("（升级前部分次数未逐条记时，仅保留首末）");
+			sb.append(TextUtils.getText("ClipboardHistory.hitTimes.legacyNote"));
 		}
 		sb.append('\n');
 		if (recorded == 0) {
-			sb.append("暂无时间点");
+			sb.append(TextUtils.getText("ClipboardHistory.hitTimes.none"));
 			return sb.toString();
 		}
 		for (int i = 0; i < recorded; i++) {
 			final long ts = ((Long) times.get(i)).longValue();
 			sb.append(i + 1).append(". ").append(TIME_SEC.format(new Date(ts)));
 			if (i == 0) {
-				sb.append("（最近）");
+				sb.append(TextUtils.getText("ClipboardHistory.hitTimes.latest"));
 			}
 			else if (i == recorded - 1 && entry.firstTs == ts) {
-				sb.append("（首次）");
+				sb.append(TextUtils.getText("ClipboardHistory.hitTimes.first"));
 			}
 			sb.append('\n');
 		}
 		if (recorded >= ClipboardHistoryDatabase.HIT_LIST_LIMIT) {
-			sb.append("…仅显示最近 ").append(ClipboardHistoryDatabase.HIT_LIST_LIMIT).append(" 条");
+			sb.append(TextUtils.format("ClipboardHistory.hitTimes.truncated",
+					Integer.valueOf(ClipboardHistoryDatabase.HIT_LIST_LIMIT)));
 		}
 		return sb.toString().trim();
 	}
@@ -468,7 +478,7 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 			return;
 		}
 		ClipboardHistoryMonitor.copyToSystemClipboard(entry.content);
-		statusLabel.setText("已复制回系统剪贴板");
+		statusLabel.setText(TextUtils.getText("ClipboardHistory.status.copied"));
 		statusLabel.setForeground(DocearUiTheme.SUCCESS);
 	}
 
@@ -477,8 +487,9 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		if (entry == null) {
 			return;
 		}
-		final int ok = JOptionPane.showConfirmDialog(this, "删除这条剪贴板记录？\n" + entry.preview(80), "删除",
-				JOptionPane.OK_CANCEL_OPTION);
+		final int ok = JOptionPane.showConfirmDialog(this,
+				TextUtils.format("ClipboardHistory.delete.confirm", entry.preview(80)),
+				TextUtils.getText("ClipboardHistory.delete.title"), JOptionPane.OK_CANCEL_OPTION);
 		if (ok != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -487,8 +498,9 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	}
 
 	private void clearAll() {
-		final int ok = JOptionPane.showConfirmDialog(this, "清空本机剪贴板历史？同步过来的其他电脑记录不会删除。", "清空",
-				JOptionPane.OK_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+		final int ok = JOptionPane.showConfirmDialog(this, TextUtils.getText("ClipboardHistory.clear.confirm"),
+				TextUtils.getText("ClipboardHistory.clear.title"), JOptionPane.OK_CANCEL_OPTION,
+				JOptionPane.WARNING_MESSAGE);
 		if (ok != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -499,15 +511,19 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 	private void showStatsReport() {
 		try {
 			final ClipboardHistoryService service = ClipboardHistoryService.getInstance();
-			final ReportViewModel view = new ReportViewModel("剪贴板统计", "文字历史 · 去重后的收录与命中");
-			view.decision = "高频内容可快速回填；库过大切记清理低频条目";
+			final ReportViewModel view = new ReportViewModel(TextUtils.getText("ClipboardHistory.stats.title"),
+					TextUtils.getText("ClipboardHistory.stats.subtitle"));
+			view.decision = TextUtils.getText("ClipboardHistory.stats.decision");
 			view.dataSource = service.getDbFile().getAbsolutePath();
-			view.addKpi("唯一条数", String.valueOf(service.count()), "");
-			view.addKpi("命中合计", String.valueOf(service.sumHits()), "含重复复制");
-			view.addKpi("库大小", formatBytes(service.getDbFileBytes()), "");
+			view.addKpi(TextUtils.getText("ClipboardHistory.stats.kpi.unique"), String.valueOf(service.count()), "");
+			view.addKpi(TextUtils.getText("ClipboardHistory.stats.kpi.hits"), String.valueOf(service.sumHits()),
+					TextUtils.getText("ClipboardHistory.stats.kpi.hitsHint"));
+			view.addKpi(TextUtils.getText("ClipboardHistory.stats.kpi.dbSize"), formatBytes(service.getDbFileBytes()),
+					"");
 
 			final Map byDay = service.hitsByDay(14);
-			final ReportChartSeries trend = new ReportChartSeries("近14天命中", ReportChartSeries.TYPE_BAR);
+			final ReportChartSeries trend = new ReportChartSeries(TextUtils.getText("ClipboardHistory.stats.chart.trend"),
+					ReportChartSeries.TYPE_BAR);
 			final Iterator it = byDay.entrySet().iterator();
 			while (it.hasNext()) {
 				final Map.Entry entry = (Map.Entry) it.next();
@@ -517,8 +533,9 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 			}
 			view.addChart(trend);
 
-			final ReportChartSeries topPie = new ReportChartSeries("高频内容（次）", ReportChartSeries.TYPE_PIE);
-			view.addDetail("—— 复制次数 Top ——");
+			final ReportChartSeries topPie = new ReportChartSeries(
+					TextUtils.getText("ClipboardHistory.stats.chart.top"), ReportChartSeries.TYPE_PIE);
+			view.addDetail(TextUtils.getText("ClipboardHistory.stats.detail.topHeader"));
 			final List top = service.topByHits(15);
 			for (int i = 0; i < top.size(); i++) {
 				final ClipboardHistoryEntry entry = (ClipboardHistoryEntry) top.get(i);
@@ -528,13 +545,13 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 			}
 			view.addChart(topPie);
 			if (service.count() == 0) {
-				view.emptyHint = "暂无剪贴板记录。复制任意文字后会出现在左侧「剪贴板」Tab。";
+				view.emptyHint = TextUtils.getText("ClipboardHistory.stats.emptyHint");
 			}
 
 			final ReportViewportService viewport = ReportViewportService.get();
 			if (viewport == null) {
-				JOptionPane.showMessageDialog(this, buildPlainStatsText(view), "剪贴板统计",
-						JOptionPane.INFORMATION_MESSAGE);
+				JOptionPane.showMessageDialog(this, buildPlainStatsText(view),
+						TextUtils.getText("ClipboardHistory.stats.title"), JOptionPane.INFORMATION_MESSAGE);
 				return;
 			}
 			ReportNodeSpec tree = null;
@@ -545,11 +562,12 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 				LogUtils.warn("Clipboard stats toTree failed", e);
 			}
 			viewport.showReport(view, tree);
-			statusLabel.setText("已打开统计报表");
+			statusLabel.setText(TextUtils.getText("ClipboardHistory.status.statsOpened"));
 			statusLabel.setForeground(DocearUiTheme.ACCENT_DEEP);
 		}
 		catch (Exception ex) {
-			JOptionPane.showMessageDialog(this, "统计失败: " + ex.getMessage(), "剪贴板", JOptionPane.ERROR_MESSAGE);
+			JOptionPane.showMessageDialog(this, TextUtils.format("ClipboardHistory.stats.failed", ex.getMessage()),
+					TextUtils.getText("ClipboardHistory.dialog.title"), JOptionPane.ERROR_MESSAGE);
 		}
 	}
 

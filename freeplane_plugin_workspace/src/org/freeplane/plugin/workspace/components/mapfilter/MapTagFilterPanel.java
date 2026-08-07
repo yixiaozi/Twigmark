@@ -49,6 +49,7 @@ import org.freeplane.plugin.workspace.features.mapfilter.MapTagFilterService;
 import org.freeplane.plugin.workspace.features.mapfilter.TagFilterMapExtension;
 import org.freeplane.plugin.workspace.features.mapfilter.TagFilterMode;
 import org.freeplane.plugin.workspace.features.nodepins.TagColorStore;
+import org.freeplane.core.util.TextUtils;
 
 /**
  * Floating tag-filter card: collapsed pill / expanded panel, draggable & resizable.
@@ -133,7 +134,7 @@ public class MapTagFilterPanel extends JPanel {
 		setOpaque(false);
 		setLayout(new BorderLayout());
 
-		collapsedTitle = new JLabel("标签");
+		collapsedTitle = new JLabel(TextUtils.getText("workspace.maptag.title"));
 		collapsedTitle.setFont(DocearUiTheme.font(12f, Font.BOLD));
 		collapsedTitle.setForeground(MODE_ON_BG);
 		collapsedTitle.setBorder(null);
@@ -150,10 +151,10 @@ public class MapTagFilterPanel extends JPanel {
 		expandedCard = buildExpandedShell();
 		headerBar = buildHeaderBar();
 
-		viewToggle = createModeButton("查看");
-		includeToggle = createModeButton("仅看");
-		excludeToggle = createModeButton("排除");
-		allToggle = createModeButton("同时包含");
+		viewToggle = createModeButton(TextUtils.getText("workspace.maptag.mode.view"));
+		includeToggle = createModeButton(TextUtils.getText("workspace.maptag.mode.include"));
+		excludeToggle = createModeButton(TextUtils.getText("workspace.maptag.mode.exclude"));
+		allToggle = createModeButton(TextUtils.getText("workspace.maptag.mode.all"));
 		final ButtonGroup modeGroup = new ButtonGroup();
 		modeGroup.add(viewToggle);
 		modeGroup.add(includeToggle);
@@ -192,12 +193,12 @@ public class MapTagFilterPanel extends JPanel {
 		DocearUiTheme.styleScrollPane(nodeScroll);
 		nodeScroll.setVisible(false);
 
-		untaggedToggle = createModeButton("无标签：隐藏");
+		untaggedToggle = createModeButton(TextUtils.getText("workspace.maptag.untagged.hide"));
 		statusLabel = DocearUiTheme.mutedLabel("");
-		clearButton = DocearUiTheme.ghostButton("清除");
-		collapseButton = DocearUiTheme.ghostButton("收起");
-		homeButton = DocearUiTheme.ghostButton("归位");
-		homeButton.setToolTipText("回到导图右上角默认位置");
+		clearButton = DocearUiTheme.ghostButton(TextUtils.getText("workspace.maptag.clear"));
+		collapseButton = DocearUiTheme.ghostButton(TextUtils.getText("workspace.maptag.collapse"));
+		homeButton = DocearUiTheme.ghostButton(TextUtils.getText("workspace.maptag.home"));
+		homeButton.setToolTipText(TextUtils.getText("workspace.maptag.home.tip"));
 		resizeCorner = buildResizeCorner();
 
 		assembleExpandedCard();
@@ -266,7 +267,7 @@ public class MapTagFilterPanel extends JPanel {
 		header.setBackground(HEADER_BG);
 		header.setBorder(new EmptyBorder(8, 10, 8, 8));
 		header.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
-		final JLabel title = new JLabel("标签筛选");
+		final JLabel title = new JLabel(TextUtils.getText("workspace.maptag.filter_title"));
 		title.setFont(DocearUiTheme.font(13f, Font.BOLD));
 		title.setForeground(DocearUiTheme.TEXT);
 		header.add(title, BorderLayout.WEST);
@@ -293,7 +294,7 @@ public class MapTagFilterPanel extends JPanel {
 		corner.setOpaque(false);
 		corner.setPreferredSize(new Dimension(RESIZE_HANDLE, RESIZE_HANDLE));
 		corner.setCursor(Cursor.getPredefinedCursor(Cursor.SE_RESIZE_CURSOR));
-		corner.setToolTipText("拖动调整大小");
+		corner.setToolTipText(TextUtils.getText("workspace.maptag.resize.tip"));
 		return corner;
 	}
 
@@ -318,7 +319,7 @@ public class MapTagFilterPanel extends JPanel {
 		modeRow.add(excludeToggle);
 		modeRow.add(allToggle);
 
-		final JLabel searchLabel = new JLabel("搜索");
+		final JLabel searchLabel = new JLabel(TextUtils.getText("workspace.maptag.search"));
 		searchLabel.setFont(DocearUiTheme.font(11f));
 		searchLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		searchLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -329,7 +330,7 @@ public class MapTagFilterPanel extends JPanel {
 		searchWrap.add(searchLabel, BorderLayout.NORTH);
 		searchWrap.add(searchField, BorderLayout.CENTER);
 
-		final JLabel tagsLabel = new JLabel("本图标签");
+		final JLabel tagsLabel = new JLabel(TextUtils.getText("workspace.maptag.local_tags"));
 		tagsLabel.setFont(DocearUiTheme.font(11f));
 		tagsLabel.setForeground(DocearUiTheme.TEXT_MUTED);
 		tagsLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -398,7 +399,7 @@ public class MapTagFilterPanel extends JPanel {
 		field.setBackground(CHIP_AREA_BG);
 		field.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(CARD_BORDER),
 				new EmptyBorder(6, 8, 6, 8)));
-		field.putClientProperty("JTextField.placeholderText", "输入关键字过滤标签");
+		field.putClientProperty("JTextField.placeholderText", TextUtils.getText("workspace.maptag.search.placeholder"));
 		return field;
 	}
 
@@ -718,24 +719,24 @@ public class MapTagFilterPanel extends JPanel {
 	}
 
 	private void refreshUntaggedLabel(final boolean show) {
-		untaggedToggle.setText(show ? "无标签：显示" : "无标签：隐藏");
+		untaggedToggle.setText(show ? TextUtils.getText("workspace.maptag.untagged.show") : TextUtils.getText("workspace.maptag.untagged.hide"));
 		updateModeLook(untaggedToggle);
 	}
 
 	private void refreshStatus(final TagFilterMapExtension extension) {
 		if (extension == null) {
-			statusLabel.setText("未筛选");
+			statusLabel.setText(TextUtils.getText("workspace.maptag.status.none"));
 			return;
 		}
 		if (extension.getMode() == TagFilterMode.VIEW) {
-			statusLabel.setText(extension.getActiveTagCount() == 0 ? "选一个标签查看" : "查看节点列表");
+			statusLabel.setText(extension.getActiveTagCount() == 0 ? TextUtils.getText("workspace.maptag.status.pick") : TextUtils.getText("workspace.maptag.status.view_nodes"));
 			return;
 		}
 		if (!extension.hasActiveFilter()) {
-			statusLabel.setText("未筛选");
+			statusLabel.setText(TextUtils.getText("workspace.maptag.status.none"));
 			return;
 		}
-		statusLabel.setText("已选 " + extension.getActiveTagCount());
+		statusLabel.setText(TextUtils.format("workspace.maptag.status.selected", Integer.valueOf(extension.getActiveTagCount())));
 	}
 
 	private void refreshCollapsed() {
@@ -758,10 +759,10 @@ public class MapTagFilterPanel extends JPanel {
 		else {
 			collapsedBadge.setText(String.valueOf(totalTags));
 			collapsedBadge.setVisible(totalTags > 0);
-			collapsedTitle.setText("标签");
+			collapsedTitle.setText(TextUtils.getText("workspace.maptag.title"));
 			collapsedTitle.setForeground(MODE_ON_BG);
-			collapsedBar.setToolTipText(totalTags > 0 ? ("本图共 " + totalTags + " 个标签；点开展开")
-			        : "按节点【标签】筛选；点开展开");
+			collapsedBar.setToolTipText(totalTags > 0 ? TextUtils.format("workspace.maptag.collapsed.tip_count", Integer.valueOf(totalTags))
+			        : TextUtils.getText("workspace.maptag.collapsed.tip_empty"));
 			pill.setColors(PILL_BG, PILL_BORDER);
 			pill.setAccent(false);
 		}
@@ -778,15 +779,15 @@ public class MapTagFilterPanel extends JPanel {
 
 	private static String modeShortLabel(final TagFilterMode mode) {
 		if (mode == TagFilterMode.VIEW) {
-			return "查看";
+			return TextUtils.getText("workspace.maptag.mode.view");
 		}
 		if (mode == TagFilterMode.EXCLUDE) {
-			return "排除";
+			return TextUtils.getText("workspace.maptag.mode.exclude");
 		}
 		if (mode == TagFilterMode.ALL) {
-			return "同时";
+			return TextUtils.getText("workspace.maptag.mode.all_short");
 		}
-		return "仅看";
+		return TextUtils.getText("workspace.maptag.mode.include");
 	}
 
 	private void rebuildChips() {
@@ -829,7 +830,7 @@ public class MapTagFilterPanel extends JPanel {
 			shown++;
 		}
 		if (shown == 0) {
-			final JLabel empty = DocearUiTheme.mutedLabel(availableTags.isEmpty() ? "当前导图还没有标签" : "无匹配标签");
+			final JLabel empty = DocearUiTheme.mutedLabel(availableTags.isEmpty() ? TextUtils.getText("workspace.maptag.empty.no_tags") : TextUtils.getText("workspace.maptag.empty.no_match"));
 			empty.setBorder(new EmptyBorder(10, 4, 10, 4));
 			chipHost.add(empty);
 		}
@@ -858,7 +859,7 @@ public class MapTagFilterPanel extends JPanel {
 		}
 		final Set selected = extension.getActiveTags();
 		if (selected.isEmpty()) {
-			final JLabel tip = DocearUiTheme.mutedLabel("选择一个标签，在此列出对应节点");
+			final JLabel tip = DocearUiTheme.mutedLabel(TextUtils.getText("workspace.maptag.nodes.tip"));
 			tip.setBorder(new EmptyBorder(12, 8, 12, 8));
 			nodeListHost.add(tip);
 		}
@@ -866,7 +867,7 @@ public class MapTagFilterPanel extends JPanel {
 			final String tag = String.valueOf(selected.iterator().next());
 			final List nodes = MapTagFilterService.collectNodesWithTag(map, tag);
 			if (nodes.isEmpty()) {
-				nodeListHost.add(DocearUiTheme.mutedLabel("没有带该标签的节点"));
+				nodeListHost.add(DocearUiTheme.mutedLabel(TextUtils.getText("workspace.maptag.nodes.empty")));
 			}
 			else {
 				for (int i = 0; i < nodes.size(); i++) {
@@ -1070,7 +1071,7 @@ public class MapTagFilterPanel extends JPanel {
 
 	private Dimension computeCollapsedSize() {
 		final java.awt.FontMetrics fm = collapsedTitle.getFontMetrics(collapsedTitle.getFont());
-		final String title = collapsedTitle.getText() != null ? collapsedTitle.getText() : "标签";
+		final String title = collapsedTitle.getText() != null ? collapsedTitle.getText() : TextUtils.getText("workspace.maptag.title");
 		int contentW = fm.stringWidth(title);
 		int contentH = Math.max(fm.getHeight(), 14);
 		if (collapsedBadge.isVisible() && collapsedBadge.getText() != null && collapsedBadge.getText().length() > 0) {

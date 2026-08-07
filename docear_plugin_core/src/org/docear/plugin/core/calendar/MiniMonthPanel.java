@@ -20,10 +20,21 @@ import java.util.Map;
 
 import javax.swing.JPanel;
 
+import org.freeplane.core.util.TextUtils;
+
 /** Compact month navigator; dots under dates mark task density. */
 final class MiniMonthPanel extends JPanel {
 	private static final long serialVersionUID = 1L;
-	private static final String[] HEADERS = { "一", "二", "三", "四", "五", "六", "日" };
+	private static String[] weekHeaders() {
+		return new String[] {
+		        TextUtils.getText("CalendarViewport.weekday.mon"),
+		        TextUtils.getText("CalendarViewport.weekday.tue"),
+		        TextUtils.getText("CalendarViewport.weekday.wed"),
+		        TextUtils.getText("CalendarViewport.weekday.thu"),
+		        TextUtils.getText("CalendarViewport.weekday.fri"),
+		        TextUtils.getText("CalendarViewport.weekday.sat"),
+		        TextUtils.getText("CalendarViewport.weekday.sun") };
+	}
 	private static final int CELL_H = 24;
 	private static final int GRID_TOP = 30;
 	private static final int PANEL_H = GRID_TOP + 6 * CELL_H + 6;
@@ -32,7 +43,7 @@ final class MiniMonthPanel extends JPanel {
 		void onDayChosen(Date day);
 	}
 
-	private final SimpleDateFormat titleFormat = new SimpleDateFormat("yyyy年M月", Locale.CHINA);
+	private final SimpleDateFormat titleFormat = new SimpleDateFormat(TextUtils.getText("CalendarViewport.date.monthTitle"), Locale.getDefault());
 	private Date monthStart = MonthViewPanel.firstOfMonth(new Date());
 	private Date selectedDay = DayViewPanel.startOfDay(new Date());
 	private Map dayCounts = Collections.EMPTY_MAP;
@@ -116,7 +127,7 @@ final class MiniMonthPanel extends JPanel {
 		for (int i = 0; i < 7; i++) {
 			g2.setColor(CalendarTheme.TEXT_FAINT);
 			final FontMetrics hfm = g2.getFontMetrics();
-			final String label = HEADERS[i];
+			final String label = weekHeaders()[i];
 			g2.drawString(label, 4 + i * cellW + (cellW - hfm.stringWidth(label)) / 2, GRID_TOP - 8);
 		}
 

@@ -38,6 +38,7 @@ import javax.swing.JToggleButton;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
 
+import org.freeplane.core.util.TextUtils;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge;
 
 /**
@@ -57,18 +58,18 @@ final class CalendarViewportPanel extends JPanel {
 	private final MiniMonthPanel miniMonth = new MiniMonthPanel();
 	private final DefaultListModel dayTaskModel = new DefaultListModel();
 	private final JList dayTaskList = new JList(dayTaskModel);
-	private final JLabel dayTaskHeader = new JLabel("当日安排");
-	private final JButton newTaskBtn = ghost("新建");
+	private final JLabel dayTaskHeader = new JLabel(TextUtils.getText("CalendarViewport.dayTasks"));
+	private final JButton newTaskBtn = ghost(TextUtils.getText("CalendarViewport.new"));
 	private final CardLayout cards = new CardLayout();
 	private final JPanel cardHost = new JPanel(cards);
 	private final JScrollPane timedScroll;
-	private final JLabel titleLabel = new JLabel("安排中心");
+	private final JLabel titleLabel = new JLabel(TextUtils.getText("CalendarViewport.title"));
 	private final JLabel subtitleLabel = new JLabel(" ");
-	private final JLabel statusLabel = new JLabel("加载任务中…");
-	private final SimpleDateFormat monthTitle = new SimpleDateFormat("yyyy年M月", Locale.CHINA);
-	private final SimpleDateFormat dayTitle = new SimpleDateFormat("yyyy年M月d日 EEEE", Locale.CHINA);
-	private final SimpleDateFormat rangeTitle = new SimpleDateFormat("M月d日", Locale.CHINA);
-	private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.CHINA);
+	private final JLabel statusLabel = new JLabel(TextUtils.getText("CalendarViewport.loading"));
+	private final SimpleDateFormat monthTitle = new SimpleDateFormat(TextUtils.getText("CalendarViewport.date.monthTitle"), Locale.getDefault());
+	private final SimpleDateFormat dayTitle = new SimpleDateFormat(TextUtils.getText("CalendarViewport.date.dayTitle"), Locale.getDefault());
+	private final SimpleDateFormat rangeTitle = new SimpleDateFormat(TextUtils.getText("CalendarViewport.date.rangeTitle"), Locale.getDefault());
+	private final SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm", Locale.getDefault());
 
 	private int mode = MODE_WEEK;
 	private List appointments = Collections.EMPTY_LIST;
@@ -76,12 +77,12 @@ final class CalendarViewportPanel extends JPanel {
 	private Date pendingCreateEnd;
 	private int loadGeneration;
 	private boolean showPomodoro = true;
-	private final JToggleButton monthBtn = segment("月");
-	private final JToggleButton weekBtn = segment("周");
-	private final JToggleButton dayBtn = segment("日");
-	private final JToggleButton rangeAllDay = scale("全天");
+	private final JToggleButton monthBtn = segment(TextUtils.getText("CalendarViewport.mode.month"));
+	private final JToggleButton weekBtn = segment(TextUtils.getText("CalendarViewport.mode.week"));
+	private final JToggleButton dayBtn = segment(TextUtils.getText("CalendarViewport.mode.day"));
+	private final JToggleButton rangeAllDay = scale(TextUtils.getText("CalendarViewport.range.allDay"));
 	private final JToggleButton rangeWork = scale("4–22");
-	private final JToggleButton pomodoroToggle = segment("番茄");
+	private final JToggleButton pomodoroToggle = segment(TextUtils.getText("CalendarViewport.pomodoro"));
 
 	CalendarViewportPanel() {
 		super(new BorderLayout(0, 0));
@@ -119,9 +120,9 @@ final class CalendarViewportPanel extends JPanel {
 		legend.setBorder(BorderFactory.createEmptyBorder(4, 2, 2, 2));
 		legend.setAlignmentX(java.awt.Component.LEFT_ALIGNMENT);
 		legend.setMaximumSize(new Dimension(Integer.MAX_VALUE, 54));
-		legend.add(legendLine(CalendarTheme.EVENT_A, "安排"));
-		legend.add(legendLine(CalendarTheme.EVENT_D, "周期"));
-		legend.add(legendLine(CalendarTaskService.POMODORO_COLOR, "番茄钟"));
+		legend.add(legendLine(CalendarTheme.EVENT_A, TextUtils.getText("CalendarViewport.legend.event")));
+		legend.add(legendLine(CalendarTheme.EVENT_D, TextUtils.getText("CalendarViewport.legend.recurring")));
+		legend.add(legendLine(CalendarTaskService.POMODORO_COLOR, TextUtils.getText("CalendarViewport.legend.pomodoro")));
 		sideTop.add(legend);
 
 		final JPanel taskHead = new JPanel(new BorderLayout(4, 0));
@@ -283,7 +284,7 @@ final class CalendarViewportPanel extends JPanel {
 		monthView.setAppointmentListener(new MonthViewPanel.AppointmentListener() {
 			public void onAppointmentClicked(final CalendarAppointment appt) {
 				CalendarTaskService.open(appt);
-				statusLabel.setText("已打开节点：" + appt.title);
+				statusLabel.setText(TextUtils.format("CalendarViewport.status.opened", appt.title));
 			}
 
 			public void onAppointmentActivated(final CalendarAppointment appt) {
@@ -292,7 +293,7 @@ final class CalendarViewportPanel extends JPanel {
 					return;
 				}
 				final boolean ok = CalendarTaskService.checkInOrComplete(appt);
-				statusLabel.setText(ok ? "已打卡/完成：" + appt.title : "打卡已取消");
+				statusLabel.setText(ok ? TextUtils.format("CalendarViewport.status.checkedIn", appt.title) : TextUtils.getText("CalendarViewport.status.checkInCancelled"));
 				if (ok) {
 					reloadTasksAsync();
 				}
@@ -310,7 +311,7 @@ final class CalendarViewportPanel extends JPanel {
 		dayView.setAppointmentListener(new DayViewPanel.AppointmentListener() {
 			public void onAppointmentClicked(final CalendarAppointment appt) {
 				CalendarTaskService.open(appt);
-				statusLabel.setText("已打开节点：" + appt.title);
+				statusLabel.setText(TextUtils.format("CalendarViewport.status.opened", appt.title));
 			}
 
 			public void onAppointmentActivated(final CalendarAppointment appt) {
@@ -319,7 +320,8 @@ final class CalendarViewportPanel extends JPanel {
 					return;
 				}
 				final boolean ok = CalendarTaskService.checkInOrComplete(appt);
-				statusLabel.setText(ok ? "已打卡/完成：" + appt.title : "打卡已取消");
+				statusLabel.setText(ok ? TextUtils.format("CalendarViewport.status.checkedIn", appt.title)
+				        : TextUtils.getText("CalendarViewport.status.checkInCancelled"));
 				if (ok) {
 					reloadTasksAsync();
 				}
@@ -327,35 +329,35 @@ final class CalendarViewportPanel extends JPanel {
 
 			public void onAppointmentMoved(final CalendarAppointment appt, final long newStartMillis) {
 				if (CalendarTaskService.isPomodoro(appt)) {
-					statusLabel.setText("番茄钟时段不可拖拽改期");
+					statusLabel.setText(TextUtils.getText("CalendarViewport.status.pomodoroNoMove"));
 					reloadTasksAsync();
 					return;
 				}
 				final boolean ok = CalendarTaskService.reschedule(appt, newStartMillis);
 				if (ok) {
-					statusLabel.setText("已改期到 " + timeFmt.format(new Date(newStartMillis)) + "（记得保存导图）");
+					statusLabel.setText(TextUtils.format("CalendarViewport.status.rescheduled", timeFmt.format(new Date(newStartMillis))));
 					reloadTasksAsync(false);
 				}
 				else {
-					statusLabel.setText("改期失败：" + appt.title);
+					statusLabel.setText(TextUtils.format("CalendarViewport.status.rescheduleFailed", appt.title));
 					reloadTasksAsync(true);
 				}
 			}
 
 			public void onAppointmentResized(final CalendarAppointment appt, final long newEndMillis) {
 				if (CalendarTaskService.isPomodoro(appt)) {
-					statusLabel.setText("番茄钟时段不可调整时长");
+					statusLabel.setText(TextUtils.getText("CalendarViewport.status.pomodoroNoResize"));
 					reloadTasksAsync();
 					return;
 				}
 				final boolean ok = CalendarTaskService.resizeDuration(appt, newEndMillis);
 				if (ok) {
 					final int minutes = (int) Math.max(5L, (newEndMillis - appt.startMillis()) / 60000L);
-					statusLabel.setText("已调整时长为 " + minutes + " 分钟（记得保存导图）");
+					statusLabel.setText(TextUtils.format("CalendarViewport.status.resized", Integer.valueOf(minutes)));
 					reloadTasksAsync(false);
 				}
 				else {
-					statusLabel.setText("调整时长失败：" + appt.title);
+					statusLabel.setText(TextUtils.format("CalendarViewport.status.resizeFailed", appt.title));
 					reloadTasksAsync(true);
 				}
 			}
@@ -370,8 +372,8 @@ final class CalendarViewportPanel extends JPanel {
 				pendingCreateEnd = end;
 				miniMonth.setSelectedDay(start);
 				refreshDayTaskList();
-				statusLabel.setText("选中 " + timeFmt.format(start) + " – " + timeFmt.format(end)
-				        + " · 右键新建 / 点「新建」/ 双击空白");
+				statusLabel.setText(TextUtils.format("CalendarViewport.status.selected", timeFmt.format(start),
+				        timeFmt.format(end)));
 			}
 		});
 		dayView.setEmptyPopupListener(new DayViewPanel.EmptyPopupListener() {
@@ -431,7 +433,7 @@ final class CalendarViewportPanel extends JPanel {
 		if (forceRescan) {
 			ReminderCalendarBridge.invalidateReminderCache();
 		}
-		statusLabel.setText(forceRescan ? "正在重新扫描导图提醒…" : "正在加载提醒…");
+		statusLabel.setText(forceRescan ? TextUtils.getText("CalendarViewport.status.rescanning") : TextUtils.getText("CalendarViewport.status.loadingReminders"));
 		final long[] range = visibleRange();
 		final long[] monthRange = miniMonthVisibleRange();
 		final boolean pomo = showPomodoro;
@@ -446,12 +448,12 @@ final class CalendarViewportPanel extends JPanel {
 						}
 						setAppointments(result.appointments, result.dayCounts);
 						if (result.appointments.isEmpty()) {
-							statusLabel.setText("当前视图暂无安排 · 拖选/右键空白新建 · 点「刷新」重扫（"
-							        + result.elapsedMs + "ms）");
+							statusLabel.setText(TextUtils.format("CalendarViewport.status.empty",
+							        Long.valueOf(result.elapsedMs)));
 						}
 						else {
-							statusLabel.setText("已加载 " + result.appointments.size()
-							        + " 条 · 单击打开 · 拖拽改期 · 双击打卡 · 右键空白新建（" + result.elapsedMs + "ms）");
+							statusLabel.setText(TextUtils.format("CalendarViewport.status.loaded",
+							        Integer.valueOf(result.appointments.size()), Long.valueOf(result.elapsedMs)));
 						}
 						refreshChrome();
 					}
@@ -477,9 +479,9 @@ final class CalendarViewportPanel extends JPanel {
 		final Date day = selectedListDay();
 		dayView.setSelectedDayHighlight(mode == MODE_WEEK ? day : null);
 		final List dayTasks = CalendarTaskService.dayTaskLines(appointments, day);
-		dayTaskHeader.setText("当日安排 · " + dayTasks.size());
+		dayTaskHeader.setText(TextUtils.format("CalendarViewport.dayTasks.header", Integer.valueOf(dayTasks.size())));
 		if (dayTasks.isEmpty()) {
-			dayTaskModel.addElement("（无）· 右侧拖选或右键新建");
+			dayTaskModel.addElement(TextUtils.getText("CalendarViewport.dayTasks.empty"));
 		}
 		else {
 			for (int i = 0; i < dayTasks.size(); i++) {
@@ -541,7 +543,7 @@ final class CalendarViewportPanel extends JPanel {
 	        final Date end) {
 		final JPopupMenu menu = new JPopupMenu();
 		final JMenuItem create = new JMenuItem(
-		        "新建任务  " + timeFmt.format(start) + " – " + timeFmt.format(end));
+		        TextUtils.format("CalendarViewport.menu.createTask", timeFmt.format(start), timeFmt.format(end)));
 		create.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				promptCreateTask();
@@ -568,7 +570,7 @@ final class CalendarViewportPanel extends JPanel {
 		}
 		final Boolean ok = CalendarTaskService.promptCreateTask(this, start.getTime(), end.getTime());
 		if (Boolean.TRUE.equals(ok)) {
-			statusLabel.setText("已新建安排（含周期/时长/等级/紧急程度；未保存也会显示）");
+			statusLabel.setText(TextUtils.getText("CalendarViewport.status.created"));
 			miniMonth.setSelectedDay(start);
 			dayView.clearSelection();
 			pendingCreateStart = start;
@@ -576,7 +578,7 @@ final class CalendarViewportPanel extends JPanel {
 			reloadTasksAsync(true);
 		}
 		else if (Boolean.FALSE.equals(ok)) {
-			statusLabel.setText("新建失败：请先打开一张导图");
+			statusLabel.setText(TextUtils.getText("CalendarViewport.status.createFailed"));
 		}
 	}
 
@@ -633,7 +635,7 @@ final class CalendarViewportPanel extends JPanel {
 	private void showAppointmentMenu(final CalendarAppointment appt, final java.awt.Component invoker, final int x,
 	        final int y) {
 		final JPopupMenu menu = new JPopupMenu();
-		final JMenuItem open = new JMenuItem("打开节点");
+		final JMenuItem open = new JMenuItem(TextUtils.getText("CalendarViewport.menu.openNode"));
 		open.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				CalendarTaskService.open(appt);
@@ -641,14 +643,14 @@ final class CalendarViewportPanel extends JPanel {
 		});
 		menu.add(open);
 		if (!CalendarTaskService.isPomodoro(appt)) {
-			final JMenuItem edit = new JMenuItem("编辑安排");
+			final JMenuItem edit = new JMenuItem(TextUtils.getText("CalendarViewport.menu.edit"));
 			edit.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					promptEditTask(appt);
 				}
 			});
 			menu.add(edit);
-			final JMenuItem checkIn = new JMenuItem("打卡 / 完成");
+			final JMenuItem checkIn = new JMenuItem(TextUtils.getText("CalendarViewport.menu.checkIn"));
 			checkIn.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
 					if (CalendarTaskService.checkInOrComplete(appt)) {
@@ -658,7 +660,7 @@ final class CalendarViewportPanel extends JPanel {
 			});
 			menu.add(checkIn);
 		}
-		final JMenuItem refresh = new JMenuItem("刷新任务");
+		final JMenuItem refresh = new JMenuItem(TextUtils.getText("CalendarViewport.menu.refresh"));
 		refresh.addActionListener(new ActionListener() {
 			public void actionPerformed(final ActionEvent e) {
 				reloadTasksAsync(true);
@@ -672,18 +674,18 @@ final class CalendarViewportPanel extends JPanel {
 	private void promptEditTask(final CalendarAppointment appt) {
 		final Boolean ok = CalendarTaskService.promptEditTask(this, appt);
 		if (Boolean.TRUE.equals(ok)) {
-			statusLabel.setText("已更新安排（记得保存导图）");
+			statusLabel.setText(TextUtils.getText("CalendarViewport.status.updated"));
 			reloadTasksAsync(true);
 		}
 		else if (Boolean.FALSE.equals(ok)) {
-			statusLabel.setText("编辑失败");
+			statusLabel.setText(TextUtils.getText("CalendarViewport.status.editFailed"));
 		}
 	}
 
 	void refreshChrome() {
 		if (mode == MODE_MONTH) {
-			subtitleLabel.setText(monthTitle.format(monthView.getMonthStart()) + "  ·  月视图  ·  "
-			        + appointments.size() + " 条");
+			subtitleLabel.setText(TextUtils.format("CalendarViewport.subtitle.month",
+			        monthTitle.format(monthView.getMonthStart()), Integer.valueOf(appointments.size())));
 			cards.show(cardHost, CARD_MONTH);
 		}
 		else if (mode == MODE_WEEK) {
@@ -691,13 +693,15 @@ final class CalendarViewportPanel extends JPanel {
 			final Calendar end = Calendar.getInstance();
 			end.setTime(start);
 			end.add(Calendar.DAY_OF_MONTH, 6);
-			subtitleLabel.setText(rangeTitle.format(start) + " — " + rangeTitle.format(end.getTime()) + "  ·  周视图 · "
-			        + dayView.getRangeLabel() + " · " + appointments.size() + " 条");
+			subtitleLabel.setText(TextUtils.format("CalendarViewport.subtitle.week",
+			        rangeTitle.format(start), rangeTitle.format(end.getTime()), dayView.getRangeLabel(),
+			        Integer.valueOf(appointments.size())));
 			cards.show(cardHost, CARD_TIMED);
 		}
 		else {
-			subtitleLabel.setText(dayTitle.format(dayView.getStartDate()) + "  ·  日视图 · "
-			        + dayView.getRangeLabel() + " · " + appointments.size() + " 条");
+			subtitleLabel.setText(TextUtils.format("CalendarViewport.subtitle.day",
+			        dayTitle.format(dayView.getStartDate()), dayView.getRangeLabel(),
+			        Integer.valueOf(appointments.size())));
 			cards.show(cardHost, CARD_TIMED);
 		}
 		setScaleEnabled(mode != MODE_MONTH);
@@ -808,9 +812,9 @@ final class CalendarViewportPanel extends JPanel {
 		controls.setOpaque(false);
 		final JButton prev = heroBtn("<");
 		final JButton next = heroBtn(">");
-		final JButton today = heroBtn("今天");
-		final JButton refresh = heroBtn("刷新");
-		final JButton close = heroBtn("返回导图");
+		final JButton today = heroBtn(TextUtils.getText("CalendarViewport.today"));
+		final JButton refresh = heroBtn(TextUtils.getText("CalendarViewport.refresh"));
+		final JButton close = heroBtn(TextUtils.getText("CalendarViewport.backToMap"));
 		controls.add(prev);
 		controls.add(next);
 		controls.add(today);
@@ -862,7 +866,7 @@ final class CalendarViewportPanel extends JPanel {
 		dayView.setHourRange(startHour, endHour);
 		fitDayViewIfNeeded();
 		refreshChrome();
-		statusLabel.setText("时段 " + startHour + ":00–" + endHour + ":00 · 滚轮缩放 · 1分钟精度");
+		statusLabel.setText(TextUtils.format("CalendarViewport.status.hourRange", Integer.valueOf(startHour), Integer.valueOf(endHour)));
 	}
 
 	private void fitDayViewIfNeeded() {

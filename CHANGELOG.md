@@ -4,6 +4,13 @@
 
 ## [1.2.0] — 2026-08-07
 
+### 国际化
+
+- 主要功能界面（报表/剪切板/日历/财务/Git/番茄/快捷键/导图切换/快速命令/工作区侧栏）硬编码中文改为 EN/zh_CN 资源键
+- 报表生成内容同步 i18n；About/设置品牌文案改为 Twigmark
+- 收紧 Freeplane→Twigmark 字符串替换，避免破坏 URL 与路径占位符
+- 补齐 `docear_plugin_core` 中文 About/许可/向导等缺失键
+
 ### 产品化
 
 - 品牌：对外名称改为 **Twigmark**，署名为 Mantou（yixiaozi）；About / README / 欢迎页重写
