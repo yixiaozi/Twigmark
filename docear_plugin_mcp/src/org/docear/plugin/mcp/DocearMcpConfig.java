@@ -389,9 +389,22 @@ public final class DocearMcpConfig {
 	}
 
 	private static String getString(final String key, final String defaultValue) {
-		final String value = ResourceController.getResourceController().getProperty(PREFIX + key, null);
-		if (value != null && value.trim().length() > 0) {
-			return value.trim();
+		// JVM -Dmcp.* overrides (used by headless VPS start scripts).
+		try {
+			final String sys = System.getProperty(PREFIX + key);
+			if (sys != null && sys.trim().length() > 0) {
+				return sys.trim();
+			}
+		}
+		catch (Exception ignored) {
+		}
+		try {
+			final String value = ResourceController.getResourceController().getProperty(PREFIX + key, null);
+			if (value != null && value.trim().length() > 0) {
+				return value.trim();
+			}
+		}
+		catch (Exception ignored) {
 		}
 		return loadDefaults().getProperty(key, defaultValue);
 	}
