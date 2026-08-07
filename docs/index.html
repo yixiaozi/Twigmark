@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twigmark — 本地优先思维导图工作台</title>
+    <meta
+      name="description"
+      content="Twigmark：本地优先的桌面思维导图与个人知识工作台。由 Mantou（馒头）维护。"
+    />
+    <meta property="og:title" content="Twigmark" />
+    <meta
+      property="og:description"
+      content="本地优先的桌面思维导图与个人知识工作台"
+    />
+    <meta property="og:image" content="./assets/twigmark.png" />
+    <link rel="icon" href="./assets/twigmark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;600;650;700&family=Fraunces:opsz,wght@9..144,500;9..144,650&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <a class="brand-mark" href="./">
+          <img src="./assets/twigmark.png" alt="" width="36" height="36" />
+          <span>Twigmark</span>
+        </a>
+        <nav class="nav" aria-label="主导航">
+          <a href="#features">能力</a>
+          <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">仓库</a>
+          <a id="nav-releases" href="https://github.com/yixiaozi/Twigmark/releases" rel="noopener">发布</a>
+        </nav>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="brand-title">
+          <p class="eyebrow">by Mantou · local-first</p>
+          <h1 id="brand-title">Twigmark</h1>
+          <p class="lede">
+            本地优先的桌面思维导图与个人知识工作台。把想法、任务、专注与 AI 协作收进同一套本机导图。
+          </p>
+          <div class="cta-row">
+            <a
+              id="download-btn"
+              class="btn btn-primary"
+              href="https://github.com/yixiaozi/Twigmark/releases/latest"
+              rel="noopener"
+              >获取最新版</a
+            >
+            <a
+              class="btn btn-secondary"
+              href="https://github.com/yixiaozi/Twigmark"
+              rel="noopener"
+              >查看源码</a
+            >
+          </div>
+          <p class="meta">
+            <span>当前版本 <strong id="version-label">1.2.0</strong></span>
+            <span id="status-label">stable</span>
+            <span id="published-label"></span>
+          </p>
+        </section>
+
+        <section id="features" class="section" aria-labelledby="features-title">
+          <h2 id="features-title">做什么用</h2>
+          <p>导图仍是主角；提醒、番茄、报表与 MCP 把日常工作流补齐——数据默认留在本机。</p>
+          <ul class="feature-list">
+            <li>
+              <h3>思维导图与工作区</h3>
+              <p>完整桌面导图编辑，本地项目与多文档工作流。</p>
+            </li>
+            <li>
+              <h3>效率与时间</h3>
+              <p>提醒待办、安排中心、番茄钟、报表与剪切板历史。</p>
+            </li>
+            <li>
+              <h3>AI 可接入</h3>
+              <p>本机 MCP，让 Cursor 等助手读写导图；无强制云账号。</p>
+            </li>
+            <li>
+              <h3>知识组织</h3>
+              <p>标签分组、收藏、关系图谱；可选文献与 Draw.io。</p>
+            </li>
+          </ul>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <div>
+          <strong>Twigmark</strong> · Mantou（馒头）·
+          <a href="https://github.com/yixiaozi" rel="noopener">yixiaozi</a>
+        </div>
+        <div>
+          <a id="notes-link" href="https://github.com/yixiaozi/Twigmark/blob/master/RELEASE_NOTES.md" rel="noopener"
+            >发布说明</a
+          >
+          ·
+          <a href="https://github.com/yixiaozi/Twigmark/blob/master/LICENSE" rel="noopener">GPL v2</a>
+          · 基于 Freeplane / Docear
+        </div>
+      </footer>
+    </div>
+    <script src="./assets/app.js" defer></script>
+  </body>
+</html>
