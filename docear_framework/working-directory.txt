@@ -1,8 +1,9 @@
-# Docear working directory (mind maps). Config lives in <this>/data/
+# Twigmark / Docear working directory (mind maps). Config lives in <this>/data/
 #
 # Leave the path line empty (or omit it) to choose on first launch.
-# Windows example (written by the Windows installer/build script):
-#   E:\yixiaozi
-# macOS / Linux: pick a local folder such as /Users/you/Docear
-# Do NOT ship a Windows drive path in macOS builds — Java treats E:\... as a
-# relative folder name and creates it under the app bundle.
+# Optional absolute path example (Windows):
+#   C:\Users\You\Documents\Twigmark
+# macOS / Linux:
+#   /Users/you/Twigmark
+#
+# Do NOT ship a machine-specific drive path in shared builds.

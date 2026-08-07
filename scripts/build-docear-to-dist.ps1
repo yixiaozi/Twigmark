@@ -1,14 +1,20 @@
-# Build Docear -> publish to a local dist folder -> extract -> launch docear.exe
+# Build Twigmark/Docear -> publish to a local dist folder -> extract -> launch docear.exe
 # Does not modify user mind-map libraries.
+#
+# For a reproducible zip WITHOUT deploy/launch, prefer:
+#   scripts\package-twigmark.ps1
 #
 # Usage:
 #   Double-click: build-docear.bat
 #   Or: powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
 #
 # Options:
-#   -SkipBuild          reuse existing docear_windows.zip
-#   -TargetDir <path>   install dir (default: E:\Temp\DocearDist, or $env:DOCEAR_DIST_DIR)
-#   -NoLaunch           do not start Docear after deploy
+#   -SkipBuild          reuse existing windows zip
+#   -TargetDir <path>   install dir (default: <repo>\dist\TwigmarkDist, or $env:DOCEAR_DIST_DIR)
+#   -NoLaunch           do not start after deploy
+#
+# Optional env:
+#   DOCEAR_DIST_DIR, DOCEAR_DAILY_INSTALL, DOCEAR_WORK_DIR
 
 param(
     [switch] $SkipBuild,
@@ -21,7 +27,7 @@ if ([string]::IsNullOrWhiteSpace($TargetDir)) {
         $TargetDir = $env:DOCEAR_DIST_DIR
     }
     else {
-        $TargetDir = "E:\Temp\DocearDist"
+        $TargetDir = Join-Path ((Resolve-Path (Join-Path $PSScriptRoot "..")).Path) "dist\TwigmarkDist"
     }
 }
 
@@ -42,7 +48,7 @@ function Write-Step([string] $Message) {
 }
 
 Write-Host ""
-Write-Host "Docear build and deploy" -ForegroundColor Green
+Write-Host "Twigmark build and deploy" -ForegroundColor Green
 Write-Host "Repo:   $repoRoot"
 Write-Host "Target: $TargetDir"
 Write-Host ""
@@ -133,19 +139,26 @@ else {
 
 New-Item -ItemType Directory -Path $TargetDir -Force | Out-Null
 
-$patterns = @("docear_windows.zip", "docear_windows.zip.MD5", "gitinfo-*.txt", "history_en.txt")
+$patterns = @("twigmark_windows.zip", "docear_windows.zip", "twigmark_windows.zip.MD5", "docear_windows.zip.MD5", "gitinfo-*.txt", "history_en.txt")
 foreach ($pat in $patterns) {
     Get-ChildItem -Path $distDir -Filter $pat -ErrorAction SilentlyContinue | ForEach-Object {
         Copy-Item -Path $_.FullName -Destination (Join-Path $TargetDir $_.Name) -Force
     }
 }
 
-$windowsZip = Join-Path $distDir "docear_windows.zip"
-if (!(Test-Path $windowsZip)) {
-    throw "Package not found: $windowsZip (run without -SkipBuild for a full build)"
+$windowsZip = $null
+foreach ($name in @("twigmark_windows.zip", "docear_windows.zip")) {
+    $candidate = Join-Path $distDir $name
+    if (Test-Path $candidate) {
+        $windowsZip = $candidate
+        break
+    }
+}
+if ($null -eq $windowsZip) {
+    throw "Package not found under $distDir (expected twigmark_windows.zip or docear_windows.zip)"
 }
 
-$extractDir = Join-Path $TargetDir "docear_windows"
+$extractDir = Join-Path $TargetDir "twigmark_windows"
 Write-Step "Stop running Docear"
 Stop-RunningDocear
 Write-Host "Extracting to $extractDir ..."
@@ -171,19 +184,28 @@ if ($null -eq $installDir) {
 }
 
 Write-Step "Write default working-directory.txt"
-$defaultWorkDir = "E:\yixiaozi"
+# Prefer env; otherwise leave unset so first-run wizard chooses the home directory.
+$defaultWorkDir = $env:DOCEAR_WORK_DIR
 function Write-WorkingDirectoryFile([string] $FilePath, [string] $Value) {
-    # UTF-8 without BOM — a BOM makes Java read "\uFEFFE:\yixiaozi" and breaks startup.
+    # UTF-8 without BOM — a BOM breaks Java path reading.
     [System.IO.File]::WriteAllText($FilePath, ($Value.Trim() + "`n"), [System.Text.UTF8Encoding]::new($false))
 }
 $wdFile = Join-Path $installDir "working-directory.txt"
-Write-WorkingDirectoryFile -FilePath $wdFile -Value $defaultWorkDir
-Write-Host "working-directory.txt -> $defaultWorkDir"
+if (-not [string]::IsNullOrWhiteSpace($defaultWorkDir)) {
+    Write-WorkingDirectoryFile -FilePath $wdFile -Value $defaultWorkDir
+    Write-Host "working-directory.txt -> $defaultWorkDir"
+}
+else {
+    Write-Host "DOCEAR_WORK_DIR not set; skipping working-directory.txt (first-run wizard will ask)."
+}
 
-# Keep the user's daily install (E:\SoftWare\Docear) in sync when building to a dist folder.
-$dailyInstall = "E:\SoftWare\Docear"
+# Optional sync into a daily install path when DOCEAR_DAILY_INSTALL is set (or legacy path exists).
+$dailyInstall = $env:DOCEAR_DAILY_INSTALL
+if ([string]::IsNullOrWhiteSpace($dailyInstall) -and (Test-Path "E:\SoftWare\Docear")) {
+    $dailyInstall = "E:\SoftWare\Docear"
+}
 $launchDir = $installDir
-if ((Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
+if ((-not [string]::IsNullOrWhiteSpace($dailyInstall)) -and (Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
     Write-Step "Sync core + plugins into $dailyInstall"
     $srcCoreLib = Join-Path $installDir "core\org.freeplane.core\lib"
     $dstCoreLib = Join-Path $dailyInstall "core\org.freeplane.core\lib"
@@ -197,13 +219,16 @@ if ((Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
         Copy-Item -Path (Join-Path $srcPlugins "*") -Destination $dstPlugins -Recurse -Force
         Write-Host "Updated plugins"
     }
-    Write-WorkingDirectoryFile -FilePath (Join-Path $dailyInstall "working-directory.txt") -Value $defaultWorkDir
+    if (-not [string]::IsNullOrWhiteSpace($defaultWorkDir)) {
+        Write-WorkingDirectoryFile -FilePath (Join-Path $dailyInstall "working-directory.txt") -Value $defaultWorkDir
+    }
     # Ribbon XML was write-once-cached under resource-cache (bundle:// URL hash).
     # Stale copies keep the old "帮助" tab even after freeplaneeditor.jar is updated.
     $cacheDirs = @(
         (Join-Path $dailyInstall "workspace\data\resource-cache"),
         (Join-Path $installDir "workspace\data\resource-cache"),
-        (Join-Path $env:APPDATA "Docear\resource-cache")
+        (Join-Path $env:APPDATA "Docear\resource-cache"),
+        (Join-Path $env:APPDATA "Twigmark\resource-cache")
     )
     foreach ($cacheDir in $cacheDirs) {
         if (Test-Path $cacheDir) {

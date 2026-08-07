@@ -1,4 +1,6 @@
 <project name="docear" default="docear-dist" basedir="..">
+	<!-- Keep Docear for launcher/script filenames (docear.exe/.bat) and zip naming.
+	     Product display name Twigmark is set in freeplane.properties / DocearController. -->
 	<property name="ApplicationName" value="Docear" />
 	
 	<scriptdef name="toLowerCase" language="javascript">

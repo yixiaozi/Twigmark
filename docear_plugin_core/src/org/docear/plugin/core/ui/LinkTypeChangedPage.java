@@ -36,7 +36,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 			public void actionPerformed(ActionEvent e) {
 				if ("open_url".equals(e.getActionCommand())) {
 					try {
-						Controller.getCurrentController().getViewController().openDocument(new URI("http://www.docear.org/support/forums/docear-support-forums-group3/general-feedback-questions-forum5/"));
+						Controller.getCurrentController().getViewController().openDocument(new URI("https://github.com/yixiaozi/docear-desktop/issues"));
 					}
 					catch (Exception ex) {
 						LogUtils.warn("LinkTypeChangedPage.LinkTypeChangedPage().new ActionListener() {...}.actionPerformed(): " + ex.getMessage());
@@ -52,7 +52,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 				FormFactory.DEFAULT_ROWSPEC,}));
 		add(warning, "1, 1, left, top");
 		
-		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "http://www.docear.org/support/forums/docear-support-forums-group3/general-feedback-questions-forum5/");
+		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "https://github.com/yixiaozi/docear-desktop/issues");
 		add(hyperlink, "1, 3");
 	}
 
