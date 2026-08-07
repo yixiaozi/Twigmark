@@ -1,0 +1,84 @@
+name: Deploy GitHub Pages (Actions)
+
+# Optional: use after Settings → Pages → Source = GitHub Actions.
+# Default recommendation is branch deploy (master /docs); see docs/README.md.
+# This workflow is workflow_dispatch-only until Pages Actions is enabled,
+# to avoid red X on every push when the site is not yet created.
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-actions-deploy
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        id: setup
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Skip when Pages Actions is not enabled
+        if: steps.setup.outcome != 'success'
+        run: |
+          echo "::notice::GitHub Pages (Actions) is not enabled for this repo."
+          echo "Enable once: Settings → Pages → Source → GitHub Actions"
+          echo "Or use branch deploy: Settings → Pages → Deploy from a branch → master → /docs"
+          exit 0
+
+      - name: Build site with release data
+        if: steps.setup.outcome == 'success'
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_HTML_URL: ${{ github.event.release.html_url }}
+          RELEASE_PUBLISHED_AT: ${{ github.event.release.published_at }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -a docs/. _site/
+          mkdir -p _site/data
+          python3 scripts/update-pages-release.py \
+            --out _site/data/release.json \
+            --version-properties docear_plugin_core/resources/version.properties \
+            --event-name "$EVENT_NAME" \
+            --release-tag "${RELEASE_TAG:-}" \
+            --release-name "${RELEASE_NAME:-}" \
+            --release-html-url "${RELEASE_HTML_URL:-}" \
+            --release-published-at "${RELEASE_PUBLISHED_AT:-}" \
+            --repo "${{ github.repository }}"
+          cat _site/data/release.json
+
+      - name: Upload artifact
+        if: steps.setup.outcome == 'success'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
