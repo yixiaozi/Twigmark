@@ -589,7 +589,8 @@ public final class McpStatusAuditPanel extends JPanel {
 		combo.setSelectedIndex(0);
 	}
 
-	private void refreshAllAsync() {
+	/** Public so re-focusing an already-open audit tab can refresh quietly. */
+	public void refreshAllAsync() {
 		final Thread t = new Thread(new Runnable() {
 			public void run() {
 				try {

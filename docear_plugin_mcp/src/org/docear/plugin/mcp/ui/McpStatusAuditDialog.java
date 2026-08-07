@@ -17,6 +17,8 @@ import org.freeplane.features.mode.Controller;
  */
 public final class McpStatusAuditDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
+	private static final String TAB_TITLE = "MCP 审计";
+	private static final String ASSIGNMENT_KEY = "report://mcp-audit";
 
 	private McpStatusAuditDialog(final Frame owner, final McpStatusAuditPanel panel) {
 		super(owner, TextUtils.getText("McpStatusAuditAction.text"), true);
@@ -35,19 +37,31 @@ public final class McpStatusAuditDialog extends JDialog {
 
 	/** Open in the mind-map area as a bottom tab (preferred). */
 	public static void showInMapTab() {
-		final McpStatusAuditPanel panel = McpStatusAuditPanel.create();
-		final String title = TextUtils.getText("McpStatusAuditAction.text", "MCP 审计");
-		if (showViaReportDocumentService(title, panel)) {
+		final String title = TextUtils.getText("McpStatusAuditAction.tab", TAB_TITLE);
+		if (showViaReportDocumentService(title)) {
 			return;
 		}
+		final McpStatusAuditPanel panel = McpStatusAuditPanel.create();
 		final Frame frame = Controller.getCurrentController().getViewController().getFrame();
 		final McpStatusAuditDialog dialog = new McpStatusAuditDialog(frame, panel);
 		dialog.setVisible(true);
 	}
 
-	private static boolean showViaReportDocumentService(final String title, final McpStatusAuditPanel panel) {
+	private static boolean showViaReportDocumentService(final String title) {
 		try {
 			final Class cls = Class.forName("org.freeplane.view.swing.features.reports.ReportDocumentService");
+			// Reuse existing MCP audit tab when already open.
+			try {
+				final Object existing = cls.getMethod("focusByKey", String.class).invoke(null, ASSIGNMENT_KEY);
+				if (existing != null) {
+					tryRefreshExisting(existing);
+					return true;
+				}
+			}
+			catch (NoSuchMethodException ignore) {
+			}
+
+			final McpStatusAuditPanel panel = McpStatusAuditPanel.create();
 			panel.setOnClose(new Runnable() {
 				public void run() {
 					try {
@@ -63,19 +77,31 @@ public final class McpStatusAuditDialog extends JDialog {
 					}
 				}
 			});
-			// Prefer openNew so each open gets its own tab (keeps previous reports).
 			try {
-				final String key = "report://mcp-audit/" + System.nanoTime();
-				cls.getMethod("openNew", String.class, Component.class, String.class).invoke(null, title, panel, key);
+				cls.getMethod("openOrFocus", String.class, Component.class, String.class)
+				        .invoke(null, title, panel, ASSIGNMENT_KEY);
 			}
 			catch (NoSuchMethodException missing) {
-				cls.getMethod("showInTab", String.class, Component.class).invoke(null, title, panel);
+				cls.getMethod("openNew", String.class, Component.class, String.class)
+				        .invoke(null, title, panel, ASSIGNMENT_KEY);
 			}
 			return true;
 		}
 		catch (Throwable t) {
 			LogUtils.warn("ReportDocumentService unavailable, falling back to dialog: " + t.getMessage());
 			return false;
+		}
+	}
+
+	private static void tryRefreshExisting(final Object documentView) {
+		try {
+			final Object content = documentView.getClass().getMethod("getContent").invoke(documentView);
+			if (content instanceof McpStatusAuditPanel) {
+				((McpStatusAuditPanel) content).refreshAllAsync();
+			}
+		}
+		catch (Throwable t) {
+			// Focus alone is enough; refresh is best-effort.
 		}
 	}
 
