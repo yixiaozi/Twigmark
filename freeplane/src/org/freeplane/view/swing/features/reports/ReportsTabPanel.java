@@ -49,7 +49,7 @@ public class ReportsTabPanel extends JPanel {
 
 	private static final SimpleDateFormat DAY = new SimpleDateFormat("yyyy-MM-dd", Locale.CHINA);
 
-	private final JLabel statusLabel = new JLabel("点选报表后在中间导图区出图");
+	private final JLabel statusLabel = new JLabel("点选报表 → 先打开再加载数据");
 	private final JComboBox rangeCombo = new JComboBox();
 	private final JTextField startField = new JTextField(10);
 	private final JTextField endField = new JTextField(10);
@@ -148,7 +148,7 @@ public class ReportsTabPanel extends JPanel {
 			}
 		});
 		final JScrollPane scroll = new JScrollPane(reportList);
-		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 中间出图）"));
+		scroll.setBorder(BorderFactory.createTitledBorder(DocearUiTheme.hairlineBorder(), "报表（点选 → 先打开再加载）"));
 		add(scroll, BorderLayout.CENTER);
 		setPreferredSize(new Dimension(280, 400));
 	}
@@ -214,18 +214,41 @@ public class ReportsTabPanel extends JPanel {
 			JOptionPane.showMessageDialog(this, e.getMessage(), "时间范围", JOptionPane.WARNING_MESSAGE);
 			return;
 		}
+		final ReportViewportService service = ReportViewportService.get();
+		if (service == null) {
+			statusLabel.setText("无法打开报表视图");
+			return;
+		}
 		final ReportQuery query = new ReportQuery(range, includeField.getText(), excludeField.getText());
-		final int gen = ++generateGeneration;
+		final String subtitle = buildLoadingSubtitle(def, query);
+		// Open the tab first; data arrives asynchronously into the already-visible panel.
+		final int gen = service.beginReport(def, subtitle);
+		generateGeneration = gen;
 		generating = true;
-		statusLabel.setText("正在生成「" + def.title + "」…");
+		statusLabel.setText("已打开「" + def.title + "」，正在加载数据…");
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
 				ReportViewModel viewModel = null;
 				ReportNodeSpec tree = null;
 				Exception error = null;
 				try {
-					viewModel = ReportEngine.generateView(def, query);
+					final ReportProgress progress = new ReportProgress() {
+						public void update(final int percent, final String message) {
+							service.updateProgress(gen, message, percent);
+							SwingUtilities.invokeLater(new Runnable() {
+								public void run() {
+									if (!service.isCurrentGeneration(gen)) {
+										return;
+									}
+									statusLabel.setText(message == null ? "加载中…" : message);
+								}
+							});
+						}
+					};
+					viewModel = ReportEngine.generateView(def, query, progress);
+					service.updateProgress(gen, "正在整理写入树…", 96);
 					tree = ReportEngine.toTree(viewModel);
+					service.updateProgress(gen, "正在渲染图表…", 99);
 				}
 				catch (Exception e) {
 					error = e;
@@ -236,31 +259,24 @@ public class ReportsTabPanel extends JPanel {
 				final Exception fail = error;
 				SwingUtilities.invokeLater(new Runnable() {
 					public void run() {
-						if (gen != generateGeneration) {
+						if (!service.isCurrentGeneration(gen)) {
 							return;
 						}
 						try {
 							if (fail != null) {
+								service.showError(gen, fail.getMessage());
 								statusLabel.setText("生成失败：" + fail.getMessage());
-								JOptionPane.showMessageDialog(ReportsTabPanel.this, fail.getMessage(), "报表",
-								        JOptionPane.ERROR_MESSAGE);
 								return;
 							}
-							final ReportViewportService service = ReportViewportService.get();
-							if (service == null) {
-								statusLabel.setText("无法打开报表视图");
-								return;
-							}
-							service.showReport(resultView, resultTree);
+							service.showReport(gen, resultView, resultTree);
 							statusLabel.setText("已显示「" + def.title + "」· 可关 Tab / 返回导图");
 						}
 						catch (Exception e) {
+							service.showError(gen, e.getMessage());
 							statusLabel.setText(e.getMessage());
-							JOptionPane.showMessageDialog(ReportsTabPanel.this, e.getMessage(), "报表",
-							        JOptionPane.WARNING_MESSAGE);
 						}
 						finally {
-							if (gen == generateGeneration) {
+							if (service.isCurrentGeneration(gen)) {
 								generating = false;
 							}
 						}
@@ -270,6 +286,23 @@ public class ReportsTabPanel extends JPanel {
 		}, "Docear-Report-Generate");
 		thread.setDaemon(true);
 		thread.start();
+	}
+
+	private static String buildLoadingSubtitle(final ReportDefinition def, final ReportQuery query) {
+		final StringBuilder sub = new StringBuilder();
+		if (def != null && def.description != null && def.description.length() > 0) {
+			sub.append(def.description);
+		}
+		if (def != null && def.usesTimeRange && query != null && query.range != null) {
+			if (sub.length() > 0) {
+				sub.append("  ·  ");
+			}
+			sub.append(query.range.label);
+		}
+		if (sub.length() == 0) {
+			sub.append("正在加载…");
+		}
+		return sub.toString();
 	}
 
 	private void showActivityReport() {

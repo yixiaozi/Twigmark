@@ -1,6 +1,7 @@
 package org.freeplane.view.swing.features.reports;
 
 import javax.swing.JOptionPane;
+import javax.swing.SwingUtilities;
 
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.features.map.NodeModel;
@@ -10,9 +11,11 @@ import org.freeplane.features.usagestats.UsageStatsReportService;
 
 /**
  * Shows report charts via {@link ReportDocumentService} (bottom tab + mind-map area).
+ * Opens the tab immediately with a loading shell, then fills data when generation finishes.
  */
 public final class ReportViewportService implements IExtension {
 	private ReportViewportPanel viewportPanel;
+	private volatile int loadGeneration;
 
 	public static ReportViewportService get() {
 		final Controller controller = Controller.getCurrentController();
@@ -52,6 +55,106 @@ public final class ReportViewportService implements IExtension {
 			});
 		}
 		return viewportPanel;
+	}
+
+	/**
+	 * Open the report tab immediately with title / meta and a progress UI.
+	 * Returns a generation token; later updates must pass the same token.
+	 */
+	public int beginReport(final ReportDefinition def, final String subtitle) {
+		final UsageStatsReportService activity = UsageStatsReportService.get();
+		if (activity != null) {
+			activity.releaseSoftViewport();
+		}
+		final int generation = ++loadGeneration;
+		final ReportViewportPanel panel = getViewportPanel();
+		final String title = def == null || def.title == null || def.title.length() == 0 ? "报表"
+		        : "报表 · " + def.title;
+		final String decision = def == null || def.decision == null ? "" : def.decision;
+		final String dataSource = def == null || def.dataSource == null ? "" : def.dataSource;
+		final String sub = subtitle == null ? "" : subtitle;
+		final Runnable open = new Runnable() {
+			public void run() {
+				if (generation != loadGeneration) {
+					return;
+				}
+				panel.showLoading(title, sub, decision, dataSource);
+				ReportDocumentService.showInTab(title + " · 加载中", panel);
+			}
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			open.run();
+		}
+		else {
+			SwingUtilities.invokeLater(open);
+		}
+		return generation;
+	}
+
+	public boolean isCurrentGeneration(final int generation) {
+		return generation == loadGeneration;
+	}
+
+	public void updateProgress(final int generation, final String message, final int percent) {
+		if (generation != loadGeneration) {
+			return;
+		}
+		final Runnable update = new Runnable() {
+			public void run() {
+				if (generation != loadGeneration) {
+					return;
+				}
+				getViewportPanel().setLoadProgress(message, percent);
+			}
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			update.run();
+		}
+		else {
+			SwingUtilities.invokeLater(update);
+		}
+	}
+
+	public void showReport(final int generation, final ReportViewModel model, final ReportNodeSpec tree) {
+		if (generation != loadGeneration) {
+			return;
+		}
+		final Runnable show = new Runnable() {
+			public void run() {
+				if (generation != loadGeneration) {
+					return;
+				}
+				showReport(model, tree);
+			}
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			show.run();
+		}
+		else {
+			SwingUtilities.invokeLater(show);
+		}
+	}
+
+	public void showError(final int generation, final String message) {
+		if (generation != loadGeneration) {
+			return;
+		}
+		final String msg = message == null ? "生成失败" : message;
+		final Runnable show = new Runnable() {
+			public void run() {
+				if (generation != loadGeneration) {
+					return;
+				}
+				getViewportPanel().showError("报表生成失败", msg);
+				ReportDocumentService.showInTab("报表 · 失败", getViewportPanel());
+			}
+		};
+		if (SwingUtilities.isEventDispatchThread()) {
+			show.run();
+		}
+		else {
+			SwingUtilities.invokeLater(show);
+		}
 	}
 
 	public void showReport(final ReportViewModel model, final ReportNodeSpec tree) {
