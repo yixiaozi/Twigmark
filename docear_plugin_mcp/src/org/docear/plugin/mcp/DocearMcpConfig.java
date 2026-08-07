@@ -12,8 +12,15 @@ public final class DocearMcpConfig {
 	private static final String PREFIX = "mcp.";
 	private static final String DEFAULT_HOST = "127.0.0.1";
 	private static final int DEFAULT_PORT = 7720;
+	/** Test-only override for audit data directory (null = normal). */
+	private static volatile File AUDIT_DATA_DIR_FOR_TESTS;
 
 	private DocearMcpConfig() {
+	}
+
+	/** Package/test helper: force audit data dir without ResourceController. */
+	public static void setAuditDataDirForTests(final File dir) {
+		AUDIT_DATA_DIR_FOR_TESTS = dir;
 	}
 
 	public static boolean isEnabled() {
@@ -41,20 +48,119 @@ public final class DocearMcpConfig {
 	}
 
 	public static File getAuditDataDir() {
+		if (AUDIT_DATA_DIR_FOR_TESTS != null) {
+			return AUDIT_DATA_DIR_FOR_TESTS;
+		}
 		final String configured = getString("audit.dataDir", "");
 		if (configured.length() > 0) {
 			return new File(configured);
 		}
-		// Profile is already {workingDirectory}/data — audit.db lives there.
+		// Profile is already {workingDirectory}/data — per-machine audit-*.db lives there.
 		return new File(Compat.getApplicationUserDirectory());
 	}
 
+	/**
+	 * Local writable audit DB for this PC: {@code audit-&lt;mac&gt;.db}.
+	 * Legacy plain {@code audit.db} is renamed once when the MAC file is missing.
+	 */
 	public static File getAuditDbFile() {
-		final String configured = getString("audit.dbPath", "");
-		if (configured.length() > 0) {
-			return new File(configured);
+		if (AUDIT_DATA_DIR_FOR_TESTS == null) {
+			final String configured = getString("audit.dbPath", "");
+			if (configured.length() > 0) {
+				return new File(configured);
+			}
 		}
-		return new File(getAuditDataDir(), "audit.db");
+		final File dir = getAuditDataDir();
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+		final String macHex = org.docear.plugin.mcp.audit.McpAuditMachineId.getMacHex();
+		final File local = new File(dir, "audit-" + macHex + ".db");
+		migrateLegacyAuditDb(dir, local);
+		// Stale synced id file is unused (MAC is the identity).
+		final File staleId = new File(dir, "audit_machine.id");
+		if (staleId.isFile()) {
+			staleId.delete();
+		}
+		return local;
+	}
+
+	/**
+	 * All audit SQLite files in the data dir (this PC + synced peers):
+	 * {@code audit-*.db} and legacy {@code audit.db}.
+	 */
+	public static File[] listAuditDbFiles() {
+		final File dir = getAuditDataDir();
+		final java.util.List list = new java.util.ArrayList();
+		final File local = getAuditDbFile();
+		if (local != null) {
+			list.add(local);
+		}
+		final File[] children = dir.listFiles();
+		if (children != null) {
+			for (int i = 0; i < children.length; i++) {
+				final File f = children[i];
+				if (f == null || !f.isFile()) {
+					continue;
+				}
+				final String name = f.getName().toLowerCase();
+				if (!name.endsWith(".db")) {
+					continue;
+				}
+				if (!"audit.db".equals(name) && !name.startsWith("audit-")) {
+					continue;
+				}
+				if (name.endsWith("-wal") || name.endsWith("-shm")) {
+					continue;
+				}
+				if (!containsFile(list, f)) {
+					list.add(f);
+				}
+			}
+		}
+		return (File[]) list.toArray(new File[list.size()]);
+	}
+
+	private static void migrateLegacyAuditDb(final File dir, final File local) {
+		if (local.exists()) {
+			return;
+		}
+		final File legacy = new File(dir, "audit.db");
+		if (!legacy.isFile()) {
+			return;
+		}
+		if (legacy.renameTo(local)) {
+			renameSibling(legacy, local, "-wal");
+			renameSibling(legacy, local, "-shm");
+		}
+	}
+
+	private static void renameSibling(final File fromBase, final File toBase, final String suffix) {
+		final File from = new File(fromBase.getAbsolutePath() + suffix);
+		if (from.isFile()) {
+			from.renameTo(new File(toBase.getAbsolutePath() + suffix));
+		}
+	}
+
+	private static boolean containsFile(final java.util.List list, final File file) {
+		try {
+			final String path = file.getCanonicalPath();
+			for (int i = 0; i < list.size(); i++) {
+				final File other = (File) list.get(i);
+				if (other != null && path.equals(other.getCanonicalPath())) {
+					return true;
+				}
+			}
+		}
+		catch (Exception e) {
+			for (int i = 0; i < list.size(); i++) {
+				final File other = (File) list.get(i);
+				if (other != null && file.getAbsolutePath().equals(other.getAbsolutePath())) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	public static int getAuditQueueSize() {

@@ -12,7 +12,26 @@ public final class DocearMcpConfig {
 	}
 
 	public static File getAuditDbFile() {
-		return new File(getAuditDataDir(), "audit.db");
+		return new File(getAuditDataDir(), "audit-testmac0001.db");
+	}
+
+	public static File[] listAuditDbFiles() {
+		final File dir = getAuditDataDir();
+		final File[] kids = dir.listFiles();
+		if (kids == null) {
+			return new File[] { getAuditDbFile() };
+		}
+		final java.util.List list = new java.util.ArrayList();
+		for (int i = 0; i < kids.length; i++) {
+			final String n = kids[i].getName().toLowerCase();
+			if (n.equals("audit.db") || (n.startsWith("audit-") && n.endsWith(".db"))) {
+				list.add(kids[i]);
+			}
+		}
+		if (list.isEmpty()) {
+			list.add(getAuditDbFile());
+		}
+		return (File[]) list.toArray(new File[list.size()]);
 	}
 
 	public static int getAuditQueueSize() {

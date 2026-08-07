@@ -258,7 +258,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> queryEventsForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().queryEventRows(query);
+			return McpAuditCatalog.queryEventRows(query);
 		}
 		catch (Exception e) {
 			LogUtils.warn("queryEventsForUi failed: " + e.getMessage(), e);
@@ -269,7 +269,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> queryTracesForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().queryTraceRows(query);
+			return McpAuditCatalog.queryTraceRows(query);
 		}
 		catch (Exception e) {
 			LogUtils.warn("queryTracesForUi failed: " + e.getMessage(), e);
@@ -280,7 +280,7 @@ public final class McpAuditService {
 	public static Map<String, Object> summarizeForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().summarize(query);
+			return McpAuditCatalog.summarize(query);
 		}
 		catch (Exception e) {
 			LogUtils.warn("summarizeForUi failed: " + e.getMessage(), e);
@@ -291,7 +291,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> statsByMachineForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().statsByMachine(query);
+			return McpAuditCatalog.statsByMachine(query);
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
@@ -301,7 +301,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> statsByActionForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().statsByAction(query);
+			return McpAuditCatalog.statsByAction(query);
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
@@ -311,7 +311,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> statsByDayForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().statsByDay(query);
+			return McpAuditCatalog.statsByDay(query);
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
@@ -321,7 +321,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> listSlowEventsForUi(final McpAuditQuery query) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().listSlowEvents(query);
+			return McpAuditCatalog.listSlowEvents(query);
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
@@ -331,7 +331,7 @@ public final class McpAuditService {
 	public static List<Map<String, Object>> listMachinesForUi() {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().listMachines();
+			return McpAuditCatalog.listMachines();
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
@@ -341,10 +341,20 @@ public final class McpAuditService {
 	public static List<String> distinctForUi(final String column) {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().distinctValues(column);
+			return McpAuditCatalog.distinctValues(column);
 		}
 		catch (Exception e) {
 			return Collections.emptyList();
+		}
+	}
+
+	public static int loadedAuditDatabaseCount() {
+		try {
+			ensureDatabase();
+			return McpAuditCatalog.databaseCount();
+		}
+		catch (Exception e) {
+			return 0;
 		}
 	}
 
@@ -374,7 +384,7 @@ public final class McpAuditService {
 	public static int countAuditEvents() {
 		try {
 			ensureDatabase();
-			return McpAuditDatabase.getInstance().countEvents();
+			return McpAuditCatalog.countAllEvents();
 		}
 		catch (Exception e) {
 			return 0;
