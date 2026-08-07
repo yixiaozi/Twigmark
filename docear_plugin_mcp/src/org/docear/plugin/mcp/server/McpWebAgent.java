@@ -37,6 +37,11 @@ public final class McpWebAgent {
 
 	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history, final String baseUrl,
 			final String apiKey, final String model) throws Exception {
+		return chat(userMessage, history, baseUrl, apiKey, model, null);
+	}
+
+	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history, final String baseUrl,
+			final String apiKey, final String model, final String focusMapFile) throws Exception {
 		final String key = apiKey == null ? "" : apiKey.trim();
 		if (key.length() == 0) {
 			throw new IllegalStateException(
@@ -54,7 +59,7 @@ public final class McpWebAgent {
 		}
 
 		final List<JsonValue> messages = new ArrayList<JsonValue>();
-		messages.add(message("system", systemPrompt()));
+		messages.add(message("system", systemPromptForFocus(focusMapFile)));
 		if (history != null) {
 			for (int i = 0; i < history.size(); i++) {
 				final Map<String, JsonValue> item = history.get(i).asMap();
@@ -269,6 +274,32 @@ public final class McpWebAgent {
 
 	private static String systemPrompt() {
 		return WebchatSystemPrompt.build();
+	}
+
+	private static String systemPromptForFocus(final String focusMapFile) {
+		final String base = WebchatSystemPrompt.build();
+		if (focusMapFile == null || focusMapFile.trim().length() == 0) {
+			return base;
+		}
+		final String path = focusMapFile.trim();
+		final StringBuilder sb = new StringBuilder(base.length() + 2048);
+		sb.append(base);
+		sb.append("\n\n## 当前网页聚焦导图（只读浏览场景）\n");
+		sb.append("用户正在网页端查看这张导图：").append(path).append('\n');
+		sb.append("回答问题时优先对该文件使用 get_mindmap_json(filePath=\"").append(path).append("\")");
+		sb.append(" 与 search_nodes(..., filePath=\"").append(path).append("\")。\n");
+		sb.append("不要 open_mindmap；不要编造节点。若问题与当前图无关，可先说明再扩大搜索。\n");
+		try {
+			final String outline = org.docear.plugin.mcp.service.McpMindMapService.getMindmapOutlineForWeb(path, 3,
+					10000);
+			sb.append("\n### 导图大纲摘要（已截断）\n");
+			sb.append(outline);
+			sb.append('\n');
+		}
+		catch (Exception e) {
+			LogUtils.warn("focus map outline failed: " + e.getMessage());
+		}
+		return sb.toString();
 	}
 
 	private static boolean isOpenRouterBase(final String baseUrl) {

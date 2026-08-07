@@ -215,14 +215,16 @@ public final class WebchatApi {
 			final String message = str(args, "message");
 			String conversationId = str(args, "conversationId");
 			final String profileId = str(args, "profileId");
+			final String mapFile = str(args, "mapFile");
 			if (conversationId.length() == 0) {
-				conversationId = WebchatService.createConversation(username, "");
+				final String title = mapFile.length() > 0 ? ("关于 " + shortMapName(mapFile)) : "";
+				conversationId = WebchatService.createConversation(username, title);
 			}
 			final Map endpoint = WebchatService.resolveLlmEndpoint(username, profileId);
 			final List history = buildHistoryFromDb(username, conversationId);
 			final Map<String, JsonValue> result = webAgent.chat(message, history,
 					nullToEmpty((String) endpoint.get("baseUrl")), nullToEmpty((String) endpoint.get("apiKey")),
-					nullToEmpty((String) endpoint.get("model")));
+					nullToEmpty((String) endpoint.get("model")), mapFile.length() == 0 ? null : mapFile);
 			final String reply = result.containsKey("reply") && result.get("reply") != null
 					? nullToEmpty(result.get("reply").asString())
 					: "";
@@ -316,6 +318,21 @@ public final class WebchatApi {
 
 	private static String nullToEmpty(final String value) {
 		return value == null ? "" : value;
+	}
+
+	private static String shortMapName(final String path) {
+		if (path == null || path.length() == 0) {
+			return "导图";
+		}
+		String p = path.replace('\\', '/');
+		final int slash = p.lastIndexOf('/');
+		if (slash >= 0 && slash + 1 < p.length()) {
+			p = p.substring(slash + 1);
+		}
+		if (p.toLowerCase().endsWith(".mm")) {
+			p = p.substring(0, p.length() - 3);
+		}
+		return p.length() == 0 ? "导图" : p;
 	}
 
 	private static String error(final String message) {

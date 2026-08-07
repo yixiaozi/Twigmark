@@ -11,6 +11,7 @@
 - 桌面右侧 AI 聊天支持 OpenRouter（及 OpenAI 兼容），可切换后端与模型；与网页共用 `llm_profiles`
 - 桌面聊天记录写入 webchat 数据库（按导图 `map_key`）；网页历史显示「桌面 / 网页」来源
 - 网页聊天 UI 重做：布局、Markdown 基础渲染、工具调用标记
+- 网页导图库：登录后浏览/搜索 `.mm`，树状展开，并可针对当前导图提问（`/api/maps*`）
 - Web 助手系统提示词：教模型正确使用 MCP（先读选中、批量 add_nodes、禁编造 ID 等）
 - 默认/预设支持 OpenRouter（`openrouter.ai/api/v1` + 厂商/模型名）；域名反代说明见 `docs/WEB_DOMAIN.md`
 - 产品设置 MCP 页：认证、公网一键绑定与 Web LLM 种子配置（保存时同步到 webchat 库）

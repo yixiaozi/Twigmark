@@ -53,7 +53,10 @@ webchat-<其他MAC>.db   ← 同步过来的同伴库（只读合并）
 | POST | `/api/llm-profiles/delete` | `{id}` |
 | GET/POST | `/api/conversations` | 列表 / 新建 |
 | GET | `/api/conversations/{id}` | 含消息（跨库合并） |
-| POST | `/api/chat` | `{message,conversationId?,profileId?}` |
+| POST | `/api/chat` | `{message,conversationId?,profileId?,mapFile?}`（`mapFile` 时聚焦该导图提问） |
+| GET | `/api/maps` | 导图库列表 `?q=&limit=` |
+| GET | `/api/maps/json` | 只读树 JSON `?path=&maxDepth=&includeFolded=` |
+| GET | `/api/maps/search` | 节点搜索 `?q=&path=&limit=` |
 
 ## MCP 客户端
 
