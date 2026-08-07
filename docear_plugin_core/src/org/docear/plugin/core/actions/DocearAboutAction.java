@@ -62,24 +62,24 @@ public class DocearAboutAction extends AboutAction {
 
 		Box box = Box.createVerticalBox();
 		addMessage(box, aboutText);
-		addUri(box, "http://docear.org", "http://docear.org");
+		String homepage = resourceController.getProperty("homepage_url");
+		if (homepage != null && homepage.trim().length() > 0) {
+			addUri(box, homepage, homepage);
+		}
 
 		addMessage(box, " "); // separator gap
 		addFormattedMessage(box, "docear.about.freeplane.text", "");
-		addUri(box, resourceController.getProperty("homepage_url"), "Freeplane " + FreeplaneVersion.getVersion().toString());
+		addUri(box, "https://www.freeplane.org", "Freeplane " + FreeplaneVersion.getVersion().toString());
 
 		addMessage(box, " "); // separator gap
 		addFormattedMessage(box, "docear.about.jabref.text", "");
-		addUri(box, "http://jabref.sourceforge.net/", "JabRef");
+		addUri(box, "https://www.jabref.org/", "JabRef");
 
 		addMessage(box, " "); // separator gap
-		// addMessage(box, FreeplaneVersion.getVersion().getRevision());
 		addFormattedMessage(box, "java_version", Compat.JAVA_VERSION);
 		String installDir = new File(ResourceController.getResourceController().getResourceBaseDir()).getParentFile().getAbsolutePath();
 		addFormattedMessage(box, "docear.main_resource_directory", installDir);
 
-		addMessage(box, " "); // separator gap
-		addUri(box, resourceController.getProperty("icons_url"), TextUtils.getText("docear_icons"));
 		addMessage(box, " "); // separator gap
 		addUri(box, resourceController.getProperty("license_url"), TextUtils.getText("license"));
 		addMessage(box, TextUtils.removeTranslateComment(TextUtils.getText("license_text")));

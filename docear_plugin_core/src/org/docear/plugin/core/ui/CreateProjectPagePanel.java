@@ -144,7 +144,7 @@ public class CreateProjectPagePanel extends AWizardPage {
 			public void actionPerformed(ActionEvent e) {
 				if("project_read_more".equals(e.getActionCommand())) {
 					try {
-						Controller.getCurrentController().getViewController().openDocument(URI.create("http://www.docear.org/faqs/what-is-a-project/"));
+						Controller.getCurrentController().getViewController().openDocument(URI.create("https://github.com/yixiaozi/docear-desktop#readme"));
 					} catch (IOException e1) {
 						e1.printStackTrace();
 					}
@@ -262,10 +262,10 @@ public class CreateProjectPagePanel extends AWizardPage {
 			public void actionPerformed(ActionEvent e) {
 				try {
 					if("mendeley".equals(e.getActionCommand())) {
-							Controller.getCurrentController().getViewController().openDocument(URI.create("http://www.docear.org/faqs/how-to-use-zotero-and-docear-at-the-same-time/"));
+							Controller.getCurrentController().getViewController().openDocument(URI.create("https://github.com/yixiaozi/docear-desktop#readme"));
 					}
 					else if("zotero".equals(e.getActionCommand())) {
-						Controller.getCurrentController().getViewController().openDocument(URI.create("http://www.docear.org/faqs/how-to-use-zotero-and-docear-at-the-same-time/"));
+						Controller.getCurrentController().getViewController().openDocument(URI.create("https://github.com/yixiaozi/docear-desktop#readme"));
 					}
 				} catch (IOException ex) {
 					LogUtils.warn("org.docear.plugin.core.ui.CreateProjectPagePanel.CreateProjectPagePanel()$ActionListener.actionPerformed(ActionEvent): "+ ex.getMessage());

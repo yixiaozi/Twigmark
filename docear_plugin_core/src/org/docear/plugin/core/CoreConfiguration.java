@@ -124,8 +124,13 @@ import com.sun.jna.platform.win32.WinDef;
 public class CoreConfiguration extends ALanguageController {
 	private static boolean enableJnaUsage = true;
 
-	private static final String DOCEAR = "Docear";
+	private static final String DOCEAR = "Twigmark";
 	private static final String APPLICATION_NAME = "ApplicationName";
+
+	/** Product display name is Twigmark; accept legacy "Docear" profiles. */
+	private static boolean isTwigmarkProduct(String applicationName) {
+		return DOCEAR.equals(applicationName) || "Docear".equals(applicationName);
+	}
 	private static final String DOCUMENTATION_ACTION = "DocumentationAction";
 	private static final String WEB_DOCU_LOCATION = "webDocuLocation";
 	private static final String REQUEST_FEATURE_ACTION = "RequestFeatureAction";
@@ -161,10 +166,13 @@ public class CoreConfiguration extends ALanguageController {
 		MindMapDataRootResolver.seedDefaultsIfPending();
 		
 		AWorkspaceProject.setCurrentProjectCreator(new DocearWorspaceProjectCreator());
-		if(DocearController.getPropertiesController().getProperty("ApplicationName", "Docear").equals("Docear")) {
+		if(isTwigmarkProduct(DocearController.getPropertiesController().getProperty("ApplicationName", DOCEAR))) {
 			try {
-			URL docear16 = CoreConfiguration.class.getResource("/images/docear16.png");
-			ImageIcon docear16Icon = AFreeplaneAction.loadIconSafely(docear16, "/images/docear16.png");
+			URL appIcon = CoreConfiguration.class.getResource("/images/twigmark16.png");
+			if (appIcon == null) {
+				appIcon = CoreConfiguration.class.getResource("/images/docear16.png");
+			}
+			ImageIcon docear16Icon = AFreeplaneAction.loadIconSafely(appIcon, "/images/twigmark16.png");
 			if (docear16Icon != null) {
 				DefaultFileNode.setApplicationIcon(docear16Icon);
 			}
@@ -369,14 +377,18 @@ public class CoreConfiguration extends ALanguageController {
 		
 		File _docearLogo = new File(URIUtils.getFile(WorkspaceController.getApplicationSettingsHome()), "docear-logo.png");
 		if(!_docearLogo.exists()) {
-			createAndCopy(_docearLogo, "/images/docear_logo.png");			
+			String logoRes = "/images/twigmark_logo.png";
+			if (CoreConfiguration.class.getResource(logoRes) == null) {
+				logoRes = "/images/docear_logo.png";
+			}
+			createAndCopy(_docearLogo, logoRes);			
 		}
 		
 		ResourceController resController = Controller.getCurrentController().getResourceController();
-		if (resController.getProperty("ApplicationName").equals("Docear")) {
+		if (isTwigmarkProduct(resController.getProperty("ApplicationName"))) {
 			String mapPath = _welcomeFile.toURI().getPath();
 			resController.setProperty("first_start_map", mapPath);
-			resController.setProperty("icons_url", "http://findicons.com/");
+			resController.setProperty("icons_url", "");
 			resController.setProperty("tutorial_map", mapPath);
 		}
 	}
@@ -546,23 +558,18 @@ public class CoreConfiguration extends ALanguageController {
 		resController.setProperty("manualLocation", coreProperties.getProperty("docear_manualLocation"));
 		resController.setProperty("faqLocation", coreProperties.getProperty("docear_faqLocation"));
 		resController.setProperty("contactLocation", coreProperties.getProperty("docear_contactLocation"));
-		resController.setProperty("docu-online", "http://www.docear.org/wp-content/uploads/2012/04/docear-welcome.mm");
+		resController.setProperty("docu-online", "");
 		resController.setProperty("docear4WordLocation", coreProperties.getProperty("docear4WordLocation"));
 		resController.setProperty("docearPdfInspectorLocation", coreProperties.getProperty("docearPdfInspectorLocation"));
 		resController.setProperty("freeplaneAddOnLocation", coreProperties.getProperty("freeplaneAddOnLocation"));
 		resController.setProperty("jabrefAddOnLocation", coreProperties.getProperty("jabrefAddOnLocation"));
 		resController.setProperty("org.freeplane.plugin.bugreport", "org.freeplane.plugin.bugreport.denied");
-//		if (resController.getProperty("ApplicationName").equals("Docear")) {
-//			resController.setProperty("first_start_map", "/doc/docear-welcome.mm");
-//			resController.setProperty("tutorial_map", "/doc/docear-welcome.mm");
-//		}
 		
-		
-		if (!resController.getProperty(APPLICATION_NAME, "").equals(DOCEAR)) {
+		if (!isTwigmarkProduct(resController.getProperty(APPLICATION_NAME, ""))) {
 			return;
 		}
 
-		//replace if application name is docear
+		// Replace Freeplane brand strings with Twigmark in the UI bundle
 		replaceResourceBundleStrings();
 	}
 		
@@ -762,7 +769,7 @@ public class CoreConfiguration extends ALanguageController {
 
 	private void addPluginDefaults(Controller controller) {
 		ResourceController resController = controller.getResourceController();
-		if (resController.getProperty("ApplicationName").equals("Docear") && DocearController.getController().isDocearFirstStart()) {
+		if (isTwigmarkProduct(resController.getProperty("ApplicationName")) && DocearController.getController().isDocearFirstStart()) {
 			resController.setProperty("selection_method", "selection_method_by_click");
 			resController.setProperty("links", "relative_to_workspace");
 			resController.setProperty("save_folding", "always_save_folding");
@@ -775,7 +782,7 @@ public class CoreConfiguration extends ALanguageController {
 			resController.setProperty(DocearController.DOCEAR_FIRST_RUN_PROPERTY, true);
 		}
 		// One-shot layout defaults for existing profiles (user can still change later).
-		if ("Docear".equals(resController.getProperty("ApplicationName"))
+		if (isTwigmarkProduct(resController.getProperty("ApplicationName"))
 		        && !"2026-07-layout2".equals(resController.getProperty("docear.ui.layout.defaults", ""))) {
 			resController.setProperty("scrollbarsVisible", "false");
 			resController.setProperty("center_selected_node", "true");

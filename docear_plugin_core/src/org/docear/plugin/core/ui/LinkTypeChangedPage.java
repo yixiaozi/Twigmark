@@ -52,7 +52,7 @@ public class LinkTypeChangedPage extends AWizardPage {
 				FormFactory.DEFAULT_ROWSPEC,}));
 		add(warning, "1, 1, left, top");
 		
-		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "http://www.docear.org/support/forums/docear-support-forums-group3/general-feedback-questions-forum5/");
+		JHyperlink hyperlink = new JHyperlink(TextUtils.getRawText("page.link_type.changed.forum"), "https://github.com/yixiaozi/docear-desktop/issues");
 		add(hyperlink, "1, 3");
 	}
 

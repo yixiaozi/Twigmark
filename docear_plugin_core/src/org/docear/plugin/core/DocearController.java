@@ -95,7 +95,7 @@ public class DocearController implements IDocearEventListener {
 	
 	protected DocearController() {
 		firstRun = !DocearController.getPropertiesController().getBooleanProperty(DOCEAR_FIRST_RUN_PROPERTY);
-		checkServiceAvailability();
+		// Offline-first: never contact docear.org status endpoints at startup.
 		setApplicationIdentifiers();
 		eventQueue.addEventListener(this);
 	}
@@ -193,7 +193,7 @@ public class DocearController implements IDocearEventListener {
 		catch (final IOException e) {
 			
 		}		
-		setApplicationName("Docear");
+		setApplicationName("Twigmark");
 		setApplicationVersion(versionProperties.getProperty("docear_version"));
 		setApplicationStatus(versionProperties.getProperty("docear_version_status"));		
 		setApplicationStatusVersion(versionProperties.getProperty("docear_version_status_number"));
@@ -473,54 +473,8 @@ public class DocearController implements IDocearEventListener {
 	
 	//TODO Service
 	private Map<String, String> getServiceProperties() {
-		URI statusURI = URI.create("http://www.docear.org/services/status.php");	        
-        Map<String, String> properties = new HashMap<String, String>();
-        boolean webService = false;
-        boolean version = false;
-        HttpURLConnection statusConnection = null;        
-		try {
-			statusConnection = (HttpURLConnection)statusURI.toURL().openConnection();
-			statusConnection.setRequestMethod("GET");
-			statusConnection.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
-			statusConnection.connect();
-			BufferedReader in = new BufferedReader(new InputStreamReader(statusConnection.getInputStream()));
-			String inputLine;
-	        while ((inputLine = in.readLine()) != null){
-	        	if(inputLine.contains("[Web services]")){
-	        		webService = true;
-	        		version = false;
-	        		continue;
-	        	}
-	        	if(inputLine.contains("[Version]")){
-	        		webService = false;
-	        		version = true;
-	        		continue;
-	        	}
-	        	inputLine = inputLine.replaceAll("\t/.*", "");
-	        	inputLine = inputLine.replaceAll("\"", "");
-	        	inputLine = inputLine.replaceAll("\t", "");
-        		String[] keyValuePair = inputLine.split("=");
-        		if(keyValuePair.length == 2){
-        			if(webService){
-    	        		properties.put("webservice_" + keyValuePair[0].trim(), keyValuePair[1].trim());
-    	        	}
-        			if(version){
-        				properties.put("version_" + keyValuePair[0].trim(), keyValuePair[1].trim());
-        			}
-        		}        	
-	        }
-	        in.close();
-		} catch (MalformedURLException e) {
-			LogUtils.warn(e);
-		} catch (IOException e) {
-			LogUtils.warn(e);
-		}
-		finally{
-			if(statusConnection != null){
-				statusConnection.disconnect();
-			}
-		}	
-		return properties;
+		// Cloud status polling retired — return empty map (no network).
+		return new HashMap<String, String>();
 	}
 	
 	/***********************************************************************************
