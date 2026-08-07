@@ -175,4 +175,21 @@ public final class MapViewTabOrder {
 		}
 		return tabs.getAllTabKeysInOrder();
 	}
+
+	/**
+	 * Cycle Ctrl+Tab among currently visible bottom tabs (group filter + drag order).
+	 *
+	 * @return {@code true} if the bottom tab strip handled the request (even when
+	 *         there was only one visible tab and nothing changed); {@code false}
+	 *         if there is no tab strip and the caller should fall back to
+	 *         {@code mapViewVector} order
+	 */
+	public static boolean selectAdjacentVisibleTab(final boolean forward) {
+		final MapViewTabs tabs = MapViewTabs.getInstance();
+		if (tabs == null) {
+			return false;
+		}
+		tabs.selectAdjacentVisibleTab(forward);
+		return true;
+	}
 }
