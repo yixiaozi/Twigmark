@@ -160,6 +160,39 @@ public final class ClipboardHistoryService implements Runnable {
 		}
 	}
 
+	/**
+	 * Every recorded occurrence time for this entry (newest first).
+	 * Falls back to {@code first_ts}/{@code last_ts} when the hit table is empty
+	 * (legacy rows before per-hit logging).
+	 */
+	public List listHitTimes(final ClipboardHistoryEntry entry) {
+		final List times = new ArrayList();
+		if (entry == null) {
+			return times;
+		}
+		final ClipboardHistoryDatabase db = dbForEntry(entry);
+		if (db != null) {
+			try {
+				final List fromDb = db.listHitTimes(entry.id, ClipboardHistoryDatabase.HIT_LIST_LIMIT);
+				if (fromDb != null) {
+					times.addAll(fromDb);
+				}
+			}
+			catch (Exception e) {
+				LogUtils.warn("Clipboard hit times failed: " + e.getMessage(), e);
+			}
+		}
+		if (times.isEmpty()) {
+			if (entry.lastTs > 0L) {
+				times.add(Long.valueOf(entry.lastTs));
+			}
+			if (entry.firstTs > 0L && entry.firstTs != entry.lastTs) {
+				times.add(Long.valueOf(entry.firstTs));
+			}
+		}
+		return times;
+	}
+
 	public boolean delete(final long id) {
 		try {
 			final boolean ok = ClipboardHistoryDatabase.getInstance().deleteById(id);
