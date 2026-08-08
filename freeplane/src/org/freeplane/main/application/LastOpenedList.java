@@ -78,6 +78,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	private static final String LAST_OPENED = "lastOpened_1.0.20";
 	public static final String LOAD_LAST_MAP = "load_last_map";
 	public static final String LOAD_LAST_MAPS = "load_last_maps";
+	/** Cap maps restored at startup to keep the EDT responsive (Twigmark). */
+	public static final String LOAD_LAST_MAPS_MAX = "load_last_maps_max";
+	private static final int DEFAULT_LOAD_LAST_MAPS_MAX = 5;
 // // 	private final Controller controller;
 	private static boolean PORTABLE_APP = System.getProperty("portableapp", "false").equals("true");
 	private static String USER_DRIVE = System.getProperty("user.home", "").substring(0, 2);
@@ -262,6 +265,7 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 			if (startList.isEmpty()) {
 				appendMostRecentRestorableMap(startList);
 			}
+			limitMapsRestoredOnStart(startList, lastMap);
 			safeOpenOnStart(startList);
 			if (lastMap != null) {
 				tryToChangeToMapView(lastMap);
@@ -512,6 +516,50 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 				return;
 			}
 		}
+	}
+
+	/**
+	 * Keep the focused map and the first N others. Opening 15 large maps on the EDT
+	 * makes Twigmark look like it "won't open".
+	 */
+	private void limitMapsRestoredOnStart(final List<String> startList, final String lastMap) {
+		if (startList == null || startList.isEmpty()) {
+			return;
+		}
+		int max = DEFAULT_LOAD_LAST_MAPS_MAX;
+		try {
+			max = ResourceController.getResourceController().getIntProperty(LOAD_LAST_MAPS_MAX,
+			        DEFAULT_LOAD_LAST_MAPS_MAX);
+		}
+		catch (Throwable t) {
+			max = DEFAULT_LOAD_LAST_MAPS_MAX;
+		}
+		if (max < 1) {
+			max = 1;
+		}
+		if (startList.size() <= max) {
+			return;
+		}
+		final List<String> limited = new LinkedList<String>();
+		if (lastMap != null) {
+			for (int i = 0; i < startList.size(); i++) {
+				final String entry = startList.get(i);
+				if (lastMap.equals(decodeRestoreable(entry))) {
+					limited.add(entry);
+					break;
+				}
+			}
+		}
+		for (int i = 0; i < startList.size() && limited.size() < max; i++) {
+			final String entry = startList.get(i);
+			if (!limited.contains(entry)) {
+				limited.add(entry);
+			}
+		}
+		LogUtils.warn("Startup map restore capped from " + startList.size() + " to " + limited.size()
+		        + " (property " + LOAD_LAST_MAPS_MAX + "=" + max + ")");
+		startList.clear();
+		startList.addAll(limited);
 	}
 
 	private static void filterNonRestorableMaps(final List<String> maps) {

@@ -7,9 +7,9 @@ import java.awt.datatransfer.ClipboardOwner;
 import javax.swing.BorderFactory;
 import javax.swing.JLabel;
 import javax.swing.JTree;
-import javax.swing.UIManager;
 import javax.swing.tree.DefaultTreeCellRenderer;
 
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.plugin.workspace.dnd.DnDController;
 import org.freeplane.plugin.workspace.dnd.IWorspaceClipboardOwner;
@@ -37,10 +37,19 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 			AWorkspaceTreeNode node = (AWorkspaceTreeNode) treeNode;
 			setNodeIcon(renderer, node);
 			setToolTip(renderer, node);
-			JLabel label = (JLabel) renderer.getTreeCellRendererComponent(tree, treeNode, sel, expanded, leaf, row, hasFocus);			
+			JLabel label = (JLabel) renderer.getTreeCellRendererComponent(tree, treeNode, sel, expanded, leaf, row, hasFocus);
+			label.setOpaque(true);
+			if (sel) {
+				label.setBackground(DocearUiTheme.SIDEBAR_SELECTION);
+				label.setForeground(DocearUiTheme.SIDEBAR_SELECTION_TEXT);
+			}
+			else {
+				label.setBackground(DocearUiTheme.SIDEBAR_BG);
+				label.setForeground(DocearUiTheme.SIDEBAR_TEXT);
+			}
 			if(row == this.highlightedRow) {
 				try {
-				label.setBorder(BorderFactory.createLineBorder(UIManager.getColor(borderSelectionColor), 1));
+				label.setBorder(BorderFactory.createLineBorder(DocearUiTheme.ACCENT, 1));
 				} 
 				catch (Exception e) {
 					label.setBorder(BorderFactory.createLineBorder(label.getForeground(), 1));
@@ -58,6 +67,9 @@ public class WorkspaceNodeRenderer extends DefaultTreeCellRenderer {
 			}
 			if (textColor != null && !sel && !usesHtmlColor(label.getText())) {
 				label.setForeground(textColor);
+			}
+			else if (!sel && (textColor == null || !usesHtmlColor(label.getText()))) {
+				label.setForeground(DocearUiTheme.SIDEBAR_TEXT);
 			}
 			if(isCut(node)) {
 				//WORKSPACE - ToDo: make the item transparent (including the icon?)

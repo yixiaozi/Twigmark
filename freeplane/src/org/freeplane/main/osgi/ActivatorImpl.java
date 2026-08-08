@@ -203,10 +203,22 @@ class ActivatorImpl implements BundleActivator {
 					Controller.getCurrentController().selectModeForBuild(modeController);
 					for (int i = 0; i < modeControllerProviders.length; i++) {
 						final ServiceReference modeControllerProvider = modeControllerProviders[i];
-						final IModeControllerExtensionProvider service = (IModeControllerExtensionProvider) context
-						    .getService(modeControllerProvider);
-						service.installExtension(modeController);
-						context.ungetService(modeControllerProvider);
+						try {
+							final IModeControllerExtensionProvider service = (IModeControllerExtensionProvider) context
+							    .getService(modeControllerProvider);
+							service.installExtension(modeController);
+							context.ungetService(modeControllerProvider);
+						}
+						catch (final Throwable t) {
+							// One broken plugin must not prevent createFrame / main window
+							System.err.println("Mode extension failed: " + modeControllerProvider);
+							t.printStackTrace();
+							try {
+								context.ungetService(modeControllerProvider);
+							}
+							catch (final Throwable ignore) {
+							}
+						}
 					}
 				}
 			}

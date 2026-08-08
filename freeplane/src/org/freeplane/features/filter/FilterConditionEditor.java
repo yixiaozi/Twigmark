@@ -316,6 +316,10 @@ public class FilterConditionEditor extends JComponent {
 		{ 
 			throw new NullPointerException("null value in setEnterKeyActionListener()!");
 		}
+		if (values == null || values.getEditor() == null) {
+			this.enterKeyActionListener = enterKeyActionListener;
+			return;
+		}
 		if (this.enterKeyActionListener != null)
 		{
 			values.getEditor().removeActionListener(this.enterKeyActionListener);

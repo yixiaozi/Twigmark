@@ -36,6 +36,7 @@ import javax.swing.tree.TreeSelectionModel;
 
 import org.freeplane.core.ui.components.OneTouchCollapseResizer.ComponentCollapseListener;
 import org.freeplane.core.ui.components.ResizeEvent;
+import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.plugin.workspace.WorkspaceController;
@@ -145,7 +146,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		mTree.addMouseListener(getInputController());
 		mTree.addMouseMotionListener(getInputController());
 		mTree.addKeyListener(getInputController());
-		mTree.setRowHeight(18);
+		mTree.setRowHeight(24);
 		mTree.setLargeModel(false);
 		mTree.setShowsRootHandles(true);
 		mTree.setRootVisible(false);
@@ -157,8 +158,10 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 		
 		initSearchField();
 		workspaceBox = Box.createVerticalBox();
-		workspaceBox.add(new JScrollPane(mTree));		
+		final JScrollPane treeScroll = new JScrollPane(mTree);
+		workspaceBox.add(treeScroll);
 		this.add(workspaceBox, BorderLayout.CENTER);
+		DocearUiTheme.styleSidebarDock(this);
 	}
 
 	/** Search field kept for filter API; UI hidden per product request. */

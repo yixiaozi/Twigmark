@@ -24,6 +24,8 @@ import java.util.Collection;
 import org.freeplane.core.extension.IExtension;
 import org.freeplane.core.io.ReadManager;
 import org.freeplane.core.io.WriteManager;
+import org.freeplane.core.resources.ResourceController;
+import org.freeplane.core.util.ColorUtils;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -40,7 +42,22 @@ import org.freeplane.features.styles.MapStyleModel;
  */
 public class EdgeController implements IExtension {
 	public static final EdgeStyle STANDARD_EDGE_STYLE = EdgeStyle.EDGESTYLE_BEZIER;
-	public static final Color STANDARD_EDGE_COLOR = Color.GRAY;
+	/** Fallback when {@code standardedgecolor} is missing or invalid. */
+	public static final Color STANDARD_EDGE_COLOR = new Color(0x64, 0x74, 0x8B);
+	public static final String RESOURCES_EDGE_COLOR = "standardedgecolor";
+
+	/** Preference-aware default edge color (Twigmark high-contrast slate). */
+	public static Color getStandardEdgeColor() {
+		try {
+			final String value = ResourceController.getResourceController().getProperty(RESOURCES_EDGE_COLOR, null);
+			if (value != null && value.trim().length() > 0) {
+				return ColorUtils.stringToColor(value.trim());
+			}
+		}
+		catch (Throwable t) {
+		}
+		return STANDARD_EDGE_COLOR;
+	}
 
 	public static EdgeController getController() {
 		return getController(Controller.getCurrentModeController());
@@ -73,7 +90,7 @@ public class EdgeController implements IExtension {
 				if(node.getParentNode() != null){
 					return null;
 				}
-				return STANDARD_EDGE_COLOR;
+				return getStandardEdgeColor();
 			}
 		});
 		addStyleGetter(IPropertyHandler.STYLE, new IPropertyHandler<EdgeStyle, NodeModel>() {

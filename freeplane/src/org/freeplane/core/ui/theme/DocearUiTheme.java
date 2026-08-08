@@ -36,32 +36,41 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 
 /**
- * Shared product visual language for Twigmark / Docear (aligned with the calendar hub).
- * Light teal–slate direction with iOS-like tabs / scrollbars — not purple / cream / broadsheet.
- * FlatLaf Dark switches chrome tokens via {@link #applyAfterLookAndFeel()}.
+ * Twigmark light chrome: white surfaces (same family as the right dock), teal accents.
+ * FlatLaf Dark switches full-window dark tokens via {@link #applyAfterLookAndFeel()}.
  */
 public final class DocearUiTheme {
-	public static final Color CANVAS = new Color(0xF2, 0xF4, 0xF7);
+	/** Map / main chrome — match the light right dock. */
+	public static final Color CANVAS = new Color(0xF7, 0xF8, 0xFA);
 	public static final Color SURFACE = Color.WHITE;
-	public static final Color SURFACE_SOFT = new Color(0xE8, 0xEE, 0xF2);
-	/** iOS-like grouped control well behind pill tabs. */
-	public static final Color TAB_WELL = new Color(0xE5, 0xE9, 0xEF);
+	public static final Color SURFACE_SOFT = new Color(0xF1, 0xF5, 0xF9);
+	/** Light tab wells (map tabs / docks). */
+	public static final Color TAB_WELL = new Color(0xF1, 0xF5, 0xF9);
 	public static final Color TAB_SELECTED = Color.WHITE;
 	public static final Color TEXT = new Color(0x0F, 0x17, 0x2A);
 	public static final Color TEXT_MUTED = new Color(0x64, 0x74, 0x8B);
 	public static final Color TEXT_FAINT = new Color(0x94, 0xA3, 0xB8);
-	public static final Color ACCENT = new Color(0x0D, 0x94, 0x88);
-	public static final Color ACCENT_DEEP = new Color(0x0F, 0x76, 0x6E);
+	public static final Color ACCENT = new Color(0x14, 0xB8, 0xA6);
+	public static final Color ACCENT_DEEP = new Color(0x0D, 0x94, 0x88);
 	public static final Color ACCENT_WASH = new Color(0xCC, 0xFB, 0xF1);
 	public static final Color HAIRLINE = new Color(0xE2, 0xE8, 0xF0);
-	public static final Color GRID = new Color(0xE8, 0xEE, 0xF2);
+	public static final Color GRID = new Color(0xE2, 0xE8, 0xF0);
 	public static final Color DANGER = new Color(0xDC, 0x26, 0x26);
 	public static final Color SUCCESS = new Color(0x05, 0x96, 0x69);
 	public static final Color WARNING = new Color(0xD9, 0x77, 0x06);
 	public static final Color HEADER_TOP = new Color(0x0F, 0x76, 0x6E);
 	public static final Color HEADER_BOTTOM = new Color(0x14, 0xB8, 0xA6);
 	public static final Color SELECTION = new Color(0x99, 0xF6, 0xE4);
-	public static final Color SCROLL_THUMB = new Color(0xB8, 0xC0, 0xCC);
+	public static final Color SCROLL_THUMB = new Color(0xCB, 0xD5, 0xE1);
+
+	/** Left workspace dock — same light tokens as the right panel. */
+	public static final Color SIDEBAR_BG = SURFACE;
+	public static final Color SIDEBAR_SURFACE = SURFACE_SOFT;
+	public static final Color SIDEBAR_TEXT = TEXT;
+	public static final Color SIDEBAR_TEXT_MUTED = TEXT_MUTED;
+	public static final Color SIDEBAR_HAIRLINE = HAIRLINE;
+	public static final Color SIDEBAR_SELECTION = SELECTION;
+	public static final Color SIDEBAR_SELECTION_TEXT = TEXT;
 
 	/** Dark chrome tokens (FlatLaf Dark / IntelliJ dark variants). */
 	public static final Color DARK_CANVAS = new Color(0x1A, 0x1F, 0x26);
@@ -475,12 +484,103 @@ public final class DocearUiTheme {
 			return;
 		}
 		bar.setOpaque(true);
-		bar.setBackground(SURFACE);
-		bar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE),
+		bar.setBackground(chromeSurface());
+		bar.setBorder(BorderFactory.createCompoundBorder(
+				BorderFactory.createMatteBorder(0, 0, 1, 0, chromeHairline()),
 				new EmptyBorder(6, 8, 6, 8)));
 		bar.setFont(font(12f));
 		if (bar instanceof JToolBar) {
 			((JToolBar) bar).setFloatable(false);
+		}
+	}
+
+	/**
+	 * Paint the left workspace dock with light chrome (aligned with the right dock).
+	 * Recurses into common Swing containers so trees / scrolls / labels pick up tokens.
+	 */
+	public static void styleSidebarDock(final Component root) {
+		if (root == null) {
+			return;
+		}
+		styleSidebarComponent(root);
+		if (root instanceof Container) {
+			final Container c = (Container) root;
+			final int n = c.getComponentCount();
+			for (int i = 0; i < n; i++) {
+				styleSidebarDock(c.getComponent(i));
+			}
+		}
+	}
+
+	private static void styleSidebarComponent(final Component component) {
+		if (component instanceof JTabbedPane) {
+			final JTabbedPane tabs = (JTabbedPane) component;
+			tabs.setOpaque(true);
+			tabs.setBackground(SIDEBAR_BG);
+			tabs.setForeground(SIDEBAR_TEXT_MUTED);
+			tabs.setFont(font(isCompactDensity() ? 11f : 12f, Font.PLAIN));
+			tabs.setBorder(new EmptyBorder(4, 4, 2, 4));
+			tabs.putClientProperty("JTabbedPane.tabType", "card");
+			tabs.putClientProperty("JTabbedPane.showTabSeparators", Boolean.FALSE);
+			tabs.putClientProperty("JTabbedPane.showContentSeparator", Boolean.FALSE);
+			return;
+		}
+		if (component instanceof JScrollPane) {
+			final JScrollPane scroll = (JScrollPane) component;
+			scroll.setBorder(BorderFactory.createEmptyBorder());
+			scroll.setOpaque(true);
+			scroll.setBackground(SIDEBAR_BG);
+			scroll.getViewport().setOpaque(true);
+			scroll.getViewport().setBackground(SIDEBAR_BG);
+			scroll.putClientProperty("JScrollBar.showButtons", Boolean.FALSE);
+			styleScrollBar(scroll.getVerticalScrollBar());
+			styleScrollBar(scroll.getHorizontalScrollBar());
+			return;
+		}
+		if (component instanceof javax.swing.JTree) {
+			final javax.swing.JTree tree = (javax.swing.JTree) component;
+			tree.setOpaque(true);
+			tree.setBackground(SIDEBAR_BG);
+			tree.setForeground(SIDEBAR_TEXT);
+			tree.setFont(font(isCompactDensity() ? 12f : 13f));
+			tree.setRowHeight(isCompactDensity() ? 22 : 24);
+			return;
+		}
+		if (component instanceof JTextField) {
+			final JTextField field = (JTextField) component;
+			field.setOpaque(true);
+			field.setBackground(SIDEBAR_SURFACE);
+			field.setForeground(SIDEBAR_TEXT);
+			field.setCaretColor(ACCENT);
+			field.setSelectionColor(SIDEBAR_SELECTION);
+			field.setSelectedTextColor(SIDEBAR_SELECTION_TEXT);
+			field.setBorder(BorderFactory.createCompoundBorder(
+					BorderFactory.createLineBorder(SIDEBAR_HAIRLINE),
+					new EmptyBorder(6, 10, 6, 10)));
+			field.setFont(font(12.5f));
+			return;
+		}
+		if (component instanceof JLabel) {
+			final JLabel label = (JLabel) component;
+			label.setForeground(SIDEBAR_TEXT_MUTED);
+			return;
+		}
+		if (component instanceof JButton || component instanceof JToggleButton) {
+			final JComponent btn = (JComponent) component;
+			btn.setOpaque(false);
+			btn.setForeground(SIDEBAR_TEXT_MUTED);
+			btn.setFont(font(12f));
+			return;
+		}
+		if (component instanceof JComponent) {
+			final JComponent jc = (JComponent) component;
+			jc.setOpaque(true);
+			jc.setBackground(SIDEBAR_BG);
+			jc.setForeground(SIDEBAR_TEXT);
+		}
+		else {
+			component.setBackground(SIDEBAR_BG);
+			component.setForeground(SIDEBAR_TEXT);
 		}
 	}
 
@@ -516,6 +616,10 @@ public final class DocearUiTheme {
 	/** Soft well + FlatLaf card client props for panes that keep FlatLaf tab UI. */
 	public static void styleTabbedPane(final JTabbedPane tabs) {
 		if (tabs == null) {
+			return;
+		}
+		if (Boolean.TRUE.equals(tabs.getClientProperty("twigmark.sidebarDock"))) {
+			styleSidebarDock(tabs);
 			return;
 		}
 		final boolean dark = isDarkLafActive();
