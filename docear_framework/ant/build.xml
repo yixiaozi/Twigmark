@@ -37,8 +37,8 @@
 	<property name="launcher_classpath" value="${framework.jar}" />
 	
 	<property name="debug" value="on" />
-	<property name="java_source_version" value="1.6" />
-	<property name="java_target_version" value="1.6" />
+	<property name="java_source_version" value="1.8" />
+	<property name="java_target_version" value="1.8" />
 	<property name="build.compiler" value="modern" />
 
 	<condition property="ver_freeplane" value="${freeplane_version}_${minor}" else="${freeplane_version}">

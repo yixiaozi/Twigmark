@@ -537,8 +537,11 @@ final class PomodoroWindow extends JFrame {
 		}
 		catch (Exception e) {
 			try {
-				// Older JREs / platforms that reject per-pixel opacity.
-				com.sun.awt.AWTUtilities.setWindowOpacity(this, windowOpacity);
+				// Older JREs: reflect so we still compile on Java 17+ (com.sun.awt removed).
+				final Class<?> awtUtilities = Class.forName("com.sun.awt.AWTUtilities");
+				final java.lang.reflect.Method m = awtUtilities.getMethod("setWindowOpacity",
+						java.awt.Window.class, float.class);
+				m.invoke(null, this, Float.valueOf(windowOpacity));
 			}
 			catch (Throwable t) {
 			}

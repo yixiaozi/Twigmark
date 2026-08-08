@@ -202,18 +202,23 @@
               <label
                 >服务商
                 <select id="llm-provider">
-                  <option value="openrouter">OpenRouter（推荐）</option>
+                  <option value="deepseek">DeepSeek（国内推荐）</option>
+                  <option value="kimi">Kimi / Moonshot</option>
+                  <option value="openrouter">OpenRouter</option>
                   <option value="openai">OpenAI 官方</option>
                   <option value="custom">自定义 OpenAI 兼容</option>
                 </select>
               </label>
-              <label>名称 <input id="llm-name" placeholder="OpenRouter" /></label>
-              <label>Base URL <input id="llm-base" placeholder="https://openrouter.ai/api/v1" /></label>
-              <label>API Key <input id="llm-key" type="password" placeholder="sk-or-… 或留空保留原 Key" /></label>
+              <label>名称 <input id="llm-name" placeholder="DeepSeek" /></label>
+              <label>Base URL <input id="llm-base" placeholder="https://api.deepseek.com/v1" /></label>
+              <label>API Key <input id="llm-key" type="password" placeholder="sk-… 或留空保留原 Key" /></label>
               <label class="span-2"
                 >模型
-                <input id="llm-model" list="llm-model-hints" placeholder="openai/gpt-4o-mini" />
+                <input id="llm-model" list="llm-model-hints" placeholder="deepseek-chat" />
                 <datalist id="llm-model-hints">
+                  <option value="deepseek-chat"></option>
+                  <option value="deepseek-reasoner"></option>
+                  <option value="moonshot-v1-auto"></option>
                   <option value="openai/gpt-4o-mini"></option>
                   <option value="openai/gpt-4o"></option>
                   <option value="anthropic/claude-3.5-sonnet"></option>

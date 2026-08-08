@@ -565,13 +565,19 @@ abstract public class FrameController implements ViewController {
 	public static void setLookAndFeel(String lookAndFeel) {
 		try {
 			org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
+			final String appName = Controller.getCurrentController().getResourceController()
+					.getProperty("ApplicationName", "freeplane");
+			final boolean twigmarkProduct = appName != null
+					&& !"freeplane".equalsIgnoreCase(appName.trim());
 			// Migrate legacy Docear default (Nimbus) to FlatLaf Light on first run after upgrade.
-			if (lookAndFeel != null && "nimbus".equalsIgnoreCase(lookAndFeel.trim())
-					&& !"freeplane".equalsIgnoreCase(Controller.getCurrentController().getResourceController()
-							.getProperty("ApplicationName", "freeplane"))) {
+			if (lookAndFeel != null && "nimbus".equalsIgnoreCase(lookAndFeel.trim()) && twigmarkProduct) {
 				lookAndFeel = org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT;
 			}
-			if (Compat.isMacOsX() || "default".equals(lookAndFeel)) {
+			// Twigmark: "default" means FlatLaf Light (modern chrome), not the OS system L&F.
+			if (twigmarkProduct && lookAndFeel != null && "default".equalsIgnoreCase(lookAndFeel.trim())) {
+				lookAndFeel = org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT;
+			}
+			if (!twigmarkProduct && (Compat.isMacOsX() || "default".equals(lookAndFeel))) {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", "default");
 			}
@@ -580,8 +586,8 @@ abstract public class FrameController implements ViewController {
 				boolean setLnF = false;
 				setLnF = setLookAndFeel(lookAndFeel, lafInfos);
 				if(!setLnF){
-					if (!"freeplane".equals(Controller.getCurrentController().getResourceController().getProperty("ApplicationName", "freeplane").toLowerCase())) {
-						// Prefer FlatLaf, then Nimbus, for Docear
+					if (twigmarkProduct) {
+						// Prefer FlatLaf, then Nimbus, for Twigmark / Docear
 						if (!setLookAndFeel(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT, lafInfos)) {
 							setLookAndFeel("nimbus", lafInfos);
 						}

@@ -70,6 +70,10 @@
     <tab name="Appearance">
         <separator name="look_and_feel">
             <group name="lookandfeel"/>
+            <combo name="ui_density">
+                <choice value="comfortable"/>
+                <choice value="compact"/>
+            </combo>
             <boolean name="apply_system_screen_resolution"/>
             <number name="user_defined_screen_resolution" min="72" max="1200"/>
             <boolean name="use_tabbed_pane"/>

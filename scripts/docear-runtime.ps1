@@ -454,3 +454,60 @@ function Find-Jdk8Home {
     }
     return $null
 }
+
+# Fallback for Cloud Agents / modernization: JDK 11+ can compile with source/target 1.8.
+function Find-JdkModernHome {
+    $candidates = @(
+        $env:JAVA_HOME,
+        "C:\Program Files\Eclipse Adoptium\jdk-21*",
+        "C:\Program Files\Eclipse Adoptium\jdk-17*",
+        "C:\Program Files\Eclipse Adoptium\jdk-11*",
+        "C:\Program Files\Microsoft\jdk-21*",
+        "C:\Program Files\Microsoft\jdk-17*",
+        "C:\Program Files\Zulu\zulu-21*",
+        "C:\Program Files\Zulu\zulu-17*"
+    )
+    foreach ($path in $candidates) {
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        if ($path -match '[\*\?]') {
+            $globHits = @(Get-Item -Path $path -ErrorAction SilentlyContinue | Sort-Object FullName -Descending)
+            foreach ($m in $globHits) {
+                if (Test-Path (Join-Path $m.FullName "bin\javac.exe")) {
+                    return $m.FullName
+                }
+            }
+            continue
+        }
+        if (Test-Path (Join-Path $path "bin\javac.exe")) {
+            return $path
+        }
+    }
+    $whereJava = Get-Command java -ErrorAction SilentlyContinue
+    if ($null -ne $whereJava) {
+        try {
+            $ver = & java -version 2>&1 | Out-String
+            if ($ver -match 'version "(1[1-9]|[2-9][0-9])') {
+                $javaHomeProp = & java -XshowSettings:properties -version 2>&1 |
+                    Select-String -Pattern 'java\.home\s*=\s*(.+)' |
+                    Select-Object -First 1
+                if ($null -ne $javaHomeProp) {
+                    $home = $javaHomeProp.Matches[0].Groups[1].Value.Trim()
+                    if ($home -match '[/\\]jre$') {
+                        $parent = Split-Path $home -Parent
+                        if (Test-Path (Join-Path $parent "bin\javac.exe")) {
+                            return $parent
+                        }
+                    }
+                    if (Test-Path (Join-Path $home "bin\javac.exe")) {
+                        return $home
+                    }
+                    # Debian/Ubuntu: java.home may be a JRE; javac often lives in sibling paths.
+                    $amd64 = "/usr/lib/jvm/java-21-openjdk-amd64"
+                    if (Test-Path (Join-Path $amd64 "bin/javac")) { return $amd64 }
+                }
+            }
+        }
+        catch { }
+    }
+    return $null
+}

@@ -36,8 +36,9 @@ import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 
 /**
- * Shared product visual language for Docear (aligned with the calendar hub).
+ * Shared product visual language for Twigmark / Docear (aligned with the calendar hub).
  * Light teal–slate direction with iOS-like tabs / scrollbars — not purple / cream / broadsheet.
+ * FlatLaf Dark switches chrome tokens via {@link #applyAfterLookAndFeel()}.
  */
 public final class DocearUiTheme {
 	public static final Color CANVAS = new Color(0xF2, 0xF4, 0xF7);
@@ -62,9 +63,30 @@ public final class DocearUiTheme {
 	public static final Color SELECTION = new Color(0x99, 0xF6, 0xE4);
 	public static final Color SCROLL_THUMB = new Color(0xB8, 0xC0, 0xCC);
 
+	/** Dark chrome tokens (FlatLaf Dark / IntelliJ dark variants). */
+	public static final Color DARK_CANVAS = new Color(0x1A, 0x1F, 0x26);
+	public static final Color DARK_SURFACE = new Color(0x24, 0x2A, 0x33);
+	public static final Color DARK_SURFACE_SOFT = new Color(0x2E, 0x36, 0x40);
+	public static final Color DARK_TAB_WELL = new Color(0x1E, 0x24, 0x2C);
+	public static final Color DARK_TAB_SELECTED = new Color(0x2E, 0x36, 0x40);
+	public static final Color DARK_TEXT = new Color(0xE8, 0xEE, 0xF4);
+	public static final Color DARK_TEXT_MUTED = new Color(0x9A, 0xA6, 0xB5);
+	public static final Color DARK_TEXT_FAINT = new Color(0x6B, 0x78, 0x8A);
+	public static final Color DARK_ACCENT = new Color(0x2D, 0xD4, 0xBF);
+	public static final Color DARK_ACCENT_DEEP = new Color(0x14, 0xB8, 0xA6);
+	public static final Color DARK_ACCENT_WASH = new Color(0x13, 0x4E, 0x4A);
+	public static final Color DARK_HAIRLINE = new Color(0x3A, 0x44, 0x52);
+	public static final Color DARK_SELECTION = new Color(0x11, 0x5E, 0x59);
+	public static final Color DARK_SCROLL_THUMB = new Color(0x5B, 0x68, 0x78);
+
 	public static final String FLAT_LIGHT = "com.formdev.flatlaf.FlatLightLaf";
 	public static final String FLAT_INTELLIJ = "com.formdev.flatlaf.FlatIntelliJLaf";
 	public static final String FLAT_DARK = "com.formdev.flatlaf.FlatDarkLaf";
+
+	/** Preference key: comfortable (default) | compact */
+	public static final String UI_DENSITY_PROPERTY = "ui_density";
+	public static final String UI_DENSITY_COMFORTABLE = "comfortable";
+	public static final String UI_DENSITY_COMPACT = "compact";
 
 	private static boolean globalScrollBarStylerInstalled;
 
@@ -87,6 +109,7 @@ public final class DocearUiTheme {
 
 	/**
 	 * Apply accent colors, fonts, and denser/modern component defaults after L&amp;F is set.
+	 * Chooses light or dark chrome tokens when FlatLaf Dark is active.
 	 */
 	public static void applyAfterLookAndFeel() {
 		try {
@@ -94,8 +117,26 @@ public final class DocearUiTheme {
 			// (24px empty taskbar). ZeroTaskbarRibbonUI.createUI is required for this to work.
 			UIManager.put("RibbonUI", "org.freeplane.core.ui.ribbon.ZeroTaskbarRibbonUI");
 
-			final Font ui = font(13f);
-			final Font uiBold = font(13f, Font.BOLD);
+			final boolean dark = isDarkLafActive();
+			final boolean compact = isCompactDensity();
+			final Color canvas = dark ? DARK_CANVAS : CANVAS;
+			final Color surface = dark ? DARK_SURFACE : SURFACE;
+			final Color surfaceSoft = dark ? DARK_SURFACE_SOFT : SURFACE_SOFT;
+			final Color tabWell = dark ? DARK_TAB_WELL : TAB_WELL;
+			final Color tabSelected = dark ? DARK_TAB_SELECTED : TAB_SELECTED;
+			final Color text = dark ? DARK_TEXT : TEXT;
+			final Color textMuted = dark ? DARK_TEXT_MUTED : TEXT_MUTED;
+			final Color accent = dark ? DARK_ACCENT : ACCENT;
+			final Color accentDeep = dark ? DARK_ACCENT_DEEP : ACCENT_DEEP;
+			final Color accentWash = dark ? DARK_ACCENT_WASH : ACCENT_WASH;
+			final Color hairline = dark ? DARK_HAIRLINE : HAIRLINE;
+			final Color selection = dark ? DARK_SELECTION : SELECTION;
+			final Color scrollThumb = dark ? DARK_SCROLL_THUMB : SCROLL_THUMB;
+
+			final float base = compact ? 12f : 13f;
+			final float tabFont = compact ? 11f : 12f;
+			final Font ui = font(base);
+			final Font uiBold = font(base, Font.BOLD);
 			setUiFont("Label.font", ui);
 			setUiFont("Button.font", ui);
 			setUiFont("ToggleButton.font", ui);
@@ -111,8 +152,8 @@ public final class DocearUiTheme {
 			setUiFont("TextPane.font", ui);
 			setUiFont("EditorPane.font", ui);
 			setUiFont("TitledBorder.font", uiBold);
-			setUiFont("ToolTip.font", font(12f));
-			setUiFont("TabbedPane.font", font(12f, Font.PLAIN));
+			setUiFont("ToolTip.font", font(compact ? 11f : 12f));
+			setUiFont("TabbedPane.font", font(tabFont, Font.PLAIN));
 			setUiFont("Menu.font", ui);
 			setUiFont("MenuItem.font", ui);
 			setUiFont("CheckBoxMenuItem.font", ui);
@@ -123,51 +164,57 @@ public final class DocearUiTheme {
 			setUiFont("Tree.font", ui);
 			setUiFont("ToolBar.font", ui);
 
-			UIManager.put("Panel.background", CANVAS);
-			UIManager.put("Viewport.background", CANVAS);
-			UIManager.put("OptionPane.background", CANVAS);
-			UIManager.put("OptionPane.messageForeground", TEXT);
-			UIManager.put("OptionPane.border", new EmptyBorder(16, 18, 12, 18));
-			UIManager.put("OptionPane.messageAreaBorder", new EmptyBorder(0, 0, 12, 0));
-			UIManager.put("OptionPane.buttonAreaBorder", new EmptyBorder(8, 0, 0, 0));
+			UIManager.put("Panel.background", canvas);
+			UIManager.put("Viewport.background", canvas);
+			UIManager.put("OptionPane.background", canvas);
+			UIManager.put("OptionPane.messageForeground", text);
+			final int optPad = compact ? 10 : 16;
+			UIManager.put("OptionPane.border", new EmptyBorder(optPad, optPad + 2, compact ? 8 : 12, optPad + 2));
+			UIManager.put("OptionPane.messageAreaBorder", new EmptyBorder(0, 0, compact ? 8 : 12, 0));
+			UIManager.put("OptionPane.buttonAreaBorder", new EmptyBorder(compact ? 4 : 8, 0, 0, 0));
 			localizeOptionPaneButtons();
-			UIManager.put("ToolBar.background", SURFACE);
-			UIManager.put("ToolBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, HAIRLINE));
+			UIManager.put("ToolBar.background", surface);
+			UIManager.put("ToolBar.border", BorderFactory.createMatteBorder(0, 0, 1, 0, hairline));
 
-			UIManager.put("PopupMenu.background", SURFACE);
+			UIManager.put("PopupMenu.background", surface);
 			UIManager.put("PopupMenu.border", BorderFactory.createCompoundBorder(
-			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(3, 2, 3, 4)));
-			UIManager.put("MenuItem.selectionBackground", ACCENT_WASH);
-			UIManager.put("MenuItem.selectionForeground", TEXT);
-			UIManager.put("MenuItem.margin", new Insets(2, 4, 2, 8));
-			UIManager.put("Menu.margin", new Insets(2, 4, 2, 8));
-			UIManager.put("MenuItem.iconTextGap", Integer.valueOf(4));
-			UIManager.put("CheckBoxMenuItem.selectionBackground", ACCENT_WASH);
-			UIManager.put("CheckBoxMenuItem.selectionForeground", TEXT);
-			UIManager.put("RadioButtonMenuItem.selectionBackground", ACCENT_WASH);
-			UIManager.put("RadioButtonMenuItem.selectionForeground", TEXT);
-			UIManager.put("Menu.selectionBackground", ACCENT_WASH);
-			UIManager.put("Menu.selectionForeground", TEXT);
+			        BorderFactory.createLineBorder(hairline), new EmptyBorder(3, 2, 3, 4)));
+			UIManager.put("MenuItem.selectionBackground", accentWash);
+			UIManager.put("MenuItem.selectionForeground", text);
+			final int menuPadV = compact ? 1 : 2;
+			final int menuPadH = compact ? 3 : 4;
+			UIManager.put("MenuItem.margin", new Insets(menuPadV, menuPadH, menuPadV, compact ? 6 : 8));
+			UIManager.put("Menu.margin", new Insets(menuPadV, menuPadH, menuPadV, compact ? 6 : 8));
+			UIManager.put("MenuItem.iconTextGap", Integer.valueOf(compact ? 2 : 4));
+			UIManager.put("CheckBoxMenuItem.selectionBackground", accentWash);
+			UIManager.put("CheckBoxMenuItem.selectionForeground", text);
+			UIManager.put("RadioButtonMenuItem.selectionBackground", accentWash);
+			UIManager.put("RadioButtonMenuItem.selectionForeground", text);
+			UIManager.put("Menu.selectionBackground", accentWash);
+			UIManager.put("Menu.selectionForeground", text);
 
 			// Shared tab chrome (safe for any L&F). FlatLaf-only keys applied below.
-			UIManager.put("TabbedPane.background", TAB_WELL);
-			UIManager.put("TabbedPane.contentAreaColor", SURFACE);
-			UIManager.put("TabbedPane.selected", TAB_SELECTED);
-			UIManager.put("TabbedPane.selectedBackground", TAB_SELECTED);
-			UIManager.put("TabbedPane.foreground", TEXT_MUTED);
-			UIManager.put("TabbedPane.tabInsets", new Insets(5, 8, 5, 8));
+			UIManager.put("TabbedPane.background", tabWell);
+			UIManager.put("TabbedPane.contentAreaColor", surface);
+			UIManager.put("TabbedPane.selected", tabSelected);
+			UIManager.put("TabbedPane.selectedBackground", tabSelected);
+			UIManager.put("TabbedPane.foreground", textMuted);
+			final int tabInsetV = compact ? 3 : 5;
+			final int tabInsetH = compact ? 6 : 8;
+			UIManager.put("TabbedPane.tabInsets", new Insets(tabInsetV, tabInsetH, tabInsetV, tabInsetH));
 			UIManager.put("TabbedPane.selectedTabPadInsets", new Insets(0, 0, 0, 0));
-			UIManager.put("TabbedPane.tabAreaInsets", new Insets(4, 4, 3, 4));
+			UIManager.put("TabbedPane.tabAreaInsets", new Insets(compact ? 2 : 4, compact ? 2 : 4, 3, compact ? 2 : 4));
 			UIManager.put("TabbedPane.contentBorderInsets", new Insets(0, 0, 0, 0));
 			UIManager.put("TabbedPane.tabRunOverlay", Integer.valueOf(0));
 
-			UIManager.put("Button.arc", Integer.valueOf(10));
-			UIManager.put("Component.arc", Integer.valueOf(10));
-			UIManager.put("TextComponent.arc", Integer.valueOf(10));
+			final int arc = compact ? 8 : 10;
+			UIManager.put("Button.arc", Integer.valueOf(arc));
+			UIManager.put("Component.arc", Integer.valueOf(arc));
+			UIManager.put("TextComponent.arc", Integer.valueOf(arc));
 			UIManager.put("Component.focusWidth", Integer.valueOf(1));
 			UIManager.put("Component.innerFocusWidth", Integer.valueOf(0));
-			UIManager.put("Component.accentColor", ACCENT);
-			UIManager.put("@accentColor", ACCENT);
+			UIManager.put("Component.accentColor", accent);
+			UIManager.put("@accentColor", accent);
 
 			// IMPORTANT: never put ScrollBarUI class name into UIManager — OSGi / system L&F
 			// classloaders often cannot load org.freeplane.* and the first JScrollBar then aborts startup.
@@ -179,52 +226,52 @@ public final class DocearUiTheme {
 				UIManager.put("RadioButtonMenuItem.minimumIconSize", new java.awt.Dimension(0, 0));
 				UIManager.put("MenuItem.iconTextGap", Integer.valueOf(2));
 				UIManager.put("Menu.iconTextGap", Integer.valueOf(2));
-				UIManager.put("TabbedPane.underlineColor", ACCENT);
-				UIManager.put("TabbedPane.focusColor", ACCENT);
-				UIManager.put("TabbedPane.hoverColor", SURFACE_SOFT);
-				UIManager.put("TabbedPane.selectedForeground", TEXT);
+				UIManager.put("TabbedPane.underlineColor", accent);
+				UIManager.put("TabbedPane.focusColor", accent);
+				UIManager.put("TabbedPane.hoverColor", surfaceSoft);
+				UIManager.put("TabbedPane.selectedForeground", text);
 				UIManager.put("TabbedPane.showTabSeparators", Boolean.FALSE);
 				UIManager.put("TabbedPane.showContentSeparator", Boolean.FALSE);
 				UIManager.put("TabbedPane.tabType", "card");
-				UIManager.put("TabbedPane.tabHeight", Integer.valueOf(30));
-				UIManager.put("TabbedPane.tabArc", Integer.valueOf(12));
-				UIManager.put("TabbedPane.cardTabArc", Integer.valueOf(12));
+				UIManager.put("TabbedPane.tabHeight", Integer.valueOf(compact ? 26 : 30));
+				UIManager.put("TabbedPane.tabArc", Integer.valueOf(compact ? 10 : 12));
+				UIManager.put("TabbedPane.cardTabArc", Integer.valueOf(compact ? 10 : 12));
 				UIManager.put("TabbedPane.tabSelectionHeight", Integer.valueOf(0));
 				UIManager.put("TabbedPane.cardTabSelectionHeight", Integer.valueOf(0));
 
 				UIManager.put("ScrollBar.thumbArc", Integer.valueOf(999));
 				UIManager.put("ScrollBar.trackArc", Integer.valueOf(999));
-				UIManager.put("ScrollBar.width", Integer.valueOf(6));
+				UIManager.put("ScrollBar.width", Integer.valueOf(compact ? 5 : 6));
 				UIManager.put("ScrollBar.showButtons", Boolean.FALSE);
 				UIManager.put("ScrollBar.trackInsets", new Insets(1, 1, 1, 1));
 				UIManager.put("ScrollBar.thumbInsets", new Insets(1, 1, 1, 1));
-				UIManager.put("ScrollBar.track", CANVAS);
-				UIManager.put("ScrollBar.thumb", SCROLL_THUMB);
-				UIManager.put("ScrollBar.hoverThumbColor", new Color(0x8E, 0x99, 0xA8));
-				UIManager.put("ScrollBar.pressedThumbColor", new Color(0x78, 0x84, 0x94));
+				UIManager.put("ScrollBar.track", canvas);
+				UIManager.put("ScrollBar.thumb", scrollThumb);
+				UIManager.put("ScrollBar.hoverThumbColor", dark ? new Color(0x7A, 0x88, 0x9A) : new Color(0x8E, 0x99, 0xA8));
+				UIManager.put("ScrollBar.pressedThumbColor", dark ? new Color(0x8E, 0x9C, 0xAE) : new Color(0x78, 0x84, 0x94));
 				UIManager.put("ScrollBar.minimumThumbSize", new java.awt.Dimension(18, 18));
 			}
 
-			UIManager.put("Button.background", SURFACE);
-			UIManager.put("Button.foreground", TEXT);
-			UIManager.put("Button.default.background", ACCENT);
-			UIManager.put("Button.default.foreground", Color.WHITE);
-			UIManager.put("Button.default.focusColor", ACCENT_DEEP);
+			UIManager.put("Button.background", surface);
+			UIManager.put("Button.foreground", text);
+			UIManager.put("Button.default.background", accent);
+			UIManager.put("Button.default.foreground", dark ? DARK_CANVAS : Color.WHITE);
+			UIManager.put("Button.default.focusColor", accentDeep);
 
-			UIManager.put("List.selectionBackground", ACCENT_WASH);
-			UIManager.put("List.selectionForeground", TEXT);
-			UIManager.put("Tree.selectionBackground", ACCENT_WASH);
-			UIManager.put("Tree.selectionForeground", TEXT);
-			UIManager.put("Table.selectionBackground", ACCENT_WASH);
-			UIManager.put("Table.selectionForeground", TEXT);
-			UIManager.put("TextField.selectionBackground", SELECTION);
-			UIManager.put("TextArea.selectionBackground", SELECTION);
+			UIManager.put("List.selectionBackground", accentWash);
+			UIManager.put("List.selectionForeground", text);
+			UIManager.put("Tree.selectionBackground", accentWash);
+			UIManager.put("Tree.selectionForeground", text);
+			UIManager.put("Table.selectionBackground", accentWash);
+			UIManager.put("Table.selectionForeground", text);
+			UIManager.put("TextField.selectionBackground", selection);
+			UIManager.put("TextArea.selectionBackground", selection);
 
-			UIManager.put("Separator.foreground", HAIRLINE);
-			UIManager.put("ToolTip.background", SURFACE);
-			UIManager.put("ToolTip.foreground", TEXT);
+			UIManager.put("Separator.foreground", hairline);
+			UIManager.put("ToolTip.background", surface);
+			UIManager.put("ToolTip.foreground", text);
 			UIManager.put("ToolTip.border", BorderFactory.createCompoundBorder(
-			        BorderFactory.createLineBorder(HAIRLINE), new EmptyBorder(6, 8, 6, 8)));
+			        BorderFactory.createLineBorder(hairline), new EmptyBorder(6, 8, 6, 8)));
 
 			scaleLegacyFontsIfNeeded();
 			installGlobalScrollBarStyler();
@@ -401,9 +448,9 @@ public final class DocearUiTheme {
 			return;
 		}
 		panel.setOpaque(true);
-		panel.setBackground(CANVAS);
-		panel.setForeground(TEXT);
-		panel.setFont(font(13f));
+		panel.setBackground(chromeCanvas());
+		panel.setForeground(chromeText());
+		panel.setFont(font(isCompactDensity() ? 12f : 13f));
 	}
 
 	public static void styleSurface(final JComponent panel) {
@@ -411,8 +458,8 @@ public final class DocearUiTheme {
 			return;
 		}
 		panel.setOpaque(true);
-		panel.setBackground(SURFACE);
-		panel.setForeground(TEXT);
+		panel.setBackground(chromeSurface());
+		panel.setForeground(chromeText());
 	}
 
 	public static void styleSurfaceCard(final JPanel panel) {
@@ -471,17 +518,19 @@ public final class DocearUiTheme {
 		if (tabs == null) {
 			return;
 		}
+		final boolean dark = isDarkLafActive();
+		final boolean compact = isCompactDensity();
 		tabs.setOpaque(true);
-		tabs.setBackground(TAB_WELL);
-		tabs.setForeground(TEXT_MUTED);
-		tabs.setFont(font(12f, Font.PLAIN));
-		tabs.setBorder(new EmptyBorder(4, 4, 2, 4));
+		tabs.setBackground(dark ? DARK_TAB_WELL : TAB_WELL);
+		tabs.setForeground(dark ? DARK_TEXT_MUTED : TEXT_MUTED);
+		tabs.setFont(font(compact ? 11f : 12f, Font.PLAIN));
+		tabs.setBorder(new EmptyBorder(compact ? 2 : 4, compact ? 2 : 4, 2, compact ? 2 : 4));
 		tabs.putClientProperty("JTabbedPane.tabType", "card");
 		tabs.putClientProperty("JTabbedPane.showTabSeparators", Boolean.FALSE);
 		tabs.putClientProperty("JTabbedPane.showContentSeparator", Boolean.FALSE);
-		tabs.putClientProperty("JTabbedPane.tabHeight", Integer.valueOf(30));
-		tabs.putClientProperty("JTabbedPane.tabArc", Integer.valueOf(12));
-		tabs.putClientProperty("JTabbedPane.cardTabArc", Integer.valueOf(12));
+		tabs.putClientProperty("JTabbedPane.tabHeight", Integer.valueOf(compact ? 26 : 30));
+		tabs.putClientProperty("JTabbedPane.tabArc", Integer.valueOf(compact ? 10 : 12));
+		tabs.putClientProperty("JTabbedPane.cardTabArc", Integer.valueOf(compact ? 10 : 12));
 	}
 
 	public static void styleSearchField(final JTextField field) {
@@ -605,10 +654,66 @@ public final class DocearUiTheme {
 	public static boolean isFlatLafActive() {
 		try {
 			final String name = UIManager.getLookAndFeel().getClass().getName();
-			return name != null && name.indexOf("flatlaf") >= 0;
+			return name != null && name.toLowerCase().indexOf("flatlaf") >= 0;
 		}
 		catch (Throwable t) {
 			return false;
 		}
+	}
+
+	/** True for FlatDark / Darcula-like FlatLaf skins. */
+	public static boolean isDarkLafActive() {
+		try {
+			final String name = UIManager.getLookAndFeel().getClass().getName();
+			if (name == null) {
+				return false;
+			}
+			final String lower = name.toLowerCase();
+			return lower.indexOf("flatdark") >= 0 || lower.indexOf("flatdarcula") >= 0
+					|| lower.indexOf("flatmacdark") >= 0;
+		}
+		catch (Throwable t) {
+			return false;
+		}
+	}
+
+	/** Read {@link #UI_DENSITY_PROPERTY}; default comfortable. */
+	public static boolean isCompactDensity() {
+		try {
+			final String sys = System.getProperty("twigmark.ui_density");
+			if (sys != null && UI_DENSITY_COMPACT.equalsIgnoreCase(sys.trim())) {
+				return true;
+			}
+			final org.freeplane.features.mode.Controller controller = org.freeplane.features.mode.Controller
+					.getCurrentController();
+			if (controller != null && controller.getResourceController() != null) {
+				final String v = controller.getResourceController().getProperty(UI_DENSITY_PROPERTY,
+						UI_DENSITY_COMFORTABLE);
+				return v != null && UI_DENSITY_COMPACT.equalsIgnoreCase(v.trim());
+			}
+		}
+		catch (Throwable t) {
+		}
+		return false;
+	}
+
+	public static Color chromeCanvas() {
+		return isDarkLafActive() ? DARK_CANVAS : CANVAS;
+	}
+
+	public static Color chromeSurface() {
+		return isDarkLafActive() ? DARK_SURFACE : SURFACE;
+	}
+
+	public static Color chromeText() {
+		return isDarkLafActive() ? DARK_TEXT : TEXT;
+	}
+
+	public static Color chromeAccent() {
+		return isDarkLafActive() ? DARK_ACCENT : ACCENT;
+	}
+
+	public static Color chromeHairline() {
+		return isDarkLafActive() ? DARK_HAIRLINE : HAIRLINE;
 	}
 }

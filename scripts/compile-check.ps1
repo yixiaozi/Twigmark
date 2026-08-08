@@ -36,14 +36,18 @@ if (!(Test-Path $antPath)) {
     throw "Ant not found: $antPath"
 }
 
-Write-Step "Locate JDK 8"
+Write-Step "Locate JDK (prefer 8; allow 11+ for modernization compile with source/target 1.8)"
 $jdkHome = Find-Jdk8Home
 if ($null -eq $jdkHome) {
-    throw "JDK 8 not found. Set JAVA_HOME to a full JDK 8 (with javac)."
+    $jdkHome = Find-JdkModernHome
+}
+if ($null -eq $jdkHome) {
+    throw "No suitable JDK found. Install JDK 8 (preferred) or JDK 11+ with javac, or set JAVA_HOME."
 }
 $env:JAVA_HOME = $jdkHome
 $env:Path = "$($env:JAVA_HOME)\bin;$env:Path"
 Write-Host "JAVA_HOME = $env:JAVA_HOME"
+& java -version 2>&1 | ForEach-Object { Write-Host $_ }
 
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "ensure-build-metadata.ps1") | Out-Null
 
