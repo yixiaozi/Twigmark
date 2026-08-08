@@ -125,7 +125,8 @@ public final class McpRuntimeFacade {
 		try {
 			return b.isSharedLlmConfigured();
 		}
-		catch (Exception e) {
+		catch (Throwable e) {
+			// sqlite-jdbc 3.4x needs slf4j; missing deps must not abort OSGi Activator
 			return false;
 		}
 	}

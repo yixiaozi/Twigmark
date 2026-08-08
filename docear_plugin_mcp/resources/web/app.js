@@ -591,6 +591,8 @@
 
   function detectProvider(base) {
     var u = (base || "").toLowerCase();
+    if (u.indexOf("api.deepseek.com") >= 0) return "deepseek";
+    if (u.indexOf("api.moonshot.cn") >= 0) return "kimi";
     if (u.indexOf("openrouter.ai") >= 0) return "openrouter";
     if (u.indexOf("api.openai.com") >= 0) return "openai";
     return "custom";
@@ -600,14 +602,23 @@
     var base = document.getElementById("llm-base");
     var model = document.getElementById("llm-model");
     var name = document.getElementById("llm-name");
-    if (provider === "openrouter") {
+    if (provider === "deepseek") {
+      base.value = "https://api.deepseek.com/v1";
+      model.value = "deepseek-chat";
+      name.value = "DeepSeek";
+    } else if (provider === "kimi") {
+      base.value = "https://api.moonshot.cn/v1";
+      model.value = "moonshot-v1-auto";
+      name.value = "Kimi";
+    } else if (provider === "openrouter") {
       base.value = "https://openrouter.ai/api/v1";
       if (!model.value || model.value.indexOf("/") < 0) model.value = "openai/gpt-4o-mini";
-      if (!name.value || name.value === "Default" || name.value === "OpenAI") name.value = "OpenRouter";
+      if (!name.value || name.value === "Default" || name.value === "OpenAI" || name.value === "DeepSeek")
+        name.value = "OpenRouter";
     } else if (provider === "openai") {
       base.value = "https://api.openai.com/v1";
       if (!model.value || model.value.indexOf("/") >= 0) model.value = "gpt-4o-mini";
-      if (!name.value || name.value === "OpenRouter") name.value = "OpenAI";
+      if (!name.value || name.value === "OpenRouter" || name.value === "DeepSeek") name.value = "OpenAI";
     }
   }
 
@@ -615,12 +626,13 @@
     creatingProfile = !!asNew;
     editingProfileId = asNew ? "" : (p && p.id) || "";
     document.getElementById("llm-editor-title").textContent = asNew ? "新建配置" : "编辑配置";
-    document.getElementById("llm-name").value = asNew ? "OpenRouter" : (p && p.name) || "OpenRouter";
+    // Domestic-friendly default: DeepSeek; existing profiles keep their values.
+    document.getElementById("llm-name").value = asNew ? "DeepSeek" : (p && p.name) || "DeepSeek";
     document.getElementById("llm-base").value =
-      asNew || !p ? "https://openrouter.ai/api/v1" : p.baseUrl || "https://openrouter.ai/api/v1";
+      asNew || !p ? "https://api.deepseek.com/v1" : p.baseUrl || "https://api.deepseek.com/v1";
     document.getElementById("llm-key").value = "";
     document.getElementById("llm-model").value =
-      asNew || !p ? "openai/gpt-4o-mini" : p.model || "openai/gpt-4o-mini";
+      asNew || !p ? "deepseek-chat" : p.model || "deepseek-chat";
     document.getElementById("llm-default").checked = asNew ? true : !p || !!p.isDefault;
     document.getElementById("llm-provider").value = detectProvider(document.getElementById("llm-base").value);
     renderProfileList();

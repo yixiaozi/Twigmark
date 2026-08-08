@@ -892,7 +892,7 @@ public class MenuBuilder extends UIBuilder implements IKeyStrokeProcessor {
 		if (userObject instanceof JMenuItem && !(userObject instanceof JMenu)) {
 			setAccelerator((Node) node, null);
 		}
-		for (final Enumeration<Object> children = node.children(); children.hasMoreElements();) {
+		for (final Enumeration<?> children = node.children(); children.hasMoreElements();) {
 			removeAccelerators((DefaultMutableTreeNode) children.nextElement());
 		}
 	}

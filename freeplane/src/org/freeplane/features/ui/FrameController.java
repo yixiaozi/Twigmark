@@ -51,6 +51,7 @@ import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.RootPaneContainer;
+import javax.swing.LookAndFeel;
 import javax.swing.UIManager;
 import javax.swing.UIManager.LookAndFeelInfo;
 import javax.swing.UnsupportedLookAndFeelException;
@@ -565,13 +566,43 @@ abstract public class FrameController implements ViewController {
 	public static void setLookAndFeel(String lookAndFeel) {
 		try {
 			org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
+			final String appName = Controller.getCurrentController().getResourceController()
+					.getProperty("ApplicationName", "freeplane");
+			final boolean twigmarkProduct = appName != null
+					&& !"freeplane".equalsIgnoreCase(appName.trim());
 			// Migrate legacy Docear default (Nimbus) to FlatLaf Light on first run after upgrade.
-			if (lookAndFeel != null && "nimbus".equalsIgnoreCase(lookAndFeel.trim())
-					&& !"freeplane".equalsIgnoreCase(Controller.getCurrentController().getResourceController()
-							.getProperty("ApplicationName", "freeplane"))) {
+			if (lookAndFeel != null && "nimbus".equalsIgnoreCase(lookAndFeel.trim()) && twigmarkProduct) {
 				lookAndFeel = org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT;
 			}
-			if (Compat.isMacOsX() || "default".equals(lookAndFeel)) {
+			// Twigmark: "default" means FlatLaf Light (modern chrome), not the OS system L&F.
+			if (twigmarkProduct && lookAndFeel != null && "default".equalsIgnoreCase(lookAndFeel.trim())) {
+				lookAndFeel = org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT;
+			}
+			// Migrate prior soft-gray canvas token to high-contrast near-white.
+			if (twigmarkProduct) {
+				try {
+					final org.freeplane.core.resources.ResourceController rc = Controller.getCurrentController()
+					        .getResourceController();
+					final String bg = rc.getProperty("standardbackgroundcolor", "");
+					if (bg != null) {
+						final String normalized = bg.trim().toLowerCase();
+						if ("#f2f4f7".equals(normalized) || "f2f4f7".equals(normalized)) {
+							rc.setProperty("standardbackgroundcolor", "#fafbfc");
+						}
+					}
+					final String edge = rc.getProperty("standardedgecolor", "");
+					if (edge != null) {
+						final String normalized = edge.trim().toLowerCase();
+						if ("#808080".equals(normalized) || "808080".equals(normalized)
+						        || "#94a3b8".equals(normalized)) {
+							rc.setProperty("standardedgecolor", "#64748b");
+						}
+					}
+				}
+				catch (Throwable ignore) {
+				}
+			}
+			if (!twigmarkProduct && (Compat.isMacOsX() || "default".equals(lookAndFeel))) {
 				UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", "default");
 			}
@@ -580,8 +611,8 @@ abstract public class FrameController implements ViewController {
 				boolean setLnF = false;
 				setLnF = setLookAndFeel(lookAndFeel, lafInfos);
 				if(!setLnF){
-					if (!"freeplane".equals(Controller.getCurrentController().getResourceController().getProperty("ApplicationName", "freeplane").toLowerCase())) {
-						// Prefer FlatLaf, then Nimbus, for Docear
+					if (twigmarkProduct) {
+						// Prefer FlatLaf, then Nimbus, for Twigmark / Docear
 						if (!setLookAndFeel(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT, lafInfos)) {
 							setLookAndFeel("nimbus", lafInfos);
 						}
@@ -594,13 +625,14 @@ abstract public class FrameController implements ViewController {
 			}
 		}
 		catch (final Exception ex) {
-			LogUtils.warn("Error while setting Look&Feel" + lookAndFeel);
-			// Fallback chain: FlatLaf → Nimbus → system
+			LogUtils.warn("Error while setting Look&Feel " + lookAndFeel, ex);
+			// Fallback chain: FlatLaf (bundle CL) → Nimbus → system
 			try {
 				org.freeplane.core.ui.theme.DocearUiTheme.registerLookAndFeels();
-				UIManager.setLookAndFeel(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT);
+				setLookAndFeelSafe(org.freeplane.core.ui.theme.DocearUiTheme.FLAT_LIGHT);
 			}
 			catch (final Exception flatFail) {
+				LogUtils.warn("FlatLaf fallback failed", flatFail);
 				try {
 					UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
 				}
@@ -628,6 +660,23 @@ abstract public class FrameController implements ViewController {
 			new JFileChooser();
 		}
 		catch (Throwable t){
+			// FlatLaf under OSGi sometimes installs without ComponentUI delegates — fall back.
+			final String current = UIManager.getLookAndFeel() != null
+			        ? UIManager.getLookAndFeel().getClass().getName() : "";
+			if (current.indexOf("flatlaf") >= 0) {
+				LogUtils.warn("FlatLaf UI delegates unavailable; falling back to Nimbus", t);
+				try {
+					UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+					org.freeplane.core.ui.theme.DocearUiTheme.applyAfterLookAndFeel();
+				}
+				catch (Throwable nimbusFail) {
+					try {
+						UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+					}
+					catch (Throwable ignore) {
+					}
+				}
+			}
 			try{
 				UIManager.getLookAndFeelDefaults().put("FileChooserUI", MetalFileChooserUI.class.getName());
 			}
@@ -640,20 +689,55 @@ abstract public class FrameController implements ViewController {
 			InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
 		boolean setLnF = false;
 		for(LookAndFeelInfo lafInfo : lafInfos){
-			if(lafInfo.getName().equalsIgnoreCase(lookAndFeel)){										
-				UIManager.setLookAndFeel(lafInfo.getClassName());						
+			if(lafInfo.getName().equalsIgnoreCase(lookAndFeel)){
+				setLookAndFeelSafe(lafInfo.getClassName());
 				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", lafInfo.getClassName());
 				setLnF = true;
-				break;										
+				break;
 			}
 			if(lafInfo.getClassName().equals(lookAndFeel)){
-				UIManager.setLookAndFeel(lafInfo.getClassName());
+				setLookAndFeelSafe(lafInfo.getClassName());
 				Controller.getCurrentController().getResourceController().setProperty("lookandfeel", lookAndFeel);
 				setLnF = true;
 				break;
 			}
 		}
 		return setLnF;
+	}
+
+	/**
+	 * FlatLaf under OSGi needs the bundle ClassLoader in UIDefaults; if delegates still
+	 * fail the JFileChooser probe below falls back to Nimbus.
+	 */
+	private static void setLookAndFeelSafe(final String className) throws ClassNotFoundException,
+	        InstantiationException, IllegalAccessException, UnsupportedLookAndFeelException {
+		if (className != null && className.indexOf("flatlaf") >= 0) {
+			final ClassLoader cl = org.freeplane.core.ui.theme.DocearUiTheme.class.getClassLoader();
+			try {
+				final Class<?> clazz = Class.forName(className, true, cl);
+				final LookAndFeel laf = (LookAndFeel) clazz.newInstance();
+				UIManager.put("ClassLoader", cl);
+				UIManager.setLookAndFeel(laf);
+				UIManager.getLookAndFeelDefaults().put("ClassLoader", cl);
+				return;
+			}
+			catch (ClassNotFoundException e) {
+				throw e;
+			}
+			catch (UnsupportedLookAndFeelException e) {
+				throw e;
+			}
+			catch (InstantiationException e) {
+				throw e;
+			}
+			catch (IllegalAccessException e) {
+				throw e;
+			}
+			catch (RuntimeException e) {
+				throw e;
+			}
+		}
+		UIManager.setLookAndFeel(className);
 	}
 
 	public void addObjectTypeInfo(Object value) {

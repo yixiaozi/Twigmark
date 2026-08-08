@@ -11,4 +11,7 @@ Require-Bundle: org.freeplane.core;bundle-version="1.0.1",
  org.docear.plugin.core;bundle-version="1.0.0",
  org.freeplane.plugin.workspace;bundle-version="2.0.0",
  org.docear.plugin.ai;bundle-version="1.0.0"
-Bundle-ClassPath: lib/plugin.jar, lib/sqlite-jdbc-3.21.0.jar
+Bundle-ClassPath: lib/plugin.jar,
+ lib/sqlite-jdbc-3.44.1.0.jar,
+ lib/slf4j-api-1.7.36.jar,
+ lib/slf4j-nop-1.7.36.jar

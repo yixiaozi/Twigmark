@@ -63,13 +63,7 @@ public final class FreeplaneSecurityManager extends SecurityManager {
 		mFinalSecurityManager.checkAccess(pG);
 	}
 
-	@Override
-	public void checkAwtEventQueueAccess() {
-		if (mFinalSecurityManager == null) {
-			return;
-		}
-		mFinalSecurityManager.checkAwtEventQueueAccess();
-	}
+	// checkAwtEventQueueAccess removed: not present on SecurityManager since Java 17+.
 
 	@Override
 	public void checkConnect(final String pHost, final int pPort) {
@@ -135,13 +129,7 @@ public final class FreeplaneSecurityManager extends SecurityManager {
 		mFinalSecurityManager.checkListen(pPort);
 	}
 
-	@Override
-	public void checkMemberAccess(final Class<?> clazz, final int which) {
-		if (mFinalSecurityManager == null) {
-			return;
-		}
-		mFinalSecurityManager.checkMemberAccess(clazz, which);
-	}
+	// checkMemberAccess removed: not present on SecurityManager since Java 17+.
 
 	@Override
 	public void checkMulticast(final InetAddress pMaddr) {
@@ -256,21 +244,7 @@ public final class FreeplaneSecurityManager extends SecurityManager {
 		mFinalSecurityManager.checkSetFactory();
 	}
 
-	@Override
-	public void checkSystemClipboardAccess() {
-		if (mFinalSecurityManager == null) {
-			return;
-		}
-		mFinalSecurityManager.checkSystemClipboardAccess();
-	}
-
-	@Override
-	public boolean checkTopLevelWindow(final Object pWindow) {
-		if (mFinalSecurityManager == null) {
-			return true;
-		}
-		return mFinalSecurityManager.checkTopLevelWindow(pWindow);
-	}
+	// checkSystemClipboardAccess / checkTopLevelWindow removed: not present since Java 17+.
 
 	@Override
 	public void checkWrite(final FileDescriptor pFd) {

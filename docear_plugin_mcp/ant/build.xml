@@ -13,10 +13,10 @@
 	<property name="dist.osgi.dir" value="${dist}/org.docear.plugin.mcp" />
 	<property name="freeplaneplugin.jar" value="${dist}/org.docear.plugin.mcp.jar"/>
 	<property name="debug" value="on" />
-	<property name="java_source_version" value="1.6" />
-	<property name="java_target_version" value="1.6" />
+	<property name="java_source_version" value="1.8" />
+	<property name="java_target_version" value="1.8" />
 	<property name="build.compiler" value="modern" />
-    <property name="classpath" value="${framework.jar}:${freeplane.jars}:${external.jars}:${jhall.jar}:${swingworker.jar}:${core.jar}:${workspace.jar}:${jhyperlink.jar}:${jgoodies.jar}:${ai.jar}:lib/sqlite-jdbc-3.21.0.jar"/>
+    <property name="classpath" value="${framework.jar}:${freeplane.jars}:${external.jars}:${jhall.jar}:${swingworker.jar}:${core.jar}:${workspace.jar}:${jhyperlink.jar}:${jgoodies.jar}:${ai.jar}:lib/sqlite-jdbc-3.44.1.0.jar:lib/slf4j-api-1.7.36.jar:lib/slf4j-nop-1.7.36.jar"/>
 
 	<target name="build">
 		<mkdir dir="${build}" />

@@ -1,5 +1,6 @@
 #!/bin/bash
-set -e
+# Do not use `set -e`: GUI-launched bash + pipelines (java -version | grep) are fragile.
+set +e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 CONTENTS_DIR="$(dirname "$SCRIPT_DIR")"
@@ -10,6 +11,7 @@ mkdir -p "$LOG_DIR"
 exec >>"$LOG_FILE" 2>&1
 echo "========== $(date) =========="
 echo "Launching Twigmark from: $0"
+echo "uname=$(uname -m) HOME=$HOME PATH=$PATH"
 
 show_error() {
     osascript -e "display alert \"Twigmark 无法启动\" message \"$1\" as critical" 2>/dev/null || true
@@ -19,7 +21,7 @@ show_error() {
 
 java_cpu_arch() {
     local info
-    info="$(file "$1" 2>/dev/null || true)"
+    info="$(/usr/bin/file -b "$1" 2>/dev/null || true)"
     case "$info" in
         *arm64*|*aarch64*) echo "arm64" ;;
         *x86_64*) echo "x86_64" ;;
@@ -29,67 +31,72 @@ java_cpu_arch() {
 
 is_jdk8_home() {
     local home="$1"
-    [ -x "${home}/bin/java" ] || return 1
+    [ -n "$home" ] && [ -x "${home}/bin/java" ] || return 1
     case "$home" in
         *"JavaAppletPlugin"*|*"Internet Plug-Ins"*) return 1 ;;
     esac
-    "${home}/bin/java" -version 2>&1 | grep -qE 'version "1\.8'
+    "${home}/bin/java" -version 2>&1 | /usr/bin/grep -qE 'version "1\.8'
 }
 
-# Apple Silicon 优先 arm64 JDK 8（Zulu/Temurin），避免 Rosetta；再退回任意 JDK 8。
+# Prefer known arm64 JDK 8 homes first (Zulu), then scan, then java_home.
 find_java() {
-    local home candidate prefer=""
-    local -a matches=()
-
+    local home prefer=""
     if [ "$(uname -m)" = "arm64" ]; then
         prefer="arm64"
     fi
 
+    # 1) Explicit high-priority homes (user installs)
     for home in \
-        /Library/Java/JavaVirtualMachines/*/Contents/Home \
-        "${HOME}/Library/Java/JavaVirtualMachines/"*/Contents/Home
+        "${HOME}/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home" \
+        "/Library/Java/JavaVirtualMachines/zulu-8.jdk/Contents/Home" \
+        "${HOME}/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home" \
+        "/Library/Java/JavaVirtualMachines/temurin-8.jdk/Contents/Home"
     do
-        is_jdk8_home "$home" || continue
-        matches+=("$home")
-    done
-
-    if [ -n "$prefer" ]; then
-        for home in "${matches[@]}"; do
-            if [ "$(java_cpu_arch "${home}/bin/java")" = "$prefer" ]; then
+        if is_jdk8_home "$home"; then
+            if [ -z "$prefer" ] || [ "$(java_cpu_arch "${home}/bin/java")" = "$prefer" ]; then
+                echo "find_java: prefer hit $home" >&2
                 echo "$home"
                 return 0
             fi
-        done
-    fi
+            echo "find_java: skip wrong arch $home ($(java_cpu_arch "${home}/bin/java"))" >&2
+        fi
+    done
 
-    if [ "${#matches[@]}" -gt 0 ]; then
-        echo "${matches[0]}"
+    # 2) Scan standard JVM directories
+    local first=""
+    for home in \
+        "${HOME}"/Library/Java/JavaVirtualMachines/*/Contents/Home \
+        /Library/Java/JavaVirtualMachines/*/Contents/Home
+    do
+        is_jdk8_home "$home" || continue
+        if [ -z "$first" ]; then
+            first="$home"
+        fi
+        if [ -n "$prefer" ] && [ "$(java_cpu_arch "${home}/bin/java")" = "$prefer" ]; then
+            echo "find_java: scan hit $home" >&2
+            echo "$home"
+            return 0
+        fi
+    done
+
+    if [ -n "$first" ]; then
+        echo "find_java: fallback first $first" >&2
+        echo "$first"
         return 0
     fi
 
+    # 3) /usr/libexec/java_home
     if [ -x "/usr/libexec/java_home" ]; then
         if [ -n "$prefer" ]; then
-            while IFS= read -r home; do
-                is_jdk8_home "$home" || continue
-                if [ "$(java_cpu_arch "${home}/bin/java")" = "$prefer" ]; then
-                    echo "$home"
-                    return 0
-                fi
-            done < <(/usr/libexec/java_home -v 1.8 -a arm64 2>/dev/null; /usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
-        else
-            while IFS= read -r home; do
-                is_jdk8_home "$home" || continue
+            home="$(/usr/libexec/java_home -v 1.8 -a arm64 2>/dev/null || true)"
+            if is_jdk8_home "$home"; then
                 echo "$home"
                 return 0
-            done < <(/usr/libexec/java_home -v 1.8 2>/dev/null; /usr/libexec/java_home 2>/dev/null)
+            fi
         fi
-    fi
-
-    candidate="$(command -v java 2>/dev/null || true)"
-    [ -z "$candidate" ] && [ -x /usr/bin/java ] && candidate="/usr/bin/java"
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then
-        if "$candidate" -version 2>&1 | grep -qE 'version "1\.8'; then
-            dirname "$(dirname "$candidate")"
+        home="$(/usr/libexec/java_home -v 1.8 2>/dev/null || true)"
+        if is_jdk8_home "$home"; then
+            echo "$home"
             return 0
         fi
     fi
@@ -100,7 +107,6 @@ find_java() {
 JAVA_HOME="$(find_java)" || show_error "未找到 Java 8。Apple Silicon 请安装 Azul Zulu 8 aarch64：\nhttps://www.azul.com/downloads/?version=java-8-lts&os=macos&architecture=arm-64-bit&package=jdk\n或将 JDK 放到 ~/Library/Java/JavaVirtualMachines/"
 export JAVA_HOME
 JAVACMD="${JAVA_HOME}/bin/java"
-[ -x "$JAVACMD" ] || JAVACMD="$(command -v java)"
 [ -x "$JAVACMD" ] || show_error "Java 可执行文件不存在：${JAVA_HOME}/bin/java"
 
 echo "Using JAVA_HOME=$JAVA_HOME"
@@ -111,8 +117,6 @@ echo "Java arch: $(java_cpu_arch "$JAVACMD")"
 cd "$JAVA_DIR" || show_error "找不到应用资源目录：$JAVA_DIR"
 FREEDIR="$(pwd)"
 
-# Dock：名称 + PNG 图标。直接 exec java 时进程是 JVM，Info.plist 的 .icns
-# 不会进 Dock；-Xdock:icon 必须用 PNG（.icns 在 Java 8 上会 NPE）。
 DOCK_ICON=""
 for candidate in \
     "${CONTENTS_DIR}/Resources/Java/twigmark.png" \
@@ -127,6 +131,7 @@ do
         break
     fi
 done
+
 JAVA_ARGS=(
     -Xmx1536m
     -Xdock:name=Twigmark
@@ -151,7 +156,6 @@ JAVA_ARGS+=(
     -xargs "${FREEDIR}/init.xargs"
 )
 
-# 仅当选中的仍是 x86_64 JVM 时才走 Rosetta
 if [ "$(uname -m)" = "arm64" ] && [ "$(java_cpu_arch "$JAVACMD")" = "x86_64" ]; then
     echo "Running x86_64 JVM under Rosetta: $JAVACMD"
     exec arch -x86_64 "$JAVACMD" "${JAVA_ARGS[@]}"

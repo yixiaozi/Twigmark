@@ -188,8 +188,9 @@ public class OptionPanel {
 	@SuppressWarnings("unchecked")
     private void initControls(final DefaultMutableTreeNode controlsTree) {
 	    controls = new Vector<IPropertyControl>();
-		for (final Enumeration<DefaultMutableTreeNode> i = controlsTree.preorderEnumeration(); i.hasMoreElements();) {
-			final IPropertyControlCreator creator = (IPropertyControlCreator) i.nextElement().getUserObject();
+		for (final Enumeration<?> i = controlsTree.preorderEnumeration(); i.hasMoreElements();) {
+			final DefaultMutableTreeNode treeNode = (DefaultMutableTreeNode) i.nextElement();
+			final IPropertyControlCreator creator = (IPropertyControlCreator) treeNode.getUserObject();
 			if (creator == null) {
 				continue;
 			}

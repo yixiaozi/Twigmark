@@ -436,6 +436,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		// the dock is narrow, instead of hiding tabs behind a scroll triangle.
 		sideTabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 		org.freeplane.core.ui.components.TabbedPaneStableOrder.install(sideTabs);
+		org.freeplane.core.ui.theme.DocearUiTheme.styleSidebarDock(sideTabs);
 		for (final String tabId : sideTabOrder) {
 			if (sideTabComponents.get(tabId) == null) {
 				sideTabComponents.put(tabId, createSideTabPlaceholder(tabId));
@@ -505,6 +506,8 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		});
 		
 		Box resizableTools = Box.createHorizontalBox();
+		resizableTools.setOpaque(true);
+		resizableTools.setBackground(org.freeplane.core.ui.theme.DocearUiTheme.SIDEBAR_BG);
 		resizableTools.add(sideTabs);
 		this.viewUpdater = new Runnable() {
 			public void run() {
@@ -529,6 +532,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			}
 		};
 		resizableTools.add(otcr);
+		org.freeplane.core.ui.theme.DocearUiTheme.styleSidebarDock(resizableTools);
 		
 		modeController.getUserInputListenerFactory().addToolBar("workspace", ViewController.LEFT, resizableTools);
 		
@@ -1379,6 +1383,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 		applySideTabsWidth();
 		bindSideTabTitles();
 		ensureSideTabLoaded(sideTabs.getSelectedIndex());
+		DocearUiTheme.styleSidebarDock(sideTabs);
 	}
 
 	private void ensureSideTabLoaded(final int tabIndex) {
@@ -1479,6 +1484,7 @@ public class MModeWorkspaceController extends AWorkspaceModeExtension {
 			panel = new EnhancedAllFlagsTabPanel();
 		}
 		if (panel != null) {
+			DocearUiTheme.styleSidebarDock(panel);
 			sideTabComponents.put(tabId, panel);
 			if (tabIndex < sideTabs.getTabCount()) {
 				sideTabs.setComponentAt(tabIndex, panel);

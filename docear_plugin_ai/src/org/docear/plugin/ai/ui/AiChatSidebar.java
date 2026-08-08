@@ -25,6 +25,7 @@ import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 import org.docear.plugin.ai.DocearAiConfig;
 import org.docear.plugin.ai.DocearAiController;
@@ -66,6 +67,8 @@ public class AiChatSidebar extends JPanel {
     private NodeModel focusNode;
     private AiChatMessagePanel streamingPanel;
     private volatile boolean requestInFlight;
+    /** Serial so rapid map/node switches only keep the latest context walk. */
+    private int contextRefreshSerial;
 
     public AiChatSidebar(DocearAiController aiController) {
         this.aiController = aiController;
@@ -516,15 +519,36 @@ public class AiChatSidebar extends JPanel {
             statusBar.updateContext(null);
             return;
         }
-        int redactionCount = 0;
-        if (lastQuestion != null && lastQuestion.length() > 0) {
-            String raw = aiController.getPromptBuilder().buildRawChatPrompt(
-                    lastQuestion, map, aiController.getChatSessionManager().getOrCreateSession(map),
-                    resolveFocusNode());
-            redactionCount = AiPromptBuilder.countRedactions(raw);
-        }
-        statusBar.updateContext(aiController.buildContextInfo(map, lastQuestion, redactionCount, ""));
-        updateInputPlaceholder(map);
+        // Full map walks must not block the EDT (startup restore / node selection).
+        final int serial = ++contextRefreshSerial;
+        final MapModel mapRef = map;
+        final String question = lastQuestion == null ? "" : lastQuestion;
+        final NodeModel focus = resolveFocusNode();
+        new SwingWorker<AiChatContextInfo, Void>() {
+            protected AiChatContextInfo doInBackground() {
+                int redactionCount = 0;
+                if (question.length() > 0) {
+                    String raw = aiController.getPromptBuilder().buildRawChatPrompt(
+                            question, mapRef, aiController.getChatSessionManager().getOrCreateSession(mapRef),
+                            focus);
+                    redactionCount = AiPromptBuilder.countRedactions(raw);
+                }
+                return aiController.buildContextInfo(mapRef, question, redactionCount, "");
+            }
+
+            protected void done() {
+                if (serial != contextRefreshSerial) {
+                    return;
+                }
+                try {
+                    statusBar.updateContext(get());
+                }
+                catch (Exception e) {
+                    LogUtils.warn("AI context refresh failed", e);
+                }
+                updateInputPlaceholder(mapRef);
+            }
+        }.execute();
     }
 
     private void updateInputPlaceholder(MapModel map) {

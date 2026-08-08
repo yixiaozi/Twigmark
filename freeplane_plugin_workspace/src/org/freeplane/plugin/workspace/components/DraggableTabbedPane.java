@@ -25,7 +25,8 @@ public class DraggableTabbedPane extends JTabbedPane {
 	private TabReorderListener reorderListener;
 
 	public DraggableTabbedPane() {
-		DocearUiTheme.styleTabbedPane(this);
+		putClientProperty("twigmark.sidebarDock", Boolean.TRUE);
+		DocearUiTheme.styleSidebarDock(this);
 		TabbedPaneStableOrder.install(this);
 		addMouseListener(new MouseAdapter() {
 			public void mousePressed(final MouseEvent e) {
