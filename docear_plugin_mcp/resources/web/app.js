@@ -1205,12 +1205,19 @@
         btn.type = "button";
         btn.className = "conv-item" + (c.id === conversationId ? " active" : "");
         var source = c.source === "desktop" ? "desktop" : "web";
+        var mapLabel = "";
+        if (c.mapKey) {
+          var parts = String(c.mapKey).replace(/\\/g, "/").split("/");
+          mapLabel = parts[parts.length - 1] || c.mapKey;
+        }
         btn.innerHTML =
           '<span class="t"></span><span class="s"><span class="tag ' +
           source +
-          '"></span><span class="when"></span></span>';
+          '"></span><span class="map"></span><span class="when"></span></span>';
         btn.querySelector(".t").textContent = c.title || "(未命名)";
         btn.querySelector(".tag").textContent = source === "desktop" ? "桌面" : "网页";
+        btn.querySelector(".map").textContent = mapLabel ? " · " + mapLabel : "";
+        btn.querySelector(".map").title = c.mapKey || "";
         btn.querySelector(".when").textContent = formatTime(c.updatedAt);
         btn.addEventListener("click", function () {
           openConversation(c.id, c.title);
