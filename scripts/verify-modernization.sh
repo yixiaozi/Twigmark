@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Twigmark modernization gate — safe for Cloud Agents.
+# Twigmark modernization gate — safe for Cloud Agents / GitHub Actions.
 # NEVER stops a running Docear/Twigmark instance, NEVER deploys to install dirs.
 set -euo pipefail
 
@@ -14,6 +14,21 @@ ok()   { echo "[OK]   $*"; PASS=$((PASS+1)); }
 bad()  { echo "[FAIL] $*"; FAIL=$((FAIL+1)); }
 skip() { echo "[SKIP] $*"; SKIP=$((SKIP+1)); }
 
+# Portable content search (rg is not installed on GitHub-hosted runners).
+search() {
+  local pattern="$1"
+  shift
+  if command -v rg >/dev/null 2>&1; then
+    rg -n -- "$pattern" "$@"
+  else
+    grep -REn -- "$pattern" "$@"
+  fi
+}
+
+search_quiet() {
+  search "$@" >/dev/null 2>&1
+}
+
 echo "==== Twigmark modernization verify ===="
 echo "Repo: $ROOT"
 echo "Java: $(java -version 2>&1 | head -1 || true)"
@@ -27,14 +42,20 @@ else
 fi
 
 # Ensure verify entrypoints do not *invoke* deploy helpers (mentions in comments OK).
-if rg -n 'Stop-RunningDocear\s|build-docear\.bat\s' scripts/verify-mm-fixtures.py .github/workflows/modernization-verify.yml 2>/dev/null; then
+if search_quiet 'Stop-RunningDocear[[:space:]]|build-docear\.bat[[:space:]]' \
+    scripts/verify-mm-fixtures.py .github/workflows/modernization-verify.yml; then
   bad "verify path references deploy/stop helpers"
 else
   ok "verify path has no deploy/stop side effects"
 fi
 
 # --- Phase 2: Java 1.8 compile target ---
-BAD_JAVA=$(rg -n 'name="java_source_version"\s+value="1\.[0-7]"' --glob '**/build.xml' || true)
+BAD_JAVA=""
+while IFS= read -r -d '' f; do
+  if grep -Eq 'name="java_source_version"[[:space:]]+value="1\.[0-7]"' "$f"; then
+    BAD_JAVA+="$f"$'\n'
+  fi
+done < <(find . -name build.xml -not -path './.git/*' -print0)
 if [[ -z "${BAD_JAVA}" ]]; then
   ok "all ant modules use java_source_version >= 1.8"
 else
@@ -49,19 +70,22 @@ else
 fi
 
 # --- Phase 4/5/6: theme & defaults ---
-if rg -n 'lookandfeel\s*=\s*com\.formdev\.flatlaf\.FlatLightLaf' freeplane/viewer-resources/freeplane.properties >/dev/null; then
+if search_quiet 'lookandfeel[[:space:]]*=[[:space:]]*com\.formdev\.flatlaf\.FlatLightLaf' \
+    freeplane/viewer-resources/freeplane.properties; then
   ok "default Look&Feel is FlatLaf Light"
 else
   bad "default Look&Feel is not FlatLaf Light"
 fi
 
-if rg -n 'isDarkLafActive|applyChromePalette|ui_density' freeplane/src/org/freeplane/core/ui/theme/DocearUiTheme.java >/dev/null; then
+if search_quiet 'isDarkLafActive|ui_density|isCompactDensity' \
+    freeplane/src/org/freeplane/core/ui/theme/DocearUiTheme.java; then
   ok "DocearUiTheme has dark palette / density hooks"
 else
   bad "DocearUiTheme missing dark/density modernization hooks"
 fi
 
-if rg -n 'standardbackgroundcolor\s*=\s*#f2f4f7' freeplane/viewer-resources/freeplane.properties >/dev/null; then
+if search_quiet 'standardbackgroundcolor[[:space:]]*=[[:space:]]*#f2f4f7' \
+    freeplane/viewer-resources/freeplane.properties; then
   ok "map canvas default uses modern canvas color"
 else
   bad "map canvas default not updated"
@@ -112,11 +136,6 @@ if [[ -x "$ANT" && -n "$(command -v javac || true)" ]]; then
   fi
 else
   skip "ant/javac not available for compile probe"
-fi
-
-# --- Optional standalone Java tests (no GUI) ---
-if [[ -f freeplane/dist/org.freeplane.core/org.freeplane.core.jar || -f freeplane/build ]]; then
-  :
 fi
 
 echo
