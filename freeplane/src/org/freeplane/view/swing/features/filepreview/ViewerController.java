@@ -435,6 +435,18 @@ public class ViewerController extends PersistentNodeHook implements INodeViewLif
 			    .getText("not_saved_for_image_error"), "Freeplane", JOptionPane.WARNING_MESSAGE);
 			return null;
 		}
+		// Plugin chooser (e.g. Eagle + local). Null means cancelled.
+		final ExternalImageSelection.Chooser imageChooser = ExternalImageSelection.getChooser();
+		if (imageChooser != null) {
+			final URI chosen = imageChooser.chooseStoredUri(node);
+			if (chosen == null) {
+				return null;
+			}
+			final ExternalResource preview = new ExternalResource(chosen);
+			final String progressName = chosen.getPath() != null ? new File(chosen.getPath()).getName() : chosen.toString();
+			ProgressIcons.updateExtendedProgressIcons(node, progressName);
+			return preview;
+		}
 		final UrlManager urlManager = (UrlManager) controller.getModeController().getExtension(UrlManager.class);
 		final JFileChooser chooser = urlManager.getFileChooser(null, false);
 		chooser.setAcceptAllFileFilterUsed(false);
@@ -581,7 +593,9 @@ public class ViewerController extends PersistentNodeHook implements INodeViewLif
 		if (uri == null) {
 			return new JLabel("no file set");
 		}
-		final URI absoluteUri = model.getAbsoluteUri(map);
+		URI absoluteUri = model.getAbsoluteUri(map);
+		// Path / UrlManager first; only if the file is missing, optional plugin fallback (e.g. Eagle by filename).
+		absoluteUri = ExternalImageResolution.resolveDisplayUri(map, uri, absoluteUri);
 		if (absoluteUri == null) {
 			return new JLabel(uri.toString());
 		}
@@ -636,6 +650,7 @@ public class ViewerController extends PersistentNodeHook implements INodeViewLif
 		undoableDeactivateHook(node);
 		undoableActivateHook(node, preview);
 		ProgressIcons.updateExtendedProgressIcons(node, uri.getPath());
+		ExternalImageSelection.notifyAfterApply(node, uri);
 		return true;
 	}
 	

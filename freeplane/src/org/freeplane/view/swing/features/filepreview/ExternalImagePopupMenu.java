@@ -128,12 +128,17 @@ class ExternalImagePopupMenu extends JPopupMenu implements MouseListener {
 			change = new JMenuItem(TextUtils.getText("ExternalImage_popupMenu_Change"));
 			change.addActionListener(new ActionListener() {
 				public void actionPerformed(final ActionEvent e) {
+					final ExternalResource old = (ExternalResource) node.getExtension(ExternalResource.class);
+					final float zoom = old != null ? old.getZoom() : -1f;
 					final ExternalResource extRes = (ExternalResource) viewer.createExtension(node);
-					if (extRes != null) {
-						final File file = new File(extRes.getAbsoluteUri(node.getMap()));
-						if (progUtil.hasExternalResource(node) && !progUtil.hasExtendedProgressIcon(node)) {
-							viewer.undoableDeactivateHook(node);
-							viewer.paste(file, node, node.isLeft());
+					if (extRes != null && progUtil.hasExternalResource(node)
+					        && !progUtil.hasExtendedProgressIcon(node)) {
+						viewer.paste(extRes.getUri(), node);
+						if (zoom > 0) {
+							final ExternalResource neu = (ExternalResource) node.getExtension(ExternalResource.class);
+							if (neu != null) {
+								neu.setZoom(zoom);
+							}
 						}
 					}
 				}

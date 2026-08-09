@@ -20,7 +20,7 @@
 package org.freeplane.view.swing.features.filepreview;
 
 import java.awt.event.ActionEvent;
-import java.io.File;
+import java.net.URI;
 import java.util.Collection;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.EnabledAction;
@@ -51,12 +51,13 @@ public class AddExternalImageAction extends AFreeplaneAction {
 		    .getExtension(ViewerController.class));
 		final NodeModel selectedNode = mapController.getSelectedNode();
 		final ExternalResource extRes = (ExternalResource) vc.createExtension(selectedNode);
-		if (extRes != null) {
-			final File file = new File(extRes.getAbsoluteUri(selectedNode.getMap()));
-			for (final NodeModel node : nodes) {
-				if (!progUtil.hasExternalResource(node)) {
-					vc.paste(file, node, node.isLeft());
-				}
+		if (extRes == null) {
+			return;
+		}
+		final URI uri = extRes.getUri();
+		for (final NodeModel node : nodes) {
+			if (!progUtil.hasExternalResource(node)) {
+				vc.paste(uri, node);
 			}
 		}
 	}

@@ -1,8 +1,15 @@
 package org.freeplane.core.util;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -10,12 +17,21 @@ import java.util.Enumeration;
 import java.util.List;
 
 /**
- * Stable per-PC identity from the primary NIC MAC (no on-disk id file — safe for synced folders).
- * Used for machine-local filenames: {@code audit-&lt;mac&gt;.db}, {@code clipboard_history-&lt;mac&gt;.db}, etc.
+ * Stable per-PC identity for machine-local filenames:
+ * {@code audit-&lt;mac&gt;.db}, {@code clipboard_history-&lt;mac&gt;.db}, etc.
+ * <p>
+ * NIC MAC alone is unstable on modern Macs (Private Wi‑Fi Address, Thunderbolt adapters
+ * going up/down). Therefore the chosen id is <b>pinned</b> once in a non-synced OS support
+ * directory ({@code ~/Library/Application Support/Docear/local-machine-id.txt} on macOS).
+ * The working-directory {@code data/}/{@code _data/} folder must never store this id —
+ * it is often cloud-synced across PCs.
  */
 public final class LocalMachineId {
 
 	private static final Object LOCK = new Object();
+	private static final String STICKY_FILE_NAME = "local-machine-id.txt";
+	private static final Charset UTF8 = Charset.forName("UTF-8");
+
 	private static volatile String CACHED_HEX;
 	private static volatile String CACHED_ID;
 	private static volatile String CACHED_NAME;
@@ -23,7 +39,7 @@ public final class LocalMachineId {
 	private LocalMachineId() {
 	}
 
-	/** Lowercase 12-hex MAC, e.g. {@code aabbccddeeff}. */
+	/** Lowercase 12-hex id fragment, e.g. {@code aabbccddeeff}. */
 	public static String getMacHex() {
 		ensureLoaded();
 		return CACHED_HEX;
@@ -94,7 +110,7 @@ public final class LocalMachineId {
 		return (File[]) list.toArray(new File[list.size()]);
 	}
 
-	static void setForTests(final String macHex, final String hostName) {
+	public static void setForTests(final String macHex, final String hostName) {
 		synchronized (LOCK) {
 			String hex = macHex == null ? "000000000000" : macHex.replace(":", "").replace("-", "").toLowerCase();
 			if (hex.startsWith("mac")) {
@@ -115,7 +131,7 @@ public final class LocalMachineId {
 		}
 	}
 
-	static void resetForTests() {
+	public static void resetForTests() {
 		synchronized (LOCK) {
 			CACHED_HEX = null;
 			CACHED_ID = null;
@@ -131,12 +147,116 @@ public final class LocalMachineId {
 			if (CACHED_HEX != null && CACHED_HEX.length() > 0) {
 				return;
 			}
-			final String hex = detectMacHex();
+			String hex = readStickyHex();
+			if (hex == null || hex.length() != 12) {
+				hex = detectMacHex();
+				writeStickyHex(hex);
+			}
 			CACHED_HEX = hex;
 			CACHED_ID = "mac-" + hex;
 			CACHED_NAME = resolveHostName();
-			LogUtils.info("LocalMachineId from MAC: " + CACHED_ID + " (" + CACHED_NAME + ")");
+			LogUtils.info("LocalMachineId: " + CACHED_ID + " (" + CACHED_NAME + ") sticky="
+			        + stickyFile().getAbsolutePath());
 		}
+	}
+
+	/** OS support dir that is NOT the synced mind-map data folder. */
+	static File stickyFile() {
+		return new File(getOsSupportDir(), STICKY_FILE_NAME);
+	}
+
+	static File getOsSupportDir() {
+		final File home = new File(System.getProperty("user.home", "."));
+		if (Compat.isWindowsOS()) {
+			final String appData = System.getenv("APPDATA");
+			if (appData != null && appData.trim().length() > 0) {
+				return new File(appData.trim(), "Docear");
+			}
+			return new File(home, "AppData" + File.separator + "Roaming" + File.separator + "Docear");
+		}
+		if (Compat.isMacOsX()) {
+			return new File(new File(new File(home, "Library"), "Application Support"), "Docear");
+		}
+		final String xdg = System.getenv("XDG_CONFIG_HOME");
+		final File configHome = (xdg != null && xdg.trim().length() > 0) ? new File(xdg.trim())
+		        : new File(home, ".config");
+		return new File(configHome, "Docear");
+	}
+
+	private static String readStickyHex() {
+		final File file = stickyFile();
+		if (!file.isFile()) {
+			return null;
+		}
+		BufferedReader reader = null;
+		try {
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), UTF8));
+			String line;
+			while ((line = reader.readLine()) != null) {
+				line = line.trim();
+				if (line.length() == 0 || line.startsWith("#")) {
+					continue;
+				}
+				final String hex = normalizeHex(line);
+				if (hex != null) {
+					return hex;
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("LocalMachineId sticky read failed: " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(reader);
+		}
+		return null;
+	}
+
+	private static void writeStickyHex(final String hex) {
+		final File file = stickyFile();
+		final File parent = file.getParentFile();
+		if (parent != null && !parent.exists()) {
+			parent.mkdirs();
+		}
+		BufferedWriter writer = null;
+		try {
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file), UTF8));
+			writer.write("# Docear per-PC id for audit-*.db / clipboard_history-*.db");
+			writer.newLine();
+			writer.write("# Keep this file on THIS computer only (not in synced mind-map data/).");
+			writer.newLine();
+			writer.write(hex);
+			writer.newLine();
+		}
+		catch (Exception e) {
+			LogUtils.warn("LocalMachineId sticky write failed: " + e.getMessage());
+		}
+		finally {
+			FileUtils.silentlyClose(writer);
+		}
+	}
+
+	private static String normalizeHex(final String raw) {
+		if (raw == null) {
+			return null;
+		}
+		String hex = raw.trim().toLowerCase().replace(":", "").replace("-", "");
+		if (hex.startsWith("mac")) {
+			hex = hex.substring(3);
+			if (hex.startsWith("-")) {
+				hex = hex.substring(1);
+			}
+		}
+		if (hex.length() != 12) {
+			return null;
+		}
+		for (int i = 0; i < 12; i++) {
+			final char c = hex.charAt(i);
+			if ((c < '0' || c > '9') && (c < 'a' || c > 'f')) {
+				return null;
+			}
+		}
+		return hex;
 	}
 
 	private static String detectMacHex() {
@@ -151,16 +271,27 @@ public final class LocalMachineId {
 							continue;
 						}
 						final String name = ni.getName() != null ? ni.getName().toLowerCase() : "";
-						if (name.startsWith("docker") || name.startsWith("veth") || name.startsWith("br-")
-						        || name.startsWith("virbr") || name.startsWith("vmnet") || name.startsWith("vbox")) {
+						if (isSkippedInterfaceName(name)) {
 							continue;
 						}
 						final byte[] mac = ni.getHardwareAddress();
 						if (mac == null || mac.length < 6 || isAllZero(mac)) {
 							continue;
 						}
-						final boolean preferred = (mac[0] & 0x02) == 0;
-						candidates.add(new Object[] { Boolean.valueOf(preferred), name, toHex(mac) });
+						final boolean globallyAdministered = (mac[0] & 0x02) == 0;
+						// Prefer en0 (built-in Wi‑Fi/Ethernet on Mac), then other en*, then rest.
+						int rank = 50;
+						if ("en0".equals(name)) {
+							rank = 0;
+						}
+						else if (name.startsWith("en") && name.length() <= 4) {
+							rank = 10;
+						}
+						else if (name.startsWith("eth")) {
+							rank = 15;
+						}
+						candidates.add(new Object[] { Boolean.valueOf(globallyAdministered), Integer.valueOf(rank),
+						        name, toHex(mac) });
 					}
 					catch (Exception ignored) {
 					}
@@ -179,11 +310,16 @@ public final class LocalMachineId {
 				if (px != py) {
 					return px ? -1 : 1;
 				}
-				return String.valueOf(x[1]).compareTo(String.valueOf(y[1]));
+				final int rx = ((Integer) x[1]).intValue();
+				final int ry = ((Integer) y[1]).intValue();
+				if (rx != ry) {
+					return rx < ry ? -1 : 1;
+				}
+				return String.valueOf(x[2]).compareTo(String.valueOf(y[2]));
 			}
 		});
 		if (!candidates.isEmpty()) {
-			return (String) ((Object[]) candidates.get(0))[2];
+			return (String) ((Object[]) candidates.get(0))[3];
 		}
 		final String host = resolveHostName();
 		int h = host.hashCode();
@@ -194,6 +330,14 @@ public final class LocalMachineId {
 			sb.append(Character.forDigit(b & 0xf, 16));
 		}
 		return sb.toString();
+	}
+
+	private static boolean isSkippedInterfaceName(final String name) {
+		return name.startsWith("docker") || name.startsWith("veth") || name.startsWith("br-")
+		        || name.startsWith("bridge") || name.startsWith("virbr") || name.startsWith("vmnet")
+		        || name.startsWith("vbox") || name.startsWith("utun") || name.startsWith("awdl")
+		        || name.startsWith("llw") || name.startsWith("ap") || name.startsWith("ipsec")
+		        || name.startsWith("p2p");
 	}
 
 	private static boolean isAllZero(final byte[] mac) {

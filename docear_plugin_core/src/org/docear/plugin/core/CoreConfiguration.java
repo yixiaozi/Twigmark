@@ -56,6 +56,7 @@ import org.docear.plugin.core.calendar.CalendarViewportIntegration;
 import org.docear.plugin.core.mapswitcher.MapSwitcherService;
 import org.docear.plugin.core.quickcommand.QuickCommandService;
 import org.docear.plugin.core.graph.RelationshipGraphIntegration;
+import org.docear.plugin.core.eagle.EagleIntegrationService;
 import org.docear.plugin.core.todoist.TodoistIntegrationService;
 import org.docear.plugin.core.logger.DocearLogEvent;
 import org.docear.plugin.core.ui.OverlayViewport;
@@ -580,6 +581,7 @@ public class CoreConfiguration extends ALanguageController {
 		org.docear.plugin.core.settings.ProductSettingsService.install(modeController);
 		CalendarViewportIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
 		TodoistIntegrationService.install(modeController);
+		EagleIntegrationService.install(modeController);
 		RelationshipGraphIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
 		modeController.addAction(new DocearRemoveNodeLinkAction());
 		if("true".equals(System.getProperty("docear.debug", "false"))) {

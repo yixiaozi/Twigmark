@@ -20,7 +20,7 @@
 package org.freeplane.view.swing.features.filepreview;
 
 import java.awt.event.ActionEvent;
-import java.io.File;
+import java.net.URI;
 import java.util.Collection;
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.EnabledAction;
@@ -50,12 +50,20 @@ public class ChangeExternalImageAction extends AFreeplaneAction {
 		final ViewerController vc = ((ViewerController) Controller.getCurrentController().getModeController()
 		    .getExtension(ViewerController.class));
 		final ExternalResource extRes = (ExternalResource) vc.createExtension(mapController.getSelectedNode());
-		if (extRes != null) {
-			final File file = new File(extRes.getAbsoluteUri(mapController.getSelectedNode().getMap()));
-			for (final NodeModel node : nodes) {
-				if (progUtil.hasExternalResource(node) && !progUtil.hasExtendedProgressIcon(node)) {
-					vc.undoableDeactivateHook(node);
-					vc.paste(file, node, node.isLeft());
+		if (extRes == null) {
+			return;
+		}
+		final URI uri = extRes.getUri();
+		for (final NodeModel node : nodes) {
+			if (progUtil.hasExternalResource(node) && !progUtil.hasExtendedProgressIcon(node)) {
+				final ExternalResource old = (ExternalResource) node.getExtension(ExternalResource.class);
+				final float zoom = old != null ? old.getZoom() : -1f;
+				vc.paste(uri, node);
+				if (zoom > 0) {
+					final ExternalResource neu = (ExternalResource) node.getExtension(ExternalResource.class);
+					if (neu != null) {
+						neu.setZoom(zoom);
+					}
 				}
 			}
 		}

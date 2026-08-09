@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.docear.plugin.core.eagle.EagleConfig;
+import org.docear.plugin.core.eagle.EagleUrlHandler;
 import org.docear.plugin.core.workspace.compatible.DocearConversionURLHandler;
 import org.docear.plugin.core.workspace.controller.DocearConversionDescriptor;
 import org.freeplane.core.util.LogUtils;
@@ -30,6 +32,10 @@ public class Activator extends WorkspaceDependingService {
 		Hashtable<String, String[]>properties = new Hashtable<String, String[]>();
         properties.put(URLConstants.URL_HANDLER_PROTOCOL, new String[] { DocearConversionDescriptor.OLD_WORKSPACE_URL_HANDLE });
         context.registerService(URLStreamHandlerService.class.getName(), new DocearConversionURLHandler(), properties);
+
+		Hashtable<String, String[]> eagleProperties = new Hashtable<String, String[]>();
+		eagleProperties.put(URLConstants.URL_HANDLER_PROTOCOL, new String[] { EagleConfig.PROP_PROTOCOL });
+		context.registerService(URLStreamHandlerService.class.getName(), new EagleUrlHandler(), eagleProperties);
         
 		getConfig().initMode(modeController);		
 		startPluginServices(context, modeController);

@@ -27,6 +27,10 @@ import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.border.EmptyBorder;
 
+import javax.swing.JTextArea;
+
+import org.docear.plugin.core.eagle.EagleConfig;
+import org.docear.plugin.core.eagle.EagleItemIndex;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.theme.DocearUiTheme;
 import org.freeplane.core.util.MindMapDataRootResolver;
@@ -37,7 +41,7 @@ import org.freeplane.view.swing.features.finance.FinanceLedgerService;
 import org.freeplane.view.swing.features.git.GitConfig;
 
 /**
- * Product settings hub: working directory + MCP / Git / Finance / QuickCapture.
+ * Product settings hub: working directory + MCP / Git / Finance / QuickCapture / Eagle.
  */
 public final class ProductSettingsDialog extends JDialog {
 	private static final long serialVersionUID = 1L;
@@ -46,6 +50,10 @@ public final class ProductSettingsDialog extends JDialog {
 	private static final String PROP_INBOX_FILENAME = "quickcapture.inbox_filename";
 
 	private final JTextField workingDirField = new JTextField(36);
+	private final JTextArea eagleLibrariesArea = new JTextArea(5, 36);
+	private final JTextField eaglePrimaryField = new JTextField(36);
+	private final JCheckBox eagleAutoImport = new JCheckBox();
+	private final JLabel eagleIndexLabel = DocearUiTheme.mutedLabel(" ");
 	private final JLabel configDirLabel = DocearUiTheme.mutedLabel(" ");
 	private final JCheckBox mcpEnabled = new JCheckBox();
 	private final JTextField mcpHostField = new JTextField(16);
@@ -91,6 +99,7 @@ public final class ProductSettingsDialog extends JDialog {
 		tabs.addTab(TextUtils.getText("ProductSettingsAction.tab.git"), buildGitTab());
 		tabs.addTab(TextUtils.getText("ProductSettingsAction.tab.finance"), buildFinanceTab());
 		tabs.addTab(TextUtils.getText("ProductSettingsAction.tab.quickcapture"), buildQuickCaptureTab());
+		tabs.addTab(TextUtils.getText("ProductSettingsAction.tab.eagle"), buildEagleTab());
 		root.add(tabs, BorderLayout.CENTER);
 
 		final JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 8, 0));
@@ -393,9 +402,87 @@ public final class ProductSettingsDialog extends JDialog {
 		return panel;
 	}
 
+	private JPanel buildEagleTab() {
+		final JPanel panel = formPanel();
+		final GridBagConstraints c = baseConstraints();
+		eagleLibrariesArea.setLineWrap(true);
+		eagleLibrariesArea.setWrapStyleWord(true);
+		eagleLibrariesArea.setFont(DocearUiTheme.font(12f));
+		final JScrollPane libScroll = new JScrollPane(eagleLibrariesArea);
+		libScroll.setPreferredSize(new Dimension(420, 100));
+
+		c.gridx = 0;
+		c.gridy = 0;
+		c.gridwidth = 3;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("eagle.settings.libraries")), c);
+		c.gridy = 1;
+		c.weightx = 1;
+		c.weighty = 1;
+		c.fill = GridBagConstraints.BOTH;
+		panel.add(libScroll, c);
+		c.gridy = 2;
+		c.weighty = 0;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("eagle.settings.primary")), c);
+		c.gridy = 3;
+		c.gridwidth = 2;
+		panel.add(eaglePrimaryField, c);
+		c.gridx = 2;
+		c.gridwidth = 1;
+		c.fill = GridBagConstraints.NONE;
+		panel.add(browseButton(eaglePrimaryField, true), c);
+		c.gridx = 0;
+		c.gridy = 4;
+		c.gridwidth = 3;
+		eagleAutoImport.setText(TextUtils.getText("eagle.settings.auto_import"));
+		eagleAutoImport.setOpaque(false);
+		eagleAutoImport.setFont(DocearUiTheme.font(12f));
+		panel.add(eagleAutoImport, c);
+		c.gridy = 5;
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("eagle.settings.hint")), c);
+		c.gridy = 6;
+		panel.add(eagleIndexLabel, c);
+		c.gridy = 7;
+		c.fill = GridBagConstraints.NONE;
+		final JButton rebuild = DocearUiTheme.softButton(TextUtils.getText("eagle.settings.rebuild_now"));
+		rebuild.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				applyEagleFieldsToConfig();
+				EagleItemIndex.getInstance().rebuild(true, null);
+				refreshEagleIndexLabel();
+				JOptionPane.showMessageDialog(ProductSettingsDialog.this,
+						TextUtils.format("eagle.settings.rebuilt",
+								Integer.valueOf(EagleItemIndex.getInstance().size()),
+								Integer.valueOf(EagleConfig.existingLibraryRoots().size())),
+						TextUtils.getText("ProductSettingsAction.tab.eagle"), JOptionPane.INFORMATION_MESSAGE);
+			}
+		});
+		panel.add(rebuild, c);
+		return panel;
+	}
+
+	private void applyEagleFieldsToConfig() {
+		EagleConfig.setLibraryPathsText(eagleLibrariesArea.getText());
+		final String primary = eaglePrimaryField.getText() == null ? "" : eaglePrimaryField.getText().trim();
+		EagleConfig.setPrimaryLibrary(primary.length() == 0 ? null : new File(primary));
+		EagleConfig.setAutoImportEnabled(eagleAutoImport.isSelected());
+	}
+
+	private void refreshEagleIndexLabel() {
+		eagleIndexLabel.setText(TextUtils.format("eagle.settings.index_status",
+				Integer.valueOf(EagleItemIndex.getInstance().size()),
+				Integer.valueOf(EagleConfig.existingLibraryRoots().size())));
+	}
+
 	private void loadValues() {
 		workingDirField.setText(MindMapDataRootResolver.getWorkingDirectory().getAbsolutePath());
 		refreshConfigHint();
+		eagleLibrariesArea.setText(EagleConfig.getLibraryPathsText());
+		final File primary = EagleConfig.getPrimaryLibrary();
+		eaglePrimaryField.setText(primary == null ? "" : primary.getAbsolutePath());
+		eagleAutoImport.setSelected(EagleConfig.isAutoImportEnabled());
+		refreshEagleIndexLabel();
 		final ResourceController rc = ResourceController.getResourceController();
 		mcpEnabled.setSelected(isTrue(rc.getProperty("mcp.enabled", "true")));
 		mcpHostField.setText(rc.getProperty("mcp.host", "127.0.0.1"));
@@ -475,6 +562,16 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty(PROP_INBOX_FILENAME,
 		        inboxFileField.getText() == null || inboxFileField.getText().trim().length() == 0
 		                ? "\u6536\u4ef6\u7bb1.mm" : inboxFileField.getText().trim());
+
+		applyEagleFieldsToConfig();
+		try {
+			if (!EagleConfig.existingLibraryRoots().isEmpty()) {
+				EagleItemIndex.getInstance().rebuild(false, null);
+			}
+		}
+		catch (Exception e) {
+			JOptionPane.showMessageDialog(this, e.getMessage(), getTitle(), JOptionPane.WARNING_MESSAGE);
+		}
 
 		MindMapDataRootResolver.markSetupCompleted();
 
