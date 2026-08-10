@@ -225,9 +225,13 @@ public class XMLWriter {
 	 *            the string to write.
 	 */
 	protected void writeEncoded(final String str) {
-		for (int i = 0; i < str.length(); i++) {
-			final char c = str.charAt(i);
-			switch (c) {
+		if (str == null) {
+			return;
+		}
+		for (int i = 0; i < str.length();) {
+			final int cp = str.codePointAt(i);
+			i += Character.charCount(cp);
+			switch (cp) {
 				case '<':
 					writer.print("&lt;");
 					break;
@@ -244,18 +248,30 @@ public class XMLWriter {
 					writer.print("&quot;");
 					break;
 				case 0x0A:
-					if(inContent){
-						writer.print(c);
+					if (inContent) {
+						writer.print((char) cp);
 						break;
 					}
+					// fall through: encode as NCR outside content
 				default:
-					if ((c < ' ') || (c > 0x7E)) {
-						writer.print("&#x");
-						writer.print(Integer.toString(c, 16));
-						writer.print(';');
+					if (cp < 0x20 && cp != 0x9 && cp != 0xA && cp != 0xD) {
+						// Illegal XML 1.0 C0 controls (incl. NUL) — skip
+						break;
+					}
+					if (cp >= 0xD800 && cp <= 0xDFFF) {
+						// Lone surrogate — skip
+						break;
+					}
+					if (cp > 0x7E) {
+						if (cp <= 0xD7FF || (cp >= 0xE000 && cp <= 0xFFFD)
+						        || (cp >= 0x10000 && cp <= 0x10FFFF)) {
+							writer.print("&#x");
+							writer.print(Integer.toHexString(cp));
+							writer.print(';');
+						}
 					}
 					else {
-						writer.print(c);
+						writer.print((char) cp);
 					}
 			}
 		}

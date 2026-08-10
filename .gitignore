@@ -49,7 +49,15 @@ docear_plugin_core/resources/build.number
 docear_plugin_core/resources/version.properties
 Jabref_Beta_2_7_Docear/build.number
 Jabref_Beta_2_7_Docear/src/resource/build.properties
+<<<<<<< Updated upstream
 
 # Modernization local outputs
 .gradle/
 testdata/mm-fixtures/.twigmark-backups/
+=======
+docear_framework/docear.version.properties
+docear_plugin_core/resources/build.number
+docear_plugin_core/resources/version.properties
+Jabref_Beta_2_7_Docear/build.number
+Jabref_Beta_2_7_Docear/src/resource/build.properties
+>>>>>>> Stashed changes

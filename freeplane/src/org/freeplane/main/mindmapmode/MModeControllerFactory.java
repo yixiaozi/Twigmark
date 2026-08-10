@@ -197,6 +197,7 @@ public class MModeControllerFactory {
 		try {
 			org.freeplane.view.swing.features.finance.FinanceController.install(modeController);
 			org.freeplane.view.swing.features.clipboardhistory.ClipboardHistoryController.install(modeController);
+			org.freeplane.view.swing.features.keylog.KeyLogController.install(modeController);
 		}
 		catch (Exception e) {
 			org.freeplane.core.util.LogUtils.severe("Finance install failed; continuing without it", e);

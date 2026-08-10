@@ -297,22 +297,28 @@ class XMLUtil {
 	}
 
 	/**
-	 * Processes a character literal.
-	 * 
-	 * @param entity
-	 *            the entity
-	 * @throws java.io.IOException
-	 *             if an error occurred reading the data
+	 * Processes a character literal into a Java String (handles supplementary
+	 * planes such as emoji {@code &#x1f31f;}). Illegal XML 1.0 code points yield
+	 * an empty string.
 	 */
-	static char processCharLiteral(String entity) throws IOException, XMLParseException {
-		if (entity.charAt(2) == 'x') {
-			entity = entity.substring(3, entity.length() - 1);
-			return (char) Integer.parseInt(entity, 16);
+	static String processCharLiteral(String entity) throws IOException, XMLParseException {
+		final int cp;
+		try {
+			if (entity.length() > 3 && entity.charAt(2) == 'x') {
+				cp = Integer.parseInt(entity.substring(3, entity.length() - 1), 16);
+			}
+			else {
+				cp = Integer.parseInt(entity.substring(2, entity.length() - 1), 10);
+			}
 		}
-		else {
-			entity = entity.substring(2, entity.length() - 1);
-			return (char) Integer.parseInt(entity, 10);
+		catch (RuntimeException e) {
+			throw new XMLParseException(null, -1, "Invalid character reference: " + entity);
 		}
+		if (!(cp == 0x9 || cp == 0xA || cp == 0xD || (cp >= 0x20 && cp <= 0xD7FF)
+		        || (cp >= 0xE000 && cp <= 0xFFFD) || (cp >= 0x10000 && cp <= 0x10FFFF))) {
+			return "";
+		}
+		return new String(Character.toChars(cp));
 	}
 
 	/**

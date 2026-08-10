@@ -361,26 +361,38 @@ public class HtmlUtils {
 	public static String unicodeToHTMLUnicodeEntity(final String text) {
 		/*
 		 * Heuristic reserve for expansion : factor 1.2
+		 * Encode by Unicode code point so emoji become &#x1f31f; not surrogate pairs.
 		 */
-		StringBuilder result = null;
-		int intValue;
-		char myChar;
-		for (int i = 0; i < text.length(); ++i) {
-			myChar = text.charAt(i);
-			intValue = text.charAt(i);
-			if (intValue < 32 || intValue > 126) {
-				if(result == null){
-					 result = new StringBuilder((int) (text.length() * 1.2));
-					 result.append(text.subSequence(0, i));
-				}
-				result.append("&#x").append(Integer.toString(intValue, 16)).append(';');
-			}
-			else if(result != null){
-				result.append(myChar);
-			}
+		if (text == null || text.length() == 0) {
+			return text;
 		}
-		if(result != null)
+		StringBuilder result = null;
+		for (int i = 0; i < text.length();) {
+			final int cp = text.codePointAt(i);
+			final int charCount = Character.charCount(cp);
+			final boolean encode = cp < 32 || cp > 126;
+			if (encode) {
+				// Skip illegal XML 1.0 controls / lone surrogates entirely.
+				final boolean legal = cp == 0x9 || cp == 0xA || cp == 0xD
+				        || (cp >= 0x20 && cp <= 0xD7FF)
+				        || (cp >= 0xE000 && cp <= 0xFFFD)
+				        || (cp >= 0x10000 && cp <= 0x10FFFF);
+				if (result == null) {
+					result = new StringBuilder((int) (text.length() * 1.2));
+					result.append(text.subSequence(0, i));
+				}
+				if (legal) {
+					result.append("&#x").append(Integer.toHexString(cp)).append(';');
+				}
+			}
+			else if (result != null) {
+				result.appendCodePoint(cp);
+			}
+			i += charCount;
+		}
+		if (result != null) {
 			return result.toString();
+		}
 		return text;
 	}
 

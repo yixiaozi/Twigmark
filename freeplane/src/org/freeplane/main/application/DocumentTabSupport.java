@@ -75,6 +75,22 @@ public final class DocumentTabSupport {
 		Controller.getCurrentController().getMapViewManager().refreshViewportView(mapView);
 	}
 
+	/**
+	 * Clears document-tab ownership without touching the viewport. Use when a
+	 * MapView is about to claim the scroll pane via {@code afterViewChange}.
+	 */
+	public static void clearActiveDocumentView() {
+		if (activeDocumentView == null) {
+			return;
+		}
+		try {
+			activeDocumentView.onTabDeactivated();
+		}
+		catch (Throwable ignore) {
+		}
+		activeDocumentView = null;
+	}
+
 	public static void refreshTabTitles() {
 		final MapViewTabs tabs = MapViewTabs.getInstance();
 		if (tabs != null) {

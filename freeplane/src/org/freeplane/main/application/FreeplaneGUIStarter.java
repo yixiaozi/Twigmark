@@ -219,6 +219,8 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {
 			    final Options options = CommandLineParser.parse(args);
+				// Focused session map opens here; remaining maps are queued on a timer
+				// (LastOpenedList) so setVisible below is not blocked by a long restore.
 				loadMaps(options.getFilesToOpenAsArray());
 				viewController.init(Controller.getCurrentController());
 				if (splash != null) {

@@ -52,6 +52,20 @@ public final class LocalMachineIdStandaloneTest {
 			if (!sawPeer) {
 				throw new IllegalStateException("peer missing from list");
 			}
+			// Empty local + richer sibling → adopt
+			LocalMachineId.setForTests("mac-ccddeeff0011", "pc-b");
+			final File emptyLocal = new File(dir, "clipboard_history-ccddeeff0011.db");
+			final File rich = new File(dir, "clipboard_history-998877665544.db");
+			writeBytes(rich, new byte[] { 7, 7, 7, 7, 7 });
+			final File adopted = LocalMachineId.migrateLegacyFile(dir, "clipboard_history.db", "clipboard_history",
+			        ".db");
+			if (!adopted.isFile() || adopted.length() != 5) {
+				throw new IllegalStateException("adopt richest sibling failed: " + adopted + " len="
+				        + (adopted.isFile() ? adopted.length() : -1));
+			}
+			if (!emptyLocal.getName().equals(adopted.getName())) {
+				throw new IllegalStateException("adopted wrong file: " + adopted.getName());
+			}
 			System.out.println("LocalMachineIdStandaloneTest OK");
 		}
 		finally {

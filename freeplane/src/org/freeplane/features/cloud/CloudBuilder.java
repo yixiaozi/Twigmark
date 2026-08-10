@@ -74,7 +74,7 @@ class CloudBuilder implements IElementDOMHandler, IExtensionElementWriter, IElem
 		reader.addAttributeHandler("cloud", "COLOR", new IAttributeHandler() {
 			public void setAttribute(final Object userObject, final String value) {
 				final CloudModel cloud = (CloudModel) userObject;
-				cloud.setColor(ColorUtils.stringToColor(value.toString()));
+				cloud.setColor(ColorUtils.stringToColor(value.toString(), java.awt.Color.LIGHT_GRAY));
 			}
 		});
 		reader.addAttributeHandler("cloud", "SHAPE", new IAttributeHandler() {

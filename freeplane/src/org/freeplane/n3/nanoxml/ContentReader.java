@@ -151,7 +151,12 @@ class ContentReader extends Reader {
 				}
 				if ((ch == '&') && (str.length() > 1)) {
 					if (str.charAt(1) == '#') {
-						ch = XMLUtil.processCharLiteral(str);
+						final String decoded = XMLUtil.processCharLiteral(str);
+						for (int di = 0; di < decoded.length() && charsRead < size; di++) {
+							outputBuffer[charsRead] = decoded.charAt(di);
+							charsRead++;
+						}
+						continue;
 					}
 					else {
 						XMLUtil.processEntity(str, reader, resolver);

@@ -82,7 +82,7 @@ class EdgeBuilder implements IElementDOMHandler, IExtensionElementWriter, IEleme
 		reader.addAttributeHandler("edge", "COLOR", new IAttributeHandler() {
 			public void setAttribute(final Object userObject, final String value) {
 				final EdgeModel edge = (EdgeModel) userObject;
-				edge.setColor(ColorUtils.stringToColor(value.toString()));
+				edge.setColor(ColorUtils.stringToColor(value.toString(), EdgeController.STANDARD_EDGE_COLOR));
 			}
 		});
 		reader.addAttributeHandler("edge", "WIDTH", new IAttributeHandler() {

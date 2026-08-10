@@ -807,7 +807,13 @@ public class CoreConfiguration extends ALanguageController {
 		WorkspaceController.addAction(new DocearRenameAction());
 		JViewport viewport = (JViewport) Controller.getCurrentController().getMapViewManager().getViewport();
 		final OverlayViewport overlayViewport = new OverlayViewport(viewport);
+		// Preserve the current MapView — setViewport alone installs an empty viewport
+		// and looks like a blank mind map until the next tab switch.
+		final java.awt.Component existingView = viewport != null ? viewport.getView() : null;
 		Controller.getCurrentController().getMapViewManager().getScrollPane().setViewport(overlayViewport);
+		if (existingView != null && overlayViewport.getView() != existingView) {
+			overlayViewport.setView(existingView);
+		}
 		MapTagFilterOverlay.install();
 		MapActivityOverlay.install();
 	}

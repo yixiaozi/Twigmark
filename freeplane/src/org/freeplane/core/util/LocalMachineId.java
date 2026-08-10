@@ -64,19 +64,111 @@ public final class LocalMachineId {
 	/**
 	 * Rename legacy shared file to this machine's file when the MAC file is missing.
 	 * Also renames SQLite {@code -wal}/{@code -shm} siblings.
+	 * <p>
+	 * When the sticky machine id changes (NIC churn before sticky pinning), many
+	 * {@code prefix-*.suffix} siblings can exist. If the current id's file is missing
+	 * or empty while a richer sibling exists, copy that sibling so session/encryption
+	 * state is not lost.
 	 */
 	public static File migrateLegacyFile(final File dir, final String legacyName, final String prefix,
 	        final String suffix) {
 		final File local = fileIn(dir, prefix, suffix);
-		if (local.exists()) {
+		if (local.exists() && local.length() > 0) {
 			return local;
 		}
 		final File legacy = new File(dir, legacyName);
-		if (legacy.isFile() && legacy.renameTo(local)) {
+		if (!local.exists() && legacy.isFile() && legacy.renameTo(local)) {
 			renameSibling(legacy, local, "-wal");
 			renameSibling(legacy, local, "-shm");
+			if (local.exists() && local.length() > 0) {
+				return local;
+			}
 		}
+		adoptRichestSibling(dir, local, prefix, suffix, legacyName);
 		return local;
+	}
+
+	/**
+	 * If {@code local} is missing/empty, copy the largest non-empty {@code prefix-*suffix}
+	 * sibling (excluding {@code local} itself).
+	 */
+	static boolean adoptRichestSibling(final File dir, final File local, final String prefix,
+	        final String suffix, final String legacyName) {
+		if (dir == null || !dir.isDirectory() || local == null) {
+			return false;
+		}
+		if (local.exists() && local.length() > 0) {
+			return false;
+		}
+		final File[] siblings = listMachineFiles(dir, prefix, suffix, legacyName);
+		File best = null;
+		long bestLen = 0;
+		for (int i = 0; i < siblings.length; i++) {
+			final File f = siblings[i];
+			if (f == null || !f.isFile()) {
+				continue;
+			}
+			try {
+				if (f.getCanonicalPath().equals(local.getCanonicalPath())) {
+					continue;
+				}
+			}
+			catch (Exception e) {
+				if (f.getAbsolutePath().equals(local.getAbsolutePath())) {
+					continue;
+				}
+			}
+			final String name = f.getName();
+			// Never adopt import/archive shards into the writable per-PC file.
+			if (name != null && name.toLowerCase().indexOf("-import-") >= 0) {
+				continue;
+			}
+			final long len = f.length();
+			if (len > bestLen) {
+				bestLen = len;
+				best = f;
+			}
+		}
+		if (best == null || bestLen <= 0) {
+			return false;
+		}
+		try {
+			copyFile(best, local);
+			LogUtils.warn("LocalMachineId: adopted " + best.getName() + " → " + local.getName() + " (" + bestLen
+			        + " bytes)");
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("LocalMachineId: could not adopt sibling " + best.getName() + ": " + e.getMessage());
+			return false;
+		}
+	}
+
+	private static void copyFile(final File from, final File to) throws Exception {
+		final FileInputStream in = new FileInputStream(from);
+		try {
+			final File parent = to.getParentFile();
+			if (parent != null && !parent.exists()) {
+				parent.mkdirs();
+			}
+			final FileOutputStream out = new FileOutputStream(to);
+			try {
+				final byte[] buf = new byte[8192];
+				int n;
+				while ((n = in.read(buf)) >= 0) {
+					if (n > 0) {
+						out.write(buf, 0, n);
+					}
+				}
+				out.flush();
+			}
+			finally {
+				out.close();
+			}
+		}
+		finally {
+			in.close();
+		}
 	}
 
 	/** List {@code prefix-*.suffix} plus optional legacy {@code legacyName} in dir. */

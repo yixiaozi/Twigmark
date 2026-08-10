@@ -21,6 +21,7 @@ import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.usagestats.MapUsageSummary;
 import org.freeplane.features.usagestats.UsageRecord;
 import org.freeplane.features.usagestats.UsageStatsManager;
+import org.freeplane.view.swing.features.keylog.KeyLogService;
 import org.freeplane.view.swing.features.pomodoro.PomodoroSessionManager;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderCalendarBridge;
 
@@ -966,69 +967,19 @@ public final class ReportEngine {
 	private static ReportViewModel viewKeyboard(final ReportQuery q) {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_KEYBOARD);
 		final ReportViewModel view = baseView(def, q);
-		final List keyFiles = findKeyLogFiles();
-		if (keyFiles.isEmpty()) {
+		final KeyboardStats stats = loadKeyboardStats(q);
+		if (stats.totalKeys <= 0L) {
 			view.emptyHint = tr("ReportEngine.content.0119");
 			view.addDetail(tr("ReportEngine.content.0120"));
 			return view;
 		}
-		final Map byDay = new TreeMap();
-		final Map byHour = new TreeMap();
-		long totalKeys = 0L;
-		for (int f = 0; f < keyFiles.size(); f++) {
-			final File file = (File) keyFiles.get(f);
-			view.addDetail(tr("ReportEngine.content.0121") + file.getAbsolutePath());
-			try {
-				final java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
-				        new java.io.FileInputStream(file), "UTF-8"));
-				String line;
-				while ((line = reader.readLine()) != null) {
-					if (line.length() < 16) {
-						continue;
-					}
-					Date dt = null;
-					String key = "";
-					try {
-						dt = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.CHINA).parse(line.substring(0, 16));
-						key = line.length() > 17 ? line.substring(17).trim() : "";
-					}
-					catch (Exception e1) {
-						try {
-							dt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).parse(line.substring(0, 16));
-							key = line.length() > 17 ? line.substring(17).trim() : "";
-						}
-						catch (Exception e2) {
-							continue;
-						}
-					}
-					if (dt == null || !q.range.contains(dt.getTime())) {
-						continue;
-					}
-					if (!q.matches(key, file.getName(), "")) {
-						continue;
-					}
-					totalKeys++;
-					final String day = DAY.format(dt);
-					Long dayCount = (Long) byDay.get(day);
-					byDay.put(day, Long.valueOf((dayCount == null ? 0L : dayCount.longValue()) + 1L));
-					final Calendar cal = Calendar.getInstance();
-					cal.setTime(dt);
-					final String hour = String.format("%02d:00", Integer.valueOf(cal.get(Calendar.HOUR_OF_DAY)));
-					Long hourCount = (Long) byHour.get(hour);
-					byHour.put(hour, Long.valueOf((hourCount == null ? 0L : hourCount.longValue()) + 1L));
-				}
-				reader.close();
-			}
-			catch (Exception e) {
-				view.addDetail(tr("ReportEngine.content.0122") + e.getMessage());
-			}
-		}
-		view.addKpi(tr("ReportEngine.content.0123"), String.valueOf(totalKeys), tr("ReportEngine.content.0124"));
+		view.addDetail(stats.sourceNote);
+		view.addKpi(tr("ReportEngine.content.0123"), String.valueOf(stats.totalKeys), tr("ReportEngine.content.0124"));
 		final ReportChartSeries dayLine = new ReportChartSeries(tr("ReportEngine.content.0125"), ReportChartSeries.TYPE_LINE);
-		fillLongSeries(dayLine, byDay);
+		fillLongSeries(dayLine, stats.byDay);
 		view.addChart(dayLine);
 		final ReportChartSeries hourBar = new ReportChartSeries(tr("ReportEngine.content.0126"), ReportChartSeries.TYPE_BAR);
-		final Iterator hit = byHour.entrySet().iterator();
+		final Iterator hit = stats.byHour.entrySet().iterator();
 		while (hit.hasNext()) {
 			final Map.Entry e = (Map.Entry) hit.next();
 			hourBar.add((String) e.getKey(), ((Long) e.getValue()).doubleValue());
@@ -1278,22 +1229,92 @@ public final class ReportEngine {
 		return root;
 	}
 
-	/** DocearReminder KeyHours：扫描 key.txt. */
+	/** Keystroke rhythm: prefer TwigMark keylog DB; fall back to legacy key.txt. */
 	private static ReportNodeSpec keyboardReport(final ReportQuery q) {
 		final ReportDefinition def = ReportCatalog.byId(ReportCatalog.ID_KEYBOARD);
 		final ReportNodeSpec root = root(def, q, "pencil");
-		final List keyFiles = findKeyLogFiles();
-		if (keyFiles.isEmpty()) {
+		final KeyboardStats stats = loadKeyboardStats(q);
+		if (stats.totalKeys <= 0L) {
 			root.add(tr("ReportEngine.content.0148"), "messagebox_warning");
 			root.add(tr("ReportEngine.content.0149"), "info");
 			return root;
 		}
+		root.add(stats.sourceNote, "attach");
+		root.add(tr("ReportEngine.content.0150") + stats.totalKeys, "info");
+		final ReportNodeSpec dayNode = root.add(tr("ReportEngine.content.0151"), "calendar");
+		final Iterator dayIt = stats.byDay.entrySet().iterator();
+		while (dayIt.hasNext()) {
+			final Map.Entry e = (Map.Entry) dayIt.next();
+			dayNode.add(e.getKey() + " · " + e.getValue() + tr("ReportEngine.content.0046"), "pencil");
+		}
+		final ReportNodeSpec hourNode = root.add(tr("ReportEngine.content.0152"), "clock");
+		final Iterator hourIt = stats.byHour.entrySet().iterator();
+		while (hourIt.hasNext()) {
+			final Map.Entry e = (Map.Entry) hourIt.next();
+			hourNode.add(e.getKey() + " · " + e.getValue() + tr("ReportEngine.content.0046"), "full-1");
+		}
+		return root;
+	}
+
+	private static final class KeyboardStats {
+		long totalKeys;
 		final Map byDay = new TreeMap();
 		final Map byHour = new TreeMap();
-		long totalKeys = 0L;
+		String sourceNote = "";
+	}
+
+	private static KeyboardStats loadKeyboardStats(final ReportQuery q) {
+		final KeyboardStats stats = new KeyboardStats();
+		final long from = q.range.startMs;
+		final long to = q.range.endMs;
+		try {
+			// Prefer SQLite hour stats. Never fall back to scanning Dropbox key.txt when
+			// any keylog-*.db exists — that path can hang for minutes on large archives.
+			if (KeyLogService.getInstance().hasAnyDatabase()) {
+				notifyProgress((ReportProgress) PROGRESS.get(), -1,
+				        TextUtils.getText("ReportEngine.progress.keyboard"));
+				final Map hourTs = KeyLogService.getInstance().aggregateByHour(from, to);
+				for (final Iterator it = hourTs.entrySet().iterator(); it.hasNext();) {
+					final Map.Entry e = (Map.Entry) it.next();
+					final long ts = ((Long) e.getKey()).longValue();
+					final long count = ((Long) e.getValue()).longValue();
+					if (count <= 0L) {
+						continue;
+					}
+					stats.totalKeys += count;
+					final Date dt = new Date(ts);
+					final String day = DAY.format(dt);
+					final Long dayPrev = (Long) stats.byDay.get(day);
+					stats.byDay.put(day, Long.valueOf(dayPrev == null ? count : dayPrev.longValue() + count));
+					final Calendar cal = Calendar.getInstance();
+					cal.setTime(dt);
+					final String hour = String.format("%02d:00", Integer.valueOf(cal.get(Calendar.HOUR_OF_DAY)));
+					final Long hourPrev = (Long) stats.byHour.get(hour);
+					stats.byHour.put(hour, Long.valueOf(hourPrev == null ? count : hourPrev.longValue() + count));
+				}
+				stats.sourceNote = stats.totalKeys > 0L ? "TwigMark keylog (keylog-*.db)"
+				        : "TwigMark keylog（该时段无击键）";
+				return stats;
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Keylog report failed: " + e.getMessage(), e);
+			stats.sourceNote = "keylog error: " + e.getMessage();
+			return stats;
+		}
+		notifyProgress((ReportProgress) PROGRESS.get(), -1, TextUtils.getText("ReportEngine.progress.keyboard"));
+		return loadKeyboardStatsFromLegacyTxt(q, stats);
+	}
+
+	/** Legacy DocearReminder key.txt: count semicolon-separated keys; time from line stamp. */
+	private static KeyboardStats loadKeyboardStatsFromLegacyTxt(final ReportQuery q, final KeyboardStats stats) {
+		final List keyFiles = findKeyLogFiles();
+		if (keyFiles.isEmpty()) {
+			return stats;
+		}
+		final StringBuffer note = new StringBuffer("legacy key.txt ×").append(keyFiles.size());
 		for (int f = 0; f < keyFiles.size(); f++) {
 			final File file = (File) keyFiles.get(f);
-			root.add(tr("ReportEngine.content.0121") + file.getAbsolutePath(), "attach");
 			try {
 				final java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.InputStreamReader(
 				        new java.io.FileInputStream(file), "UTF-8"));
@@ -1302,58 +1323,87 @@ public final class ReportEngine {
 					if (line.length() < 16) {
 						continue;
 					}
-					Date dt = null;
-					String key = "";
-					try {
-						dt = new SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.CHINA).parse(line.substring(0, 16));
-						key = line.length() > 17 ? line.substring(17).trim() : "";
-					}
-					catch (Exception e1) {
-						try {
-							dt = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.CHINA).parse(line.substring(0, 16));
-							key = line.length() > 17 ? line.substring(17).trim() : "";
-						}
-						catch (Exception e2) {
-							continue;
-						}
-					}
-					if (dt == null || !q.range.contains(dt.getTime())) {
+					final ParsedKeyLine parsed = parseLegacyKeyLine(line);
+					if (parsed == null || !q.range.contains(parsed.ts)) {
 						continue;
 					}
-					if (!q.matches(key, file.getName(), "")) {
+					if (!q.matches(parsed.body, file.getName(), "")) {
 						continue;
 					}
-					totalKeys++;
+					final int keyCount = countLegacyKeys(parsed.body);
+					if (keyCount <= 0) {
+						continue;
+					}
+					stats.totalKeys += keyCount;
+					final Date dt = new Date(parsed.ts);
 					final String day = DAY.format(dt);
-					Long dayCount = (Long) byDay.get(day);
-					byDay.put(day, Long.valueOf((dayCount == null ? 0L : dayCount.longValue()) + 1L));
+					final Long dayPrev = (Long) stats.byDay.get(day);
+					stats.byDay.put(day, Long.valueOf(dayPrev == null ? keyCount : dayPrev.longValue() + keyCount));
 					final Calendar cal = Calendar.getInstance();
 					cal.setTime(dt);
-					final Integer hour = Integer.valueOf(cal.get(Calendar.HOUR_OF_DAY));
-					Long hourCount = (Long) byHour.get(hour);
-					byHour.put(hour, Long.valueOf((hourCount == null ? 0L : hourCount.longValue()) + 1L));
+					final String hour = String.format("%02d:00", Integer.valueOf(cal.get(Calendar.HOUR_OF_DAY)));
+					final Long hourPrev = (Long) stats.byHour.get(hour);
+					stats.byHour.put(hour, Long.valueOf(hourPrev == null ? keyCount : hourPrev.longValue() + keyCount));
 				}
 				reader.close();
 			}
 			catch (Exception e) {
-				root.add(tr("ReportEngine.content.0122") + e.getMessage(), "messagebox_warning");
+				note.append("; error ").append(file.getName());
 			}
 		}
-		root.add(tr("ReportEngine.content.0150") + totalKeys, "info");
-		final ReportNodeSpec dayNode = root.add(tr("ReportEngine.content.0151"), "calendar");
-		final Iterator dayIt = byDay.entrySet().iterator();
-		while (dayIt.hasNext()) {
-			final Map.Entry e = (Map.Entry) dayIt.next();
-			dayNode.add(e.getKey() + " · " + e.getValue() + tr("ReportEngine.content.0046"), "pencil");
+		stats.sourceNote = note.toString();
+		return stats;
+	}
+
+	private static final class ParsedKeyLine {
+		long ts;
+		String body;
+	}
+
+	private static ParsedKeyLine parseLegacyKeyLine(final String line) {
+		// 2025/11/03 09:54:53KEYS...  or 2025/11/03 09:54:53   KEYS
+		java.util.regex.Matcher m = java.util.regex.Pattern
+		        .compile("^(\\d{4}/\\d{1,2}/\\d{1,2} \\d{1,2}:\\d{2}:\\d{2})\\s*(.*)$").matcher(line);
+		if (!m.find()) {
+			m = java.util.regex.Pattern.compile("^(\\d{1,2}/\\d{1,2}/\\d{4} \\d{1,2}:\\d{2}:\\d{2} [AP]M)\\s*(.*)$",
+			        java.util.regex.Pattern.CASE_INSENSITIVE).matcher(line);
+			if (!m.find()) {
+				return null;
+			}
 		}
-		final ReportNodeSpec hourNode = root.add(tr("ReportEngine.content.0152"), "clock");
-		final Iterator hourIt = byHour.entrySet().iterator();
-		while (hourIt.hasNext()) {
-			final Map.Entry e = (Map.Entry) hourIt.next();
-			hourNode.add(String.format("%02d:00", ((Integer) e.getKey()).intValue()) + " · " + e.getValue() + tr("ReportEngine.content.0046"),
-			        "full-1");
+		try {
+			Date dt;
+			try {
+				dt = new SimpleDateFormat("yyyy/M/d H:mm:ss", Locale.CHINA).parse(m.group(1));
+			}
+			catch (Exception e1) {
+				dt = new SimpleDateFormat("M/d/yyyy h:mm:ss a", Locale.US).parse(m.group(1));
+			}
+			final ParsedKeyLine parsed = new ParsedKeyLine();
+			parsed.ts = dt.getTime();
+			parsed.body = m.group(2) == null ? "" : m.group(2).trim();
+			return parsed;
 		}
-		return root;
+		catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static int countLegacyKeys(final String body) {
+		if (body == null || body.length() == 0) {
+			return 0;
+		}
+		int n = 0;
+		int start = 0;
+		for (int i = 0; i <= body.length(); i++) {
+			if (i == body.length() || body.charAt(i) == ';') {
+				if (i > start) {
+					n++;
+				}
+				start = i + 1;
+			}
+		}
+		return n;
 	}
 
 	/** DocearReminder TimeBlockTrend：每日走势与均值. */
@@ -1637,35 +1687,12 @@ public final class ReportEngine {
 	}
 
 	private static List findKeyLogFiles() {
+		// Legacy fallback only: keep the scan tiny (data dir). Never walk Dropbox / all scan roots.
 		final List out = new ArrayList();
-		final List roots = new ArrayList();
 		try {
-			roots.add(new File(org.freeplane.core.util.Compat.getApplicationUserDirectory()));
+			collectNamedFiles(new File(org.freeplane.core.util.Compat.getApplicationUserDirectory()), "key.txt", out, 0);
 		}
 		catch (Exception e) {
-		}
-		try {
-			final File project = org.freeplane.core.util.MindMapDataRootResolver.getProjectDataDirectory();
-			if (project != null) {
-				roots.add(project);
-			}
-		}
-		catch (Exception e) {
-		}
-		try {
-			final File[] scanRoots = org.freeplane.core.util.MindMapDataRootResolver.getScanRoots();
-			if (scanRoots != null) {
-				for (int i = 0; i < scanRoots.length; i++) {
-					if (scanRoots[i] != null) {
-						roots.add(scanRoots[i]);
-					}
-				}
-			}
-		}
-		catch (Exception e) {
-		}
-		for (int i = 0; i < roots.size(); i++) {
-			collectNamedFiles((File) roots.get(i), "key.txt", out, 0);
 		}
 		return out;
 	}

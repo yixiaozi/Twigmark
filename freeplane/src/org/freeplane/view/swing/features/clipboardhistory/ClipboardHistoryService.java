@@ -94,12 +94,40 @@ public final class ClipboardHistoryService implements Runnable {
 	}
 
 	public List search(final String query, final int limit) {
+		return search(query, limit, false);
+	}
+
+	/**
+	 * @param localOnly when true, only the writable PC DB (fast path for first paint).
+	 */
+	public List search(final String query, final int limit, final boolean localOnly) {
 		final int want = limit > 0 ? limit : 200;
 		final Map byHash = new HashMap();
-		final File[] files = ClipboardHistoryConfig.listDbFiles();
 		final File local = ClipboardHistoryConfig.getDbFile();
+		if (localOnly) {
+			try {
+				final ClipboardHistoryDatabase db = ClipboardHistoryDatabase.getInstance();
+				mergeByHash(byHash, db.listRecent(query, want));
+			}
+			catch (Exception e) {
+				LogUtils.warn("Clipboard history local search failed: " + e.getMessage(), e);
+			}
+			return sortAndTrim(byHash, want);
+		}
+		final File[] files = ClipboardHistoryConfig.listDbFiles();
+		// Local first for snappy merge, then archives/peers.
+		final List ordered = new ArrayList();
+		if (local != null) {
+			ordered.add(local);
+		}
 		for (int i = 0; i < files.length; i++) {
 			final File file = files[i];
+			if (file != null && !sameFile(file, local)) {
+				ordered.add(file);
+			}
+		}
+		for (int i = 0; i < ordered.size(); i++) {
+			final File file = (File) ordered.get(i);
 			final boolean isLocal = sameFile(file, local);
 			if (!isLocal && (file == null || !file.isFile())) {
 				continue;
@@ -109,13 +137,16 @@ public final class ClipboardHistoryService implements Runnable {
 				if (db == null) {
 					continue;
 				}
-				final List rows = db.listRecent(query, want);
-				mergeByHash(byHash, rows);
+				mergeByHash(byHash, db.listRecent(query, want));
 			}
 			catch (Exception e) {
 				LogUtils.warn("Clipboard history search failed for " + file + ": " + e.getMessage(), e);
 			}
 		}
+		return sortAndTrim(byHash, want);
+	}
+
+	private static List sortAndTrim(final Map byHash, final int want) {
 		final List merged = new ArrayList(byHash.values());
 		Collections.sort(merged, new Comparator() {
 			public int compare(final Object a, final Object b) {
@@ -133,6 +164,15 @@ public final class ClipboardHistoryService implements Runnable {
 			return new ArrayList(merged.subList(0, want));
 		}
 		return merged;
+	}
+
+	public int countLocal() {
+		try {
+			return ClipboardHistoryDatabase.getInstance().countEntries();
+		}
+		catch (Exception e) {
+			return 0;
+		}
 	}
 
 	public ClipboardHistoryEntry get(final long id) {
@@ -161,8 +201,10 @@ public final class ClipboardHistoryService implements Runnable {
 	}
 
 	/**
-	 * Every recorded occurrence time for this entry (newest first).
-	 * Falls back to {@code first_ts}/{@code last_ts} when the hit table is empty
+	 * Every recorded occurrence time for this content (newest first).
+	 * Aggregates {@code clipboard_hit} across all {@code clipboard_history-*.db}
+	 * that share the same {@code content_hash} (year shards, peers, import DBs).
+	 * Falls back to {@code first_ts}/{@code last_ts} when no hit rows exist
 	 * (legacy rows before per-hit logging).
 	 */
 	public List listHitTimes(final ClipboardHistoryEntry entry) {
@@ -170,16 +212,57 @@ public final class ClipboardHistoryService implements Runnable {
 		if (entry == null) {
 			return times;
 		}
-		final ClipboardHistoryDatabase db = dbForEntry(entry);
-		if (db != null) {
+		final String hash = entry.contentHash;
+		final int want = ClipboardHistoryDatabase.HIT_LIST_LIMIT;
+		// Fast path: source DB (or local) first — enough for most UI clicks.
+		final ClipboardHistoryDatabase primary = dbForEntry(entry);
+		if (primary != null) {
 			try {
-				final List fromDb = db.listHitTimes(entry.id, ClipboardHistoryDatabase.HIT_LIST_LIMIT);
+				List fromDb;
+				if (hash != null && hash.length() > 0) {
+					fromDb = primary.listHitTimesByHash(hash, want);
+				}
+				else {
+					fromDb = primary.listHitTimes(entry.id, want);
+				}
 				if (fromDb != null) {
 					times.addAll(fromDb);
 				}
 			}
 			catch (Exception e) {
 				LogUtils.warn("Clipboard hit times failed: " + e.getMessage(), e);
+			}
+		}
+		final int need = entry.hitCount > 0 ? Math.min(entry.hitCount, want) : want;
+		if (hash != null && hash.length() > 0 && times.size() < need) {
+			final File[] files = ClipboardHistoryConfig.listDbFiles();
+			final File local = ClipboardHistoryConfig.getDbFile();
+			final File primaryFile = primary != null ? primary.getDbFile() : null;
+			for (int i = 0; i < files.length; i++) {
+				final File file = files[i];
+				if (file == null || sameFile(file, primaryFile)) {
+					continue;
+				}
+				final boolean isLocal = sameFile(file, local);
+				if (!isLocal && !file.isFile()) {
+					continue;
+				}
+				try {
+					final ClipboardHistoryDatabase db = ClipboardHistoryDatabase.open(file, isLocal);
+					if (db == null) {
+						continue;
+					}
+					final List fromDb = db.listHitTimesByHash(hash, want);
+					if (fromDb != null && !fromDb.isEmpty()) {
+						times.addAll(fromDb);
+					}
+					if (times.size() >= want) {
+						break;
+					}
+				}
+				catch (Exception e) {
+					LogUtils.warn("Clipboard hit times failed for " + file + ": " + e.getMessage(), e);
+				}
 			}
 		}
 		if (times.isEmpty()) {
@@ -189,6 +272,22 @@ public final class ClipboardHistoryService implements Runnable {
 			if (entry.firstTs > 0L && entry.firstTs != entry.lastTs) {
 				times.add(Long.valueOf(entry.firstTs));
 			}
+			return times;
+		}
+		Collections.sort(times, new Comparator() {
+			public int compare(final Object a, final Object b) {
+				final long diff = ((Long) b).longValue() - ((Long) a).longValue();
+				if (diff > 0L) {
+					return 1;
+				}
+				if (diff < 0L) {
+					return -1;
+				}
+				return 0;
+			}
+		});
+		if (times.size() > want) {
+			return new ArrayList(times.subList(0, want));
 		}
 		return times;
 	}

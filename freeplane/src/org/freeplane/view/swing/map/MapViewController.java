@@ -720,6 +720,11 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		final ModeController oldModeController = controller.getModeController();
 		ModeController newModeController = oldModeController;
 		if (pNewMap != null) {
+			// Report/document tabs own the scroll-pane view; opening/switching a
+			// MapView must drop that ownership or the canvas stays blank.
+			if (pNewMap instanceof MapView) {
+				org.freeplane.main.application.DocumentTabSupport.clearActiveDocumentView();
+			}
 			refreshViewportView(pNewMap);
 			// While an overlay owns the viewport, MapView is not displayed — skip
 			// scroll/focus that would walk a detached MapView hierarchy.

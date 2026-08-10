@@ -134,7 +134,7 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 		else
 			fileExtensionPattern = DoAutomaticSave.AUTOSAVE_EXTENSION;
 		final Pattern pattern = Pattern.compile("^" + Pattern.quote(backupFileName(file)) + "\\.+\\d+\\." + fileExtensionPattern);
-		if (backupDir.exists()) {
+		if (backupDir != null && backupDir.exists()) {
 			final File[] fileList = backupDir.listFiles(new java.io.FileFilter() {
 				public boolean accept(final File f) {
 					final String name = f.getName();
@@ -143,7 +143,7 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 							&&(mode == AlternativeFileMode.ALL || f.lastModified() > (file.lastModified() - DEBUG_OFFSET)); 
 				}
 			});
-			return fileList;
+			return fileList != null ? fileList : new File[0];
 		}
 		return new File[0];
 	}
@@ -897,6 +897,17 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 			if (lock.isValid()) {
 				lock.release();
 			}
+			// Auto-heal NCR glitches (&[x from bad #tag migrations) before publishing the temp file.
+			if (tmpFile.exists()) {
+				try {
+					if (MindMapEncodingRepair.repairIfNeeded(tmpFile)) {
+						LogUtils.warn("Healed corrupt XML entities in temp save: " + tmpFile.getAbsolutePath());
+					}
+				}
+				catch (Exception e) {
+					LogUtils.warn("Post-save encoding repair failed for " + tmpFile, e);
+				}
+			}
 			if(isValidMapFile(tmpFile)) {
 				if(file.exists()) {
 					file.delete();
@@ -908,6 +919,10 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 	
 	private boolean isValidMapFile(File file) {
 		try {
+			if (MindMapEncodingRepair.containsBrokenNcrMarkers(file)) {
+				LogUtils.severe("Rejecting map save: broken &#x entity markers (&[x) in " + file.getAbsolutePath());
+				return false;
+			}
 			RandomAccessFile raf = new RandomAccessFile(file, "r");
 			try {
 				raf.seek(raf.length()-7);

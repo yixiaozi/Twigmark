@@ -332,7 +332,6 @@ public class StdXMLParser implements IXMLParser {
 	protected void processElementContent(final String defaultNamespace, final Properties namespaces,
 	                                     final String fullName, final String name, final String prefix)
 	        throws IOException, XMLParseException, Exception {
-		char ch;
 		final StringBuilder buffer = new StringBuilder(16);
 		for (;;) {
 			buffer.setLength(0);
@@ -359,8 +358,7 @@ public class StdXMLParser implements IXMLParser {
 			}
 			else {
 				if (str.charAt(0) == '&') {
-					ch = XMLUtil.processCharLiteral(str);
-					buffer.append(ch);
+					buffer.append(XMLUtil.processCharLiteral(str));
 				}
 				else {
 					reader.unread(str.charAt(0));

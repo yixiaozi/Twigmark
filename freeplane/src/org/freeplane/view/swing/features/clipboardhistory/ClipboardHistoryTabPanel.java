@@ -340,26 +340,66 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 		final String query = searchField.getText();
 		final int gen = ++generation;
 		reloading = true;
+		statusLabel.setText(TextUtils.getText("ClipboardHistory.status.loading"));
+		statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+		// Phase 1: local DB only (fast first paint).
+		new SwingWorker() {
+			private List rows;
+			private int localTotal;
+			private String error;
+
+			protected Object doInBackground() throws Exception {
+				try {
+					final ClipboardHistoryService service = ClipboardHistoryService.getInstance();
+					rows = service.search(query, DISPLAY_LIMIT, true);
+					localTotal = service.countLocal();
+				}
+				catch (Exception e) {
+					error = e.getMessage();
+					LogUtils.warn("Clipboard local reload failed", e);
+				}
+				return null;
+			}
+
+			protected void done() {
+				if (gen != generation) {
+					return;
+				}
+				applyRows(rows, localTotal, -1L, -1L, query, error, true);
+				// Phase 2: merge import/peer archives in background.
+				mergeArchivesAsync(gen, query, forceFullStatus);
+			}
+		}.execute();
+	}
+
+	private void mergeArchivesAsync(final int gen, final String query, final boolean forceFullStatus) {
 		new SwingWorker() {
 			private List rows;
 			private int total;
 			private long hits;
 			private long dbBytes;
+			private String error;
 
 			protected Object doInBackground() throws Exception {
-				final ClipboardHistoryService service = ClipboardHistoryService.getInstance();
-				rows = service.search(query, DISPLAY_LIMIT);
-				total = service.count();
-				final boolean wantDetails = forceFullStatus
-						|| System.currentTimeMillis() - lastFullStatusAt > 15000L;
-				if (wantDetails) {
-					hits = service.sumHits();
-					dbBytes = service.getDbFileBytes();
-					lastFullStatusAt = System.currentTimeMillis();
+				try {
+					final ClipboardHistoryService service = ClipboardHistoryService.getInstance();
+					rows = service.search(query, DISPLAY_LIMIT, false);
+					total = service.count();
+					final boolean wantDetails = forceFullStatus
+					        || System.currentTimeMillis() - lastFullStatusAt > 15000L;
+					if (wantDetails) {
+						hits = service.sumHits();
+						dbBytes = service.getDbFileBytes();
+						lastFullStatusAt = System.currentTimeMillis();
+					}
+					else {
+						hits = -1L;
+						dbBytes = -1L;
+					}
 				}
-				else {
-					hits = -1L;
-					dbBytes = -1L;
+				catch (Exception e) {
+					error = e.getMessage();
+					LogUtils.warn("Clipboard archive merge failed", e);
 				}
 				return null;
 			}
@@ -370,43 +410,78 @@ public final class ClipboardHistoryTabPanel extends JPanel {
 					return;
 				}
 				try {
-					listModel.clear();
-					if (rows == null || rows.isEmpty()) {
-						statusLabel.setText(query != null && query.trim().length() > 0
-								? TextUtils.getText("ClipboardHistory.status.noMatch")
-								: TextUtils.getText("ClipboardHistory.status.empty"));
-						statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
-						detailArea.setText("");
-						hitTimesArea.setText("");
-					}
-					else {
-						for (int i = 0; i < rows.size(); i++) {
-							listModel.addElement(rows.get(i));
-						}
-						if (hits >= 0L) {
-							statusLabel.setText(TextUtils.format("ClipboardHistory.status.full",
-									Integer.valueOf(rows.size()), Integer.valueOf(total), Long.valueOf(hits),
-									formatBytes(dbBytes)));
-						}
-						else {
-							statusLabel.setText(TextUtils.format("ClipboardHistory.status.basic",
-									Integer.valueOf(rows.size()), Integer.valueOf(total)));
-						}
-						statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
-						if (list.getSelectedIndex() < 0 && listModel.getSize() > 0) {
-							list.setSelectedIndex(0);
-						}
-						else {
-							showSelected();
-						}
-					}
-					SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_CLIPBOARD, total);
+					applyRows(rows, total, hits, dbBytes, query, error, false);
 				}
 				finally {
 					reloading = false;
 				}
 			}
 		}.execute();
+	}
+
+	private void applyRows(final List rows, final int total, final long hits, final long dbBytes,
+	        final String query, final String error, final boolean partial) {
+		if (error != null && (rows == null || rows.isEmpty())) {
+			statusLabel.setText(TextUtils.format("ClipboardHistory.status.error", error));
+			statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+			return;
+		}
+		int selectedHash = 0;
+		if (list.getSelectedValue() instanceof ClipboardHistoryEntry) {
+			final String h = ((ClipboardHistoryEntry) list.getSelectedValue()).contentHash;
+			if (h != null && h.length() > 0) {
+				selectedHash = h.hashCode();
+			}
+		}
+		listModel.clear();
+		if (rows == null || rows.isEmpty()) {
+			if (!partial) {
+				statusLabel.setText(query != null && query.trim().length() > 0
+				        ? TextUtils.getText("ClipboardHistory.status.noMatch")
+				        : TextUtils.getText("ClipboardHistory.status.empty"));
+				statusLabel.setForeground(DocearUiTheme.TEXT_FAINT);
+				detailArea.setText("");
+				hitTimesArea.setText("");
+			}
+			SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_CLIPBOARD, total);
+			return;
+		}
+		for (int i = 0; i < rows.size(); i++) {
+			listModel.addElement(rows.get(i));
+		}
+		if (partial) {
+			statusLabel.setText(TextUtils.format("ClipboardHistory.status.loadingMore",
+			        Integer.valueOf(rows.size()), Integer.valueOf(total)));
+		}
+		else if (hits >= 0L) {
+			statusLabel.setText(TextUtils.format("ClipboardHistory.status.full", Integer.valueOf(rows.size()),
+			        Integer.valueOf(total), Long.valueOf(hits), formatBytes(dbBytes)));
+		}
+		else {
+			statusLabel.setText(TextUtils.format("ClipboardHistory.status.basic", Integer.valueOf(rows.size()),
+			        Integer.valueOf(total)));
+		}
+		statusLabel.setForeground(DocearUiTheme.TEXT_MUTED);
+		int restore = -1;
+		if (selectedHash != 0) {
+			for (int i = 0; i < listModel.getSize(); i++) {
+				final ClipboardHistoryEntry e = (ClipboardHistoryEntry) listModel.get(i);
+				if (e.contentHash != null && e.contentHash.hashCode() == selectedHash) {
+					restore = i;
+					break;
+				}
+			}
+		}
+		if (restore >= 0) {
+			list.setSelectedIndex(restore);
+		}
+		else if (list.getSelectedIndex() < 0 && listModel.getSize() > 0) {
+			list.setSelectedIndex(0);
+		}
+		else {
+			showSelected();
+		}
+		SideTabMetricRegistry.set(SideTabMetricKeys.LEFT_CLIPBOARD, total);
 	}
 
 	private void showSelected() {

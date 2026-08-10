@@ -974,6 +974,8 @@ public final class McpMindMapService {
 		final SAXParser saxParser = factory.newSAXParser();
 		final List stack = new ArrayList();
 		final List roots = new ArrayList();
+		// Rewrite known on-disk corruptions so strict SAX matches Freeplane's open path.
+		org.freeplane.features.url.MindMapEncodingRepair.repairIfNeeded(file);
 		saxParser.parse(file, new DefaultHandler() {
 			private final StringBuilder richContentBuilder = new StringBuilder();
 			private String richContentType;

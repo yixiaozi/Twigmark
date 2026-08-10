@@ -21,11 +21,26 @@ public class ColorUtils {
 		if (str == null) {
 			return null;
 		}
-		if (str.length() != 7 || str.charAt(0) != '#') {
+		String value = str.trim();
+		if (value.length() == 6 && value.charAt(0) != '#') {
+			value = "#" + value;
+		}
+		if (value.length() != 7 || value.charAt(0) != '#') {
 			throw new NumberFormatException("wrong color format in " + str);
 		}
-		return new Color(Integer.parseInt(str.substring(1, 3), 16), Integer.parseInt(str.substring(3, 5), 16), Integer
-		    .parseInt(str.substring(5, 7), 16));
+		return new Color(Integer.parseInt(value.substring(1, 3), 16), Integer.parseInt(value.substring(3, 5), 16),
+		        Integer.parseInt(value.substring(5, 7), 16));
+	}
+
+	/** Like {@link #stringToColor(String)} but never throws — returns {@code fallback} on bad input. */
+	public static Color stringToColor(final String str, final Color fallback) {
+		try {
+			final Color color = stringToColor(str);
+			return color != null ? color : fallback;
+		}
+		catch (RuntimeException e) {
+			return fallback;
+		}
 	}
 
 	public static Color createColor(final Color color, final int alpha) {

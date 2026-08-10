@@ -25,7 +25,7 @@ import org.freeplane.core.util.LogUtils;
 final class ClipboardHistoryDatabase {
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
 	/** Cap per-entry history shown / stored queries (keeps UI snappy). */
-	static final int HIT_LIST_LIMIT = 200;
+	static final int HIT_LIST_LIMIT = 5000;
 	private static volatile ClipboardHistoryDatabase INSTANCE;
 
 	private final File dbFile;
@@ -168,6 +168,46 @@ final class ClipboardHistoryDatabase {
 			statement = connection.prepareStatement(
 					"SELECT hit_ts FROM clipboard_hit WHERE entry_id = ? ORDER BY hit_ts DESC LIMIT ?");
 			statement.setLong(1, entryId);
+			statement.setInt(2, limit > 0 ? limit : HIT_LIST_LIMIT);
+			rs = statement.executeQuery();
+			final List times = new ArrayList();
+			while (rs.next()) {
+				times.add(Long.valueOf(rs.getLong(1)));
+			}
+			return times;
+		}
+		catch (SQLException e) {
+			final String msg = e.getMessage() == null ? "" : e.getMessage().toLowerCase();
+			if (msg.indexOf("clipboard_hit") >= 0 || msg.indexOf("no such table") >= 0) {
+				return new ArrayList();
+			}
+			throw e;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(statement);
+			closeQuietly(connection);
+		}
+	}
+
+	/**
+	 * Hit timestamps for one content hash (all entry rows with that hash), newest first.
+	 * Used when the same text is split across year/size shards or peer DBs.
+	 */
+	List listHitTimesByHash(final String contentHash, final int limit) throws SQLException {
+		if (contentHash == null || contentHash.length() == 0) {
+			return new ArrayList();
+		}
+		Connection connection = null;
+		PreparedStatement statement = null;
+		ResultSet rs = null;
+		try {
+			connection = openConnection();
+			statement = connection.prepareStatement(
+					"SELECT h.hit_ts FROM clipboard_hit h "
+							+ "INNER JOIN clipboard_entry e ON e.id = h.entry_id "
+							+ "WHERE e.content_hash = ? ORDER BY h.hit_ts DESC LIMIT ?");
+			statement.setString(1, contentHash);
 			statement.setInt(2, limit > 0 ? limit : HIT_LIST_LIMIT);
 			rs = statement.executeQuery();
 			final List times = new ArrayList();
