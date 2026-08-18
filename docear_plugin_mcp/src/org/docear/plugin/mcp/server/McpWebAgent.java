@@ -317,11 +317,12 @@ public final class McpWebAgent {
 		final String path = focusMapFile.trim();
 		final StringBuilder sb = new StringBuilder(base.length() + 2048);
 		sb.append(base);
-		sb.append("\n\n## 当前网页聚焦导图（只读浏览场景）\n");
-		sb.append("用户正在网页端查看这张导图：").append(path).append('\n');
-		sb.append("回答问题时优先对该文件使用 get_mindmap_json(filePath=\"").append(path).append("\")");
-		sb.append(" 与 search_nodes(..., filePath=\"").append(path).append("\")。\n");
-		sb.append("不要 open_mindmap；不要编造节点。若问题与当前图无关，可先说明再扩大搜索。\n");
+		sb.append("\n\n## 当前网页聚焦导图\n");
+		sb.append("用户正在网页里查看：").append(path).append('\n');
+		sb.append("默认把这张图当作当前上下文：优先 search_nodes(query, filePath=\"").append(path);
+		sb.append("\") 与 get_mindmap_json(filePath=\"").append(path).append("\")。\n");
+		sb.append("不要 open_mindmap。不要编造节点。");
+		sb.append("若问题明显属于全库（待办、财务、最近修改、其它项目），可以出图检索，但先用一句话说明已离开当前图。\n");
 		try {
 			final String outline = org.docear.plugin.mcp.service.McpMindMapService.getMindmapOutlineForWeb(path, 3,
 					10000);
