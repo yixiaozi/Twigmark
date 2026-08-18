@@ -36,7 +36,7 @@
   <body>
     <form class="card" method="post" autocomplete="on">
       <h1>授权 Grok 访问 Twigmark</h1>
-      <p>使用网页账号登录。Grok 只会得到<strong>只读</strong>权限，看不到密码，也不能改导图。</p>
+      <p>使用网页账号登录。Grok 可以<strong>读取并改导图</strong>（加节点、待办、标签等），但不能 git、加密或看审计。看不到你的密码。</p>
       {{error}}
       <label>账号 <input name="username" autocomplete="username" required /></label>
       <label>密码 <input name="password" type="password" autocomplete="current-password" required /></label>

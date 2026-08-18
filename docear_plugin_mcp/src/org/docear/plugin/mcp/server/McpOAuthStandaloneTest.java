@@ -102,8 +102,8 @@ public final class McpOAuthStandaloneTest {
 		if (principal == null || !"alice".equals(principal.getName())) {
 			throw new IllegalStateException("resolve " + principal);
 		}
-		if (principal.getRole() != McpRole.READ) {
-			throw new IllegalStateException("oauth default role must be read: " + principal.getRole());
+		if (principal.getRole() != McpRole.WRITE) {
+			throw new IllegalStateException("oauth default role must be write: " + principal.getRole());
 		}
 		if (svc.resolveAccessToken("mto_deadbeef") != null) {
 			throw new IllegalStateException("unknown token");

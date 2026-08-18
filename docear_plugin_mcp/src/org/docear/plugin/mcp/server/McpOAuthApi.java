@@ -307,7 +307,7 @@ public final class McpOAuthApi {
 				+ "<input type=hidden name=code_challenge value=\"{{code_challenge}}\">"
 				+ "<input type=hidden name=code_challenge_method value=\"{{code_challenge_method}}\">"
 				+ "<input type=hidden name=response_type value=\"{{response_type}}\">"
-				+ "<button type=submit>授权 Grok 只读访问</button></form>";
+				+ "<button type=submit>登录并授权改导图</button></form>";
 	}
 
 	private static Map tokenParams(final HttpExchange exchange) throws IOException {

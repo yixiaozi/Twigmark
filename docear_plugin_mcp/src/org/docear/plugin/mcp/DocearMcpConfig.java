@@ -162,9 +162,9 @@ public final class DocearMcpConfig {
 		return url;
 	}
 
-	/** Role granted to OAuth access tokens (Grok etc.). Default read. */
+	/** Role granted to OAuth access tokens (Grok etc.). Default write (maps/todos), not owner. */
 	public static McpRole getOauthRole() {
-		return McpRole.parse(getString("oauth.role", "read"));
+		return McpRole.parse(getString("oauth.role", "write"));
 	}
 
 	public static int getOauthAccessTtlSeconds() {
