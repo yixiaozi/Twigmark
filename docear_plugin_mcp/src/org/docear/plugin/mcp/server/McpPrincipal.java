@@ -7,6 +7,7 @@ public final class McpPrincipal {
 	public static final String SOURCE_LOCAL = "local";
 	public static final String SOURCE_KEY = "key";
 	public static final String SOURCE_WEB = "web";
+	public static final String SOURCE_OAUTH = "oauth";
 
 	private final String id;
 	private final String name;

@@ -328,6 +328,7 @@ final class McpAuditCatalog {
 		q.action = src.action;
 		q.intent = src.intent;
 		q.traceId = src.traceId;
+		q.emptyTraceOnly = src.emptyTraceOnly;
 		q.result = src.result;
 		q.sinceMillis = src.sinceMillis;
 		q.untilMillis = src.untilMillis;

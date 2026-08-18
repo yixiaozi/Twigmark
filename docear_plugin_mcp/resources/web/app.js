@@ -380,7 +380,7 @@
     if (!el) return;
     el.innerHTML = "";
     if (!traces.length) {
-      el.innerHTML = '<p class="muted">这段时间没有带问题摘要的调用链。</p>';
+      el.innerHTML = '<p class="muted">这段时间没有调用链。Grok 等客户端若不带问题摘要，会归在「未提供问题摘要」卡片里。</p>';
       return;
     }
     traces.forEach(function (row) {

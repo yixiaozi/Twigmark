@@ -614,7 +614,12 @@ final class McpAuditDatabase {
 		appendFilter(sql, params, "actor", q.actor);
 		appendFilter(sql, params, "action", q.action);
 		appendFilter(sql, params, "intent", q.intent);
-		appendFilter(sql, params, "trace_id", q.traceId);
+		if (q.emptyTraceOnly) {
+			sql.append(" AND trace_id = ''");
+		}
+		else {
+			appendFilter(sql, params, "trace_id", q.traceId);
+		}
 		if ("ok".equalsIgnoreCase(q.result)) {
 			sql.append(" AND success = 1");
 		}
@@ -637,17 +642,18 @@ final class McpAuditDatabase {
 			if (q.searchPayload) {
 				sql.append(" AND (question_summary LIKE ? OR operation_goal LIKE ? OR action LIKE ?"
 				    + " OR actor LIKE ? OR trace_id LIKE ? OR request_json LIKE ? OR response_json LIKE ?"
-				    + " OR error_message LIKE ? OR machine_name LIKE ? OR machine_id LIKE ?)");
+				    + " OR error_message LIKE ? OR machine_name LIKE ? OR machine_id LIKE ? OR client_name LIKE ?)");
 				final String like = "%" + q.text + "%";
-				for (int i = 0; i < 10; i++) {
+				for (int i = 0; i < 11; i++) {
 					params.add(like);
 				}
 			}
 			else {
 				sql.append(" AND (question_summary LIKE ? OR operation_goal LIKE ? OR action LIKE ?"
-				    + " OR actor LIKE ? OR trace_id LIKE ? OR machine_name LIKE ? OR error_message LIKE ?)");
+				    + " OR actor LIKE ? OR trace_id LIKE ? OR machine_name LIKE ? OR error_message LIKE ?"
+				    + " OR client_name LIKE ?)");
 				final String like = "%" + q.text + "%";
-				for (int i = 0; i < 7; i++) {
+				for (int i = 0; i < 8; i++) {
 					params.add(like);
 				}
 			}

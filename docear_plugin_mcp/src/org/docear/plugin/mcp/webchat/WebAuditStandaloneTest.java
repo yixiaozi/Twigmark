@@ -5,6 +5,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.docear.plugin.mcp.audit.McpAuditLabels;
 import org.docear.plugin.mcp.audit.McpAuditQuery;
 
 /**
@@ -19,6 +20,8 @@ public final class WebAuditStandaloneTest {
 		assertActionLists();
 		assertParseQuery();
 		assertWriteFilters();
+		assertLabels();
+		assertUngroupedMerge();
 		System.out.println("WebAuditStandaloneTest OK");
 	}
 
@@ -84,6 +87,15 @@ public final class WebAuditStandaloneTest {
 		if (WebAuditFilters.parseQuery(huge).limit != WebAuditFilters.MAX_LIMIT) {
 			throw new IllegalStateException("limit cap");
 		}
+
+		final Map ungrouped = new LinkedHashMap();
+		ungrouped.put("traceId", "ungrouped:yixiaozi");
+		ungrouped.put("sinceHours", "0");
+		final McpAuditQuery uq = WebAuditFilters.parseQuery(ungrouped);
+		if (!uq.emptyTraceOnly || !"yixiaozi".equals(uq.actor) || uq.traceId.length() != 0) {
+			throw new IllegalStateException("ungrouped parse: actor=" + uq.actor + " empty=" + uq.emptyTraceOnly
+					+ " trace=" + uq.traceId);
+		}
 	}
 
 	private static void assertWriteFilters() {
@@ -119,6 +131,63 @@ public final class WebAuditStandaloneTest {
 		}
 		if (WebAuditFilters.expandLimitForWriteFilter(80) < 200) {
 			throw new IllegalStateException("expand write scan limit");
+		}
+	}
+
+	private static void assertLabels() {
+		if (!"Grok".equals(McpAuditLabels.inferClientName("grok-connectors-manager/0.1.0"))) {
+			throw new IllegalStateException("infer grok ua");
+		}
+		if (!"Grok".equals(McpAuditLabels.inferClientName("Grok"))) {
+			throw new IllegalStateException("infer grok name");
+		}
+		if (!"Cursor".equals(McpAuditLabels.inferClientName("Cursor/1.0"))) {
+			throw new IllegalStateException("infer cursor");
+		}
+		final String trace = McpAuditLabels.syntheticTraceId("oauth:yixiaozi", "yixiaozi", 1L);
+		if (trace.indexOf("oauth:yixiaozi") < 0 || !trace.startsWith("auto:")) {
+			throw new IllegalStateException("synthetic trace: " + trace);
+		}
+		if (!McpAuditLabels.isUngroupedTraceId("ungrouped:yixiaozi")
+				|| !"yixiaozi".equals(McpAuditLabels.actorFromUngroupedTraceId("ungrouped:yixiaozi"))) {
+			throw new IllegalStateException("ungrouped id");
+		}
+		if (McpAuditLabels.fallbackQuestionSummary("Grok", "yixiaozi").indexOf("Grok") < 0) {
+			throw new IllegalStateException("fallback summary");
+		}
+	}
+
+	private static void assertUngroupedMerge() {
+		final List traces = new ArrayList();
+		final Map existing = new LinkedHashMap();
+		existing.put("traceId", "web-1");
+		existing.put("actor", "twigmark-web");
+		existing.put("questionSummary", "web chat");
+		traces.add(existing);
+		final List events = new ArrayList();
+		final Map grok = new LinkedHashMap();
+		grok.put("traceId", "");
+		grok.put("actor", "yixiaozi");
+		grok.put("clientName", "");
+		grok.put("action", "search_nodes");
+		grok.put("ts", Long.valueOf(1000L));
+		events.add(grok);
+		final Map grokWrite = new LinkedHashMap();
+		grokWrite.put("traceId", "");
+		grokWrite.put("actor", "yixiaozi");
+		grokWrite.put("action", "add_node");
+		grokWrite.put("ts", Long.valueOf(2000L));
+		events.add(grokWrite);
+		final List merged = WebAuditFilters.mergeUngroupedTraces(traces, events);
+		if (merged.size() != 2) {
+			throw new IllegalStateException("merged size " + merged.size());
+		}
+		final Map first = (Map) merged.get(0);
+		if (!"ungrouped:yixiaozi".equals(first.get("traceId")) || !Integer.valueOf(2).equals(first.get("callCount"))) {
+			throw new IllegalStateException("ungrouped row: " + first);
+		}
+		if (String.valueOf(first.get("actions")).indexOf("add_node") < 0) {
+			throw new IllegalStateException("ungrouped actions: " + first.get("actions"));
 		}
 	}
 

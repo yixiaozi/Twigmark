@@ -12,6 +12,8 @@ public final class McpAuditQuery {
 	public String action = "";
 	public String intent = "";
 	public String traceId = "";
+	/** When true, only events that never received a client {@code _audit.traceId}. */
+	public boolean emptyTraceOnly = false;
 	/** empty / ok / fail */
 	public String result = "";
 	public long sinceMillis = 0L;

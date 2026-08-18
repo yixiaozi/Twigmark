@@ -176,7 +176,7 @@ public final class McpOAuthService {
 			return null;
 		}
 		final McpRole live = DocearMcpConfig.getOauthRole();
-		return new McpPrincipal("oauth:" + grant.username, grant.username, live, "oauth");
+		return new McpPrincipal("oauth:" + grant.username, grant.username, live, McpPrincipal.SOURCE_OAUTH);
 	}
 
 	private Map<String, String> issueTokens(final String username, final String clientId, final String scope) {

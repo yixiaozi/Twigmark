@@ -82,6 +82,12 @@ public final class WebAuditApi {
 				q.limit = WebAuditFilters.expandLimitForWriteFilter(requested);
 			}
 			List rows = McpAuditService.queryTracesForUi(q);
+			final McpAuditQuery eventQuery = WebAuditFilters.parseQuery(params);
+			eventQuery.traceId = "";
+			eventQuery.emptyTraceOnly = true;
+			eventQuery.limit = WebAuditFilters.MAX_LIMIT;
+			final List ungroupedEvents = McpAuditService.queryEventsForUi(eventQuery);
+			rows = WebAuditFilters.mergeUngroupedTraces(rows, ungroupedEvents);
 			if (writesOnly) {
 				rows = WebAuditFilters.filterWriteTraces(rows, requested);
 			}

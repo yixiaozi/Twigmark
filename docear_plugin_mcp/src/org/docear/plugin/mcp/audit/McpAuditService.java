@@ -10,6 +10,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.docear.plugin.mcp.DocearMcpConfig;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.server.McpPrincipal;
 import org.freeplane.core.util.LogUtils;
 
 public final class McpAuditService {
@@ -70,6 +71,39 @@ public final class McpAuditService {
 			return;
 		}
 		SESSION_CLIENTS.put(sessionId, clientName);
+	}
+
+	static String resolveClientName(final McpRequestContext ctx) {
+		if (ctx == null) {
+			return "";
+		}
+		final String sessionId = nullToEmpty(ctx.getSessionId());
+		if (sessionId.length() > 0) {
+			final String named = SESSION_CLIENTS.get(sessionId);
+			if (named != null && named.length() > 0) {
+				return named;
+			}
+		}
+		if (ctx.getPrincipal() != null) {
+			final String named = SESSION_CLIENTS.get(ctx.getPrincipal().getId());
+			if (named != null && named.length() > 0) {
+				return named;
+			}
+		}
+		final String inferred = McpAuditLabels.inferClientName(ctx.getUserAgent());
+		if (inferred.length() > 0) {
+			if (ctx.getPrincipal() != null) {
+				SESSION_CLIENTS.put(ctx.getPrincipal().getId(), inferred);
+			}
+			if (sessionId.length() > 0) {
+				SESSION_CLIENTS.put(sessionId, inferred);
+			}
+			return inferred;
+		}
+		if (ctx.getPrincipal() != null && McpPrincipal.SOURCE_OAUTH.equals(ctx.getPrincipal().getSource())) {
+			return "OAuth";
+		}
+		return "";
 	}
 
 	public static AuditMetadata extractAuditMetadata(final Map<String, JsonValue> args) {
@@ -483,16 +517,23 @@ public final class McpAuditService {
 		start();
 		final McpRequestContext ctx = McpRequestContext.current();
 		final String sessionId = ctx != null ? nullToEmpty(ctx.getSessionId()) : "";
-		final String clientName = sessionId.length() > 0 ? nullToEmpty(SESSION_CLIENTS.get(sessionId)) : "";
+		final String clientName = resolveClientName(ctx);
 		final String actor = firstNonEmpty(metadata.caller, ctx != null ? ctx.getHeaderCaller() : "",
 		    ctx != null && ctx.getPrincipal() != null ? ctx.getPrincipal().getName() : "", clientName,
 		    System.getProperty("user.name", "unknown"));
-		final String questionSummary = truncate(firstNonEmpty(metadata.questionSummary,
+		String questionSummary = truncate(firstNonEmpty(metadata.questionSummary,
 		    ctx != null ? ctx.getHeaderQuestionSummary() : ""), MAX_SUMMARY_LENGTH);
 		final String operationGoal = metadata.operationGoal.length() > 0
 		    ? truncate(metadata.operationGoal, MAX_GOAL_LENGTH)
 		    : defaultOperationGoal(kind, operation, intent);
-		final String traceId = metadata.traceId;
+		String traceId = metadata.traceId;
+		if (traceId.length() == 0) {
+			final String principalId = ctx != null && ctx.getPrincipal() != null ? ctx.getPrincipal().getId() : "";
+			traceId = McpAuditLabels.syntheticTraceId(principalId, actor, System.currentTimeMillis());
+		}
+		if (questionSummary.length() == 0) {
+			questionSummary = McpAuditLabels.fallbackQuestionSummary(clientName, actor);
+		}
 		final ResponsePayload response = normalizeResponse(responseText);
 
 		final McpAuditEvent event = McpAuditEvent.local(System.currentTimeMillis(), metadata.tenant, actor, operation,

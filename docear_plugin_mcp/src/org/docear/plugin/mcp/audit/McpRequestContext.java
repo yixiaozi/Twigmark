@@ -13,14 +13,16 @@ public final class McpRequestContext {
 	private final String remoteAddress;
 	private final String headerCaller;
 	private final String headerQuestionSummary;
+	private final String userAgent;
 	private final McpPrincipal principal;
 
 	private McpRequestContext(final String sessionId, final String remoteAddress, final String headerCaller,
-	    final String headerQuestionSummary, final McpPrincipal principal) {
+	    final String headerQuestionSummary, final String userAgent, final McpPrincipal principal) {
 		this.sessionId = sessionId;
 		this.remoteAddress = remoteAddress;
 		this.headerCaller = headerCaller;
 		this.headerQuestionSummary = headerQuestionSummary;
+		this.userAgent = userAgent;
 		this.principal = principal;
 	}
 
@@ -30,17 +32,20 @@ public final class McpRequestContext {
 
 	public static void begin(final HttpExchange exchange, final McpPrincipal principal) {
 		final String sessionId = firstHeader(exchange, "Mcp-Session-Id");
-		String remoteAddress = "unknown";
-		if (exchange != null && exchange.getRemoteAddress() != null
+		String remoteAddress = firstForwardedAddress(exchange);
+		if (remoteAddress.length() == 0 && exchange != null && exchange.getRemoteAddress() != null
 				&& exchange.getRemoteAddress().getAddress() != null) {
 			remoteAddress = exchange.getRemoteAddress().getAddress().getHostAddress();
 		}
+		if (remoteAddress.length() == 0) {
+			remoteAddress = "unknown";
+		}
 		CURRENT.set(new McpRequestContext(sessionId, remoteAddress, firstHeader(exchange, "X-Docear-Audit-Caller"),
-		    firstHeader(exchange, "X-Docear-Audit-Question"), principal));
+		    firstHeader(exchange, "X-Docear-Audit-Question"), firstHeader(exchange, "User-Agent"), principal));
 	}
 
 	public static void beginWeb(final String username, final McpRole role) {
-		CURRENT.set(new McpRequestContext("", "web", username == null ? "" : username, "",
+		CURRENT.set(new McpRequestContext("", "web", username == null ? "" : username, "", "twigmark-web",
 		    McpPrincipal.web(username, role)));
 	}
 
@@ -73,6 +78,10 @@ public final class McpRequestContext {
 		return headerQuestionSummary;
 	}
 
+	public String getUserAgent() {
+		return userAgent;
+	}
+
 	public McpPrincipal getPrincipal() {
 		return principal;
 	}
@@ -83,5 +92,19 @@ public final class McpRequestContext {
 		}
 		final String value = exchange.getRequestHeaders().getFirst(name);
 		return value != null ? value.trim() : "";
+	}
+
+	private static String firstForwardedAddress(final HttpExchange exchange) {
+		final String realIp = firstHeader(exchange, "X-Real-IP");
+		if (realIp.length() > 0 && !"127.0.0.1".equals(realIp) && !"::1".equals(realIp)) {
+			return realIp;
+		}
+		final String forwarded = firstHeader(exchange, "X-Forwarded-For");
+		if (forwarded.length() == 0) {
+			return realIp;
+		}
+		final int comma = forwarded.indexOf(',');
+		final String hop = (comma < 0 ? forwarded : forwarded.substring(0, comma)).trim();
+		return hop;
 	}
 }

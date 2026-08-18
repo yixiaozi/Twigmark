@@ -1,9 +1,11 @@
 package org.docear.plugin.mcp.webchat;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.docear.plugin.mcp.audit.McpAuditLabels;
 import org.docear.plugin.mcp.audit.McpAuditQuery;
 import org.docear.plugin.mcp.server.McpPermissions;
 
@@ -22,6 +24,14 @@ public final class WebAuditFilters {
 		q.action = str(params, "action");
 		q.intent = str(params, "intent");
 		q.traceId = str(params, "traceId");
+		if (McpAuditLabels.isUngroupedTraceId(q.traceId)) {
+			final String who = McpAuditLabels.actorFromUngroupedTraceId(q.traceId);
+			if (q.actor.length() == 0) {
+				q.actor = who;
+			}
+			q.traceId = "";
+			q.emptyTraceOnly = true;
+		}
 		q.result = str(params, "result");
 		q.limit = Math.min(MAX_LIMIT, Math.max(1, intParam(params, "limit", 200)));
 		final int sinceHours = intParam(params, "sinceHours", 168);
@@ -106,6 +116,95 @@ public final class WebAuditFilters {
 		for (int i = 0; i < rows.size(); i++) {
 			final Map row = (Map) rows.get(i);
 			row.put("mutating", Boolean.valueOf(actionsContainWrite(str(row, "actions"))));
+		}
+	}
+
+	/** Surface historical calls that never sent {@code _audit.traceId} as left-panel cards. */
+	static List mergeUngroupedTraces(final List traces, final List events) {
+		final List out = new ArrayList();
+		if (traces != null) {
+			out.addAll(traces);
+		}
+		if (events == null || events.isEmpty()) {
+			return out;
+		}
+		final Map groups = new LinkedHashMap();
+		for (int i = 0; i < events.size(); i++) {
+			final Map event = (Map) events.get(i);
+			if (str(event, "traceId").length() > 0) {
+				continue;
+			}
+			final String actor = str(event, "actor");
+			final String key = actor.length() == 0 ? "unknown" : actor;
+			Map row = (Map) groups.get(key);
+			if (row == null) {
+				row = new LinkedHashMap();
+				row.put("traceId", McpAuditLabels.ungroupedTraceId(key));
+				row.put("actor", key);
+				row.put("clientName", str(event, "clientName"));
+				row.put("questionSummary", McpAuditLabels.fallbackQuestionSummary(str(event, "clientName"), key));
+				row.put("actions", str(event, "action"));
+				row.put("callCount", Integer.valueOf(1));
+				row.put("lastTs", event.get("ts"));
+				row.put("firstTs", event.get("ts"));
+				groups.put(key, row);
+			}
+			else {
+				row.put("callCount", Integer.valueOf(intVal(row.get("callCount")) + 1));
+				final long ts = longVal(event.get("ts"));
+				if (ts > longVal(row.get("lastTs"))) {
+					row.put("lastTs", event.get("ts"));
+				}
+				if (str(row, "clientName").length() == 0 && str(event, "clientName").length() > 0) {
+					row.put("clientName", str(event, "clientName"));
+					row.put("questionSummary", McpAuditLabels.fallbackQuestionSummary(str(event, "clientName"), key));
+				}
+				row.put("actions", mergeActionCsv(str(row, "actions"), str(event, "action")));
+			}
+		}
+		final Object[] keys = groups.keySet().toArray();
+		final List merged = new ArrayList();
+		for (int i = 0; i < keys.length; i++) {
+			merged.add(groups.get(keys[i]));
+		}
+		merged.addAll(out);
+		return merged;
+	}
+
+	private static String mergeActionCsv(final String existing, final String action) {
+		if (action == null || action.length() == 0) {
+			return existing == null ? "" : existing;
+		}
+		if (existing == null || existing.length() == 0) {
+			return action;
+		}
+		if (("," + existing + ",").indexOf("," + action + ",") >= 0) {
+			return existing;
+		}
+		return existing + "," + action;
+	}
+
+	private static int intVal(final Object value) {
+		if (value instanceof Number) {
+			return ((Number) value).intValue();
+		}
+		try {
+			return Integer.parseInt(String.valueOf(value));
+		}
+		catch (Exception e) {
+			return 0;
+		}
+	}
+
+	private static long longVal(final Object value) {
+		if (value instanceof Number) {
+			return ((Number) value).longValue();
+		}
+		try {
+			return Long.parseLong(String.valueOf(value));
+		}
+		catch (Exception e) {
+			return 0L;
 		}
 	}
 

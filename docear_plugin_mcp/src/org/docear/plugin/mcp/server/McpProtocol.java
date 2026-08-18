@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
+import org.docear.plugin.mcp.audit.McpAuditLabels;
 import org.docear.plugin.mcp.audit.McpAuditService;
 import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonValue;
@@ -1135,7 +1136,7 @@ public final class McpProtocol {
 
 	private void captureInitializeClient(final JsonValue params) {
 		final McpRequestContext ctx = McpRequestContext.current();
-		if (ctx == null || ctx.getSessionId().length() == 0) {
+		if (ctx == null) {
 			return;
 		}
 		final Map<String, JsonValue> map = params.asMap();
@@ -1143,8 +1144,19 @@ public final class McpProtocol {
 			return;
 		}
 		final Map<String, JsonValue> clientInfo = map.get("clientInfo").asMap();
-		if (clientInfo.containsKey("name")) {
-			McpAuditService.registerClient(ctx.getSessionId(), clientInfo.get("name").asString());
+		if (!clientInfo.containsKey("name")) {
+			return;
+		}
+		final String name = McpAuditLabels.inferClientName(clientInfo.get("name").asString());
+		final String label = name.length() > 0 ? name : clientInfo.get("name").asString();
+		if (label == null || label.trim().length() == 0) {
+			return;
+		}
+		if (ctx.getSessionId().length() > 0) {
+			McpAuditService.registerClient(ctx.getSessionId(), label);
+		}
+		if (ctx.getPrincipal() != null) {
+			McpAuditService.registerClient(ctx.getPrincipal().getId(), label);
 		}
 	}
 
