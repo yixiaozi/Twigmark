@@ -1,6 +1,12 @@
 package org.docear.plugin.mcp.service;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.lang.reflect.Method;
 import java.net.URL;
 import java.text.SimpleDateFormat;
@@ -119,6 +125,7 @@ public final class McpMindMapService {
 	private static volatile long webMapListCacheAt = 0L;
 	private static final long WEB_MAP_LIST_TTL_MS = 5L * 60L * 1000L;
 	private static volatile boolean webMapListScanning = false;
+	private static final String WEB_CATALOG_FILE = "web-map-catalog.txt";
 
 	/**
 	 * Lightweight catalog for the web library (session-auth HTTP layer).
@@ -183,6 +190,13 @@ public final class McpMindMapService {
 		}
 		final long now = System.currentTimeMillis();
 		synchronized (WEB_MAP_LIST_LOCK) {
+			if (webMapListCache == null) {
+				final List persisted = loadPersistedWebCatalog();
+				if (persisted != null && !persisted.isEmpty()) {
+					webMapListCache = persisted;
+					webMapListCacheAt = 0L;
+				}
+			}
 			if (webMapListCache != null && now - webMapListCacheAt < WEB_MAP_LIST_TTL_MS) {
 				return new ArrayList(webMapListCache);
 			}
@@ -214,6 +228,7 @@ public final class McpMindMapService {
 					webMapListCache = files;
 					webMapListCacheAt = System.currentTimeMillis();
 					WorkspaceSideTabScanCache.publishMindMapFiles(files);
+					persistWebCatalog(files);
 					LogUtils.info("Web mind-map catalog warmed (" + files.size() + " files)");
 				}
 				catch (Exception e) {
@@ -228,6 +243,94 @@ public final class McpMindMapService {
 		}, "twigmark-web-map-scan");
 		t.setDaemon(true);
 		t.start();
+	}
+
+	private static File webCatalogPersistFile() {
+		try {
+			final File dir = MindMapDataRootResolver.getApplicationConfigDirectory();
+			if (dir == null) {
+				return null;
+			}
+			return new File(dir, WEB_CATALOG_FILE);
+		}
+		catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static List loadPersistedWebCatalog() {
+		final File persist = webCatalogPersistFile();
+		if (persist == null || !persist.isFile()) {
+			return null;
+		}
+		BufferedReader reader = null;
+		try {
+			reader = new BufferedReader(new InputStreamReader(new FileInputStream(persist), "UTF-8"));
+			final List files = new ArrayList();
+			String line;
+			while ((line = reader.readLine()) != null) {
+				final String path = line.trim();
+				if (path.length() == 0 || path.startsWith("#")) {
+					continue;
+				}
+				final File mm = new File(path);
+				if (mm.isFile() && mm.getName().toLowerCase().endsWith(".mm")) {
+					files.add(mm);
+				}
+			}
+			if (files.isEmpty()) {
+				return null;
+			}
+			LogUtils.info("Web mind-map catalog restored from disk (" + files.size() + " files)");
+			return files;
+		}
+		catch (Exception e) {
+			LogUtils.warn("Web mind-map catalog restore failed: " + e.getMessage());
+			return null;
+		}
+		finally {
+			if (reader != null) {
+				try {
+					reader.close();
+				}
+				catch (Exception ignored) {
+				}
+			}
+		}
+	}
+
+	private static void persistWebCatalog(final List files) {
+		final File persist = webCatalogPersistFile();
+		if (persist == null || files == null) {
+			return;
+		}
+		BufferedWriter writer = null;
+		try {
+			final File parent = persist.getParentFile();
+			if (parent != null && !parent.exists()) {
+				parent.mkdirs();
+			}
+			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(persist), "UTF-8"));
+			for (int i = 0; i < files.size(); i++) {
+				final File file = (File) files.get(i);
+				if (file != null) {
+					writer.write(file.getAbsolutePath());
+					writer.newLine();
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Web mind-map catalog persist failed: " + e.getMessage());
+		}
+		finally {
+			if (writer != null) {
+				try {
+					writer.close();
+				}
+				catch (Exception ignored) {
+				}
+			}
+		}
 	}
 
 	/** Warm mind-map file cache in background (headless-safe, no Swing Timer). */

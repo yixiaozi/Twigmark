@@ -764,7 +764,7 @@
       maps = res.body.maps || [];
       if (res.body.warming && !maps.length) {
         mapCount.textContent = "索引构建中…";
-        mapList.innerHTML = '<p class="muted tiny">正在扫描导图库，请稍候…</p>';
+        mapList.innerHTML = '<p class="muted tiny">正在扫描导图库（约两千张，首次较慢）。已开始后台去重扫描，完成后会自动列出。</p>';
         if (mapsWarmPoll) clearTimeout(mapsWarmPoll);
         mapsWarmPoll = setTimeout(loadMaps, 1500);
         return;
