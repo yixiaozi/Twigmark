@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>授权 Twigmark</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; font-family: "DM Sans", "PingFang SC", "Noto Sans SC", sans-serif;
+        color: #e8eef8; display: grid; place-items: center; padding: 1.25rem;
+        background:
+          radial-gradient(900px 520px at 8% -8%, rgba(47, 158, 139, 0.22), transparent 55%),
+          linear-gradient(165deg, #0b1220, #121a2b 55%, #0d1524);
+      }
+      .card {
+        width: min(420px, 100%); background: rgba(18, 28, 46, 0.92);
+        border: 1px solid rgba(148, 175, 210, 0.16); border-radius: 20px;
+        padding: 1.35rem 1.25rem; box-shadow: 0 18px 50px rgba(0,0,0,0.35);
+      }
+      h1 { margin: 0 0 0.35rem; font-size: 1.45rem; letter-spacing: -0.03em; }
+      p { color: #8b9bb3; line-height: 1.5; font-size: 0.95rem; }
+      label { display: grid; gap: 0.35rem; font-size: 0.86rem; color: #8b9bb3; margin-top: 0.7rem; }
+      input {
+        width: 100%; border: 1px solid rgba(148, 175, 210, 0.16); background: rgba(8, 14, 24, 0.72);
+        color: #e8eef8; border-radius: 12px; padding: 0.7rem 0.8rem;
+      }
+      button {
+        margin-top: 1rem; width: 100%; border: 0; border-radius: 12px; padding: 0.8rem;
+        background: #2f9e8b; color: #06201b; font-weight: 650; cursor: pointer;
+      }
+      .err { color: #e07a6a; min-height: 1.2em; }
+    </style>
+  </head>
+  <body>
+    <form class="card" method="post" autocomplete="on">
+      <h1>授权 Grok 访问 Twigmark</h1>
+      <p>使用网页账号登录。Grok 只会得到<strong>只读</strong>权限，看不到密码，也不能改导图。</p>
+      {{error}}
+      <label>账号 <input name="username" autocomplete="username" required /></label>
+      <label>密码 <input name="password" type="password" autocomplete="current-password" required /></label>
+      <input type="hidden" name="client_id" value="{{client_id}}" />
+      <input type="hidden" name="redirect_uri" value="{{redirect_uri}}" />
+      <input type="hidden" name="state" value="{{state}}" />
+      <input type="hidden" name="scope" value="{{scope}}" />
+      <input type="hidden" name="code_challenge" value="{{code_challenge}}" />
+      <input type="hidden" name="code_challenge_method" value="{{code_challenge_method}}" />
+      <input type="hidden" name="response_type" value="{{response_type}}" />
+      <button type="submit">登录并授权</button>
+    </form>
+  </body>
+</html>

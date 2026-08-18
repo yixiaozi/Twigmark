@@ -104,6 +104,8 @@ exec xvfb-run -a -s "-screen 0 800x600x16" java -Xms64m -Xmx512m -XX:+UseSerialG
   -Dmcp.auth.apiKey=${MCP_API_KEY} \\
   -Dmcp.web.enabled=true \\
   -Dmcp.web.readOnlyTools=true \\
+  -Dmcp.publicBaseUrl=https://webchat.mantoublog.top \\
+  -Dmcp.oauth.role=read \\
   -Dmcp.skipFullTagScan=true \\
   -Dmcp.lowMemory=true \\
   -Dmcp.auth.role=owner \\

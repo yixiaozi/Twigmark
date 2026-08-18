@@ -44,6 +44,8 @@ public final class McpHttpServer {
 		server.createContext("/mcp", new McpHandler());
 		server.createContext("/health", new HealthHandler());
 		server.createContext("/api", new ApiDispatcher());
+		server.createContext("/oauth", new OAuthHandler());
+		server.createContext("/.well-known", new OAuthHandler());
 		if (DocearMcpConfig.isWebEnabled()) {
 			server.createContext("/web", new StaticWebHandler());
 		}
@@ -92,6 +94,20 @@ public final class McpHttpServer {
 				return;
 			}
 			writeJson(exchange, 200, healthJson());
+		}
+	}
+
+	private final class OAuthHandler implements HttpHandler {
+		public void handle(final HttpExchange exchange) throws IOException {
+			addCorsHeaders(exchange);
+			if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+				exchange.sendResponseHeaders(204, -1);
+				exchange.close();
+				return;
+			}
+			if (!McpOAuthApi.handle(exchange)) {
+				writeJson(exchange, 404, apiError("Unknown OAuth path"));
+			}
 		}
 	}
 
@@ -300,7 +316,8 @@ public final class McpHttpServer {
 			}
 			final McpPrincipal principal = McpAuth.authenticate(exchange);
 			if (principal == null) {
-				writeJson(exchange, 401, errorBody(-32001, "Unauthorized: provide Authorization: Bearer <mcp-api-key> or X-Api-Key"));
+				exchange.getResponseHeaders().set("WWW-Authenticate", McpOAuthApi.wwwAuthenticate(exchange));
+				writeJson(exchange, 401, errorBody(-32001, "Unauthorized: provide Authorization: Bearer <mcp-api-key> or complete OAuth"));
 				return;
 			}
 			final String body = readBody(exchange);

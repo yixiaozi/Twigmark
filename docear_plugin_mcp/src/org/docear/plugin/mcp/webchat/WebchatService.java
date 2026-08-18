@@ -120,6 +120,19 @@ public final class WebchatService {
 		return result;
 	}
 
+	/** Verify web username/password without creating a browser session. */
+	public static String authenticateUser(final String usernameRaw, final String password) throws Exception {
+		final String username = normalizeUsername(usernameRaw);
+		final Map<String, Object> user = findUserAcross(username);
+		if (user == null) {
+			throw new IllegalArgumentException("invalid username or password");
+		}
+		if (!WebchatPassword.matches(password, (String) user.get("salt"), (String) user.get("passwordHash"))) {
+			throw new IllegalArgumentException("invalid username or password");
+		}
+		return username;
+	}
+
 	public static void logout(final String token) {
 		if (token == null || token.length() == 0) {
 			return;

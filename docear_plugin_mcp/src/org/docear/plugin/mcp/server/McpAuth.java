@@ -58,6 +58,9 @@ public final class McpAuth {
 	public static McpPrincipal authenticate(final HttpExchange exchange) {
 		final String provided = extractApiKey(exchange);
 		if (provided.length() > 0) {
+			if (provided.startsWith("mto_")) {
+				return McpOAuthService.get().resolveAccessToken(provided);
+			}
 			return McpAccessStore.get().resolve(provided);
 		}
 		if (isAuthRequired()) {

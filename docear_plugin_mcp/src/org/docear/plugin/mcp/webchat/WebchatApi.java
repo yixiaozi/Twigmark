@@ -622,7 +622,7 @@ public final class WebchatApi {
 			final String trimmed = auth.trim();
 			if (trimmed.length() >= 7 && "bearer ".equalsIgnoreCase(trimmed.substring(0, 7))) {
 				final String token = trimmed.substring(7).trim();
-				if (token.startsWith("tm_")) {
+				if (token.startsWith("tm_") || token.startsWith("mto_") || token.startsWith("mtr_")) {
 					return "";
 				}
 				return token;
@@ -631,7 +631,7 @@ public final class WebchatApi {
 		final String session = header(exchange, "X-Session-Token");
 		if (session != null) {
 			final String token = session.trim();
-			if (token.startsWith("tm_")) {
+			if (token.startsWith("tm_") || token.startsWith("mto_") || token.startsWith("mtr_")) {
 				return "";
 			}
 			return token;

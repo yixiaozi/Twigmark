@@ -149,6 +149,46 @@ public final class DocearMcpConfig {
 		return (String[]) list.toArray(new String[list.size()]);
 	}
 
+	/** Public HTTPS origin for OAuth metadata (empty = infer from Forwarded headers). */
+	public static String getPublicBaseUrl() {
+		String url = getString("publicBaseUrl", "");
+		if (url == null) {
+			url = "";
+		}
+		url = url.trim();
+		while (url.endsWith("/")) {
+			url = url.substring(0, url.length() - 1);
+		}
+		return url;
+	}
+
+	/** Role granted to OAuth access tokens (Grok etc.). Default read. */
+	public static McpRole getOauthRole() {
+		return McpRole.parse(getString("oauth.role", "read"));
+	}
+
+	public static int getOauthAccessTtlSeconds() {
+		final int sec = getInt("oauth.accessTtlSeconds", 86400);
+		return sec < 300 ? 300 : sec;
+	}
+
+	/** Extra redirect hosts besides grok.com / x.ai / x.com. */
+	public static String[] getOauthRedirectHosts() {
+		final String configured = getString("oauth.redirectHosts", "");
+		if (configured == null || configured.trim().length() == 0) {
+			return new String[0];
+		}
+		final String[] parts = configured.split(",");
+		final java.util.List list = new java.util.ArrayList();
+		for (int i = 0; i < parts.length; i++) {
+			final String host = parts[i] == null ? "" : parts[i].trim().toLowerCase();
+			if (host.length() > 0) {
+				list.add(host);
+			}
+		}
+		return (String[]) list.toArray(new String[list.size()]);
+	}
+
 	public static boolean isWebLlmConfigured() {
 		final String key = getWebLlmApiKey();
 		return key != null && key.trim().length() > 0;
@@ -453,7 +493,7 @@ public final class DocearMcpConfig {
 				return sys.trim();
 			}
 		}
-		catch (Exception ignored) {
+		catch (Throwable ignored) {
 		}
 		try {
 			final String value = ResourceController.getResourceController().getProperty(PREFIX + key, null);
@@ -461,7 +501,7 @@ public final class DocearMcpConfig {
 				return value.trim();
 			}
 		}
-		catch (Exception ignored) {
+		catch (Throwable ignored) {
 		}
 		return loadDefaults().getProperty(key, defaultValue);
 	}

@@ -21,7 +21,7 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 6;
+	private static final int SCHEMA_VERSION = 7;
 	public static final String SOURCE_WEB = "web";
 	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
@@ -956,6 +956,17 @@ public final class WebchatDatabase {
 					+ "user_agent TEXT NOT NULL DEFAULT ''"
 					+ ")");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_ideas_created ON feature_ideas(created_at)");
+			st.execute("CREATE TABLE IF NOT EXISTS oauth_tokens ("
+					+ "access_hash TEXT PRIMARY KEY,"
+					+ "refresh_hash TEXT NOT NULL DEFAULT '',"
+					+ "username TEXT NOT NULL,"
+					+ "client_id TEXT NOT NULL,"
+					+ "scope TEXT NOT NULL DEFAULT 'mcp',"
+					+ "role TEXT NOT NULL DEFAULT 'read',"
+					+ "expires_at INTEGER NOT NULL,"
+					+ "created_at INTEGER NOT NULL"
+					+ ")");
+			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_oauth_refresh ON oauth_tokens(refresh_hash)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_share_msg ON message_shares(message_id)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_share_created ON message_shares(created_at DESC)");
 			st.execute("INSERT OR REPLACE INTO webchat_meta(key, value) VALUES('schema_version', '"
@@ -1041,6 +1052,87 @@ public final class WebchatDatabase {
 			closeQuietly(c);
 		}
 		return rows;
+	}
+
+	public void insertOauthToken(final String accessHash, final String refreshHash, final String username,
+			final String clientId, final String scope, final String role, final long expiresAt) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"INSERT INTO oauth_tokens(access_hash, refresh_hash, username, client_id, scope, role, expires_at, created_at) VALUES(?,?,?,?,?,?,?,?)");
+			ps.setString(1, accessHash);
+			ps.setString(2, refreshHash == null ? "" : refreshHash);
+			ps.setString(3, username);
+			ps.setString(4, clientId);
+			ps.setString(5, scope == null ? "mcp" : scope);
+			ps.setString(6, role == null ? "read" : role);
+			ps.setLong(7, expiresAt);
+			ps.setLong(8, System.currentTimeMillis());
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public Map<String, Object> findOauthTokenByAccess(final String accessHash) throws SQLException {
+		return findOauthToken("access_hash", accessHash);
+	}
+
+	public Map<String, Object> findOauthTokenByRefresh(final String refreshHash) throws SQLException {
+		return findOauthToken("refresh_hash", refreshHash);
+	}
+
+	private Map<String, Object> findOauthToken(final String column, final String hash) throws SQLException {
+		if (hash == null || hash.length() == 0) {
+			return null;
+		}
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT username, client_id, scope, role, expires_at FROM oauth_tokens WHERE " + column + "=?");
+			ps.setString(1, hash);
+			rs = ps.executeQuery();
+			if (!rs.next()) {
+				return null;
+			}
+			final Map row = new LinkedHashMap();
+			row.put("username", rs.getString(1));
+			row.put("clientId", rs.getString(2));
+			row.put("scope", rs.getString(3));
+			row.put("role", rs.getString(4));
+			row.put("expiresAt", Long.valueOf(rs.getLong(5)));
+			return row;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void deleteOauthTokenByRefresh(final String refreshHash) throws SQLException {
+		if (refreshHash == null || refreshHash.length() == 0) {
+			return;
+		}
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("DELETE FROM oauth_tokens WHERE refresh_hash=?");
+			ps.setString(1, refreshHash);
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
 	}
 
 	private static String nullToEmpty(final String value) {
