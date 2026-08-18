@@ -48,6 +48,7 @@
         <nav class="app-nav" aria-label="主导航">
           <button type="button" class="nav-btn active" data-view="library" data-member-only>导图库</button>
           <button type="button" class="nav-btn" data-view="chat">对话</button>
+          <button type="button" class="nav-btn" data-view="audit" data-member-only>审计</button>
           <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集箱</button>
           <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
           <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>
@@ -216,6 +217,46 @@
         </div>
       </section>
 
+      <section id="view-audit" class="view hidden">
+        <div class="settings-page audit-page">
+          <header class="shares-manage-head">
+            <div>
+              <h2>MCP 审计</h2>
+              <p class="muted tiny">哪个 AI / 客户端查了什么、改了什么。点右侧卡片可看请求与响应。仅登录后可见。</p>
+            </div>
+            <button type="button" id="btn-refresh-audit" class="ghost small">刷新</button>
+          </header>
+          <div class="audit-filters">
+            <label class="search-field">
+              <span class="sr-only">搜索</span>
+              <input id="audit-q" placeholder="搜索问题 / 工具 / 调用方…" />
+            </label>
+            <select id="audit-actor" title="调用方">
+              <option value="">全部调用方</option>
+            </select>
+            <select id="audit-range" title="时间范围">
+              <option value="24">近 24 小时</option>
+              <option value="168" selected>近 7 天</option>
+              <option value="720">近 30 天</option>
+              <option value="0">全部</option>
+            </select>
+            <label class="check"><input id="audit-writes" type="checkbox" /> 只看写入</label>
+          </div>
+          <p class="muted tiny" id="audit-summary">加载中…</p>
+          <div class="audit-layout">
+            <aside class="audit-traces">
+              <h3>按问题</h3>
+              <div id="audit-trace-list" class="audit-list"><p class="muted">加载中…</p></div>
+            </aside>
+            <section class="audit-events">
+              <h3 id="audit-event-title">调用明细</h3>
+              <div id="audit-event-list" class="audit-list"><p class="muted">选择左侧一条问题，或查看全部调用</p></div>
+            </section>
+          </div>
+          <pre id="audit-detail" class="audit-detail hidden"></pre>
+        </div>
+      </section>
+
       <section id="view-ideas" class="view hidden">
         <div class="settings-page">
           <header class="shares-manage-head">
@@ -302,6 +343,7 @@
       <nav class="mobile-nav" aria-label="移动导航">
         <button type="button" class="nav-btn active" data-view="library" data-member-only>导图</button>
         <button type="button" class="nav-btn" data-view="chat">对话</button>
+        <button type="button" class="nav-btn" data-view="audit" data-member-only>审计</button>
         <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集</button>
         <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
         <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>

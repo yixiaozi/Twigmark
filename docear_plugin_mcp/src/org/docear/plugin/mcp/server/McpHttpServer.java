@@ -19,6 +19,7 @@ import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.webchat.WebAuditApi;
 import org.docear.plugin.mcp.webchat.WebMapsApi;
 import org.docear.plugin.mcp.webchat.WebchatApi;
 import org.freeplane.core.util.LogUtils;
@@ -238,6 +239,18 @@ public final class McpHttpServer {
 			}
 			if ("/api/maps/search".equals(path) && "GET".equalsIgnoreCase(method)) {
 				WebMapsApi.handleSearch(exchange);
+				return;
+			}
+			if ("/api/audit/meta".equals(path) && "GET".equalsIgnoreCase(method)) {
+				WebAuditApi.handleMeta(exchange);
+				return;
+			}
+			if ("/api/audit/events".equals(path) && "GET".equalsIgnoreCase(method)) {
+				WebAuditApi.handleEvents(exchange);
+				return;
+			}
+			if ("/api/audit/traces".equals(path) && "GET".equalsIgnoreCase(method)) {
+				WebAuditApi.handleTraces(exchange);
 				return;
 			}
 			writeJson(exchange, 404, apiError("Unknown API path: " + path));

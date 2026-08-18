@@ -282,9 +282,209 @@
     });
   }
 
+  var auditTimer = null;
+  var auditTraceId = "";
+  var auditEvents = [];
+
+  function auditQuery(opts) {
+    opts = opts || {};
+    var q = document.getElementById("audit-q");
+    var actor = document.getElementById("audit-actor");
+    var range = document.getElementById("audit-range");
+    var writes = document.getElementById("audit-writes");
+    var params = [];
+    if (q && q.value.trim()) params.push("q=" + encodeURIComponent(q.value.trim()));
+    if (actor && actor.value) params.push("actor=" + encodeURIComponent(actor.value));
+    params.push("sinceHours=" + encodeURIComponent((range && range.value) || "168"));
+    if (writes && writes.checked) params.push("writes=1");
+    if (opts.traceId !== false && auditTraceId) params.push("traceId=" + encodeURIComponent(auditTraceId));
+    if (opts.limit) params.push("limit=" + encodeURIComponent(String(opts.limit)));
+    return "?" + params.join("&");
+  }
+
+  function actorLabel(row) {
+    var a = (row && row.actor) || "";
+    var c = (row && row.clientName) || "";
+    if (c && a && c !== a) return a + " · " + c;
+    return a || c || "未知客户端";
+  }
+
+  function prettyJson(raw) {
+    if (!raw) return "";
+    try {
+      return JSON.stringify(JSON.parse(raw), null, 2);
+    } catch (e) {
+      return String(raw);
+    }
+  }
+
+  function loadAudit() {
+    if (guestMode) return;
+    var summaryEl = document.getElementById("audit-summary");
+    var actorSel = document.getElementById("audit-actor");
+    var prevActor = actorSel ? actorSel.value : "";
+    api("/audit/meta" + auditQuery({ traceId: false })).then(function (res) {
+      if (!res.ok) {
+        if (summaryEl) summaryEl.textContent = (res.body && res.body.error) || "无法加载审计";
+        return;
+      }
+      var s = (res.body && res.body.summary) || {};
+      var dbCount = res.body.dbCount || 0;
+      if (summaryEl) {
+        summaryEl.textContent =
+          "共 " +
+          (s.count || 0) +
+          " 次调用 · 成功 " +
+          (s.successCount || 0) +
+          " · 失败 " +
+          (s.failCount || 0) +
+          (s.avgDurationMs ? " · 平均 " + s.avgDurationMs + "ms" : "") +
+          (dbCount ? " · " + dbCount + " 个审计库" : "");
+      }
+      if (actorSel) {
+        var actors = res.body.actors || [];
+        actorSel.innerHTML = '<option value="">全部调用方</option>';
+        actors.forEach(function (name) {
+          var opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          if (name === prevActor) opt.selected = true;
+          actorSel.appendChild(opt);
+        });
+      }
+    });
+    api("/audit/traces" + auditQuery({ traceId: false, limit: 80 })).then(function (res) {
+      if (!res.ok) {
+        renderAuditTraces([]);
+        var el = document.getElementById("audit-trace-list");
+        if (el) el.innerHTML = '<p class="muted">' + ((res.body && res.body.error) || "无法加载调用链") + "</p>";
+        return;
+      }
+      renderAuditTraces((res.body && res.body.traces) || []);
+    });
+    api("/audit/events" + auditQuery({ limit: 200 })).then(function (res) {
+      if (!res.ok) {
+        auditEvents = [];
+        renderAuditEvents([]);
+        var el = document.getElementById("audit-event-list");
+        if (el) el.innerHTML = '<p class="muted">' + ((res.body && res.body.error) || "无法加载调用") + "</p>";
+        return;
+      }
+      auditEvents = (res.body && res.body.events) || [];
+      renderAuditEvents(auditEvents);
+    });
+  }
+
+  function renderAuditTraces(traces) {
+    var el = document.getElementById("audit-trace-list");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!traces.length) {
+      el.innerHTML = '<p class="muted">这段时间没有带问题摘要的调用链。</p>';
+      return;
+    }
+    traces.forEach(function (row) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "audit-card" + (row.traceId === auditTraceId ? " active" : "");
+      var title = document.createElement("strong");
+      title.textContent = row.questionSummary || "(无问题摘要)";
+      var meta = document.createElement("p");
+      meta.className = "muted tiny";
+      meta.textContent =
+        actorLabel(row) +
+        " · " +
+        (row.callCount || 0) +
+        " 次 · " +
+        formatTime(row.lastTs) +
+        (row.mutating ? " · 含写入" : "");
+      var acts = document.createElement("p");
+      acts.className = "audit-actions tiny";
+      acts.textContent = row.actions || "";
+      btn.appendChild(title);
+      btn.appendChild(meta);
+      btn.appendChild(acts);
+      btn.addEventListener("click", function () {
+        auditTraceId = row.traceId === auditTraceId ? "" : row.traceId || "";
+        var titleEl = document.getElementById("audit-event-title");
+        if (titleEl) titleEl.textContent = auditTraceId ? "该问题的调用" : "调用明细";
+        loadAudit();
+      });
+      el.appendChild(btn);
+    });
+  }
+
+  function renderAuditEvents(events) {
+    var el = document.getElementById("audit-event-list");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!events.length) {
+      el.innerHTML = '<p class="muted">没有匹配的调用。</p>';
+      return;
+    }
+    events.forEach(function (row, idx) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "audit-card event" + (row.mutating ? " write" : "") + (row.success === false ? " fail" : "");
+      var kicker = document.createElement("span");
+      kicker.className = "audit-kind " + (row.mutating ? "write" : "read");
+      kicker.textContent = row.mutating ? "改" : "查";
+      var title = document.createElement("strong");
+      title.textContent = row.action || row.kind || "call";
+      var meta = document.createElement("p");
+      meta.className = "muted tiny";
+      meta.textContent =
+        actorLabel(row) +
+        " · " +
+        formatTime(row.ts) +
+        " · " +
+        (row.durationMs || 0) +
+        "ms" +
+        (row.success === false ? " · 失败" : "");
+      var goal = document.createElement("p");
+      goal.className = "tiny";
+      goal.textContent = row.operationGoal || row.questionSummary || "";
+      var head = document.createElement("div");
+      head.className = "audit-event-head";
+      head.appendChild(kicker);
+      head.appendChild(title);
+      btn.appendChild(head);
+      btn.appendChild(meta);
+      if (goal.textContent) btn.appendChild(goal);
+      btn.addEventListener("click", function () {
+        showAuditDetail(row);
+      });
+      el.appendChild(btn);
+    });
+  }
+
+  function showAuditDetail(row) {
+    var el = document.getElementById("audit-detail");
+    if (!el) return;
+    var lines = [
+      actorLabel(row),
+      (row.mutating ? "写入" : "读取") + " · " + (row.action || ""),
+      row.questionSummary || "",
+      row.operationGoal || "",
+      row.error ? "错误: " + row.error : "",
+      "",
+      "请求",
+      prettyJson(row.requestJson),
+      "",
+      "响应",
+      prettyJson(row.responseJson),
+    ].filter(function (x, i, arr) {
+      return x || (i > 0 && arr[i - 1]);
+    });
+    el.textContent = lines.join("\n");
+    el.classList.remove("hidden");
+    el.scrollIntoView({ block: "nearest" });
+  }
+
   function switchView(name) {
     if (guestMode && name !== "chat") name = "chat";
-    ["library", "chat", "settings", "shares", "ideas"].forEach(function (v) {
+    ["library", "chat", "settings", "shares", "ideas", "audit"].forEach(function (v) {
       var el = document.getElementById("view-" + v);
       if (el) el.classList.toggle("hidden", v !== name);
     });
@@ -313,6 +513,9 @@
     }
     if (name === "ideas") {
       loadIdeas();
+    }
+    if (name === "audit") {
+      loadAudit();
     }
   }
 
@@ -1679,6 +1882,19 @@
   });
   document.getElementById("btn-idea").addEventListener("click", submitIdea);
   document.getElementById("btn-refresh-ideas").addEventListener("click", loadIdeas);
+  document.getElementById("btn-refresh-audit").addEventListener("click", loadAudit);
+  ["audit-q", "audit-actor", "audit-range", "audit-writes"].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener(id === "audit-q" ? "input" : "change", function () {
+      if (id === "audit-q") {
+        clearTimeout(auditTimer);
+        auditTimer = setTimeout(loadAudit, 280);
+      } else {
+        loadAudit();
+      }
+    });
+  });
   document.getElementById("btn-refresh-maps").addEventListener("click", loadMaps);
   mapFilter.addEventListener("input", function () {
     clearTimeout(filterTimer);
