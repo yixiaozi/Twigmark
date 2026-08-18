@@ -89,7 +89,7 @@ mkdir -p "\$DATA" "\$MAPS" /var/log/docear
 printf '%s\\n' "\$MAPS" > "\$RUNTIME/working-directory.txt"
 printf '%s\\n' "\$DATA" > "\$RUNTIME/config-directory.txt"
 cd "\$RUNTIME"
-exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xms256m -Xmx1024m -XX:+UseG1GC \\
+exec xvfb-run -a -s "-screen 0 800x600x16" java -Xms64m -Xmx512m -XX:+UseSerialGC -Xss256k -XX:MaxMetaspaceSize=128m -XX:+ExitOnOutOfMemoryError \\
   -Dorg.knopflerfish.framework.bundlestorage=memory \\
   -Dorg.freeplane.globalresourcedir="\$RUNTIME/resources" \\
   -Dorg.knopflerfish.gosg.jars=reference:file:"\$RUNTIME/core/" \\
@@ -105,6 +105,7 @@ exec xvfb-run -a -s "-screen 0 1280x800x24" java -Xms256m -Xmx1024m -XX:+UseG1GC
   -Dmcp.web.enabled=true \\
   -Dmcp.web.readOnlyTools=true \\
   -Dmcp.skipFullTagScan=true \\
+  -Dmcp.lowMemory=true \\
   -Dmcp.edtTimeoutMs=90000 \\
   -Duser.language=zh -Duser.country=CN \\
   -jar "\$RUNTIME/framework.jar" \\

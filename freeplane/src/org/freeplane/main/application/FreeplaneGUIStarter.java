@@ -42,6 +42,7 @@ import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.FileUtils;
 import org.freeplane.core.util.FreeplaneVersion;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.McpHeadlessFlags;
 import org.freeplane.core.util.MenuUtils;
 import org.freeplane.features.attribute.ModelessAttributeController;
 import org.freeplane.features.filter.FilterController;
@@ -332,6 +333,11 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 
 	private void loadMaps( final String[] args) {
 		final Controller controller = Controller.getCurrentController();
+		if (McpHeadlessFlags.isLeanMemory()) {
+			LogUtils.info("Lean memory: skip session restore and first-start map");
+			loadMaps(controller, args);
+			return;
+		}
 		final boolean alwaysLoadLastMaps = ResourceController.getResourceController().getBooleanProperty(
 		    "always_load_last_maps");
 		if (alwaysLoadLastMaps && !dontLoadLastMaps) {

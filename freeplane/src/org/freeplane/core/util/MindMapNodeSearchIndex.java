@@ -28,7 +28,8 @@ import org.xml.sax.helpers.DefaultHandler;
 /**
  * Per-file node TEXT index for keyword search.
  * <p>
- * Memory: LRU of compact per-file indexes (default 1200 files / 64MB). Does <b>not</b> keep
+ * Memory: LRU of compact per-file indexes (default 1200 files / 64MB; lean MCP
+ * 200 files / 16MB). Does <b>not</b> keep
  * full XML or notes — only node id/text/parent/depth/modified.
  * <p>
  * Disk spill: under {@code <userDir>/mcp-node-search-index/} (or tmp), keyed by
@@ -118,6 +119,8 @@ public final class MindMapNodeSearchIndex {
 	 */
 	private static final int MAX_MEMORY_FILES = 1200;
 	private static final long MAX_MEMORY_BYTES = 64L * 1024L * 1024L;
+	private static final int LEAN_MAX_MEMORY_FILES = 200;
+	private static final long LEAN_MAX_MEMORY_BYTES = 16L * 1024L * 1024L;
 	private static final int MAX_TEXT_CHARS = 2000;
 	private static final int MAX_PARENT_PATH_CHARS = 400;
 	private static final Charset UTF8 = Charset.forName("UTF-8");
@@ -290,9 +293,17 @@ public final class MindMapNodeSearchIndex {
 		evictMemoryLocked();
 	}
 
+	private static int maxMemoryFiles() {
+		return McpHeadlessFlags.isLeanMemory() ? LEAN_MAX_MEMORY_FILES : MAX_MEMORY_FILES;
+	}
+
+	private static long maxMemoryBytes() {
+		return McpHeadlessFlags.isLeanMemory() ? LEAN_MAX_MEMORY_BYTES : MAX_MEMORY_BYTES;
+	}
+
 	private static void evictMemoryLocked() {
 		while (!MEMORY.isEmpty()) {
-			if (MEMORY.size() <= MAX_MEMORY_FILES && estimateMemoryBytesLocked() <= MAX_MEMORY_BYTES) {
+			if (MEMORY.size() <= maxMemoryFiles() && estimateMemoryBytesLocked() <= maxMemoryBytes()) {
 				return;
 			}
 			final Object eldest = MEMORY.keySet().iterator().next();

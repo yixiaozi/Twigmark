@@ -61,6 +61,10 @@ public final class AiWorkspaceSnapshotAutoSync {
     }
 
     public static synchronized void install(final ModeController modeController) {
+        if (org.freeplane.core.util.McpHeadlessFlags.isLeanMemory()) {
+            LogUtils.info("Lean memory: skip AI workspace snapshot auto-sync");
+            return;
+        }
         if (instance == null) {
             instance = new AiWorkspaceSnapshotAutoSync(modeController);
             LogUtils.info("AI workspace snapshot auto-sync installed.");
