@@ -6,7 +6,9 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Method;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Resolves when two {@link File} paths refer to the same on-disk file or directory —
@@ -117,6 +119,27 @@ public final class MindMapFileIdentity {
 		return buildKey(absolute);
 	}
 
+	private static final ThreadLocal DEDUPE_SLOT = new ThreadLocal();
+
+	private static Set seenAbsolutePaths(final List files) {
+		final Object slot = DEDUPE_SLOT.get();
+		if (slot instanceof Object[]) {
+			final Object[] pair = (Object[]) slot;
+			if (pair.length >= 2 && pair[0] == files && pair[1] instanceof Set) {
+				return (Set) pair[1];
+			}
+		}
+		final Set seen = new HashSet();
+		for (int i = 0; i < files.size(); i++) {
+			final Object item = files.get(i);
+			if (item instanceof File) {
+				seen.add(((File) item).getAbsoluteFile().getPath());
+			}
+		}
+		DEDUPE_SLOT.set(new Object[] { files, seen });
+		return seen;
+	}
+
 	/** Adds {@code file} to {@code files} only when no equivalent path is already present. */
 	public static void addFileIfNew(final File file, final List files) {
 		addMindmapFileIfNew(file, files);
@@ -126,10 +149,10 @@ public final class MindMapFileIdentity {
 		if (file == null || files == null) {
 			return;
 		}
-		for (int i = 0; i < files.size(); i++) {
-			if (isSameFile(file, (File) files.get(i))) {
-				return;
-			}
+		final String key = file.getAbsoluteFile().getPath();
+		final Set seen = seenAbsolutePaths(files);
+		if (!seen.add(key)) {
+			return;
 		}
 		files.add(file);
 	}
