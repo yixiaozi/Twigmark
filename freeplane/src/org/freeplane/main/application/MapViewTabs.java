@@ -50,6 +50,7 @@ import javax.swing.plaf.TabbedPaneUI;
 import javax.swing.plaf.basic.BasicTabbedPaneUI;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.ui.IDocumentTabView;
 import org.freeplane.features.ui.IMapViewChangeListener;
@@ -552,48 +553,62 @@ class MapViewTabs implements IMapViewChangeListener {
 			return;
 		}
 		final int selectedIndex = mTabbedPane.getSelectedIndex();
-		for (int j = 0; j < mTabbedPane.getTabCount(); j++) {
-			if (j != selectedIndex) {
-				mTabbedPane.setComponentAt(j, new JPanel());
-			}
-		}
 		if (selectedIndex < 0 || selectedIndex >= visibleTabKeys.size()) {
 			return;
 		}
 		final Component mapView = visibleTabKeys.get(selectedIndex);
 		Controller controller = Controller.getCurrentController();
 
-		if (mapView instanceof IDocumentTabView) {
-			DocumentTabSupport.activateDocumentView((IDocumentTabView) mapView);
-		}
-		else if (mapView instanceof MapView) {
-			DocumentTabSupport.deactivateDocumentView();
-			if (mapView != controller.getMapViewManager().getMapViewComponent()) {
-				suppressingViewSync = true;
-				try {
-					controller.getMapViewManager().changeToMapView(mapView.getName());
+		try {
+			if (mapView instanceof IDocumentTabView) {
+				DocumentTabSupport.activateDocumentView((IDocumentTabView) mapView);
+			}
+			else if (mapView instanceof MapView) {
+				DocumentTabSupport.deactivateDocumentView();
+				if (mapView != controller.getMapViewManager().getMapViewComponent()) {
+					suppressingViewSync = true;
+					try {
+						// Switch by component. Looking up by getName() throws when the
+						// tab is a ghost (MapView not in mapViewVector) and leaves every
+						// tab as an empty JPanel — looks like a blank mind map.
+						controller.getMapViewManager().changeToMapView(mapView);
+					}
+					catch (RuntimeException ex) {
+						LogUtils.warn("Could not switch to map tab " + mapView.getName(), ex);
+					}
+					finally {
+						suppressingViewSync = false;
+					}
 				}
-				finally {
-					suppressingViewSync = false;
+				else {
+					// Same MapView was still "current" while a document tab owned the
+					// viewport — changeToMapView is a no-op, so restore explicitly.
+					controller.getMapViewManager().refreshViewportView(mapView);
 				}
 			}
-			else {
-				// Same MapView was still "current" while a document tab owned the
-				// viewport — changeToMapView is a no-op, so restore explicitly.
-				// (deactivateDocumentView already restores; this covers the case
-				// where activeDocumentView was already cleared.)
-				controller.getMapViewManager().refreshViewportView(mapView);
-			}
-			// Do NOT exit overlay views here: rebuilds/filter sync also call this path.
-			// User mouse clicks use SameTabClickListener; Alt+N uses switchToTab.
 		}
-		if (mContentComponent != null) {
-			mContentComponent.setVisible(true);
-			mTabbedPane.setComponentAt(selectedIndex, mContentComponent);
-			mContentComponent.revalidate();
-			mContentComponent.repaint();
-			mTabbedPane.revalidate();
-			mTabbedPane.repaint();
+		finally {
+			for (int j = 0; j < mTabbedPane.getTabCount(); j++) {
+				if (j != selectedIndex) {
+					mTabbedPane.setComponentAt(j, new JPanel());
+				}
+			}
+			if (mContentComponent != null) {
+				mContentComponent.setVisible(true);
+				mTabbedPane.setComponentAt(selectedIndex, mContentComponent);
+				mContentComponent.revalidate();
+				mContentComponent.repaint();
+				mTabbedPane.revalidate();
+				mTabbedPane.repaint();
+			}
+			if (mapView instanceof MapView) {
+				final MapView toShow = (MapView) mapView;
+				SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						toShow.ensureSelectedVisibleAfterShowing();
+					}
+				});
+			}
 		}
 	}
 

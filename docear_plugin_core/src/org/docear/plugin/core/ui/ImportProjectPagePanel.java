@@ -300,9 +300,9 @@ public class ImportProjectPagePanel extends AWizardPage {
 		getModel().clear();
 		lstVersions.getSelectionModel().clearSelection();
 		
-		File _data = new File(homeForListing, "_data");
-		if(_data.exists()) {
-			readVersions(_data, logicalHome);
+		File configBase = MindMapDataRootResolver.getProjectSettingsBaseDirectory(homeForListing);
+		if (configBase != null && configBase.exists()) {
+			readVersions(configBase, logicalHome);
 		}
 		lookForIncompatibles();
 		if(getModel().getSize() > 0) {

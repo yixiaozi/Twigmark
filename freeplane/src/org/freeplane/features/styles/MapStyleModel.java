@@ -70,7 +70,14 @@ public class MapStyleModel implements IExtension {
     }
 
 	public static MapStyleModel getExtension(final MapModel map) {
-		return MapStyleModel.getExtension(map.getRootNode());
+		if (map == null) {
+			return null;
+		}
+		final NodeModel root = map.getRootNode();
+		if (root == null) {
+			return null;
+		}
+		return MapStyleModel.getExtension(root);
 	}
 
 	public MapModel getStyleMap() {

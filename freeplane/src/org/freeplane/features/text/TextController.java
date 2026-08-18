@@ -169,13 +169,18 @@ public class TextController implements IExtension {
 		return PatternFormat.IDENTITY_PATTERN.equals(getNodeFormat(nodeModel));
 	}
 	
+	private static volatile int transformWarnCount;
+
 	/** returns an error message instead of a normal result if something goes wrong. */
 	public Object getTransformedObjectNoThrow(Object data, final NodeModel node, Object extension) {
 		try {
 			return getTransformedObject(data, node, extension);
 		}
 		catch (Throwable e) {
-			LogUtils.warn(e.getMessage(), e);
+			if (transformWarnCount < 3) {
+				transformWarnCount++;
+				LogUtils.warn(e.getMessage(), e);
+			}
 			return TextUtils.format("MainView.errorUpdateText", data, e.getLocalizedMessage());
 		}
 	}
@@ -250,8 +255,14 @@ public class TextController implements IExtension {
 						 return null;
 					 }
 					final NodeStyleController style = (NodeStyleController) modeController.getExtension(NodeStyleController.class);
-			        final MapStyleModel model = MapStyleModel.getExtension(node.getMap());
+			        final MapStyleModel model = node.getMap() == null ? null : MapStyleModel.getExtension(node.getMap());
+			        if (model == null) {
+			        	return null;
+			        }
 			        final NodeModel detailStyleNode = model.getStyleNodeSafe(MapStyleModel.DETAILS_STYLE);
+			        if (detailStyleNode == null) {
+			        	return null;
+			        }
 			        Font detailFont = style.getFont(detailStyleNode);
 			        Color detailBackground = style.getBackgroundColor(detailStyleNode);
 			        Color detailForeground = style.getColor(detailStyleNode);
@@ -334,9 +345,19 @@ public class TextController implements IExtension {
     }
 
 	public String getNodeFormat(NodeModel node) {
-		Collection<IStyle> collection = LogicalStyleController.getController(modeController).getStyles(node);
-		final MapStyleModel model = MapStyleModel.getExtension(node.getMap());
+		if (node == null || node.getMap() == null) {
+			return defaultNodeFormat();
+		}
 		try {
+			final LogicalStyleController styles = LogicalStyleController.getController(modeController);
+			if (styles == null) {
+				return defaultNodeFormat();
+			}
+			Collection<IStyle> collection = styles.getStyles(node);
+			final MapStyleModel model = MapStyleModel.getExtension(node.getMap());
+			if (collection == null || model == null) {
+				return defaultNodeFormat();
+			}
 			for(IStyle styleKey : collection){
 				final NodeModel styleNode = model.getStyleNode(styleKey);
 				if (styleNode == null) {
@@ -349,18 +370,35 @@ public class TextController implements IExtension {
 	        }
 		}
 		catch (Exception e) {
-			LogUtils.warn("Exception in org.freeplane.features.text.TextController.getNodeFormat(node): "+ e.getMessage());
+			if (transformWarnCount < 3) {
+				transformWarnCount++;
+				LogUtils.warn("Exception in org.freeplane.features.text.TextController.getNodeFormat(node): "+ e.getMessage());
+			}
 		}
-        return parseData() ? PatternFormat.STANDARD_FORMAT_PATTERN : PatternFormat.IDENTITY_PATTERN;
+        return defaultNodeFormat();
     }
+
+	private String defaultNodeFormat() {
+		return parseData() ? PatternFormat.STANDARD_FORMAT_PATTERN : PatternFormat.IDENTITY_PATTERN;
+	}
 
 	public boolean parseData() {
         return false;
     }
 
-    public boolean getNodeNumbering(NodeModel node) {
-		Collection<IStyle> collection = LogicalStyleController.getController(modeController).getStyles(node);
+	public boolean getNodeNumbering(NodeModel node) {
+		if (node == null || node.getMap() == null) {
+			return false;
+		}
+		final LogicalStyleController styles = LogicalStyleController.getController(modeController);
+		if (styles == null) {
+			return false;
+		}
+		Collection<IStyle> collection = styles.getStyles(node);
 		final MapStyleModel model = MapStyleModel.getExtension(node.getMap());
+		if (collection == null || model == null) {
+			return false;
+		}
 		for(IStyle styleKey : collection){
 			final NodeModel styleNode = model.getStyleNode(styleKey);
 			if (styleNode == null) {

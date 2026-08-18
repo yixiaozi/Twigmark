@@ -49,8 +49,8 @@ public final class WorkingDirectoryDefaults implements MindMapDataRootResolver.E
 		copyIfMissing(new File(drafts, "My New Paper.mm"),
 		        "/demo/docear_example_project/My New Paper.mm", replaceMapping);
 
-		final File welcome = new File(new File(workingDirectory, MindMapDataRootResolver.CONFIG_DIR_NAME),
-		        "docear-welcome.mm");
+		final File welcomeDir = MindMapDataRootResolver.getApplicationConfigDirectory();
+		final File welcome = new File(welcomeDir, "docear-welcome.mm");
 		copyIfMissing(welcome, "/conf/docear-welcome.mm", null);
 
 		LogUtils.info("Default working-directory content ensured under " + workingDirectory.getAbsolutePath());

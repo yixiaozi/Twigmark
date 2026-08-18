@@ -47,7 +47,7 @@ if ($null -eq $jdkHome) {
 $env:JAVA_HOME = $jdkHome
 $env:Path = "$($env:JAVA_HOME)\bin;$env:Path"
 Write-Host "JAVA_HOME = $env:JAVA_HOME"
-& java -version 2>&1 | ForEach-Object { Write-Host $_ }
+cmd /c "java -version 2>&1" | ForEach-Object { Write-Host $_ }
 
 & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "ensure-build-metadata.ps1") | Out-Null
 
@@ -58,6 +58,7 @@ $moduleMap = @{
     "docear_plugin_ai"     = @{ BuildFile = "docear_plugin_ai\ant\build.xml";     Target = "build" }
     "docear_plugin_drawio" = @{ BuildFile = "docear_plugin_drawio\ant\build.xml"; Target = "build" }
     "freeplane_plugin_workspace" = @{ BuildFile = "freeplane_plugin_workspace\ant\build.xml"; Target = "build" }
+    "freeplane_plugin_bugreport" = @{ BuildFile = "freeplane_plugin_bugreport\ant\build.xml"; Target = "build" }
 }
 
 $failed = @()

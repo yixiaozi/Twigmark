@@ -59,6 +59,7 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.MenuBuilder;
 import org.freeplane.core.ui.ribbon.RibbonBuilder;
 import org.freeplane.core.ui.ribbon.special.ZoomContributorFactory;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.IMapSelectionListener;
@@ -167,15 +168,22 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 	private void addToOrChangeInMapViews(final String key, final MapView newOrChangedMapView) {
 		String extension = "";
 		int count = 1;
-		final List<String> mapKeys = getMapKeys();
-		while (mapKeys.contains(key + extension)) {
+		while (nameTakenByOtherView(key + extension, newOrChangedMapView)) {
 			extension = "<" + (++count) + ">";
 		}
-		newOrChangedMapView.setName((key + extension));
-		newOrChangedMapView.setName((key + extension));
+		newOrChangedMapView.setName(key + extension);
 		if (!mapViewVector.contains(newOrChangedMapView)) {
 			mapViewVector.add(newOrChangedMapView);
 		}
+	}
+
+	private boolean nameTakenByOtherView(final String name, final MapView self) {
+		for (final MapView existing : mapViewVector) {
+			if (existing != self && name.equals(existing.getName())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/* (non-Javadoc)
@@ -186,6 +194,10 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 		final MapView oldMapView = mapView;
 		if (newMapView == oldMapView) {
 			return true;
+		}
+		if (newMapView != null && !mapViewVector.contains(newMapView)) {
+			final String key = newMapView.getName() != null ? newMapView.getName() : "map";
+			addToOrChangeInMapViews(key, newMapView);
 		}
 		mapViewChangeListeners.beforeMapViewChange(oldMapView, newMapView);
 		mapView = newMapView;
@@ -216,7 +228,8 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 			}
 		}
 		if (mapViewCandidate == null) {
-			throw new IllegalArgumentException("Map mapView " + mapViewDisplayName + " not found.");
+			LogUtils.warn("Map mapView " + mapViewDisplayName + " not found.");
+			return false;
 		}
 		return changeToMapView(mapViewCandidate);
 	}
@@ -736,6 +749,22 @@ public class MapViewController implements IMapViewManager , IMapViewChangeListen
 						mapSelection.scrollNodeToVisible(selected);
 					}
 				}
+				// Tab strip attaches the shared scroll pane after this method; a
+				// large map otherwise stays at canvas (0,0) until a second switch.
+				final Component shown = pNewMap;
+				EventQueue.invokeLater(new Runnable() {
+					public void run() {
+						if (viewportOverride != null && viewportOverride.getViewportComponent() != null) {
+							return;
+						}
+						if (shown != getMapViewComponent()) {
+							return;
+						}
+						if (shown instanceof MapView) {
+							((MapView) shown).ensureSelectedVisibleAfterShowing();
+						}
+					}
+				});
 				setZoomComboBox(getZoom());
 				obtainFocusForSelected();
 			}

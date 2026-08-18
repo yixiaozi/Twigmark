@@ -33,30 +33,13 @@ public final class ProductSettingsService {
 		});
 		ResourceController.getResourceController().addPropertyChangeListener(new IFreeplanePropertyListener() {
 			public void propertyChanged(final String propertyName, final String newValue, final String oldValue) {
-				if (!MindMapDataRootResolver.WORKING_DIRECTORY_SYSTEM_PROPERTY.equals(propertyName)) {
+				if (MindMapDataRootResolver.WORKING_DIRECTORY_SYSTEM_PROPERTY.equals(propertyName)) {
+					applyWorkingDirectoryFromPreferences(newValue);
 					return;
 				}
-				if (newValue == null || newValue.trim().length() == 0) {
-					return;
+				if (MindMapDataRootResolver.CONFIG_DIRECTORY_SYSTEM_PROPERTY.equals(propertyName)) {
+					applyConfigDirectoryFromPreferences(newValue);
 				}
-				if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(newValue)) {
-					LogUtils.warn("Ignoring unusable working directory from preferences: " + newValue);
-					return;
-				}
-				final File dir = new File(newValue.trim());
-				final File current = MindMapDataRootResolver.getWorkingDirectory();
-				try {
-					if (current.getCanonicalFile().equals(dir.getCanonicalFile())) {
-						return;
-					}
-				}
-				catch (Exception e) {
-					if (current.getAbsolutePath().equalsIgnoreCase(dir.getAbsolutePath())) {
-						return;
-					}
-				}
-				MindMapDataRootResolver.setWorkingDirectory(dir);
-				LogUtils.info("Working directory updated from preferences: " + dir.getAbsolutePath());
 			}
 		});
 		scheduleFirstRunIfNeeded();
@@ -67,6 +50,8 @@ public final class ProductSettingsService {
 		final ResourceController resources = ResourceController.getResourceController();
 		resources.setDefaultProperty(MindMapDataRootResolver.WORKING_DIRECTORY_SYSTEM_PROPERTY,
 		        MindMapDataRootResolver.getWorkingDirectory().getAbsolutePath());
+		resources.setDefaultProperty(MindMapDataRootResolver.CONFIG_DIRECTORY_SYSTEM_PROPERTY,
+		        MindMapDataRootResolver.getApplicationConfigDirectory().getAbsolutePath());
 		resources.setDefaultProperty("mcp.enabled", "true");
 		resources.setDefaultProperty("mcp.host", "127.0.0.1");
 		resources.setDefaultProperty("mcp.port", "7720");
@@ -78,6 +63,56 @@ public final class ProductSettingsService {
 		resources.setDefaultProperty("quickcapture.inbox_filename", "\u6536\u4ef6\u7bb1.mm");
 		resources.setProperty(MindMapDataRootResolver.WORKING_DIRECTORY_SYSTEM_PROPERTY,
 		        MindMapDataRootResolver.getWorkingDirectory().getAbsolutePath());
+		resources.setProperty(MindMapDataRootResolver.CONFIG_DIRECTORY_SYSTEM_PROPERTY,
+		        MindMapDataRootResolver.getApplicationConfigDirectory().getAbsolutePath());
+	}
+
+	private static void applyWorkingDirectoryFromPreferences(final String newValue) {
+		if (newValue == null || newValue.trim().length() == 0) {
+			return;
+		}
+		if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(newValue)) {
+			LogUtils.warn("Ignoring unusable working directory from preferences: " + newValue);
+			return;
+		}
+		final File dir = new File(newValue.trim());
+		final File current = MindMapDataRootResolver.getWorkingDirectory();
+		if (samePath(current, dir)) {
+			return;
+		}
+		MindMapDataRootResolver.setWorkingDirectory(dir);
+		LogUtils.info("Working directory updated from preferences: " + dir.getAbsolutePath());
+	}
+
+	private static void applyConfigDirectoryFromPreferences(final String newValue) {
+		if (newValue == null || newValue.trim().length() == 0) {
+			return;
+		}
+		if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(newValue)) {
+			LogUtils.warn("Ignoring unusable config directory from preferences: " + newValue);
+			return;
+		}
+		final File dir = MindMapDataRootResolver.normalizeChosenConfigDirectory(new File(newValue.trim()));
+		final File current = MindMapDataRootResolver.getApplicationConfigDirectory();
+		if (samePath(current, dir)) {
+			return;
+		}
+		MindMapDataRootResolver.setConfigDirectory(dir);
+		LogUtils.info("Config directory updated from preferences: " + dir.getAbsolutePath());
+	}
+
+	private static boolean samePath(final File current, final File dir) {
+		try {
+			if (current.getCanonicalFile().equals(dir.getCanonicalFile())) {
+				return true;
+			}
+		}
+		catch (Exception e) {
+			if (current.getAbsolutePath().equalsIgnoreCase(dir.getAbsolutePath())) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static void addMenuIfPresent(final MenuBuilder builder, final String menuPath,

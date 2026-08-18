@@ -39,9 +39,19 @@ public final class AiSelectedNodeExtractor {
         if (node == null) {
             return "";
         }
-        String text = TextController.getController().getPlainTextContent(node);
-        if (text == null) {
-            return "";
+        String text = null;
+        try {
+            TextController controller = TextController.getController();
+            if (controller != null) {
+                text = controller.getPlainTextContent(node);
+            }
+        }
+        catch (Throwable e) {
+            text = null;
+        }
+        if (text == null || text.length() == 0) {
+            Object user = node.getUserObject();
+            text = user == null ? "" : String.valueOf(user);
         }
         return text.replace("\r\n", "\n").replace('\r', '\n').trim();
     }

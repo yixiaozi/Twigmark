@@ -31,18 +31,24 @@ import org.freeplane.features.url.UrlManager;
  * Portable layout:
  * <pre>
  * {appRoot}/                      software install directory
- *   working-directory.txt         the only primary product setting
+ *   working-directory.txt         mind-map library (Dropbox-safe)
+ *   config-directory.txt          optional; _data / indexes (local disk)
  * {workingDirectory}/             mind maps and user content
- *   data/                         all application configuration (R/W)
+ * {configDirectory}/              application configuration (R/W)
  * </pre>
+ * By default {@code configDirectory} is {@code {workingDirectory}/data} (or legacy
+ * {@code _data}). It may be a separate folder so SQLite indexes are not Dropbox-synced.
  * Working directory may be overridden by {@code -Dorg.docear.working.directory}
- * or {@code DOCEAR_WORKING_DIRECTORY}. Legacy aliases
- * {@code org.docear.data.root} / {@code DOCEAR_DATA_ROOT} are still accepted.
+ * or {@code DOCEAR_WORKING_DIRECTORY}. Config directory by
+ * {@code -Dorg.docear.config.directory} / {@code DOCEAR_CONFIG_DIRECTORY}.
+ * Legacy aliases {@code org.docear.data.root} / {@code DOCEAR_DATA_ROOT} are still accepted.
  */
 public final class MindMapDataRootResolver {
 
 	/** Filename under the software root that stores the working directory path. */
 	public static final String WORKING_DIRECTORY_FILE_NAME = "working-directory.txt";
+	/** Filename under the software root that stores a separate config / {@code _data} path. */
+	public static final String CONFIG_DIRECTORY_FILE_NAME = "config-directory.txt";
 	/** Config folder name under the working directory. */
 	public static final String CONFIG_DIR_NAME = "data";
 	/** Legacy config folder name (accepted when {@link #CONFIG_DIR_NAME} is absent). */
@@ -54,6 +60,10 @@ public final class MindMapDataRootResolver {
 	public static final String WORKING_DIRECTORY_SYSTEM_PROPERTY = "org.docear.working.directory";
 	/** Environment variable for the working directory. */
 	public static final String WORKING_DIRECTORY_ENV = "DOCEAR_WORKING_DIRECTORY";
+	/** JVM system property for a separate config / {@code _data} directory. */
+	public static final String CONFIG_DIRECTORY_SYSTEM_PROPERTY = "org.docear.config.directory";
+	/** Environment variable for a separate config / {@code _data} directory. */
+	public static final String CONFIG_DIRECTORY_ENV = "DOCEAR_CONFIG_DIRECTORY";
 
 	/**
 	 * @deprecated Use {@link #WORKING_DIRECTORY_SYSTEM_PROPERTY}.
@@ -90,6 +100,8 @@ public final class MindMapDataRootResolver {
 	private static volatile boolean pendingDefaultContentSeed;
 	private static volatile EmptyDirectorySeeder emptyDirectorySeeder;
 	private static volatile boolean configuringInteractively;
+	/** True after the startup dialog persisted a config directory this JVM. */
+	private static volatile boolean configDirectoryChosenThisSession;
 
 	/**
 	 * Optional hook (registered by Docear core) to copy sample mind maps into an empty working directory.
@@ -222,7 +234,8 @@ public final class MindMapDataRootResolver {
 	}
 
 	/**
-	 * The single primary product setting: where mind maps and {@code data/} live.
+	 * Mind-map library (Dropbox-safe). Config / {@code _data} may live elsewhere —
+	 * see {@link #getApplicationConfigDirectory()}.
 	 * Always non-null; created on demand.
 	 * When {@code working-directory.txt} is missing (and no env override), prompts once.
 	 */
@@ -243,8 +256,8 @@ public final class MindMapDataRootResolver {
 	}
 
 	/**
-	 * Application configuration directory: {@code {workingDirectory}/data}.
-	 * Accepts legacy {@code _data} when {@code data} does not exist yet.
+	 * Application configuration directory ({@code data} / {@code _data}):
+	 * either a separately chosen folder, or {@code {workingDirectory}/data}.
 	 * Always non-null; created on demand.
 	 */
 	public static File getApplicationConfigDirectory() {
@@ -256,9 +269,10 @@ public final class MindMapDataRootResolver {
 			if (cachedConfigDirectory != null) {
 				return cachedConfigDirectory;
 			}
-			final File config = resolveConfigDirectory(getWorkingDirectory());
+			final File config = resolveApplicationConfigDirectory();
 			ensureDirectory(config);
 			cachedConfigDirectory = config;
+			applyUserFpDir(config);
 			return config;
 		}
 	}
@@ -277,10 +291,15 @@ public final class MindMapDataRootResolver {
 		writeWorkingDirectoryFile(absolute);
 		synchronized (MindMapDataRootResolver.class) {
 			cachedWorkingDirectory = absolute;
-			cachedConfigDirectory = null;
+			if (!configDirectoryChosenThisSession && readConfigDirectoryFile() == null
+			        && usableDirectoryFromPath(System.getProperty(CONFIG_DIRECTORY_SYSTEM_PROPERTY)) == null) {
+				cachedConfigDirectory = null;
+			}
 		}
 		System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
-		System.setProperty("org.freeplane.userfpdir", getApplicationConfigDirectory().getAbsolutePath());
+		if (cachedConfigDirectory != null) {
+			applyUserFpDir(cachedConfigDirectory);
+		}
 		try {
 			final ResourceController rc = ResourceController.getResourceController();
 			if (rc != null) {
@@ -290,6 +309,70 @@ public final class MindMapDataRootResolver {
 		catch (final Exception e) {
 			// ResourceController may not be ready during very early startup
 		}
+	}
+
+	/** Persist a separate config / {@code _data} directory and refresh caches. */
+	public static void setConfigDirectory(final File configDirectory) {
+		if (configDirectory == null) {
+			return;
+		}
+		final File absolute = normalizeChosenConfigDirectory(configDirectory.getAbsoluteFile());
+		if (!isUsableWorkingDirectoryPath(absolute.getAbsolutePath())) {
+			throw new IllegalArgumentException(
+			        "Config directory path is not valid on this operating system: " + absolute.getAbsolutePath());
+		}
+		ensureDirectory(absolute);
+		writeConfigDirectoryFile(absolute);
+		synchronized (MindMapDataRootResolver.class) {
+			cachedConfigDirectory = absolute;
+			configDirectoryChosenThisSession = true;
+		}
+		System.setProperty(CONFIG_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
+		applyUserFpDir(absolute);
+		try {
+			final ResourceController rc = ResourceController.getResourceController();
+			if (rc != null) {
+				rc.setProperty(CONFIG_DIRECTORY_SYSTEM_PROPERTY, absolute.getAbsolutePath());
+			}
+		}
+		catch (final Exception e) {
+			// ResourceController may not be ready during very early startup
+		}
+	}
+
+	/** Suggested config folder for a mind-map library (existing {@code _data}/{@code data}, else {@code data}). */
+	public static File suggestedConfigDirectory(final File workingDirectory) {
+		if (workingDirectory == null) {
+			return new File(CONFIG_DIR_NAME);
+		}
+		final File nested = nestedConfigDirectoryIfPresent(workingDirectory);
+		if (nested != null) {
+			return nested;
+		}
+		return new File(workingDirectory, CONFIG_DIR_NAME);
+	}
+
+	/**
+	 * If the user picked the library folder itself, descend into {@code _data} or {@code data}
+	 * when that child exists. Otherwise the chosen folder <em>is</em> the config directory
+	 * (e.g. {@code D:\\DropboxLocal\\mindmaps_data}).
+	 */
+	public static File normalizeChosenConfigDirectory(final File chosen) {
+		if (chosen == null) {
+			return null;
+		}
+		final File absolute = chosen.getAbsoluteFile();
+		if (isConfigDirectoryName(absolute.getName())) {
+			return absolute;
+		}
+		if (looksLikeUsableConfigDirectory(absolute)) {
+			return absolute;
+		}
+		final File nested = nestedConfigDirectoryIfPresent(absolute);
+		if (nested != null) {
+			return nested;
+		}
+		return absolute;
 	}
 
 	/** Marker file under {@code data/} written after first-run setup. */
@@ -360,14 +443,27 @@ public final class MindMapDataRootResolver {
 	}
 
 	/**
-	 * Project settings base under the working directory: prefer {@code data/},
-	 * fall back to legacy {@code _data/}.
+	 * Project settings base: the global config directory when {@code projectHome} is the
+	 * mind-map library; otherwise nested {@code data/}/{@code _data/} if present.
 	 */
-	public static File getProjectSettingsBaseDirectory(final File workingDirectory) {
-		if (workingDirectory == null) {
+	public static File getProjectSettingsBaseDirectory(final File projectHome) {
+		if (projectHome == null) {
 			return getApplicationConfigDirectory();
 		}
-		return resolveConfigDirectory(workingDirectory);
+		try {
+			final File working = getWorkingDirectory();
+			if (working != null && MindMapFileIdentity.isSameFile(projectHome, working)) {
+				return getApplicationConfigDirectory();
+			}
+		}
+		catch (final Exception e) {
+			// working directory may still be resolving
+		}
+		final File nested = nestedConfigDirectoryIfPresent(projectHome);
+		if (nested != null) {
+			return nested;
+		}
+		return getApplicationConfigDirectory();
 	}
 
 	public static boolean isConfigDirectoryName(final String name) {
@@ -379,7 +475,7 @@ public final class MindMapDataRootResolver {
 		if (workingDirectory == null) {
 			return DEFAULT_PROJECT_ID;
 		}
-		return resolveProjectIdForConfigDir(resolveConfigDirectory(workingDirectory));
+		return resolveProjectIdForConfigDir(getProjectSettingsBaseDirectory(workingDirectory));
 	}
 
 	public static File getPrimaryScanRoot() {
@@ -490,8 +586,8 @@ public final class MindMapDataRootResolver {
 	}
 
 	/**
-	 * First launch without {@code working-directory.txt}: ask the user for a folder.
-	 * Empty folders get default sample content (via optional seeder); non-empty folders are left untouched.
+	 * First launch without {@code working-directory.txt}: ask for the mind-map library
+	 * and (optionally separate) data / {@code _data} folder.
 	 */
 	private static File configureWorkingDirectoryInteractively() {
 		if (configuringInteractively) {
@@ -502,32 +598,51 @@ public final class MindMapDataRootResolver {
 		configuringInteractively = true;
 		try {
 			final File suggested = defaultSuggestedWorkingDirectory();
-			LogUtils.info("No usable " + WORKING_DIRECTORY_FILE_NAME + " — prompting for working directory");
-			final File chosen = WorkingDirectoryChooser.choose(suggested);
-			if (chosen == null) {
+			LogUtils.info("No usable " + WORKING_DIRECTORY_FILE_NAME + " — prompting for working and config directories");
+			final WorkingDirectoryChooser.Directories chosen = WorkingDirectoryChooser.choose(suggested,
+			        suggestedConfigDirectory(suggested));
+			if (chosen == null || chosen.workingDirectory == null) {
 				LogUtils.warn("Working directory selection cancelled — exiting");
 				System.err.println("Docear requires a working directory. Exiting.");
 				System.exit(1);
 			}
-			ensureDirectory(chosen);
-			final boolean empty = isEffectivelyEmptyWorkingDirectory(chosen);
-			writeWorkingDirectoryFile(chosen);
-			System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, chosen.getAbsolutePath());
+			final File working = chosen.workingDirectory.getAbsoluteFile();
+			ensureDirectory(working);
+			final boolean empty = isEffectivelyEmptyWorkingDirectory(working);
+			writeWorkingDirectoryFile(working);
+			System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY, working.getAbsolutePath());
+			cachedWorkingDirectory = working;
+			applyChosenConfigDirectory(working, chosen.configDirectory);
 			if (empty) {
 				pendingDefaultContentSeed = true;
-				runEmptyDirectorySeeder(chosen);
+				runEmptyDirectorySeeder(working);
 			}
 			else {
 				pendingDefaultContentSeed = false;
 				LogUtils.info("Using existing working directory without modifying files: "
-				        + chosen.getAbsolutePath());
+				        + working.getAbsolutePath());
 			}
-			markSetupCompletedQuietly(chosen);
-			return chosen.getAbsoluteFile();
+			markSetupCompletedQuietly(working);
+			return working;
 		}
 		finally {
 			configuringInteractively = false;
 		}
+	}
+
+	private static void applyChosenConfigDirectory(final File workingDirectory, final File chosenConfig) {
+		File config = chosenConfig != null ? normalizeChosenConfigDirectory(chosenConfig.getAbsoluteFile())
+		        : suggestedConfigDirectory(workingDirectory);
+		if (config == null) {
+			config = new File(workingDirectory, CONFIG_DIR_NAME);
+		}
+		ensureDirectory(config);
+		writeConfigDirectoryFile(config);
+		cachedConfigDirectory = config;
+		configDirectoryChosenThisSession = true;
+		System.setProperty(CONFIG_DIRECTORY_SYSTEM_PROPERTY, config.getAbsolutePath());
+		applyUserFpDir(config);
+		LogUtils.info("Config directory: " + config.getAbsolutePath());
 	}
 
 	/** Prefer a user-owned folder on macOS; under the install root elsewhere. */
@@ -556,9 +671,16 @@ public final class MindMapDataRootResolver {
 		}
 	}
 
-	/** Write setup.completed under the chosen dir's data/ without requiring the cache. */
+	/** Write setup.completed under the chosen data directory without requiring the cache. */
 	private static void markSetupCompletedQuietly(final File workingDirectory) {
-		final File marker = new File(resolveConfigDirectory(workingDirectory), SETUP_COMPLETED_MARKER);
+		File config = cachedConfigDirectory;
+		if (config == null) {
+			config = resolveExistingConfigDirectory(workingDirectory);
+		}
+		if (config == null) {
+			config = new File(workingDirectory, CONFIG_DIR_NAME);
+		}
+		final File marker = new File(config, SETUP_COMPLETED_MARKER);
 		BufferedWriter writer = null;
 		try {
 			ensureDirectory(marker.getParentFile());
@@ -587,7 +709,89 @@ public final class MindMapDataRootResolver {
 		runEmptyDirectorySeeder(dir);
 	}
 
-	private static File resolveConfigDirectory(final File workingDirectory) {
+	private static File resolveApplicationConfigDirectory() {
+		final File fromSystem = usableDirectoryFromPath(System.getProperty(CONFIG_DIRECTORY_SYSTEM_PROPERTY));
+		if (fromSystem != null) {
+			return normalizeChosenConfigDirectory(fromSystem.getAbsoluteFile());
+		}
+		final File fromEnv = usableDirectoryFromPath(System.getenv(CONFIG_DIRECTORY_ENV));
+		if (fromEnv != null) {
+			return normalizeChosenConfigDirectory(fromEnv.getAbsoluteFile());
+		}
+		final File fromFile = readConfigDirectoryFile();
+		if (fromFile != null) {
+			return normalizeChosenConfigDirectory(fromFile);
+		}
+		final File working = getWorkingDirectory();
+		if (!configuringInteractively && !isHeadlessEnvironment()) {
+			return configureConfigDirectoryInteractively(working);
+		}
+		final File nested = nestedConfigDirectoryIfUsable(working);
+		if (nested != null) {
+			return nested;
+		}
+		return new File(working, CONFIG_DIR_NAME);
+	}
+
+	private static boolean isHeadlessEnvironment() {
+		try {
+			return java.awt.GraphicsEnvironment.isHeadless()
+			        || Boolean.parseBoolean(System.getProperty("nonInteractive", "false"));
+		}
+		catch (final Exception e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Working directory is already known but {@code data}/{@code _data} is missing
+	 * (typical after moving {@code _data} off Dropbox). Prompt for the data folder.
+	 */
+	private static File configureConfigDirectoryInteractively(final File workingDirectory) {
+		if (configuringInteractively) {
+			return suggestedConfigDirectory(workingDirectory);
+		}
+		configuringInteractively = true;
+		try {
+			LogUtils.info("No usable config directory next to " + workingDirectory.getAbsolutePath()
+			        + " — prompting for data / _data folder");
+			final WorkingDirectoryChooser.Directories chosen = WorkingDirectoryChooser.choose(workingDirectory,
+			        suggestedConfigDirectory(workingDirectory));
+			if (chosen == null || chosen.configDirectory == null) {
+				LogUtils.warn("Config directory selection cancelled — exiting");
+				System.err.println("Docear requires a data (_data) directory. Exiting.");
+				System.exit(1);
+			}
+			if (chosen.workingDirectory != null
+			        && !MindMapFileIdentity.isSameFile(chosen.workingDirectory, workingDirectory)) {
+				writeWorkingDirectoryFile(chosen.workingDirectory.getAbsoluteFile());
+				cachedWorkingDirectory = chosen.workingDirectory.getAbsoluteFile();
+				System.setProperty(WORKING_DIRECTORY_SYSTEM_PROPERTY,
+				        cachedWorkingDirectory.getAbsolutePath());
+			}
+			applyChosenConfigDirectory(
+			        cachedWorkingDirectory != null ? cachedWorkingDirectory : workingDirectory,
+			        chosen.configDirectory);
+			return cachedConfigDirectory;
+		}
+		finally {
+			configuringInteractively = false;
+		}
+	}
+
+	private static File resolveExistingConfigDirectory(final File workingDirectory) {
+		final File fromFile = readConfigDirectoryFile();
+		if (fromFile != null) {
+			return normalizeChosenConfigDirectory(fromFile);
+		}
+		return nestedConfigDirectoryIfPresent(workingDirectory);
+	}
+
+	/** Nested {@code data} or {@code _data} if the folder exists (even if empty). */
+	private static File nestedConfigDirectoryIfPresent(final File workingDirectory) {
+		if (workingDirectory == null) {
+			return null;
+		}
 		final File preferred = new File(workingDirectory, CONFIG_DIR_NAME);
 		if (preferred.isDirectory()) {
 			return preferred;
@@ -596,7 +800,78 @@ public final class MindMapDataRootResolver {
 		if (legacy.isDirectory()) {
 			return legacy;
 		}
-		return preferred;
+		return null;
+	}
+
+	/** Nested config only when it already holds real profile data (not an empty stub). */
+	private static File nestedConfigDirectoryIfUsable(final File workingDirectory) {
+		final File nested = nestedConfigDirectoryIfPresent(workingDirectory);
+		if (nested != null && looksLikeUsableConfigDirectory(nested)) {
+			return nested;
+		}
+		return null;
+	}
+
+	static boolean looksLikeUsableConfigDirectory(final File directory) {
+		if (directory == null || !directory.isDirectory()) {
+			return false;
+		}
+		if (new File(directory, "auto.properties").isFile()) {
+			return true;
+		}
+		if (new File(directory, "users").isDirectory()) {
+			return true;
+		}
+		final File[] children = directory.listFiles();
+		if (children == null) {
+			return false;
+		}
+		for (int i = 0; i < children.length; i++) {
+			final File child = children[i];
+			if (child != null && child.isDirectory() && new File(child, "settings.xml").isFile()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static void applyUserFpDir(final File configDirectory) {
+		if (configDirectory != null) {
+			System.setProperty("org.freeplane.userfpdir", configDirectory.getAbsolutePath());
+		}
+	}
+
+	private static File readConfigDirectoryFile() {
+		final File[] markers = pathMarkerCandidates(CONFIG_DIRECTORY_FILE_NAME);
+		for (int i = 0; i < markers.length; i++) {
+			final File marker = markers[i];
+			if (marker == null || !marker.isFile()) {
+				continue;
+			}
+			final File parsed = parseWorkingDirectoryMarker(marker);
+			if (parsed != null) {
+				return parsed;
+			}
+		}
+		return null;
+	}
+
+	private static void writeConfigDirectoryFile(final File configDirectory) {
+		if (configDirectory == null) {
+			return;
+		}
+		final String value = configDirectory.getAbsolutePath();
+		final File preferred = resolveWritablePathMarker(CONFIG_DIRECTORY_FILE_NAME);
+		if (writePathMarker(preferred, value, "# Docear data directory (_data / indexes / preferences).")) {
+			return;
+		}
+		final File support = getUserSupportPathMarker(CONFIG_DIRECTORY_FILE_NAME);
+		if (support != null && !support.equals(preferred)
+		        && writePathMarker(support, value, "# Docear data directory (_data / indexes / preferences).")) {
+			LogUtils.info("Config directory saved to user support path: " + support.getAbsolutePath());
+			return;
+		}
+		LogUtils.warn("Could not persist config directory path");
 	}
 
 	private static File readWorkingDirectoryFile() {
@@ -651,12 +926,16 @@ public final class MindMapDataRootResolver {
 
 	/**
 	 * Preferred marker next to the install root; on macOS / Linux also
-	 * {@code ~/Library/Application Support/Docear/working-directory.txt}
+	 * {@code ~/Library/Application Support/Docear/<fileName>}
 	 * (or {@code ~/.config/Docear/}) when the .app bundle is not writable.
 	 */
 	private static File[] workingDirectoryMarkerCandidates() {
-		final File appMarker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
-		final File supportMarker = getUserSupportWorkingDirectoryMarker();
+		return pathMarkerCandidates(WORKING_DIRECTORY_FILE_NAME);
+	}
+
+	private static File[] pathMarkerCandidates(final String fileName) {
+		final File appMarker = new File(getApplicationRoot(), fileName);
+		final File supportMarker = getUserSupportPathMarker(fileName);
 		if (supportMarker == null) {
 			return new File[] { appMarker };
 		}
@@ -664,18 +943,22 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static File getUserSupportWorkingDirectoryMarker() {
+		return getUserSupportPathMarker(WORKING_DIRECTORY_FILE_NAME);
+	}
+
+	private static File getUserSupportPathMarker(final String fileName) {
 		if (Compat.isWindowsOS()) {
 			return null;
 		}
 		final File home = new File(System.getProperty("user.home", "."));
 		if (Compat.isMacOsX()) {
 			return new File(new File(new File(home, "Library"), "Application Support"),
-			        "Docear" + File.separator + WORKING_DIRECTORY_FILE_NAME);
+			        "Docear" + File.separator + fileName);
 		}
 		final String xdg = System.getenv("XDG_CONFIG_HOME");
 		final File configHome = (xdg != null && xdg.trim().length() > 0) ? new File(xdg.trim())
 		        : new File(home, ".config");
-		return new File(new File(configHome, "Docear"), WORKING_DIRECTORY_FILE_NAME);
+		return new File(new File(configHome, "Docear"), fileName);
 	}
 
 	private static void writeWorkingDirectoryFile(final File workingDirectory) {
@@ -705,11 +988,15 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static File resolveWritableWorkingDirectoryMarker() {
-		final File appMarker = new File(getApplicationRoot(), WORKING_DIRECTORY_FILE_NAME);
+		return resolveWritablePathMarker(WORKING_DIRECTORY_FILE_NAME);
+	}
+
+	private static File resolveWritablePathMarker(final String fileName) {
+		final File appMarker = new File(getApplicationRoot(), fileName);
 		if (canWriteMarker(appMarker)) {
 			return appMarker;
 		}
-		final File support = getUserSupportWorkingDirectoryMarker();
+		final File support = getUserSupportPathMarker(fileName);
 		if (support != null) {
 			return support;
 		}
@@ -735,6 +1022,11 @@ public final class MindMapDataRootResolver {
 	}
 
 	private static boolean writeWorkingDirectoryMarker(final File marker, final String value) {
+		return writePathMarker(marker, value,
+		        "# Docear working directory (mind maps). Config may live in a separate data / _data folder.");
+	}
+
+	private static boolean writePathMarker(final File marker, final String value, final String headerComment) {
 		if (marker == null) {
 			return false;
 		}
@@ -742,8 +1034,10 @@ public final class MindMapDataRootResolver {
 		try {
 			ensureDirectory(marker.getParentFile());
 			writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(marker), "UTF-8"));
-			writer.write("# Docear working directory (mind maps). Config lives in <this>/data/");
-			writer.newLine();
+			if (headerComment != null && headerComment.length() > 0) {
+				writer.write(headerComment);
+				writer.newLine();
+			}
 			writer.write("# Use a path valid on this OS. On macOS choose via Docear Settings.");
 			writer.newLine();
 			writer.write(value);

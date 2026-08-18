@@ -13,11 +13,11 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.docear.plugin.ai.DocearAiConfig;
+import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
-import org.freeplane.features.text.TextController;
 
 /**
  * 在 Docear 进程内尽可能全面地收集导图及关联文件内容。
@@ -30,6 +30,9 @@ public final class AiContextCollector {
             ".mm", ".txt", ".md", ".markdown", ".java", ".py", ".js", ".ts", ".json", ".xml",
             ".properties", ".bib", ".csv", ".html", ".htm", ".yaml", ".yml", ".sql", ".ini", ".cfg", ".log"
     };
+    private static final int MAX_STRUCTURE_CHARS = 60000;
+    private static final int MAX_STRUCTURE_NODES = 800;
+    private static final int MAX_FILE_SCAN_NODES = 600;
 
     private AiContextCollector() {
     }
@@ -120,18 +123,26 @@ public final class AiContextCollector {
 
     private static void collectFilesFromNode(NodeModel node, File baseDir, Set<File> files, File mapFile,
             File promptTemplate) {
-        if (node == null) {
+        collectFilesFromNode(node, baseDir, files, mapFile, promptTemplate, new int[] { MAX_FILE_SCAN_NODES });
+    }
+
+    private static void collectFilesFromNode(NodeModel node, File baseDir, Set<File> files, File mapFile,
+            File promptTemplate, int[] remaining) {
+        if (node == null || remaining[0] <= 0) {
             return;
         }
+        remaining[0]--;
         URI link = NodeLinks.getValidLink(node);
         addFileFromUri(link, baseDir, files, mapFile, promptTemplate);
 
-        String text = TextController.getController().getPlainTextContent(node);
-        collectPathsFromText(text, baseDir, files, mapFile, promptTemplate);
+        collectPathsFromText(safePlainText(node), baseDir, files, mapFile, promptTemplate);
 
         List<NodeModel> children = node.getChildren();
         for (int i = 0; i < children.size(); i++) {
-            collectFilesFromNode(children.get(i), baseDir, files, mapFile, promptTemplate);
+            if (remaining[0] <= 0) {
+                break;
+            }
+            collectFilesFromNode(children.get(i), baseDir, files, mapFile, promptTemplate, remaining);
         }
     }
 
@@ -226,19 +237,36 @@ public final class AiContextCollector {
             return "\uff08\u5bfc\u56fe\u65e0\u6839\u8282\u70b9\uff09";
         }
         StringBuilder sb = new StringBuilder();
-        appendNode(root, sb, 0);
-        return truncate(sb.toString(), 60000);
+        appendNode(root, sb, 0, new int[] { MAX_STRUCTURE_NODES });
+        return truncate(sb.toString(), MAX_STRUCTURE_CHARS);
     }
 
-    private static void appendNode(NodeModel node, StringBuilder sb, int depth) {
+    private static String safePlainText(NodeModel node) {
         if (node == null) {
+            return "";
+        }
+        try {
+            Object user = node.getUserObject();
+            if (user == null) {
+                return "";
+            }
+            String raw = user instanceof String ? (String) user : String.valueOf(user);
+            if (HtmlUtils.isHtmlNode(raw)) {
+                return HtmlUtils.htmlToPlain(raw);
+            }
+            return raw;
+        }
+        catch (Exception e) {
+            return "";
+        }
+    }
+
+    private static void appendNode(NodeModel node, StringBuilder sb, int depth, int[] remaining) {
+        if (node == null || remaining[0] <= 0 || sb.length() >= MAX_STRUCTURE_CHARS) {
             return;
         }
-        String text = TextController.getController().getPlainTextContent(node);
-        if (text == null) {
-            text = "";
-        }
-        text = text.trim();
+        remaining[0]--;
+        String text = safePlainText(node).trim();
         URI link = NodeLinks.getValidLink(node);
         if (text.length() > 0 || link != null) {
             for (int i = 0; i < depth; i++) {
@@ -258,7 +286,10 @@ public final class AiContextCollector {
         }
         List<NodeModel> children = node.getChildren();
         for (int i = 0; i < children.size(); i++) {
-            appendNode(children.get(i), sb, depth + 1);
+            if (remaining[0] <= 0 || sb.length() >= MAX_STRUCTURE_CHARS) {
+                break;
+            }
+            appendNode(children.get(i), sb, depth + 1, remaining);
         }
     }
 

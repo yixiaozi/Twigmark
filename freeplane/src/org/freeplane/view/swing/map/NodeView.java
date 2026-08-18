@@ -774,6 +774,15 @@ public class NodeView extends JComponent implements INodeView {
 		return getModel().isVisible();
 	}
 
+	/** True when this view has a sized main component — skip edges until then
+	 *  or the first paint after open draws a stray connector into empty space. */
+	boolean isLaidOutForEdges() {
+		if (mainView == null || !mainView.isVisible()) {
+			return false;
+		}
+		return mainView.getWidth() > 0 && mainView.getHeight() > 0;
+	}
+
 	public boolean isLeft() {
 		if (getMap().getLayoutType() == MapViewLayout.OUTLINE) {
 			return false;
@@ -1062,6 +1071,9 @@ public class NodeView extends JComponent implements INodeView {
         		}
             }
         	if (nodeView.isContentVisible()) {
+        		if (!nodeView.isLaidOutForEdges()) {
+        			continue;
+        		}
         		final EdgeView edge = EdgeViewFactory.getInstance().getEdge(source, nodeView, source);
         		edge.paint(g);
         	}

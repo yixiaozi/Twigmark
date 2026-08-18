@@ -206,16 +206,7 @@ public class ReportGenerator extends StreamHandler {
 
 	private static class LogOpener implements ActionListener{
 		public void actionPerformed(ActionEvent e) {
-			final String freeplaneLogDirectoryPath = LogUtils.getLogDirectory();
-			final File file = new File(freeplaneLogDirectoryPath);
-			if(file.isDirectory()){
-				final ViewController viewController = Controller.getCurrentController().getViewController();
-				try {
-	                viewController.openDocument(file.toURL());
-                }
-                catch (Exception ex) {
-                }
-			}
+			org.freeplane.features.help.SystemLogViewer.show();
         }
 	}
 	JButton logButton;

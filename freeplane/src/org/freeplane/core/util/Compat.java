@@ -160,7 +160,8 @@ public class Compat {
 		}
 	}
 	/**
-	 * Application configuration directory: {@code {workingDirectory}/data}.
+	 * Application configuration directory: separate data / {@code _data} folder,
+	 * or {@code {workingDirectory}/data} by default.
 	 * Optional override via {@code -Dorg.freeplane.userfpdir}.
 	 */
 	public static String getApplicationUserDirectory() {

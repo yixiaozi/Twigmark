@@ -162,6 +162,17 @@ class NodeViewFactory {
 		newView.update();
         fireNodeViewCreated(newView);
         newView.addChildViews();
+        if (newView.isRoot()) {
+        	SwingUtilities.invokeLater(new Runnable() {
+        		public void run() {
+        			final MapView mapView = newView.getMap();
+        			if (mapView != null && mapView.isDisplayable()) {
+        				mapView.validate();
+        				mapView.repaint();
+        			}
+        		}
+        	});
+        }
 	}
 
 	private static Map<Color, Icon> coloredNoteIcons  = new HashMap<Color, Icon>();

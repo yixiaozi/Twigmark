@@ -128,8 +128,12 @@ public class DefaultMapMouseListener implements IMouseListener {
 		final IMapSelection selection = controller.getSelection();
 		if(selection != null){
 			final NodeModel selected = selection.getSelected();
-			if(selected != null)
-				controller.getMapViewManager().getComponent(selected).requestFocusInWindow();
+			if(selected != null) {
+				final Component component = controller.getMapViewManager().getComponent(selected);
+				if (component != null) {
+					component.requestFocusInWindow();
+				}
+			}
 		}
 	}
 

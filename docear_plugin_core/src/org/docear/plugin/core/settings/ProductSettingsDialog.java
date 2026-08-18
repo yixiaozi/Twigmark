@@ -50,11 +50,11 @@ public final class ProductSettingsDialog extends JDialog {
 	private static final String PROP_INBOX_FILENAME = "quickcapture.inbox_filename";
 
 	private final JTextField workingDirField = new JTextField(36);
+	private final JTextField configDirField = new JTextField(36);
 	private final JTextArea eagleLibrariesArea = new JTextArea(5, 36);
 	private final JTextField eaglePrimaryField = new JTextField(36);
 	private final JCheckBox eagleAutoImport = new JCheckBox();
 	private final JLabel eagleIndexLabel = DocearUiTheme.mutedLabel(" ");
-	private final JLabel configDirLabel = DocearUiTheme.mutedLabel(" ");
 	private final JCheckBox mcpEnabled = new JCheckBox();
 	private final JTextField mcpHostField = new JTextField(16);
 	private final JSpinner mcpPortSpinner = new JSpinner(new SpinnerNumberModel(7720, 1, 65535, 1));
@@ -150,29 +150,35 @@ public final class ProductSettingsDialog extends JDialog {
 		c.gridx = 2;
 		c.weightx = 0;
 		c.fill = GridBagConstraints.NONE;
-		panel.add(browseButton(workingDirField, true), c);
+		panel.add(browseButton(workingDirField, true, TextUtils.getText("ProductSettingsAction.working_dir")), c);
+
+		addLabel(panel, c, 1, TextUtils.getText("ProductSettingsAction.config_dir_label"));
+		c.gridx = 1;
+		c.weightx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		panel.add(configDirField, c);
+		c.gridx = 2;
+		c.weightx = 0;
+		c.fill = GridBagConstraints.NONE;
+		panel.add(browseButton(configDirField, true, TextUtils.getText("ProductSettingsAction.config_dir_label")), c);
 
 		c.gridx = 0;
-		c.gridy = 1;
+		c.gridy = 2;
 		c.gridwidth = 3;
 		c.fill = GridBagConstraints.HORIZONTAL;
-		configDirLabel.setText(" ");
-		panel.add(configDirLabel, c);
-
-		c.gridy = 2;
 		final JLabel note = DocearUiTheme.mutedLabel(TextUtils.getText("ProductSettingsAction.working_dir_note"));
 		panel.add(note, c);
 		workingDirField.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
 			public void insertUpdate(javax.swing.event.DocumentEvent e) {
-				refreshConfigHint();
+				suggestConfigIfBlank();
 			}
 
 			public void removeUpdate(javax.swing.event.DocumentEvent e) {
-				refreshConfigHint();
+				suggestConfigIfBlank();
 			}
 
 			public void changedUpdate(javax.swing.event.DocumentEvent e) {
-				refreshConfigHint();
+				suggestConfigIfBlank();
 			}
 		});
 		return panel;
@@ -477,7 +483,7 @@ public final class ProductSettingsDialog extends JDialog {
 
 	private void loadValues() {
 		workingDirField.setText(MindMapDataRootResolver.getWorkingDirectory().getAbsolutePath());
-		refreshConfigHint();
+		configDirField.setText(MindMapDataRootResolver.getApplicationConfigDirectory().getAbsolutePath());
 		eagleLibrariesArea.setText(EagleConfig.getLibraryPathsText());
 		final File primary = EagleConfig.getPrimaryLibrary();
 		eaglePrimaryField.setText(primary == null ? "" : primary.getAbsolutePath());
@@ -508,14 +514,16 @@ public final class ProductSettingsDialog extends JDialog {
 		inboxFileField.setText(rc.getProperty(PROP_INBOX_FILENAME, "\u6536\u4ef6\u7bb1.mm"));
 	}
 
-	private void refreshConfigHint() {
-		final String path = workingDirField.getText() == null ? "" : workingDirField.getText().trim();
-		if (path.length() == 0) {
-			configDirLabel.setText(" ");
+	private void suggestConfigIfBlank() {
+		final String config = configDirField.getText() == null ? "" : configDirField.getText().trim();
+		if (config.length() > 0) {
 			return;
 		}
-		final File data = new File(new File(path), MindMapDataRootResolver.CONFIG_DIR_NAME);
-		configDirLabel.setText(TextUtils.format("ProductSettingsAction.config_dir", data.getAbsolutePath()));
+		final String path = workingDirField.getText() == null ? "" : workingDirField.getText().trim();
+		if (path.length() == 0 || !MindMapDataRootResolver.isUsableWorkingDirectoryPath(path)) {
+			return;
+		}
+		configDirField.setText(MindMapDataRootResolver.suggestedConfigDirectory(new File(path)).getAbsolutePath());
 	}
 
 	private boolean applyChanges(final boolean firstRun) {
@@ -530,11 +538,24 @@ public final class ProductSettingsDialog extends JDialog {
 			        getTitle(), JOptionPane.WARNING_MESSAGE);
 			return false;
 		}
+		String config = configDirField.getText() == null ? "" : configDirField.getText().trim();
+		if (config.length() == 0) {
+			config = MindMapDataRootResolver.suggestedConfigDirectory(new File(working)).getAbsolutePath();
+		}
+		if (!MindMapDataRootResolver.isUsableWorkingDirectoryPath(config)) {
+			JOptionPane.showMessageDialog(this, TextUtils.getText("ProductSettingsAction.config_dir_invalid_os"),
+			        getTitle(), JOptionPane.WARNING_MESSAGE);
+			return false;
+		}
 		final File workingDir = new File(working);
-		final File previous = MindMapDataRootResolver.getWorkingDirectory();
-		final boolean workingChanged = !samePath(previous, workingDir);
+		final File configDir = MindMapDataRootResolver.normalizeChosenConfigDirectory(new File(config));
+		final File previousWorking = MindMapDataRootResolver.getWorkingDirectory();
+		final File previousConfig = MindMapDataRootResolver.getApplicationConfigDirectory();
+		final boolean workingChanged = !samePath(previousWorking, workingDir);
+		final boolean configChanged = !samePath(previousConfig, configDir);
 		try {
 			MindMapDataRootResolver.setWorkingDirectory(workingDir);
+			MindMapDataRootResolver.setConfigDirectory(configDir);
 			if (MindMapDataRootResolver.isEffectivelyEmptyWorkingDirectory(workingDir)) {
 				org.docear.plugin.core.workspace.WorkingDirectoryDefaults.seedInto(workingDir);
 			}
@@ -575,7 +596,7 @@ public final class ProductSettingsDialog extends JDialog {
 
 		MindMapDataRootResolver.markSetupCompleted();
 
-		if (workingChanged && !firstRun) {
+		if ((workingChanged || configChanged) && !firstRun) {
 			JOptionPane.showMessageDialog(this, TextUtils.getText("ProductSettingsAction.restart_hint"), getTitle(),
 			        JOptionPane.INFORMATION_MESSAGE);
 		}
@@ -587,6 +608,10 @@ public final class ProductSettingsDialog extends JDialog {
 	}
 
 	private JButton browseButton(final JTextField field, final boolean directoriesOnly) {
+		return browseButton(field, directoriesOnly, TextUtils.getText("ProductSettingsAction.working_dir"));
+	}
+
+	private JButton browseButton(final JTextField field, final boolean directoriesOnly, final String title) {
 		final JButton button = DocearUiTheme.softButton(TextUtils.getText("browse"));
 		button.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -609,10 +634,9 @@ public final class ProductSettingsDialog extends JDialog {
 						start = new File(System.getProperty("user.home", "."));
 					}
 				}
-				final String title = directoriesOnly ? TextUtils.getText("ProductSettingsAction.working_dir")
-				        : TextUtils.getText("browse");
+				final String dialogTitle = title != null ? title : TextUtils.getText("browse");
 				final File selected = org.freeplane.core.util.DirectoryPicker.choose(ProductSettingsDialog.this,
-				        title, start, directoriesOnly);
+				        dialogTitle, start, directoriesOnly);
 				if (selected != null) {
 					field.setText(selected.getAbsolutePath());
 				}

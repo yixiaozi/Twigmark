@@ -557,10 +557,6 @@ public class AiChatSidebar extends JPanel {
         }
         NodeModel focus = resolveFocusNode();
         String selected = focus != null ? AiSelectedNodeExtractor.extractTitle(focus) : "";
-        if (selected.length() == 0) {
-            AiChatContextInfo info = aiController.buildContextInfo(map, "", 0, "");
-            selected = info.getSelectedNodeText();
-        }
         if (selected.length() > 0) {
             inputArea.setToolTipText("\u9488\u5bf9\u300c" + truncate(selected, 40) + "\u300d\u63d0\u95ee\uff08Enter \u53d1\u9001\uff0cShift+Enter \u6362\u884c\uff09");
         } else {

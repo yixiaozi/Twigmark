@@ -39,6 +39,7 @@ import java.awt.Stroke;
 import java.awt.dnd.Autoscroll;
 import java.awt.event.HierarchyBoundsAdapter;
 import java.awt.event.HierarchyEvent;
+import java.awt.event.HierarchyListener;
 import java.awt.geom.AffineTransform;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.print.PageFormat;
@@ -414,6 +415,8 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	private Color background = null;
 	private Rectangle boundingRectangle = null;
 	private int centerNodeCounter;
+	private int centerNodeRetryBudget;
+	private boolean centeringFromLater;
 // // 	final private Controller controller;
 	private boolean disableMoveCursor = true;
 	private int extraWidth;
@@ -494,6 +497,16 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		setFocusTraversalKeys(KeyboardFocusManager.UP_CYCLE_TRAVERSAL_KEYS, emptyNodeViewSet());
 		disableMoveCursor = ResourceController.getResourceController().getBooleanProperty("disable_cursor_move_paper");
 		addHierarchyBoundsListener(new Resizer());
+		addHierarchyListener(new HierarchyListener() {
+			public void hierarchyChanged(final HierarchyEvent e) {
+				if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0 || !isShowing()) {
+					return;
+				}
+				// JViewport.setView resets to (0,0). Large maps look blank until we
+				// re-center after the scroll pane is actually showing in a tab.
+				ensureSelectedVisibleAfterShowing();
+			}
+		});
 	}
 
 	public void replaceSelection(NodeView[] views) {
@@ -554,22 +567,39 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		}
 		nodeToBeVisible = null;
 		if (!(isValid() && isShowing())) {
+			scheduleCenterRetry();
 			return;
 		}
-		final JViewport viewPort = (JViewport) getParent();
-		if(slowScroll)
-			viewPort.putClientProperty(ViewController.SLOW_SCROLLING, Boolean.TRUE);
+		final Container parent = getParent();
+		if (!(parent instanceof JViewport)) {
+			scheduleCenterRetry();
+			return;
+		}
+		final JViewport viewPort = (JViewport) parent;
 		final Dimension d = viewPort.getExtentSize();
 		final JComponent content = nodeToBeCentered.getContent();
+		if (d.width < 8 || d.height < 8 || content == null || content.getWidth() <= 0 || content.getHeight() <= 0) {
+			// Viewport/node not laid out yet — keep nodeToBeCentered for retry.
+			scheduleCenterRetry();
+			return;
+		}
+		if(slowScroll)
+			viewPort.putClientProperty(ViewController.SLOW_SCROLLING, Boolean.TRUE);
 		final Rectangle rect = new Rectangle(content.getWidth() / 2 - d.width / 2, content.getHeight() / 2 - d.height
 		        / 2, d.width, d.height);
 		final Point oldAnchorContentLocation = anchorContentLocation;
 		anchorContentLocation = new Point();
 		final Point oldViewPosition = viewPort.getViewPosition();
+		// First pass often computes location as (0,0); second pass actually scrolls.
+		content.scrollRectToVisible(rect);
 		content.scrollRectToVisible(rect);
 		final Point newViewPosition = viewPort.getViewPosition();
 		if (oldViewPosition.equals(newViewPosition)) {
 			anchorContentLocation = oldAnchorContentLocation;
+		}
+		if (!isNodeCenterInViewport(nodeToBeCentered)) {
+			scheduleCenterRetry();
+			return;
 		}
 		nodeToBeCentered = null;
 		this.slowScroll = false;
@@ -1639,9 +1669,7 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
 	public void scrollNodeToVisible(final NodeView node, final int extraWidth) {
 		if (nodeToBeCentered != null) {
-			if (node != nodeToBeCentered) {
-				centerNode(node, false);
-			}
+			centerNode(node != null ? node : nodeToBeCentered, false);
 			return;
 		}
 		if (!isValid()) {
@@ -1781,13 +1809,20 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 
 	private void setViewPositionAfterValidate() {
 		if(nodeToBeCentered != null){
-			centerNodeCounter = 5;
+			centerNodeCounter = 12;
+			centerNodeRetryBudget = 20;
 			centerNodeLater(slowScroll);
 		}
-		if (anchorContentLocation.getX() == 0 && anchorContentLocation.getY() == 0) {
+		final JViewport vp = (JViewport) getParent();
+		if (vp == null) {
 			return;
 		}
-		final JViewport vp = (JViewport) getParent();
+		if (anchorContentLocation.getX() == 0 && anchorContentLocation.getY() == 0) {
+			// (0,0) means "no layout-delta restore", not "skip pending scroll".
+			// Skipping here left large maps at the canvas origin (blank except a left-edge sliver).
+			scrollPendingVisibleNode(vp);
+			return;
+		}
 		final Point viewPosition = vp.getViewPosition();
 		final Point oldAnchorContentLocation = anchorContentLocation;
 		final Point newAnchorContentLocation = getAnchorCenterPoint();
@@ -1811,20 +1846,56 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 		else {
 			repaintVisible();
 		}
-		if (nodeToBeVisible != null) {
-			final int scrollMode = vp.getScrollMode();
-			vp.setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
-			scrollNodeToVisible(nodeToBeVisible, extraWidth);
-			vp.setScrollMode(scrollMode);
+		scrollPendingVisibleNode(vp);
+	}
+
+	private void scrollPendingVisibleNode(final JViewport vp) {
+		if (nodeToBeVisible == null) {
+			return;
+		}
+		final int scrollMode = vp.getScrollMode();
+		vp.setScrollMode(JViewport.SIMPLE_SCROLL_MODE);
+		scrollNodeToVisible(nodeToBeVisible, extraWidth);
+		vp.setScrollMode(scrollMode);
+		if (isValid() && isShowing()) {
 			nodeToBeVisible = null;
+		}
+	}
+
+	private void scheduleCenterRetry() {
+		if (nodeToBeCentered == null || centeringFromLater) {
+			return;
+		}
+		if (centerNodeRetryBudget <= 0) {
+			centerNodeRetryBudget = 20;
+		}
+		if (centerNodeCounter <= 0) {
+			centerNodeCounter = 8;
+			centerNodeLater(slowScroll);
 		}
 	}
 
 	private void centerNodeLater(final boolean slowScroll) {
 	    EventQueue.invokeLater(new Runnable() {
 	    	public void run() {
-	    		if(centerNodeCounter == 0 && nodeToBeCentered != null){
-	    			centerNode(nodeToBeCentered, slowScroll);
+	    		if (nodeToBeCentered == null) {
+	    			return;
+	    		}
+	    		if(centerNodeCounter == 0){
+	    			centeringFromLater = true;
+	    			try {
+	    				centerNode(nodeToBeCentered, slowScroll);
+	    			}
+	    			finally {
+	    				centeringFromLater = false;
+	    			}
+	    			if (nodeToBeCentered != null && centerNodeRetryBudget-- > 0) {
+	    				centerNodeCounter = 3;
+	    				centerNodeLater(slowScroll);
+	    			}
+	    			else if (nodeToBeCentered != null) {
+	    				nodeToBeCentered = null;
+	    			}
 	    			return;
 	    		}
 	    		if(centerNodeCounter > 0){
@@ -1834,6 +1905,54 @@ public class MapView extends JPanel implements Printable, Autoscroll, IMapChange
 	    	}
 	    });
     }
+
+	/**
+	 * Tab switches attach the shared scroll pane after {@code changeToMapView}.
+	 * Call once the MapView is showing so a large map is not left at (0,0).
+	 */
+	public void ensureSelectedVisibleAfterShowing() {
+		if (!isShowing()) {
+			return;
+		}
+		validate();
+		final NodeView selected = getSelected();
+		if (selected == null) {
+			return;
+		}
+		if (isNodeCenterInViewport(selected)) {
+			repaint();
+			return;
+		}
+		if (ResourceController.getResourceController().getBooleanProperty("center_selected_node")) {
+			centerNode(selected, false);
+		}
+		else {
+			scrollNodeToVisible(selected);
+		}
+	}
+
+	private boolean isNodeCenterInViewport(final NodeView node) {
+		if (node == null) {
+			return false;
+		}
+		final Container parent = getParent();
+		if (!(parent instanceof JViewport)) {
+			return false;
+		}
+		final JViewport viewPort = (JViewport) parent;
+		final Dimension extent = viewPort.getExtentSize();
+		if (extent.width < 8 || extent.height < 8) {
+			return false;
+		}
+		final JComponent content = node.getContent();
+		if (content == null || content.getWidth() <= 0 || content.getHeight() <= 0) {
+			return false;
+		}
+		final Rectangle viewRect = viewPort.getViewRect();
+		final Rectangle nodeRect = SwingUtilities.convertRectangle(content,
+		        new Rectangle(0, 0, content.getWidth(), content.getHeight()), this);
+		return viewRect.contains(nodeRect.x + nodeRect.width / 2, nodeRect.y + nodeRect.height / 2);
+	}
 
 	//	@Override
 	//    public void repaint(int x, int y, int width, int height) {
