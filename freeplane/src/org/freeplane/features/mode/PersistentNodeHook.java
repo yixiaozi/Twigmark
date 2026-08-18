@@ -38,6 +38,7 @@ import org.freeplane.core.ui.SelectableAction;
 import org.freeplane.core.undo.IActor;
 import org.freeplane.features.map.IMapSelection;
 import org.freeplane.features.map.MapController;
+import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.n3.nanoxml.XMLElement;
 
@@ -267,8 +268,11 @@ public abstract class PersistentNodeHook {
 	}
 
 	public IExtension getMapHook() {
-		final NodeModel rootNode = Controller.getCurrentController().getMap().getRootNode();
-		return rootNode.getExtension(getExtensionClass());
+		final MapModel map = Controller.getCurrentController().getMap();
+		if (map == null || map.getRootNode() == null) {
+			return null;
+		}
+		return map.getRootNode().getExtension(getExtensionClass());
 	}
 
 	protected NodeModel[] getNodes() {

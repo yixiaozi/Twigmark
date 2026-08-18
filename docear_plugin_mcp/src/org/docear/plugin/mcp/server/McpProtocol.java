@@ -523,8 +523,9 @@ public final class McpProtocol {
 		}
 		catch (Exception e) {
 			success = false;
-			errorMessage = e.getMessage();
-			throw e;
+			errorMessage = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+			textResult = errorMessage;
+			return toolError(errorMessage);
 		}
 		finally {
 			McpAuditService.recordToolCall(name, args, auditMetadata, success, errorMessage,

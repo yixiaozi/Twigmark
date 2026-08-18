@@ -57,8 +57,14 @@ public class AutomaticEdgeColorHook extends PersistentNodeHook implements IExten
 				final EdgeModel edgeModel = EdgeModel.createEdgeModel(child);
 				if(null == edgeModel.getColor()){
 					final MEdgeController controller = (MEdgeController) EdgeController.getController();
-					final AutomaticEdgeColor model = (AutomaticEdgeColor) getMapHook();
-					//DOCEAR - info: hack because model can cause a nullpointer exception
+					AutomaticEdgeColor model = null;
+					final MapModel map = child.getMap();
+					if (map != null && map.getRootNode() != null) {
+						model = (AutomaticEdgeColor) map.getRootNode().getExtension(AutomaticEdgeColor.class);
+					}
+					if (model == null) {
+						model = (AutomaticEdgeColor) getMapHook();
+					}
 					if(model  != null){
 						controller.setColor(child, model.nextColor());
 					}

@@ -17,6 +17,7 @@ import org.freeplane.features.styles.MapStyle;
 import org.freeplane.features.styles.MapStyleModel;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.mindmapmode.MFileManager;
+import org.freeplane.plugin.workspace.actions.WorkspaceNewMapAction;
 
 /**
  * Resolves a mind map for MCP write operations without requiring it to be the active UI tab.
@@ -49,7 +50,16 @@ final class McpMapWriteSession {
 			return new McpMapWriteSession(current, current.getFile(), false);
 		}
 		final File file = McpMindMapService.resolveMindMapFileForWrite(filePath);
-		final MapModel openMap = findOpenMap(file);
+		MapModel openMap = findOpenMap(file);
+		if (openMap == null) {
+			try {
+				WorkspaceNewMapAction.openMap(file.toURI());
+				openMap = findOpenMap(file);
+			}
+			catch (Exception e) {
+				LogUtils.warn("MCP openMap for write failed: " + e.getMessage());
+			}
+		}
 		if (openMap != null) {
 			ensureMapStyle(openMap);
 			return new McpMapWriteSession(openMap, file, false);
