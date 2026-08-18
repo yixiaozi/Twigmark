@@ -41,6 +41,7 @@ import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.MindIconFactory;
 import org.freeplane.features.icon.mindmapmode.MIconController;
+import org.freeplane.features.map.EncryptionModel;
 import org.freeplane.features.map.MapController;
 import org.freeplane.features.map.MapModel;
 import org.freeplane.features.map.NodeModel;
@@ -880,12 +881,17 @@ public final class McpMindMapService {
 		data.put("id", JsonValue.ofString(node.getID()));
 		data.put("text", JsonValue.ofString(TextController.getController().getPlainTextContent(node)));
 		data.put("folded", JsonValue.ofBoolean(node.isFolded()));
+		McpNodeService.putEncryptionFields(data, node);
 		appendRichNodeFields(data, node);
 		final List<JsonValue> children = new ArrayList<JsonValue>();
-		final List childNodes = includeFolded ? node.getChildren()
-				: Controller.getCurrentModeController().getMapController().childrenUnfolded(node);
-		for (int i = 0; i < childNodes.size(); i++) {
-			children.add(serializeNode((NodeModel) childNodes.get(i), includeFolded));
+		final EncryptionModel encryption = EncryptionModel.getModel(node);
+		final boolean locked = encryption != null && !encryption.isAccessible();
+		if (!locked) {
+			final List childNodes = includeFolded ? node.getChildren()
+					: Controller.getCurrentModeController().getMapController().childrenUnfolded(node);
+			for (int i = 0; i < childNodes.size(); i++) {
+				children.add(serializeNode((NodeModel) childNodes.get(i), includeFolded));
+			}
 		}
 		data.put("children", JsonValue.ofList(children));
 		return JsonValue.ofMap(data);
@@ -993,6 +999,10 @@ public final class McpMindMapService {
 					final String folded = attributes.getValue("FOLDED");
 					node.put("folded", Boolean.valueOf("true".equalsIgnoreCase(folded)
 							|| "folded".equalsIgnoreCase(folded)));
+					final String encryptedContent = attributes.getValue("ENCRYPTED_CONTENT");
+					final boolean encrypted = encryptedContent != null && encryptedContent.length() > 0;
+					node.put("encrypted", Boolean.valueOf(encrypted));
+					node.put("encryptionUnlocked", Boolean.FALSE);
 					node.put("depth", Integer.valueOf(stack.size()));
 					node.put("children", new ArrayList());
 					node.put("icons", new ArrayList());
@@ -1126,6 +1136,8 @@ public final class McpMindMapService {
 		data.put("id", JsonValue.ofString(String.valueOf(node.get("id"))));
 		data.put("text", JsonValue.ofString(String.valueOf(node.get("text"))));
 		data.put("folded", JsonValue.ofBoolean(Boolean.TRUE.equals(node.get("folded"))));
+		data.put("encrypted", JsonValue.ofBoolean(Boolean.TRUE.equals(node.get("encrypted"))));
+		data.put("encryptionUnlocked", JsonValue.ofBoolean(Boolean.TRUE.equals(node.get("encryptionUnlocked"))));
 		data.put("modifiedAtMillis", JsonValue.ofNumber(((Long) node.get("modifiedAtMillis")).longValue()));
 		data.put("modifiedAt", JsonValue.ofString(String.valueOf(node.get("modifiedAt"))));
 		data.put("link", JsonValue.ofString(String.valueOf(node.get("link"))));

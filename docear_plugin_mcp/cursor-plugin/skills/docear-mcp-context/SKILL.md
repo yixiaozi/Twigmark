@@ -95,7 +95,7 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 
 限定范围：`search_nodes` 可传 `filePath` 或 `projectId`（来自 `list_projects`）。
 
-钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别、番茄钟 `pomodoro` 等）。
+钉选节点：`list_pinned`（侧栏钉选列表）；单节点详情：`get_node_details`（note、link、icons、tags、TASKLEVEL/JINJI、隐私级别、加密状态 `encrypted`/`encryptionUnlocked`、番茄钟 `pomodoro` 等）。
 
 ## 番茄钟 / 专注时间（Pomodoro）
 
@@ -299,5 +299,6 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`
 - 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`create_mindmap`
+- **加密**：`encrypt_node`（加锁并写入 ENCRYPTED_CONTENT）、`decrypt_node`（本会话解锁，文件仍加密）、`remove_node_encryption`（永久去掉密码保护）。`password` 可选，缺省用本机加密设置里的默认密码；审计日志会把密码打成 `***`
 - 打开导图：`open_mindmap`（`filePath` 来自上下文 `mapFile`）
 - 审计日志：`list_audit_log`、`list_audit_traces`、`get_audit_stats`

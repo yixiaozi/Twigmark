@@ -143,6 +143,9 @@ public final class McpProtocol {
 		set.add("set_node_folded");
 		set.add("set_node_link");
 		set.add("set_node_note");
+		set.add("encrypt_node");
+		set.add("decrypt_node");
+		set.add("remove_node_encryption");
 		set.add("set_node_tags");
 		set.add("toggle_pin");
 		set.add("set_node_icon");
@@ -220,7 +223,7 @@ public final class McpProtocol {
 				schema("filePath", "string", true), schema("maxDepth", "number", false),
 				schema("includeFolded", "boolean", false)));
 		tools.add(tool("get_node_details",
-				"Get full details for one node: note, link, icons, tags, reminders, privacy, parent path.",
+				"Get full details for one node: note, link, icons, tags, reminders, privacy, encryption, parent path.",
 				schema("filePath", "string", true), schema("nodeId", "string", true)));
 		tools.add(tool("list_pinned", "List pinned nodes from the workspace sidebar.",
 				schema("limit", "number", false)));
@@ -415,6 +418,23 @@ public final class McpProtocol {
 				"Set node note (HTML). Optional filePath targets any .mm without opening it in UI.",
 				schema("filePath", "string", false), schema("nodeId", "string", true),
 				schema("noteHtml", "string", false)));
+		tools.add(tool("encrypt_node",
+				"Password-protect a node and lock its children (Freeplane ENCRYPTED_CONTENT). "
+						+ "Optional password; if omitted, uses Encryption settings default. "
+						+ "nodeId optional = current selection. Does not open UI.",
+				schema("filePath", "string", false), schema("nodeId", "string", false),
+				schema("password", "string", false)));
+		tools.add(tool("decrypt_node",
+				"Unlock a password-protected node in this session so children can be read. "
+						+ "The .mm file stays encrypted until remove_node_encryption. "
+						+ "Optional password; if omitted, uses Encryption settings default. Headless-safe (no dialog).",
+				schema("filePath", "string", false), schema("nodeId", "string", false),
+				schema("password", "string", false)));
+		tools.add(tool("remove_node_encryption",
+				"Permanently remove password protection after unlocking. Children stay as plaintext. "
+						+ "Optional password; if omitted, uses Encryption settings default.",
+				schema("filePath", "string", false), schema("nodeId", "string", false),
+				schema("password", "string", false)));
 		tools.add(tool("set_node_tags",
 				"Set user tags on a node (comma-separated). Use pinned=true to add pin tag.",
 				schema("filePath", "string", false), schema("nodeId", "string", true),
@@ -729,6 +749,18 @@ public final class McpProtocol {
 		else if ("set_node_note".equals(name)) {
 			textResult = McpNodeService.setNodeNote(argString(args, "filePath", ""), required(args, "nodeId"),
 					argString(args, "noteHtml", ""));
+		}
+		else if ("encrypt_node".equals(name)) {
+			textResult = McpNodeService.encryptNode(argString(args, "filePath", ""), argString(args, "nodeId", ""),
+					argString(args, "password", ""));
+		}
+		else if ("decrypt_node".equals(name)) {
+			textResult = McpNodeService.decryptNode(argString(args, "filePath", ""), argString(args, "nodeId", ""),
+					argString(args, "password", ""));
+		}
+		else if ("remove_node_encryption".equals(name)) {
+			textResult = McpNodeService.removeNodeEncryption(argString(args, "filePath", ""),
+					argString(args, "nodeId", ""), argString(args, "password", ""));
 		}
 		else if ("set_node_tags".equals(name)) {
 			textResult = McpNodeService.setNodeTags(argString(args, "filePath", ""), required(args, "nodeId"),

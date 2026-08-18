@@ -109,7 +109,9 @@ public final class McpAuditService {
 		}
 		if ("get_node_details".equals(toolName) || "list_pinned".equals(toolName) || "list_published".equals(toolName)
 		    || "move_node".equals(toolName) || "set_node_folded".equals(toolName) || "set_node_link".equals(toolName)
-		    || "set_node_note".equals(toolName) || "set_node_tags".equals(toolName) || "toggle_pin".equals(toolName)
+		    || "set_node_note".equals(toolName) || "encrypt_node".equals(toolName) || "decrypt_node".equals(toolName)
+		    || "remove_node_encryption".equals(toolName)
+		    || "set_node_tags".equals(toolName) || "toggle_pin".equals(toolName)
 		    || "set_node_icon".equals(toolName) || "set_recurring_reminder".equals(toolName)
 		    || "create_mindmap".equals(toolName)) {
 			return McpOperationIntent.NODE;
@@ -194,8 +196,18 @@ public final class McpAuditService {
 
 	public static void recordToolCall(final String toolName, final Map<String, JsonValue> args, final AuditMetadata metadata,
 	    final boolean success, final String errorMessage, final long durationMs, final String responseText) {
-		record("tool", toolName, intentForTool(toolName), mapToJson(args), metadata, success, errorMessage, durationMs,
-		    responseText);
+		record("tool", toolName, intentForTool(toolName), mapToJson(redactSecrets(args)), metadata, success, errorMessage,
+		    durationMs, responseText);
+	}
+
+	static Map<String, JsonValue> redactSecrets(final Map<String, JsonValue> args) {
+		if (args == null || args.isEmpty() || !args.containsKey("password")) {
+			return args;
+		}
+		final Map<String, JsonValue> copy = new LinkedHashMap<String, JsonValue>(args);
+		final String value = copy.get("password") != null ? copy.get("password").asString() : "";
+		copy.put("password", JsonValue.ofString(value != null && value.length() > 0 ? "***" : ""));
+		return copy;
 	}
 
 	public static void recordResourceRead(final String uri, final Map<String, JsonValue> requestParams,
