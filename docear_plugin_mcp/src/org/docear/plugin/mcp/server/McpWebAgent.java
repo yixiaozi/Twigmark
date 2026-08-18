@@ -77,6 +77,8 @@ public final class McpWebAgent {
 
 		final List<JsonValue> openaiTools = toOpenAiTools(protocol.getWebToolDefinitions());
 		final List<JsonValue> toolTrace = new ArrayList<JsonValue>();
+		final List<JsonValue> rounds = new ArrayList<JsonValue>();
+		final StringBuilder allReasoning = new StringBuilder();
 		String finalReply = "";
 		final int maxRounds = DocearMcpConfig.getWebLlmMaxToolRounds();
 
@@ -93,15 +95,27 @@ public final class McpWebAgent {
 			final List<JsonValue> toolCalls = assistantMessage.containsKey("tool_calls")
 					? assistantMessage.get("tool_calls").asList()
 					: new ArrayList<JsonValue>();
-			final String content = assistantMessage.containsKey("content") && !assistantMessage.get("content").isNull()
-					? nullToEmpty(assistantMessage.get("content").asString())
+			final String rawContent = assistantMessage.containsKey("content")
+					? LlmThoughtTrace.textFrom(assistantMessage.get("content"))
 					: "";
+			final StringBuilder taggedThink = new StringBuilder();
+			final String content = LlmThoughtTrace.visibleContent(rawContent, taggedThink);
+			String reasoning = LlmThoughtTrace.extractReasoning(choice, assistantMessage);
+			if (taggedThink.length() > 0) {
+				final StringBuilder merged = new StringBuilder();
+				LlmThoughtTrace.appendParagraph(merged, reasoning);
+				LlmThoughtTrace.appendParagraph(merged, taggedThink.toString());
+				reasoning = merged.toString();
+			}
+			LlmThoughtTrace.appendParagraph(allReasoning, reasoning);
 
 			if (toolCalls.isEmpty()) {
 				finalReply = content;
+				rounds.add(JsonValue.ofMap(LlmThoughtTrace.roundMap(reasoning, content, new ArrayList<JsonValue>())));
 				break;
 			}
 
+			final List<JsonValue> roundTools = new ArrayList<JsonValue>();
 			for (int t = 0; t < toolCalls.size(); t++) {
 				final Map<String, JsonValue> call = toolCalls.get(t).asMap();
 				final String callId = call.containsKey("id") ? call.get("id").asString() : ("call_" + t);
@@ -140,7 +154,9 @@ public final class McpWebAgent {
 				trace.put("arguments", JsonValue.ofString(argsJson));
 				final String preview = toolText.length() > 4000 ? toolText.substring(0, 4000) + "..." : toolText;
 				trace.put("resultPreview", JsonValue.ofString(preview));
-				toolTrace.add(JsonValue.ofMap(trace));
+				final JsonValue traceValue = JsonValue.ofMap(trace);
+				toolTrace.add(traceValue);
+				roundTools.add(traceValue);
 
 				final Map<String, JsonValue> toolMessage = new LinkedHashMap<String, JsonValue>();
 				toolMessage.put("role", JsonValue.ofString("tool"));
@@ -148,6 +164,8 @@ public final class McpWebAgent {
 				toolMessage.put("content", JsonValue.ofString(toolText));
 				messages.add(JsonValue.ofMap(toolMessage));
 			}
+
+			rounds.add(JsonValue.ofMap(LlmThoughtTrace.roundMap(reasoning, content, roundTools)));
 
 			if (round == maxRounds - 1 && finalReply.length() == 0) {
 				finalReply = content.length() > 0 ? content
@@ -159,10 +177,14 @@ public final class McpWebAgent {
 			finalReply = "(empty model reply)";
 		}
 
+		final String reasoningText = allReasoning.toString().trim();
+		final Map<String, JsonValue> thoughtTrace = LlmThoughtTrace.bundle(reasoningText, toolTrace, rounds);
 		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>();
 		result.put("reply", JsonValue.ofString(finalReply));
 		result.put("model", JsonValue.ofString(modelName));
 		result.put("toolTrace", JsonValue.ofList(toolTrace));
+		result.put("reasoning", JsonValue.ofString(reasoningText));
+		result.put("thoughtTrace", JsonValue.ofMap(thoughtTrace));
 		return result;
 	}
 
@@ -186,6 +208,14 @@ public final class McpWebAgent {
 		if (tools != null && !tools.isEmpty()) {
 			body.put("tools", JsonValue.ofList(tools));
 			body.put("tool_choice", JsonValue.ofString("auto"));
+		}
+		if (isOpenRouterBase(baseUrl)) {
+			body.put("include_reasoning", JsonValue.ofBoolean(true));
+			if (modelLooksLikeThinking(model)) {
+				final Map<String, JsonValue> reasoning = new LinkedHashMap<String, JsonValue>();
+				reasoning.put("effort", JsonValue.ofString("medium"));
+				body.put("reasoning", JsonValue.ofMap(reasoning));
+			}
 		}
 		final String payload = JsonWriter.write(JsonValue.ofMap(body));
 		final URL url = new URL(baseUrl + "/chat/completions");
@@ -311,6 +341,16 @@ public final class McpWebAgent {
 		}
 		final String u = baseUrl.toLowerCase();
 		return u.indexOf("openrouter.ai") >= 0;
+	}
+
+	private static boolean modelLooksLikeThinking(final String model) {
+		if (model == null) {
+			return false;
+		}
+		final String m = model.toLowerCase();
+		return m.indexOf("reasoner") >= 0 || m.indexOf("thinking") >= 0 || m.indexOf("qwen3") >= 0
+				|| m.indexOf("deepseek-r1") >= 0 || m.indexOf("/r1") >= 0 || m.indexOf("o1-") >= 0
+				|| m.indexOf("o3-") >= 0 || m.indexOf("o4-mini") >= 0 || m.indexOf("gpt-5") >= 0;
 	}
 
 	private static String readStream(final InputStream stream) throws Exception {
