@@ -21,6 +21,8 @@ $sources = @(
     (Join-Path $src "org/docear/plugin/mcp/audit/McpAuditDatabase.java"),
     (Join-Path $src "org/docear/plugin/mcp/audit/McpAuditWriter.java"),
     (Join-Path $src "org/docear/plugin/mcp/audit/McpRequestContext.java"),
+    (Join-Path $src "org/docear/plugin/mcp/server/McpRole.java"),
+    (Join-Path $src "org/docear/plugin/mcp/server/McpPrincipal.java"),
     (Join-Path $src "org/docear/plugin/mcp/audit/McpAuditService.java"),
     (Join-Path $src "org/docear/plugin/mcp/audit/McpAuditStandaloneTest.java"),
     (Join-Path $stubs "org/docear/plugin/mcp/DocearMcpConfig.java"),

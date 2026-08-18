@@ -15,6 +15,7 @@ import java.security.SecureRandom;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComboBox;
 import javax.swing.JDialog;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -61,6 +62,8 @@ public final class ProductSettingsDialog extends JDialog {
 	private final JCheckBox mcpReadOnly = new JCheckBox();
 	private final JCheckBox mcpAuthEnabled = new JCheckBox();
 	private final JPasswordField mcpApiKeyField = new JPasswordField(28);
+	private final JComboBox mcpAuthRoleCombo = new JComboBox(new String[] {
+	        "owner", "write", "read" });
 	private final JCheckBox mcpWebEnabled = new JCheckBox();
 	private final JTextField mcpLlmBaseUrlField = new JTextField(28);
 	private final JPasswordField mcpLlmApiKeyField = new JPasswordField(28);
@@ -213,6 +216,22 @@ public final class ProductSettingsDialog extends JDialog {
 		c.fill = GridBagConstraints.HORIZONTAL;
 		panel.add(mcpApiKeyField, c);
 		row++;
+		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.api_key_role"));
+		c.gridx = 1;
+		c.weightx = 1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		mcpAuthRoleCombo.setRenderer(new javax.swing.DefaultListCellRenderer() {
+			public java.awt.Component getListCellRendererComponent(javax.swing.JList list, Object value, int index,
+			        boolean isSelected, boolean cellHasFocus) {
+				final java.awt.Component comp = super.getListCellRendererComponent(list, value, index, isSelected,
+				        cellHasFocus);
+				final String role = value == null ? "owner" : String.valueOf(value);
+				setText(TextUtils.getText("ProductSettingsAction.mcp.role." + role));
+				return comp;
+			}
+		});
+		panel.add(mcpAuthRoleCombo, c);
+		row++;
 		c.gridx = 1;
 		c.gridy = row;
 		c.fill = GridBagConstraints.NONE;
@@ -245,6 +264,11 @@ public final class ProductSettingsDialog extends JDialog {
 		c.gridwidth = 2;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("ProductSettingsAction.mcp.auth_hint")), c);
+		row++;
+		c.gridx = 0;
+		c.gridy = row;
+		c.gridwidth = 2;
+		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("ProductSettingsAction.mcp.keys_file_hint")), c);
 		row++;
 		addCheck(panel, c, row++, mcpWebEnabled);
 		addLabel(panel, c, row, TextUtils.getText("ProductSettingsAction.mcp.llm_base_url"));
@@ -501,6 +525,7 @@ public final class ProductSettingsDialog extends JDialog {
 		mcpReadOnly.setSelected(isTrue(rc.getProperty("mcp.readonly", "false")));
 		mcpAuthEnabled.setSelected(isTrue(rc.getProperty("mcp.auth.enabled", "false")));
 		mcpApiKeyField.setText(rc.getProperty("mcp.auth.apiKey", ""));
+		mcpAuthRoleCombo.setSelectedItem(normalizeMcpRole(rc.getProperty("mcp.auth.role", "owner")));
 		mcpWebEnabled.setSelected(isTrue(rc.getProperty("mcp.web.enabled", "true")));
 		mcpLlmBaseUrlField.setText(rc.getProperty("mcp.web.llm.baseUrl", "https://openrouter.ai/api/v1"));
 		mcpLlmApiKeyField.setText(rc.getProperty("mcp.web.llm.apiKey", ""));
@@ -696,6 +721,7 @@ public final class ProductSettingsDialog extends JDialog {
 		rc.setProperty("mcp.readonly", mcpReadOnly.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.auth.enabled", mcpAuthEnabled.isSelected() ? "true" : "false");
 		rc.setProperty("mcp.auth.apiKey", passwordValue(mcpApiKeyField));
+		rc.setProperty("mcp.auth.role", normalizeMcpRole(String.valueOf(mcpAuthRoleCombo.getSelectedItem())));
 		rc.setProperty("mcp.web.enabled", mcpWebEnabled.isSelected() ? "true" : "false");
 		final String baseUrl = mcpLlmBaseUrlField.getText() == null || mcpLlmBaseUrlField.getText().trim().length() == 0
 		        ? "https://openrouter.ai/api/v1" : mcpLlmBaseUrlField.getText().trim();
@@ -784,6 +810,20 @@ public final class ProductSettingsDialog extends JDialog {
 			return "";
 		}
 		return new String(chars).trim();
+	}
+
+	private static String normalizeMcpRole(final String raw) {
+		if (raw == null) {
+			return "owner";
+		}
+		final String value = raw.trim().toLowerCase();
+		if ("read".equals(value) || "readonly".equals(value) || "viewer".equals(value)) {
+			return "read";
+		}
+		if ("write".equals(value) || "editor".equals(value)) {
+			return "write";
+		}
+		return "owner";
 	}
 
 	private static boolean isPublicMcpHost(final String host) {

@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+import org.docear.plugin.mcp.server.McpRole;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.Compat;
 
@@ -45,6 +46,23 @@ public final class DocearMcpConfig {
 
 	public static String getApiKey() {
 		return getString("auth.apiKey", "");
+	}
+
+	/** Role for the legacy single API key: read | write | owner (default owner). */
+	public static McpRole getAuthRole() {
+		return McpRole.parse(getString("auth.role", "owner"));
+	}
+
+	/**
+	 * Extra named keys. Default {@code {configDir}/mcp-access.json}.
+	 * Override with {@code mcp.auth.keysFile}.
+	 */
+	public static File getMcpAccessFile() {
+		final String configured = getString("auth.keysFile", "");
+		if (configured.length() > 0) {
+			return new File(configured);
+		}
+		return new File(getAuditDataDir(), "mcp-access.json");
 	}
 
 	/** True when bind address is not loopback (0.0.0.0, ::, LAN IP, hostname). */
@@ -386,6 +404,10 @@ public final class DocearMcpConfig {
 
 	public static void setApiKey(final String apiKey) {
 		setProperty("auth.apiKey", apiKey == null ? "" : apiKey.trim());
+	}
+
+	public static void setAuthRole(final String role) {
+		setProperty("auth.role", role == null || role.trim().length() == 0 ? "owner" : role.trim().toLowerCase());
 	}
 
 	public static void setWebEnabled(final boolean enabled) {

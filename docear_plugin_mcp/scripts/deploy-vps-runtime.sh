@@ -106,6 +106,7 @@ exec xvfb-run -a -s "-screen 0 800x600x16" java -Xms64m -Xmx512m -XX:+UseSerialG
   -Dmcp.web.readOnlyTools=true \\
   -Dmcp.skipFullTagScan=true \\
   -Dmcp.lowMemory=true \\
+  -Dmcp.auth.role=owner \\
   -Dmcp.edtTimeoutMs=90000 \\
   -Duser.language=zh -Duser.country=CN \\
   -jar "\$RUNTIME/framework.jar" \\

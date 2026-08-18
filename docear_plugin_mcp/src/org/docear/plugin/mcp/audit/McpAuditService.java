@@ -477,7 +477,8 @@ public final class McpAuditService {
 		final McpRequestContext ctx = McpRequestContext.current();
 		final String sessionId = ctx != null ? nullToEmpty(ctx.getSessionId()) : "";
 		final String clientName = sessionId.length() > 0 ? nullToEmpty(SESSION_CLIENTS.get(sessionId)) : "";
-		final String actor = firstNonEmpty(metadata.caller, ctx != null ? ctx.getHeaderCaller() : "", clientName,
+		final String actor = firstNonEmpty(metadata.caller, ctx != null ? ctx.getHeaderCaller() : "",
+		    ctx != null && ctx.getPrincipal() != null ? ctx.getPrincipal().getName() : "", clientName,
 		    System.getProperty("user.name", "unknown"));
 		final String questionSummary = truncate(firstNonEmpty(metadata.questionSummary,
 		    ctx != null ? ctx.getHeaderQuestionSummary() : ""), MAX_SUMMARY_LENGTH);

@@ -9,9 +9,11 @@ import java.util.Map;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
 import org.docear.plugin.mcp.audit.McpAuditMachineId;
+import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.server.McpRole;
 import org.docear.plugin.mcp.server.McpWebAgent;
 import org.freeplane.core.util.LogUtils;
 
@@ -446,9 +448,17 @@ public final class WebchatApi {
 			}
 			final Map endpoint = WebchatService.resolveLlmEndpoint(username, profileId);
 			final List history = buildHistoryFromDb(username, conversationId);
-			final Map<String, JsonValue> result = webAgent.chat(message, history,
-					nullToEmpty((String) endpoint.get("baseUrl")), nullToEmpty((String) endpoint.get("apiKey")),
-					nullToEmpty((String) endpoint.get("model")), mapFile.length() == 0 ? null : mapFile);
+			final McpRole webRole = DocearMcpConfig.isWebReadOnlyTools() ? McpRole.READ : McpRole.WRITE;
+			McpRequestContext.beginWeb(username, webRole);
+			final Map<String, JsonValue> result;
+			try {
+				result = webAgent.chat(message, history,
+						nullToEmpty((String) endpoint.get("baseUrl")), nullToEmpty((String) endpoint.get("apiKey")),
+						nullToEmpty((String) endpoint.get("model")), mapFile.length() == 0 ? null : mapFile);
+			}
+			finally {
+				McpRequestContext.end();
+			}
 			final String reply = result.containsKey("reply") && result.get("reply") != null
 					? nullToEmpty(result.get("reply").asString())
 					: "";

@@ -1,0 +1,18 @@
+{
+  "keys": [
+    {
+      "id": "cursor-owner",
+      "name": "Cursor owner",
+      "role": "owner",
+      "secret": "tm_replace_with_generated_owner_key",
+      "enabled": true
+    },
+    {
+      "id": "readonly-agent",
+      "name": "Read-only agent",
+      "role": "read",
+      "secret": "tm_replace_with_generated_read_key",
+      "enabled": true
+    }
+  ]
+}

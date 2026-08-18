@@ -49,4 +49,25 @@ public final class DocearMcpConfig {
 	public static int getAuditMaxResponseBytes() {
 		return 524288;
 	}
+
+	public static boolean isReadOnly() {
+		return "true".equalsIgnoreCase(System.getProperty("mcp.readonly", "false"));
+	}
+
+	public static String getApiKey() {
+		final String key = System.getProperty("mcp.auth.apiKey", "");
+		return key == null ? "" : key;
+	}
+
+	public static org.docear.plugin.mcp.server.McpRole getAuthRole() {
+		return org.docear.plugin.mcp.server.McpRole.parse(System.getProperty("mcp.auth.role", "owner"));
+	}
+
+	public static File getMcpAccessFile() {
+		final String configured = System.getProperty("mcp.auth.keysFile", "");
+		if (configured != null && configured.length() > 0) {
+			return new File(configured);
+		}
+		return new File(getAuditDataDir(), "mcp-access.json");
+	}
 }

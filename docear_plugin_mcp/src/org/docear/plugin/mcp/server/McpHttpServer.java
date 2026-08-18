@@ -286,7 +286,8 @@ public final class McpHttpServer {
 				writeJson(exchange, 405, errorBody(-32000, "Only POST is supported on /mcp"));
 				return;
 			}
-			if (!McpAuth.isAuthorized(exchange)) {
+			final McpPrincipal principal = McpAuth.authenticate(exchange);
+			if (principal == null) {
 				writeJson(exchange, 401, errorBody(-32001, "Unauthorized: provide Authorization: Bearer <mcp-api-key> or X-Api-Key"));
 				return;
 			}
@@ -294,7 +295,7 @@ public final class McpHttpServer {
 			final long started = System.currentTimeMillis();
 			String methodHint = "";
 			try {
-				McpRequestContext.begin(exchange);
+				McpRequestContext.begin(exchange, principal);
 				final JsonValue request = JsonParser.parse(body);
 				methodHint = extractMethodHint(request);
 				final String response = protocol.handle(request);

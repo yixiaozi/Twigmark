@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
+import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
@@ -136,8 +137,9 @@ public final class McpWebAgent {
 				String toolText;
 				boolean ok = true;
 				try {
-					if (DocearMcpConfig.isWebReadOnlyTools() && McpProtocol.isWriteTool(toolName)) {
-						throw new IllegalStateException("write tools are disabled for web chat");
+					if (!McpPermissions.canCall(McpRequestContext.currentPrincipal(), toolName)) {
+						throw new IllegalStateException(McpPermissions.denyMessage(
+								McpRequestContext.currentPrincipal(), toolName));
 					}
 					injectWebAudit(args);
 					toolText = protocol.invokeToolText(toolName, args);
