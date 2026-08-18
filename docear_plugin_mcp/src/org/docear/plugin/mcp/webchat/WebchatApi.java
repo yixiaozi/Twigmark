@@ -455,9 +455,11 @@ public final class WebchatApi {
 			final String model = result.containsKey("model") && result.get("model") != null
 					? nullToEmpty(result.get("model").asString())
 					: "";
-			final String toolTraceJson = result.containsKey("toolTrace") && result.get("toolTrace") != null
-					? JsonWriter.write(result.get("toolTrace"))
-					: "[]";
+			final JsonValue thoughtTrace = result.get("thoughtTrace");
+			final JsonValue toolTrace = result.get("toolTrace");
+			final String toolTraceJson = thoughtTrace != null && !thoughtTrace.isNull()
+					? JsonWriter.write(thoughtTrace)
+					: (toolTrace != null && !toolTrace.isNull() ? JsonWriter.write(toolTrace) : "[]");
 			final String assistantMessageId = WebchatService.appendChatTurn(username, conversationId, message, reply,
 					toolTraceJson, model);
 			final Map<String, JsonValue> out = new LinkedHashMap<String, JsonValue>();
@@ -465,6 +467,15 @@ public final class WebchatApi {
 			out.put("model", result.get("model"));
 			out.put("conversationId", JsonValue.ofString(conversationId));
 			out.put("assistantMessageId", JsonValue.ofString(assistantMessageId));
+			if (toolTrace != null) {
+				out.put("toolTrace", toolTrace);
+			}
+			if (result.containsKey("reasoning") && result.get("reasoning") != null) {
+				out.put("reasoning", result.get("reasoning"));
+			}
+			if (thoughtTrace != null) {
+				out.put("thoughtTrace", thoughtTrace);
+			}
 			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
 		}
 		catch (IllegalArgumentException e) {

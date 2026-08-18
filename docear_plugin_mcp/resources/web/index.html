@@ -74,8 +74,21 @@
 
           <div class="library-main" id="library-main">
             <div id="library-empty" class="empty-state">
-              <h2>选择一张导图</h2>
-              <p>从左侧打开任意导图。滚轮浏览大纲，键盘 ↑↓ 移动、←→ 展开折叠，右侧看详情。</p>
+              <div class="empty-illustration" aria-hidden="true">
+                <span class="empty-node root"></span>
+                <span class="empty-edge e1"></span>
+                <span class="empty-node n2"></span>
+                <span class="empty-edge e2"></span>
+                <span class="empty-node n3"></span>
+              </div>
+              <h2>从左侧打开一张导图</h2>
+              <p>分支大纲像思维导图一样展开，右侧看节点详情与备注。滚轮浏览，键盘操作全程可用。</p>
+              <ul class="empty-keys">
+                <li><kbd>↑</kbd><kbd>↓</kbd> 移动</li>
+                <li><kbd>←</kbd><kbd>→</kbd> 折叠 / 展开</li>
+                <li><kbd>/</kbd> 筛选节点</li>
+                <li><kbd>A</kbd> 针对此图提问</li>
+              </ul>
             </div>
 
             <div id="map-viewer" class="map-viewer hidden">
@@ -85,6 +98,7 @@
                   <p class="muted tiny" id="viewer-path"></p>
                 </div>
                 <div class="viewer-actions">
+                  <span id="viewer-stats" class="viewer-stats"></span>
                   <label class="search-field compact">
                     <input id="node-filter" placeholder="筛选节点 ( / )" />
                   </label>
@@ -100,11 +114,12 @@
                       <nav id="browse-crumb" class="browse-crumb" aria-label="路径"></nav>
                       <span class="browse-hint muted tiny">↑↓ 移动 · ←→ 折叠 · Enter 展开 · / 搜索 · A 提问</span>
                     </div>
-                    <div id="outline-list" class="outline-list" tabindex="0" role="tree" aria-label="节点大纲"></div>
+                    <div id="outline-list" class="outline-list mm-canvas" tabindex="0" role="tree" aria-label="节点大纲"></div>
                   </section>
                   <aside id="node-detail" class="node-detail">
-                    <p class="muted tiny detail-empty">选中左侧节点查看详情</p>
+                    <p class="muted tiny detail-empty">点选左侧节点，查看备注与子分支</p>
                     <div id="node-detail-body" class="hidden">
+                      <p class="detail-kicker">当前节点</p>
                       <h3 id="detail-title"></h3>
                       <p id="detail-meta" class="muted tiny"></p>
                       <div id="detail-note" class="detail-note"></div>
@@ -114,7 +129,10 @@
                 </div>
                 <aside id="ask-panel" class="ask-panel">
                   <div class="ask-head">
-                    <strong>针对此图提问</strong>
+                    <div>
+                      <strong>针对此图提问</strong>
+                      <p class="muted tiny ask-sub">模型会优先阅读当前导图，并展示思索过程</p>
+                    </div>
                     <button type="button" id="btn-close-ask" class="ghost small hide-desktop">关闭</button>
                   </div>
                   <div id="ask-chat" class="msg-stream ask-chat" aria-live="polite"></div>
@@ -162,7 +180,7 @@
               <div class="composer-box">
                 <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送，Shift+Enter 换行）"></textarea>
                 <div class="composer-bar">
-                  <span class="muted tiny">用户消息靠右 · 助手靠左 · 可公开单条回答</span>
+                  <span class="muted tiny">用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答</span>
                   <button type="button" id="btn-send" class="primary">发送</button>
                 </div>
               </div>
@@ -197,10 +215,13 @@
             <div id="profile-list" class="profile-list"></div>
           </aside>
           <section class="settings profile-editor">
-            <h3 id="llm-editor-title">编辑配置</h3>
+            <header class="editor-head">
+              <h3 id="llm-editor-title">编辑配置</h3>
+              <p class="muted tiny">填写后保存即可新建或更新配置。桌面与网页共用。</p>
+            </header>
             <div class="settings-grid">
-              <label
-                >服务商
+              <div class="field">
+                <label for="llm-provider">服务商</label>
                 <select id="llm-provider">
                   <option value="deepseek">DeepSeek（国内推荐）</option>
                   <option value="kimi">Kimi / Moonshot</option>
@@ -208,12 +229,21 @@
                   <option value="openai">OpenAI 官方</option>
                   <option value="custom">自定义 OpenAI 兼容</option>
                 </select>
-              </label>
-              <label>名称 <input id="llm-name" placeholder="DeepSeek" /></label>
-              <label>Base URL <input id="llm-base" placeholder="https://api.deepseek.com/v1" /></label>
-              <label>API Key <input id="llm-key" type="password" placeholder="sk-… 或留空保留原 Key" /></label>
-              <label class="span-2"
-                >模型
+              </div>
+              <div class="field">
+                <label for="llm-name">名称</label>
+                <input id="llm-name" placeholder="DeepSeek" />
+              </div>
+              <div class="field">
+                <label for="llm-base">API 地址</label>
+                <input id="llm-base" placeholder="https://api.deepseek.com/v1" />
+              </div>
+              <div class="field">
+                <label for="llm-key">API Key</label>
+                <input id="llm-key" type="password" placeholder="sk-… 或留空保留原 Key" autocomplete="off" />
+              </div>
+              <div class="field span-2">
+                <label for="llm-model">模型</label>
                 <input id="llm-model" list="llm-model-hints" placeholder="deepseek-chat" />
                 <datalist id="llm-model-hints">
                   <option value="deepseek-chat"></option>
@@ -225,16 +255,19 @@
                   <option value="google/gemini-2.0-flash-001"></option>
                   <option value="deepseek/deepseek-chat"></option>
                   <option value="qwen/qwen-2.5-72b-instruct"></option>
+                  <option value="qwen/qwen3-max"></option>
                 </datalist>
-              </label>
+              </div>
             </div>
-            <label class="check"><input id="llm-default" type="checkbox" checked /> 设为默认</label>
-            <div class="settings-row">
-              <button type="button" id="btn-llm-save" class="primary">保存</button>
-              <button type="button" id="btn-llm-del" class="ghost">删除</button>
-              <button type="button" id="btn-llm-use" class="ghost">设为当前选用</button>
-              <span id="llm-note" class="muted"></span>
+            <div class="settings-actions">
+              <div class="settings-buttons">
+                <button type="button" id="btn-llm-save" class="primary">保存</button>
+                <button type="button" id="btn-llm-del" class="ghost">删除</button>
+                <button type="button" id="btn-llm-use" class="ghost">设为当前选用</button>
+              </div>
+              <label class="check" for="llm-default"><input id="llm-default" type="checkbox" checked /> 设为默认</label>
             </div>
+            <p id="llm-note" class="muted tiny"></p>
           </section>
         </div>
       </section>

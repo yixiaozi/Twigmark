@@ -18,6 +18,7 @@
   var mapViewer = document.getElementById("map-viewer");
   var viewerTitle = document.getElementById("viewer-title");
   var viewerPath = document.getElementById("viewer-path");
+  var viewerStats = document.getElementById("viewer-stats");
   var outlineList = document.getElementById("outline-list");
   var browseCrumb = document.getElementById("browse-crumb");
   var nodeDetailBody = document.getElementById("node-detail-body");
@@ -183,18 +184,134 @@
     });
   }
 
-  function parseTools(tools) {
-    if (!tools) return [];
-    if (Array.isArray(tools)) return tools;
-    if (typeof tools === "string") {
+  function parseThoughtTrace(raw) {
+    var empty = { tools: [], reasoning: "", rounds: [] };
+    if (!raw) return empty;
+    var parsed = raw;
+    if (typeof raw === "string") {
       try {
-        var parsed = JSON.parse(tools);
-        return Array.isArray(parsed) ? parsed : [];
+        parsed = JSON.parse(raw);
       } catch (e) {
-        return [];
+        return empty;
       }
     }
-    return [];
+    if (Array.isArray(parsed)) {
+      return { tools: parsed, reasoning: "", rounds: parsed.length ? [{ tools: parsed }] : [] };
+    }
+    if (typeof parsed !== "object") return empty;
+    var tools = Array.isArray(parsed.tools) ? parsed.tools : [];
+    var rounds = Array.isArray(parsed.rounds) ? parsed.rounds : [];
+    var reasoning = parsed.reasoning || "";
+    if (!tools.length && rounds.length) {
+      rounds.forEach(function (r) {
+        (r.tools || []).forEach(function (t) {
+          tools.push(t);
+        });
+      });
+    }
+    if (!reasoning && rounds.length) {
+      reasoning = rounds
+        .map(function (r) {
+          return r.reasoning || "";
+        })
+        .filter(Boolean)
+        .join("\n\n");
+    }
+    return { tools: tools, reasoning: reasoning, rounds: rounds };
+  }
+
+  function toolChip(t) {
+    var s = document.createElement("span");
+    s.className = t && t.ok === false ? "bad" : "ok";
+    s.textContent = (t && t.ok === false ? "✗ " : "✓ ") + ((t && t.name) || "tool");
+    s.title = (t && (t.resultPreview || t.arguments)) || "";
+    return s;
+  }
+
+  function renderThoughtBlock(trace) {
+    if (!trace || (!trace.reasoning && !(trace.tools && trace.tools.length))) return null;
+    var details = document.createElement("details");
+    details.className = "thought";
+    details.open = true;
+    var summary = document.createElement("summary");
+    var label = document.createElement("span");
+    label.textContent = trace.reasoning ? "思索过程" : "工具调用";
+    summary.appendChild(label);
+    var meta = document.createElement("span");
+    meta.className = "thought-meta";
+    var bits = [];
+    if (trace.rounds && trace.rounds.length > 1) bits.push(trace.rounds.length + " 轮");
+    if (trace.tools && trace.tools.length) bits.push(trace.tools.length + " 次工具");
+    meta.textContent = bits.join(" · ");
+    summary.appendChild(meta);
+    details.appendChild(summary);
+
+    var body = document.createElement("div");
+    body.className = "thought-body";
+    if (trace.reasoning) {
+      var p = document.createElement("p");
+      p.className = "thought-text";
+      p.textContent = trace.reasoning;
+      body.appendChild(p);
+    }
+    (trace.rounds || []).forEach(function (round, idx) {
+      var tools = round.tools || [];
+      var isFinal = idx === trace.rounds.length - 1 && !tools.length;
+      if (isFinal) return;
+      if (!tools.length && !round.content) return;
+      var step = document.createElement("div");
+      step.className = "thought-step";
+      if (round.content) {
+        var c = document.createElement("p");
+        c.className = "thought-text";
+        c.textContent = round.content;
+        step.appendChild(c);
+      }
+      if (tools.length) {
+        var toolRow = document.createElement("div");
+        toolRow.className = "tools";
+        tools.forEach(function (t) {
+          toolRow.appendChild(toolChip(t));
+        });
+        step.appendChild(toolRow);
+        tools.forEach(function (t) {
+          if (!t || !t.resultPreview) return;
+          var pre = document.createElement("pre");
+          pre.className = "thought-preview";
+          pre.textContent = String(t.resultPreview).slice(0, 1200);
+          step.appendChild(pre);
+        });
+      }
+      if (step.childNodes.length) body.appendChild(step);
+    });
+    if (!body.childNodes.length && trace.tools.length) {
+      var toolRow = document.createElement("div");
+      toolRow.className = "tools";
+      trace.tools.forEach(function (t) {
+        toolRow.appendChild(toolChip(t));
+      });
+      body.appendChild(toolRow);
+    }
+    details.appendChild(body);
+    return details;
+  }
+
+  function addThinkingPlaceholder(container) {
+    var row = document.createElement("div");
+    row.className = "msg assistant pending";
+    var bubble = document.createElement("div");
+    bubble.className = "bubble";
+    var live = document.createElement("div");
+    live.className = "thinking-live";
+    var dot = document.createElement("span");
+    dot.className = "thinking-dots";
+    live.appendChild(dot);
+    live.appendChild(document.createTextNode("正在思索…"));
+    bubble.appendChild(live);
+    row.appendChild(bubble);
+    container.appendChild(row);
+    scrollToBottom(container);
+    return row;
   }
 
   function addMessage(container, role, text, meta, tools, messageId) {
@@ -212,23 +329,14 @@
       roleEl.className = "role";
       roleEl.textContent = role === "user" ? "你" : "助手";
       bubble.appendChild(roleEl);
+      if (role === "assistant") {
+        var thought = renderThoughtBlock(parseThoughtTrace(tools));
+        if (thought) bubble.appendChild(thought);
+      }
       var body = document.createElement("div");
       body.className = "body";
       body.innerHTML = renderMarkdown(text || "");
       bubble.appendChild(body);
-    }
-
-    var toolList = parseTools(tools);
-    if (toolList.length) {
-      var toolRow = document.createElement("div");
-      toolRow.className = "tools";
-      toolList.forEach(function (t) {
-        var s = document.createElement("span");
-        s.className = t.ok ? "ok" : "bad";
-        s.textContent = (t.ok ? "✓ " : "✗ ") + (t.name || "tool");
-        toolRow.appendChild(s);
-      });
-      bubble.appendChild(toolRow);
     }
 
     if ((meta || messageId) && role !== "system") {
@@ -255,6 +363,7 @@
     row.appendChild(bubble);
     container.appendChild(row);
     scrollToBottom(container);
+    return row;
   }
 
   var pendingShareMessageId = "";
@@ -847,21 +956,24 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className =
-        "outline-row" +
+        "mm-row" +
         (idx === focusIdx ? " focused" : "") +
         (row.id === selectedNodeId ? " selected" : "") +
         (row.hit ? " hit" : "") +
         (row.depth === 0 ? " root" : "");
       btn.setAttribute("role", "treeitem");
       btn.setAttribute("data-id", row.id);
-      btn.style.paddingLeft = 0.65 + row.depth * 1.15 + "rem";
+      btn.style.setProperty("--d", String(row.depth));
       btn.innerHTML =
-        '<span class="o-chev"></span><span class="o-text"></span><span class="o-meta"></span>';
-      btn.querySelector(".o-chev").textContent = row.hasKids ? (row.open ? "▾" : "▸") : "·";
-      btn.querySelector(".o-text").textContent = row.node.text || "(空节点)";
+        '<span class="mm-gutter" aria-hidden="true"><span class="mm-knot"></span></span>' +
+        '<span class="mm-card"><span class="mm-chev"></span><span class="mm-text"></span><span class="mm-meta"></span></span>';
+      btn.querySelector(".mm-chev").textContent = row.hasKids ? (row.open ? "▾" : "▸") : "";
+      btn.querySelector(".mm-text").textContent = row.node.text || "(空节点)";
       var meta = row.hasKids ? row.node.children.length + " 项" : "";
-      if (row.node.notePlain || row.node.note) meta = (meta ? meta + " · " : "") + "有备注";
-      btn.querySelector(".o-meta").textContent = meta;
+      if (row.node.notePlain || row.node.note) meta = (meta ? meta + " · " : "") + "备注";
+      var metaEl = btn.querySelector(".mm-meta");
+      if (meta) metaEl.textContent = meta;
+      else metaEl.style.display = "none";
       btn.addEventListener("click", function () {
         focusIdx = idx;
         selectNode(row.id, true);
@@ -880,7 +992,7 @@
   }
 
   function scrollFocusIntoView() {
-    var el = outlineList.querySelector(".outline-row.focused");
+    var el = outlineList.querySelector(".mm-row.focused, .outline-row.focused");
     if (el && el.scrollIntoView) {
       el.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
@@ -1093,6 +1205,7 @@
     mapViewer.classList.remove("hidden");
     viewerTitle.textContent = m.title || m.name || "导图";
     viewerPath.textContent = m.relativePath || m.path || "";
+    if (viewerStats) viewerStats.textContent = "";
     outlineList.innerHTML = '<p class="muted tiny outline-empty">加载结构…</p>';
     askChat.innerHTML = "";
     addMessage(askChat, "system", "可针对「" + (m.title || m.name) + "」提问。模型会优先阅读这张图。");
@@ -1111,6 +1224,10 @@
       });
       focusIdx = 0;
       selectedNodeId = currentTree && currentTree.id ? currentTree.id : "";
+      if (viewerStats) {
+        var n = Object.keys(nodeById).length;
+        viewerStats.textContent = n ? n + " 个节点" : "";
+      }
       renderBrowse();
       if (outlineList) outlineList.focus();
     });
@@ -1170,6 +1287,7 @@
     askBusy = true;
     document.getElementById("btn-ask-send").disabled = true;
     addMessage(askChat, "user", text);
+    var pending = addThinkingPlaceholder(askChat);
     askInput.value = "";
     openAskPanel();
     api("/chat", {
@@ -1182,6 +1300,7 @@
       }),
     })
       .then(function (res) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
         if (!res.ok) {
           addMessage(askChat, "assistant", "错误：" + ((res.body && res.body.error) || res.status));
           return;
@@ -1192,12 +1311,13 @@
           "assistant",
           res.body.reply || "",
           res.body.model || "",
-          res.body.toolTrace || [],
+          res.body.thoughtTrace || res.body.toolTrace || [],
           res.body.assistantMessageId || ""
         );
         loadConversations();
       })
       .catch(function (e) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
         addMessage(askChat, "assistant", "网络错误：" + (e && e.message ? e.message : e));
       })
       .then(function () {
@@ -1300,8 +1420,9 @@
     busy = true;
     sendBtn.disabled = true;
     addMessage(chatEl, "user", text);
+    var pending = addThinkingPlaceholder(chatEl);
     inputEl.value = "";
-    setStatus("生成中…", "warn");
+    setStatus("思索中…", "warn");
     api("/chat", {
       method: "POST",
       body: JSON.stringify({
@@ -1311,6 +1432,7 @@
       }),
     })
       .then(function (res) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
         if (!res.ok) {
           addMessage(chatEl, "assistant", "错误：" + ((res.body && res.body.error) || res.status));
           setStatus("出错", "err");
@@ -1327,13 +1449,14 @@
           "assistant",
           res.body.reply || "",
           res.body.model || "",
-          res.body.toolTrace || [],
+          res.body.thoughtTrace || res.body.toolTrace || [],
           res.body.assistantMessageId || ""
         );
         setStatus("就绪", "ok");
         loadConversations();
       })
       .catch(function (e) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
         addMessage(chatEl, "assistant", "网络错误：" + (e && e.message ? e.message : e));
         setStatus("网络错误", "err");
       })
