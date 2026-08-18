@@ -36,8 +36,12 @@ def mcp(method: str, params=None, timeout=90):
         headers["X-API-Key"] = KEY
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(BASE, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        raise RuntimeError("HTTP %s %s: %s" % (e.code, method, body[:2000])) from e
 
 
 def tool(name: str, arguments: dict | None = None) -> dict:
@@ -91,7 +95,7 @@ def main() -> int:
     map_path = os.environ.get("TEST_MAP", "")
     if not map_path:
         map_path = str(TEST_DIR / ("mcp-write-tools-%d.mm" % int(time.time())))
-        created = tool("create_mindmap", {"filePath": map_path, "rootText": "MCP Write Tools Test"})
+        created = tool("create_mindmap", {"filePath": map_path, "rootText": "MCP Write Tools Test", "openInUi": True})
         expect(created.get("created") is True, "create_mindmap")
         root_id = created.get("rootNodeId") or ""
     else:
@@ -145,6 +149,8 @@ def main() -> int:
     got = tool("get_node_details", {"filePath": map_path, "nodeId": other_id})
     arrows = got.get("arrowLinks") or []
     expect(any(a.get("targetNodeId") == dst_id for a in arrows), "arrowLinks visible")
+    xml_mid = Path(map_path).read_text(encoding="utf-8", errors="replace")
+    expect("arrowlink" in xml_mid.lower(), "mm file has arrowlink after add")
 
     remind_at = int(time.time() * 1000) + 3600 * 1000
     tool("set_reminder", {"filePath": map_path, "nodeId": leaf_id, "remindAtMillis": remind_at})
@@ -181,8 +187,8 @@ def main() -> int:
     xml = Path(map_path).read_text(encoding="utf-8", errors="replace")
     expect("detail-ok" in xml, "mm file has details")
     expect("DCR_PRIVACY_LEVEL" in xml or "PRIVATE" in xml, "mm file has privacy")
-    expect("arrowlink" in xml.lower(), "mm file has arrowlink")
     expect("cloud" in xml.lower(), "mm file has cloud")
+    expect("COLOR=\"#112233\"" in xml or "COLOR=\"#112233\"".lower() in xml.lower(), "mm file has node color")
 
     print("map:", map_path)
     if failures:
