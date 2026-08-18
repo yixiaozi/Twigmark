@@ -44,7 +44,14 @@ def mcp(method: str, params: dict | None = None) -> dict:
 
 
 def tool(name: str, arguments: dict | None = None) -> str:
-    resp = mcp("tools/call", {"name": name, "arguments": arguments or {}})
+    args = dict(arguments or {})
+    args.setdefault("_audit", {
+        "caller": "audit-integration-test",
+        "traceId": "audit-integration",
+        "questionSummary": "MCP audit integration test",
+        "operationGoal": name,
+    })
+    resp = mcp("tools/call", {"name": name, "arguments": args})
     if "error" in resp:
         raise RuntimeError(json.dumps(resp["error"], ensure_ascii=False))
     content = resp.get("result", {}).get("content") or []

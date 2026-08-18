@@ -39,6 +39,8 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | `questionSummary` | 用户原始问题的**概括**（≤240 字），同一 trace 内保持一致 |
 | `operationGoal` | **本次这一个 tool call** 想做什么（≤160 字），每个调用各写一句 |
 
+服务端会把 `_audit` 标进每个工具的 JSON Schema（必填）。**缺 `questionSummary` 会 `isError` 拒绝执行**，不只依赖 Cursor 技能提醒。Grok 等外部 MCP 客户端同样适用。
+
 **操作意图分类（`intent`）**由服务端按工具自动映射到服务类，**每个类只有一个枚举**，Agent 不必传：
 
 | intent | 服务类 |

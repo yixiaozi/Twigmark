@@ -7,6 +7,7 @@ import java.util.Map;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
 import org.docear.plugin.mcp.audit.McpAuditLabels;
+import org.docear.plugin.mcp.audit.McpAuditSchema;
 import org.docear.plugin.mcp.audit.McpAuditService;
 import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonValue;
@@ -79,6 +80,7 @@ public final class McpProtocol {
 		serverInfo.put("name", JsonValue.ofString("docear-mcp"));
 		serverInfo.put("version", JsonValue.ofString("1.0.0"));
 		result.put("serverInfo", JsonValue.ofMap(serverInfo));
+		result.put("instructions", JsonValue.ofString(McpAuditSchema.SERVER_INSTRUCTIONS));
 		return JsonValue.ofMap(result);
 	}
 
@@ -506,6 +508,12 @@ public final class McpProtocol {
 		String errorMessage = null;
 		String textResult = null;
 		try {
+			if (!McpAuditSchema.hasQuestionSummary(auditMetadata.questionSummary)) {
+				success = false;
+				errorMessage = McpAuditSchema.MISSING_QUESTION_SUMMARY;
+				textResult = errorMessage;
+				return toolError(errorMessage);
+			}
 			if (!McpPermissions.canCall(currentPrincipal(), name)) {
 				success = false;
 				errorMessage = McpPermissions.denyMessage(currentPrincipal(), name);
@@ -1190,10 +1198,11 @@ public final class McpProtocol {
 				required.add(JsonValue.ofString(propName));
 			}
 		}
+		final Map<String, JsonValue> auditProperty = McpAuditSchema.toolProperty().asMap();
+		props.put(auditProperty.get("name").asString(), auditProperty.get("schema"));
+		required.add(JsonValue.ofString(auditProperty.get("name").asString()));
 		inputSchema.put("properties", JsonValue.ofMap(props));
-		if (!required.isEmpty()) {
-			inputSchema.put("required", JsonValue.ofList(required));
-		}
+		inputSchema.put("required", JsonValue.ofList(required));
 		tool.put("inputSchema", JsonValue.ofMap(inputSchema));
 		return JsonValue.ofMap(tool);
 	}

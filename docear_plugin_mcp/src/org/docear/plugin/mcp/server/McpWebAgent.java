@@ -70,6 +70,7 @@ public final class McpWebAgent {
 		if (message.length() == 0) {
 			throw new IllegalArgumentException("message is required");
 		}
+		final String auditTraceId = "web-" + System.currentTimeMillis();
 
 		final List<JsonValue> messages = new ArrayList<JsonValue>();
 		final String system = systemPromptOverride != null && systemPromptOverride.trim().length() > 0
@@ -160,7 +161,7 @@ public final class McpWebAgent {
 						throw new IllegalStateException(McpPermissions.denyMessage(
 								McpRequestContext.currentPrincipal(), toolName));
 					}
-					injectWebAudit(args);
+					injectWebAudit(args, message, auditTraceId, toolName);
 					toolText = protocol.invokeToolText(toolName, args);
 				}
 				catch (Exception e) {
@@ -209,16 +210,46 @@ public final class McpWebAgent {
 		return result;
 	}
 
-	private static void injectWebAudit(final Map<String, JsonValue> args) {
-		if (args.containsKey("_audit")) {
-			return;
+	private static void injectWebAudit(final Map<String, JsonValue> args, final String userMessage,
+			final String traceId, final String toolName) {
+		final Map<String, JsonValue> audit = args.containsKey("_audit")
+				? new LinkedHashMap<String, JsonValue>(args.get("_audit").asMap())
+				: new LinkedHashMap<String, JsonValue>();
+		if (!hasAuditText(audit, "caller")) {
+			audit.put("caller", JsonValue.ofString("twigmark-web"));
 		}
-		final Map<String, JsonValue> audit = new LinkedHashMap<String, JsonValue>();
-		audit.put("caller", JsonValue.ofString("twigmark-web"));
-		audit.put("traceId", JsonValue.ofString("web-" + System.currentTimeMillis()));
-		audit.put("questionSummary", JsonValue.ofString("web chat"));
-		audit.put("operationGoal", JsonValue.ofString("web agent tool call"));
+		if (!hasAuditText(audit, "traceId")) {
+			audit.put("traceId", JsonValue.ofString(traceId));
+		}
+		final String existingSummary = auditText(audit, "questionSummary");
+		if (existingSummary.length() == 0 || "web chat".equals(existingSummary)) {
+			audit.put("questionSummary", JsonValue.ofString(truncateAudit(userMessage, 240)));
+		}
+		if (!hasAuditText(audit, "operationGoal")) {
+			final String goal = toolName != null && toolName.length() > 0 ? ("web: " + toolName) : "web agent tool call";
+			audit.put("operationGoal", JsonValue.ofString(truncateAudit(goal, 160)));
+		}
 		args.put("_audit", JsonValue.ofMap(audit));
+	}
+
+	private static boolean hasAuditText(final Map<String, JsonValue> audit, final String key) {
+		return auditText(audit, key).length() > 0;
+	}
+
+	private static String auditText(final Map<String, JsonValue> audit, final String key) {
+		if (audit == null || !audit.containsKey(key) || audit.get(key) == null || audit.get(key).isNull()) {
+			return "";
+		}
+		final String value = audit.get(key).asString();
+		return value != null ? value.trim() : "";
+	}
+
+	private static String truncateAudit(final String text, final int max) {
+		final String value = text != null ? text.trim() : "";
+		if (value.length() <= max) {
+			return value;
+		}
+		return value.substring(0, max);
 	}
 
 	private JsonValue callChatCompletions(final List<JsonValue> messages, final List<JsonValue> tools,

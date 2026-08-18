@@ -33,7 +33,14 @@ def mcp(method: str, params: dict | None = None) -> dict:
 
 
 def tool(name: str, arguments: dict | None = None) -> str:
-    resp = mcp("tools/call", {"name": name, "arguments": arguments or {}})
+    args = dict(arguments or {})
+    args.setdefault("_audit", {
+        "caller": "mcp-smoke-test",
+        "traceId": "smoke",
+        "questionSummary": "MCP smoke test",
+        "operationGoal": name,
+    })
+    resp = mcp("tools/call", {"name": name, "arguments": args})
     if "error" in resp:
         return f"ERROR: {resp['error']}"
     content = resp.get("result", {}).get("content") or []

@@ -41,8 +41,8 @@ public final class WebchatSystemPrompt {
 		sb.append("5. 同名 .mm 很多：必须使用工具返回的 mapFile（相对路径或绝对路径），不要只传文件名。\n");
 		sb.append("6. 节点时间以 XML 的 MODIFIED（modifiedAt / modifiedAtMillis）为准。");
 		sb.append("问「现在/最近」不要把几年前的节点当现状。\n");
-		sb.append("7. 工具 arguments 尽量带 _audit：caller=twigmark-web，同一问题共用 traceId，");
-		sb.append("questionSummary=用户问题概括，operationGoal=这一次调用的目的。服务端也会补，但仍请填写。\n\n");
+		sb.append("7. 每次工具调用必须带 _audit：caller=twigmark-web，同一问题共用 traceId，");
+		sb.append("questionSummary=用户原话/概括，operationGoal=这一次调用的目的。缺 questionSummary 会被拒绝。\n\n");
 
 		sb.append("## 回答结构（每次都尽量遵守）\n");
 		sb.append("- 先给结论（1～3 句），再给依据。\n");

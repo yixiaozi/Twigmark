@@ -16,6 +16,9 @@ JAVA_HOME="${JAVA_HOME:-/home/ubuntu/jdk8}"
   "$ROOT/src/org/docear/plugin/mcp/server/McpPermissions.java" \
   "$ROOT/src/org/docear/plugin/mcp/audit/McpAuditQuery.java" \
   "$ROOT/src/org/docear/plugin/mcp/audit/McpAuditLabels.java" \
+  "$ROOT/src/org/docear/plugin/mcp/audit/McpAuditSchema.java" \
+  "$ROOT/src/org/docear/plugin/mcp/audit/McpAuditSchemaStandaloneTest.java" \
   "$ROOT/src/org/docear/plugin/mcp/webchat/WebAuditFilters.java" \
   "$ROOT/src/org/docear/plugin/mcp/webchat/WebAuditStandaloneTest.java"
 "$JAVA_HOME/bin/java" -cp "$BUILD" org.docear.plugin.mcp.webchat.WebAuditStandaloneTest
+"$JAVA_HOME/bin/java" -cp "$BUILD" org.docear.plugin.mcp.audit.McpAuditSchemaStandaloneTest
