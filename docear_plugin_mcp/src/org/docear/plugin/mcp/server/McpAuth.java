@@ -28,7 +28,10 @@ public final class McpAuth {
 
 	public static boolean hasConfiguredApiKey() {
 		final String key = DocearMcpConfig.getApiKey();
-		return key != null && key.trim().length() > 0;
+		if (key != null && key.trim().length() > 0) {
+			return true;
+		}
+		return McpAccessStore.get().hasAnyEnabledKey();
 	}
 
 	/** Validate start conditions: public bind / auth require a non-empty API key. */
@@ -37,7 +40,7 @@ public final class McpAuth {
 			if (DocearMcpConfig.isPublicBind()) {
 				throw new IllegalStateException(
 						"Public MCP bind (" + DocearMcpConfig.getHost()
-								+ ") requires an API key. Generate one in Product Settings → MCP.");
+								+ ") requires an API key (mcp.auth.apiKey or mcp-access.json).");
 			}
 			throw new IllegalStateException(
 					"MCP authentication is enabled but no API key is set. Generate one in Product Settings → MCP.");
@@ -45,15 +48,25 @@ public final class McpAuth {
 	}
 
 	public static boolean isAuthorized(final HttpExchange exchange) {
-		if (!isAuthRequired()) {
-			return true;
-		}
-		final String expected = DocearMcpConfig.getApiKey();
-		if (expected == null || expected.length() == 0) {
-			return false;
-		}
+		return authenticate(exchange) != null;
+	}
+
+	/**
+	 * Resolve the caller. Missing key is allowed only when auth is not required
+	 * (loopback desktop). An unknown key is always rejected.
+	 */
+	public static McpPrincipal authenticate(final HttpExchange exchange) {
 		final String provided = extractApiKey(exchange);
-		return expected.equals(provided);
+		if (provided.length() > 0) {
+			return McpAccessStore.get().resolve(provided);
+		}
+		if (isAuthRequired()) {
+			return null;
+		}
+		if (DocearMcpConfig.isReadOnly()) {
+			return McpPrincipal.anonymousRead();
+		}
+		return McpPrincipal.localOwner();
 	}
 
 	public static String extractApiKey(final HttpExchange exchange) {

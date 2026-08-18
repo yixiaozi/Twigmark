@@ -1,4 +1,42 @@
-# Twigmark MCP：API Key、公网与网页版
+# Twigmark MCP：API Key、权限、公网与网页版
+
+## 权限模型
+
+服务器对外提供 MCP 时，**认证（是谁）和授权（能干什么）必须分开**。
+
+| 角色 | 能力 |
+|------|------|
+| `read` | 查导图、搜索、待办/标签/关系图只读；`tools/list` 不含写入工具 |
+| `write` | 读 + 改导图/待办/标签/番茄钟/账本；不能 git、审计、加密节点 |
+| `owner` | 全部工具，含 `git_sync` / `encrypt_node` / `list_audit_*` |
+
+全局 `mcp.readonly=true` 时，即使 owner 也不能调用写入类工具（审计查询仍可用）。
+
+### 调用方
+
+| 来源 | 默认角色 |
+|------|----------|
+| MCP `Authorization: Bearer <key>` | 该 Key 在配置里的 `role` |
+| 遗留单项 `mcp.auth.apiKey` | `mcp.auth.role`（默认 `owner`） |
+| 网页会话 `/api/chat` | `read`（`mcp.web.readOnlyTools=true`）或 `write` |
+| 本机未开认证的桌面 MCP | `owner`（loopback 信任） |
+
+未知 Key **一律 401**。权限不足的 `tools/call` 返回 `isError` 文本，不执行。
+
+### 多把 Key：`mcp-access.json`
+
+放在配置目录（VPS 上为 `/data/docear/mcp-access.json`），改文件后下次请求自动加载：
+
+```json
+{
+  "keys": [
+    { "id": "cursor-owner", "name": "Cursor", "role": "owner", "secret": "tm_..." },
+    { "id": "guest", "name": "只读", "role": "read", "secret": "tm_..." }
+  ]
+}
+```
+
+也可用 `keyHash`（SHA-256 hex）代替明文 `secret`。模板见 [mcp-access.example.json](mcp-access.example.json)。
 
 ## 能力概览
 
@@ -66,7 +104,22 @@ webchat-<其他MAC>.db   ← 同步过来的同伴库（只读合并）
 Authorization: Bearer tm_your_mcp_key
 ```
 
-与网页账号相互独立。
+Cursor 远程 HTTP MCP 示例（经 HTTPS 反代，**不要**把 7720 对公网开放）：
+
+```json
+{
+  "mcpServers": {
+    "twigmark": {
+      "url": "https://twig.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer tm_your_mcp_key"
+      }
+    }
+  }
+}
+```
+
+Key 的角色决定该客户端能看到/调用哪些工具。网页账号与 MCP Key 相互独立。
 
 ## 安全建议
 

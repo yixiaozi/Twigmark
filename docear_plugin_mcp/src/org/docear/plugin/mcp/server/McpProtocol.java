@@ -44,7 +44,8 @@ public final class McpProtocol {
 			return success(id, JsonValue.ofMap(new LinkedHashMap<String, JsonValue>()));
 		}
 		if ("tools/list".equals(method)) {
-			return success(id, JsonValue.ofMap(singleEntry("tools", JsonValue.ofList(listTools()))));
+			return success(id, JsonValue.ofMap(singleEntry("tools",
+					JsonValue.ofList(McpPermissions.filterTools(listTools(), currentPrincipal())))));
 		}
 		if ("tools/call".equals(method)) {
 			return success(id, callTool(params));
@@ -86,76 +87,12 @@ public final class McpProtocol {
 
 	/** Web chat tool catalog — read-only subset when {@link DocearMcpConfig#isWebReadOnlyTools()}. */
 	public List<JsonValue> getWebToolDefinitions() {
-		if (!DocearMcpConfig.isWebReadOnlyTools()) {
-			return getToolDefinitions();
-		}
-		final List<JsonValue> all = getToolDefinitions();
-		final List<JsonValue> filtered = new ArrayList<JsonValue>();
-		for (int i = 0; i < all.size(); i++) {
-			final Map<String, JsonValue> tool = all.get(i).asMap();
-			final Map<String, JsonValue> fn = tool.containsKey("function") ? tool.get("function").asMap()
-					: new LinkedHashMap<String, JsonValue>();
-			final String name = fn.containsKey("name") ? fn.get("name").asString() : "";
-			if (!isWriteTool(name)) {
-				filtered.add(all.get(i));
-			}
-		}
-		return filtered;
+		final McpRole role = DocearMcpConfig.isWebReadOnlyTools() ? McpRole.READ : McpRole.WRITE;
+		return McpPermissions.filterTools(getToolDefinitions(), role);
 	}
 
 	public static boolean isWriteTool(final String name) {
-		return name != null && WRITE_TOOL_NAMES.contains(name);
-	}
-
-	private static final java.util.Set WRITE_TOOL_NAMES = buildWriteToolNames();
-
-	private static java.util.Set buildWriteToolNames() {
-		final java.util.Set set = new java.util.LinkedHashSet();
-		set.add("create_tag_group");
-		set.add("rename_tag_group");
-		set.add("move_tag_group");
-		set.add("delete_tag_group");
-		set.add("set_tag_group");
-		set.add("set_tag_color");
-		set.add("start_pomodoro");
-		set.add("pause_pomodoro");
-		set.add("stop_pomodoro");
-		set.add("ensure_finance_map");
-		set.add("add_finance_transaction");
-		set.add("add_finance_category");
-		set.add("add_finance_account");
-		set.add("set_finance_budget");
-		set.add("upsert_finance_subscription");
-		set.add("upsert_finance_coupon");
-		set.add("mark_finance_coupon_used");
-		set.add("delete_finance_node");
-		set.add("open_mindmap");
-		set.add("navigate_to_node");
-		set.add("add_node");
-		set.add("add_nodes");
-		set.add("change_node_text");
-		set.add("remove_node");
-		set.add("create_todo");
-		set.add("complete_todo");
-		set.add("set_reminder");
-		set.add("set_priority");
-		set.add("move_node");
-		set.add("set_node_folded");
-		set.add("set_node_link");
-		set.add("set_node_note");
-		set.add("encrypt_node");
-		set.add("decrypt_node");
-		set.add("remove_node_encryption");
-		set.add("set_node_tags");
-		set.add("toggle_pin");
-		set.add("set_node_icon");
-		set.add("set_recurring_reminder");
-		set.add("create_mindmap");
-		set.add("quick_capture");
-		set.add("sync_todoist");
-		set.add("export_workspace_snapshot");
-		set.add("git_sync");
-		return set;
+		return McpPermissions.isWriteTool(name);
 	}
 
 	/**
@@ -497,6 +434,12 @@ public final class McpProtocol {
 		String errorMessage = null;
 		String textResult = null;
 		try {
+			if (!McpPermissions.canCall(currentPrincipal(), name)) {
+				success = false;
+				errorMessage = McpPermissions.denyMessage(currentPrincipal(), name);
+				textResult = errorMessage;
+				return toolError(errorMessage);
+			}
 			textResult = dispatchTool(name, args);
 			return toolResult(textResult);
 		}
@@ -1140,6 +1083,23 @@ public final class McpProtocol {
 		content.add(JsonValue.ofMap(item));
 		result.put("content", JsonValue.ofList(content));
 		return JsonValue.ofMap(result);
+	}
+
+	private JsonValue toolError(final String text) {
+		final Map<String, JsonValue> result = new LinkedHashMap<String, JsonValue>(toolResult(text).asMap());
+		result.put("isError", JsonValue.ofBoolean(true));
+		return JsonValue.ofMap(result);
+	}
+
+	private static McpPrincipal currentPrincipal() {
+		final McpPrincipal principal = McpRequestContext.currentPrincipal();
+		if (principal != null) {
+			return principal;
+		}
+		if (DocearMcpConfig.isReadOnly()) {
+			return McpPrincipal.anonymousRead();
+		}
+		return McpPrincipal.localOwner();
 	}
 
 	private JsonValue resourceResult(final String uri, final String mimeType, final String text) {
