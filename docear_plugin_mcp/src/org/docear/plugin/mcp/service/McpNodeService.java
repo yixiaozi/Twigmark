@@ -31,7 +31,9 @@ import org.freeplane.features.icon.mindmapmode.MIconController;
 import org.freeplane.features.link.LinkController;
 import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.link.mindmapmode.MLinkController;
-import org.freeplane.features.map.MapController;
+import org.freeplane.features.encrypt.EncryptionConfig;
+import org.freeplane.features.encrypt.EncryptionController;
+import org.freeplane.features.map.EncryptionModel;
 import org.freeplane.features.map.NodeModel;
 import org.freeplane.features.map.mindmapmode.MMapController;
 import org.freeplane.features.mode.Controller;
@@ -183,6 +185,83 @@ public final class McpNodeService {
 				session.save();
 				final Map<String, JsonValue> result = McpMindMapService.writeResult(session);
 				result.put("nodeId", JsonValue.ofString(nodeId));
+				return JsonValue.ofMap(result).toJson();
+			}
+		});
+	}
+
+	public static String encryptNode(final String filePath, final String nodeId, final String password)
+			throws Exception {
+		ensureWritable();
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final McpMapWriteSession session = McpMapWriteSession.open(filePath);
+				final NodeModel node = session.requireNode(resolveNodeId(session, nodeId));
+				final EncryptionModel before = EncryptionModel.getModel(node);
+				final boolean alreadyEncrypted = before != null;
+				final boolean alreadyLocked = before != null && !before.isAccessible();
+				if (alreadyLocked) {
+					return encryptionResult(session, node, "encrypt", true, true, false);
+				}
+				final PasswordChoice choice = resolvePassword(password);
+				encryptionController().encryptAndLock(node, choice.password);
+				session.save();
+				return encryptionResult(session, node, "encrypt", alreadyEncrypted, false, choice.usedSavedPassword);
+			}
+		});
+	}
+
+	public static String decryptNode(final String filePath, final String nodeId, final String password)
+			throws Exception {
+		ensureWritable();
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final McpMapWriteSession session = McpMapWriteSession.open(filePath);
+				final NodeModel node = session.requireNode(resolveNodeId(session, nodeId));
+				final EncryptionModel before = EncryptionModel.getModel(node);
+				if (before == null) {
+					throw new IllegalArgumentException("Node is not encrypted.");
+				}
+				if (before.isAccessible()) {
+					return encryptionResult(session, node, "decrypt", true, true, false);
+				}
+				final PasswordChoice choice = resolvePassword(password);
+				if (!encryptionController().unlockWithPassword(node, choice.password)) {
+					throw new IllegalArgumentException("Wrong password.");
+				}
+				session.save();
+				return encryptionResult(session, node, "decrypt", true, false, choice.usedSavedPassword);
+			}
+		});
+	}
+
+	public static String removeNodeEncryption(final String filePath, final String nodeId, final String password)
+			throws Exception {
+		ensureWritable();
+		return (String) EdtRunner.run(new Task() {
+			public Object run() throws Exception {
+				final McpMapWriteSession session = McpMapWriteSession.open(filePath);
+				final NodeModel node = session.requireNode(resolveNodeId(session, nodeId));
+				final EncryptionModel before = EncryptionModel.getModel(node);
+				if (before == null) {
+					final Map<String, JsonValue> result = McpMindMapService.writeResult(session);
+					putEncryptionFields(result, node);
+					result.put("nodeId", JsonValue.ofString(node.getID()));
+					result.put("action", JsonValue.ofString("remove_encryption"));
+					result.put("removed", JsonValue.ofBoolean(false));
+					return JsonValue.ofMap(result).toJson();
+				}
+				final PasswordChoice choice = resolvePassword(password);
+				if (!encryptionController().removeEncryptionWithPassword(node, choice.password)) {
+					throw new IllegalArgumentException("Wrong password.");
+				}
+				session.save();
+				final Map<String, JsonValue> result = McpMindMapService.writeResult(session);
+				putEncryptionFields(result, node);
+				result.put("nodeId", JsonValue.ofString(node.getID()));
+				result.put("action", JsonValue.ofString("remove_encryption"));
+				result.put("removed", JsonValue.ofBoolean(true));
+				result.put("usedSavedPassword", JsonValue.ofBoolean(choice.usedSavedPassword));
 				return JsonValue.ofMap(result).toJson();
 			}
 		});
@@ -364,6 +443,7 @@ public final class McpNodeService {
 		data.put("jinji", JsonValue.ofNumber(Integer.valueOf(ReminderTaskAttributes.readJinjiFromNode(node))));
 
 		data.put("privacy", JsonValue.ofString(readPrivacyLevel(node)));
+		putEncryptionFields(data, node);
 
 		try {
 			final org.freeplane.view.swing.features.pomodoro.PomodoroExtension pomodoro =
@@ -482,6 +562,86 @@ public final class McpNodeService {
 
 	private static MMapController getMapController() {
 		return (MMapController) Controller.getCurrentModeController().getMapController();
+	}
+
+	private static EncryptionController encryptionController() {
+		final EncryptionController controller = (EncryptionController) Controller.getCurrentModeController()
+				.getExtension(EncryptionController.class);
+		if (controller == null) {
+			throw new IllegalStateException("EncryptionController is not available.");
+		}
+		return controller;
+	}
+
+	private static String resolveNodeId(final McpMapWriteSession session, final String nodeId) {
+		if (nodeId != null && nodeId.trim().length() > 0) {
+			return nodeId.trim();
+		}
+		try {
+			final NodeModel selected = Controller.getCurrentController().getSelection().getSelected();
+			if (selected != null && selected.getMap() == session.getMap()) {
+				return selected.getID();
+			}
+		}
+		catch (Exception ignored) {
+		}
+		throw new IllegalArgumentException("nodeId is required (or select a node in the target map).");
+	}
+
+	private static PasswordChoice resolvePassword(final String password) {
+		if (password != null && password.length() > 0) {
+			return new PasswordChoice(password, false);
+		}
+		if (EncryptionConfig.hasPassword()) {
+			return new PasswordChoice(EncryptionConfig.getPassword(), true);
+		}
+		throw new IllegalArgumentException(
+				"Password required. Pass password= or set a default in Encryption settings.");
+	}
+
+	private static String encryptionResult(final McpMapWriteSession session, final NodeModel node, final String action,
+			final boolean alreadyEncrypted, final boolean unchanged, final boolean usedSavedPassword) {
+		final Map<String, JsonValue> result = McpMindMapService.writeResult(session);
+		putEncryptionFields(result, node);
+		result.put("nodeId", JsonValue.ofString(node.getID()));
+		result.put("nodeText", JsonValue.ofString(plainText(node)));
+		result.put("action", JsonValue.ofString(action));
+		result.put("alreadyEncrypted", JsonValue.ofBoolean(alreadyEncrypted));
+		if ("encrypt".equals(action)) {
+			result.put("alreadyLocked", JsonValue.ofBoolean(unchanged));
+		}
+		else if ("decrypt".equals(action)) {
+			result.put("alreadyUnlocked", JsonValue.ofBoolean(unchanged));
+		}
+		result.put("usedSavedPassword", JsonValue.ofBoolean(usedSavedPassword));
+		return JsonValue.ofMap(result).toJson();
+	}
+
+	static void putEncryptionFields(final Map<String, JsonValue> data, final NodeModel node) {
+		final EncryptionModel enc = EncryptionModel.getModel(node);
+		final boolean encrypted = enc != null;
+		data.put("encrypted", JsonValue.ofBoolean(encrypted));
+		data.put("encryptionUnlocked", JsonValue.ofBoolean(encrypted && enc.isAccessible()));
+		data.put("visibleChildCount", JsonValue.ofNumber(Integer.valueOf(node.getChildCount())));
+	}
+
+	private static String plainText(final NodeModel node) {
+		try {
+			return TextController.getController().getPlainTextContent(node);
+		}
+		catch (Exception e) {
+			return node != null ? String.valueOf(node.toString()) : "";
+		}
+	}
+
+	private static final class PasswordChoice {
+		final String password;
+		final boolean usedSavedPassword;
+
+		PasswordChoice(final String password, final boolean usedSavedPassword) {
+			this.password = password;
+			this.usedSavedPassword = usedSavedPassword;
+		}
 	}
 
 	private static void ensureWritable() {

@@ -75,6 +75,141 @@ public class EncryptionController implements IExtension {
 		});
     }
 	/**
+	 * Encrypt the node (and its children) and lock it, without a UI dialog.
+	 * If already encrypted and unlocked, this only locks. Already-locked is a no-op.
+	 */
+	public void encryptAndLock(final NodeModel node, final String password) {
+		if (node == null) {
+			throw new IllegalArgumentException("node is required");
+		}
+		final String secret = requiredPassword(password);
+		final EncryptionModel existing = EncryptionModel.getModel(node);
+		if (existing != null && !existing.isAccessible()) {
+			return;
+		}
+		if (existing == null) {
+			encryptWithPassword(node, secret);
+		}
+		else if (existing.isAccessible()) {
+			existing.setEncrypter(new SingleDesEncrypter(new StringBuilder(secret)));
+		}
+		lockEncryptedNode(node);
+	}
+
+	/**
+	 * Unlock an encrypted node without a UI dialog.
+	 *
+	 * @return false if the password is wrong
+	 */
+	public boolean unlockWithPassword(final NodeModel node, final String password) {
+		if (node == null) {
+			throw new IllegalArgumentException("node is required");
+		}
+		final EncryptionModel encNode = EncryptionModel.getModel(node);
+		if (encNode == null) {
+			throw new IllegalArgumentException("Node is not encrypted.");
+		}
+		if (encNode.isAccessible()) {
+			return true;
+		}
+		final String secret = requiredPassword(password);
+		if (!encNode.decrypt(Controller.getCurrentModeController().getMapController(),
+		        new SingleDesEncrypter(new StringBuilder(secret)))) {
+			return false;
+		}
+		node.setFolded(false);
+		Controller.getCurrentModeController().getMapController().nodeRefresh(node);
+		return true;
+	}
+
+	/** Lock an already-encrypted, currently unlocked node. No-op if already locked. */
+	public void lockEncryptedNode(final NodeModel node) {
+		if (node == null) {
+			throw new IllegalArgumentException("node is required");
+		}
+		final ModeController mindMapController = Controller.getCurrentModeController();
+		final EncryptionModel encNode = EncryptionModel.getModel(node);
+		if (encNode == null) {
+			throw new IllegalArgumentException("Node is not encrypted.");
+		}
+		if (!encNode.isAccessible()) {
+			return;
+		}
+		if (encNode.getEncryptedContent(mindMapController.getMapController()) == null) {
+			throw new IllegalStateException("Could not encrypt node contents.");
+		}
+		encNode.setAccessible(false);
+		node.setFolded(true);
+		mindMapController.getMapController().nodeRefresh(node);
+	}
+
+	/**
+	 * Permanently remove encryption after unlocking if needed.
+	 *
+	 * @return false if the node was locked and the password is wrong
+	 */
+	public boolean removeEncryptionWithPassword(final NodeModel node, final String password) {
+		if (node == null) {
+			throw new IllegalArgumentException("node is required");
+		}
+		final EncryptionModel encryptedMindMapNode = EncryptionModel.getModel(node);
+		if (encryptedMindMapNode == null) {
+			return true;
+		}
+		if (!encryptedMindMapNode.isAccessible()) {
+			if (!unlockWithPassword(node, password)) {
+				return false;
+			}
+		}
+		final IActor actor = new IActor() {
+			public void act() {
+				node.removeExtension(encryptedMindMapNode);
+				Controller.getCurrentModeController().getMapController().nodeChanged(node);
+			}
+
+			public String getDescription() {
+				return "removeEncryption";
+			}
+
+			public void undo() {
+				node.addExtension(encryptedMindMapNode);
+				Controller.getCurrentModeController().getMapController().nodeChanged(node);
+			}
+		};
+		Controller.getCurrentModeController().execute(actor, node.getMap());
+		return true;
+	}
+
+	private static String requiredPassword(final String password) {
+		if (password == null || password.length() == 0) {
+			throw new IllegalArgumentException(
+			        "Password required. Pass password= or set a default in Encryption settings.");
+		}
+		return password;
+	}
+
+	private void encryptWithPassword(final NodeModel node, final String password) {
+		final EncryptionModel encryptedMindMapNode = new EncryptionModel(node);
+		encryptedMindMapNode.setEncrypter(new SingleDesEncrypter(new StringBuilder(password)));
+		final IActor actor = new IActor() {
+			public void act() {
+				node.addExtension(encryptedMindMapNode);
+				Controller.getCurrentModeController().getMapController().nodeChanged(node);
+			}
+
+			public String getDescription() {
+				return "encrypt";
+			}
+
+			public void undo() {
+				node.removeExtension(encryptedMindMapNode);
+				Controller.getCurrentModeController().getMapController().nodeChanged(node);
+			}
+		};
+		Controller.getCurrentModeController().execute(actor, node.getMap());
+	}
+
+	/**
 	 * @param e 
 	 */
 	public void toggleCryptState(final NodeModel node) {
@@ -98,7 +233,9 @@ public class EncryptionController implements IExtension {
 			}
 			final Controller controller = Controller.getCurrentController();
 			final IMapSelection selection = controller.getSelection();
-			selection.selectAsTheOnlyOneSelected(node);
+			if (selection != null) {
+				selection.selectAsTheOnlyOneSelected(node);
+			}
 			final IActor actor = new IActor() {
 				public void act() {
 					encNode.setAccessible(!wasAccessible);

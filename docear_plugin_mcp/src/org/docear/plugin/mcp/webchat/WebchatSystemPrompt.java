@@ -34,6 +34,7 @@ public final class WebchatSystemPrompt {
 		sb.append("- 静默读图：get_mindmap_json(filePath)\n");
 		sb.append("- 搜索节点：search_nodes(query, filePath?, projectId?, modifiedWithinDays?)\n");
 		sb.append("- 节点详情：get_node_details(filePath, nodeId)\n");
+		sb.append("- 节点加密/解密：encrypt_node / decrypt_node / remove_node_encryption（password 可选，默认用加密设置）\n");
 		sb.append("- 批量加节点：add_nodes(parentNodeId, nodes[{text, children?}], filePath?)\n");
 		sb.append("- 待办/提醒：list_todos, list_reminders, list_overdue, create_todo…\n");
 		sb.append("- 番茄/专注：get_running_pomodoro, get_pomodoro_stats, get_pomodoro_history,");
