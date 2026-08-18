@@ -19,15 +19,16 @@
         <div class="auth-brand">
           <div class="logo-mark" aria-hidden="true"></div>
           <h1>Twigmark</h1>
-              <p class="lede">导图库网页版：键盘友好浏览、搜索，并对任意导图提问。</p>
+              <p class="lede">导图库网页版。未登录也能点选问题了解 Twigmark；登录后可浏览导图并自由提问。</p>
         </div>
         <form class="auth-card" id="auth-form" autocomplete="on">
-          <p class="muted" id="auth-hint">登录后访问导图库与对话。</p>
+          <p class="muted" id="auth-hint">登录后可浏览导图库并自由提问。也可以先以游客试用预设问答。</p>
           <label>账号 <input id="auth-user" name="username" autocomplete="username" /></label>
           <label>密码 <input id="auth-pass" name="password" type="password" autocomplete="current-password" /></label>
           <div class="auth-actions">
             <button type="submit" id="btn-login" class="primary">登录</button>
             <button type="button" id="btn-register" class="ghost">首次注册</button>
+            <button type="button" id="btn-guest" class="ghost">不登录，试用对话</button>
           </div>
           <p id="auth-error" class="err"></p>
           <p class="muted tiny auth-foot"><a href="./shares.html">浏览公开问答库</a></p>
@@ -45,14 +46,16 @@
           </div>
         </div>
         <nav class="app-nav" aria-label="主导航">
-          <button type="button" class="nav-btn active" data-view="library">导图库</button>
+          <button type="button" class="nav-btn active" data-view="library" data-member-only>导图库</button>
           <button type="button" class="nav-btn" data-view="chat">对话</button>
-          <button type="button" class="nav-btn" data-view="shares">公开</button>
-          <button type="button" class="nav-btn" data-view="settings">模型</button>
+          <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集箱</button>
+          <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
+          <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>
         </nav>
         <div class="app-bar-right">
           <a class="ghost small shares-link" href="./shares.html" title="公开问答库">公开库</a>
           <span id="who" class="pill">…</span>
+          <button type="button" id="btn-show-login" class="ghost small hidden">登录</button>
           <button type="button" id="btn-logout" class="ghost small">退出</button>
         </div>
       </header>
@@ -153,11 +156,19 @@
       <section id="view-chat" class="view hidden">
         <div class="chat-layout">
           <aside class="sidebar">
-            <div class="side-top">
+            <div class="side-top" id="member-side-top">
               <span class="side-label">历史</span>
               <button type="button" id="btn-new" class="ghost small">新对话</button>
             </div>
             <div id="conv-list" class="conv-list"></div>
+            <div id="guest-idea-box" class="guest-idea-box hidden">
+              <h3>功能搜集箱</h3>
+              <p class="muted tiny">游客不能自由提问。把希望增加的功能写在这里，主人登录后可在「搜集箱」查看。</p>
+              <textarea id="idea-text" rows="4" maxlength="2000" placeholder="希望 Twigmark 增加什么？"></textarea>
+              <input id="idea-contact" maxlength="120" placeholder="联系方式（可选）" />
+              <button type="button" id="btn-idea" class="primary small">投进搜集箱</button>
+              <p id="idea-note" class="muted tiny"></p>
+            </div>
           </aside>
           <section class="main chat-main">
             <header class="top chat-top">
@@ -178,9 +189,10 @@
             <main id="chat" class="msg-stream chat" aria-live="polite"></main>
             <footer class="composer">
               <div class="composer-box">
+                <div id="preset-chips" class="preset-chips hidden"></div>
                 <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送，Shift+Enter 换行）"></textarea>
                 <div class="composer-bar">
-                  <span class="muted tiny">用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答</span>
+                  <span class="muted tiny" id="composer-hint">用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答</span>
                   <button type="button" id="btn-send" class="primary">发送</button>
                 </div>
               </div>
@@ -199,6 +211,21 @@
             <button type="button" id="btn-refresh-shares" class="ghost small">刷新</button>
           </header>
           <div id="shares-manage-list" class="shares-manage-list">
+            <p class="muted">加载中…</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="view-ideas" class="view hidden">
+        <div class="settings-page">
+          <header class="shares-manage-head">
+            <div>
+              <h2>功能搜集箱</h2>
+              <p class="muted tiny">游客提交的功能想法。仅登录后可见。</p>
+            </div>
+            <button type="button" id="btn-refresh-ideas" class="ghost small">刷新</button>
+          </header>
+          <div id="ideas-list" class="ideas-list">
             <p class="muted">加载中…</p>
           </div>
         </div>
@@ -273,10 +300,11 @@
       </section>
 
       <nav class="mobile-nav" aria-label="移动导航">
-        <button type="button" class="nav-btn active" data-view="library">导图</button>
+        <button type="button" class="nav-btn active" data-view="library" data-member-only>导图</button>
         <button type="button" class="nav-btn" data-view="chat">对话</button>
-        <button type="button" class="nav-btn" data-view="shares">公开</button>
-        <button type="button" class="nav-btn" data-view="settings">模型</button>
+        <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集</button>
+        <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
+        <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>
       </nav>
     </div>
 

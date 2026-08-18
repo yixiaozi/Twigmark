@@ -21,7 +21,7 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 5;
+	private static final int SCHEMA_VERSION = 6;
 	public static final String SOURCE_WEB = "web";
 	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
@@ -947,6 +947,15 @@ public final class WebchatDatabase {
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_msg_conv ON messages(conversation_id, created_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_profile_user ON llm_profiles(username, is_default)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_conv_map ON conversations(username, source, map_key)");
+			st.execute("CREATE TABLE IF NOT EXISTS feature_ideas ("
+					+ "id TEXT PRIMARY KEY,"
+					+ "created_at INTEGER NOT NULL,"
+					+ "text TEXT NOT NULL,"
+					+ "contact TEXT NOT NULL DEFAULT '',"
+					+ "ip TEXT NOT NULL DEFAULT '',"
+					+ "user_agent TEXT NOT NULL DEFAULT ''"
+					+ ")");
+			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_ideas_created ON feature_ideas(created_at)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_share_msg ON message_shares(message_id)");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_share_created ON message_shares(created_at DESC)");
 			st.execute("INSERT OR REPLACE INTO webchat_meta(key, value) VALUES('schema_version', '"
@@ -980,6 +989,58 @@ public final class WebchatDatabase {
 			throw new SQLException("SQLite JDBC driver not found", e);
 		}
 		return DriverManager.getConnection(JDBC_PREFIX + dbFile.getAbsolutePath());
+	}
+
+	public void insertFeatureIdea(final String id, final String text, final String contact, final String ip,
+			final String userAgent) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"INSERT INTO feature_ideas(id, created_at, text, contact, ip, user_agent) VALUES(?,?,?,?,?,?)");
+			ps.setString(1, id);
+			ps.setLong(2, System.currentTimeMillis());
+			ps.setString(3, text);
+			ps.setString(4, contact == null ? "" : contact);
+			ps.setString(5, ip == null ? "" : ip);
+			ps.setString(6, userAgent == null ? "" : userAgent);
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public List<Map<String, Object>> listFeatureIdeas(final int limit) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		final List rows = new ArrayList();
+		final int cap = limit < 1 ? 100 : Math.min(limit, 300);
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT id, created_at, text, contact, ip FROM feature_ideas ORDER BY created_at DESC LIMIT ?");
+			ps.setInt(1, cap);
+			rs = ps.executeQuery();
+			while (rs.next()) {
+				final Map row = new LinkedHashMap();
+				row.put("id", rs.getString(1));
+				row.put("createdAt", Long.valueOf(rs.getLong(2)));
+				row.put("text", rs.getString(3));
+				row.put("contact", rs.getString(4));
+				row.put("ip", rs.getString(5));
+				rows.add(row);
+			}
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+		return rows;
 	}
 
 	private static String nullToEmpty(final String value) {

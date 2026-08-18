@@ -16,6 +16,7 @@ import org.docear.plugin.mcp.audit.McpRequestContext;
 import org.docear.plugin.mcp.json.JsonParser;
 import org.docear.plugin.mcp.json.JsonValue;
 import org.docear.plugin.mcp.json.JsonWriter;
+import org.docear.plugin.mcp.webchat.GuestCatalog;
 import org.docear.plugin.mcp.webchat.WebchatSystemPrompt;
 import org.freeplane.core.util.LogUtils;
 
@@ -43,6 +44,17 @@ public final class McpWebAgent {
 
 	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history, final String baseUrl,
 			final String apiKey, final String model, final String focusMapFile) throws Exception {
+		return chat(userMessage, history, baseUrl, apiKey, model, focusMapFile, true, null);
+	}
+
+	public Map<String, JsonValue> chatFaq(final String userMessage, final String baseUrl, final String apiKey,
+			final String model) throws Exception {
+		return chat(userMessage, null, baseUrl, apiKey, model, null, false, GuestCatalog.systemPrompt());
+	}
+
+	public Map<String, JsonValue> chat(final String userMessage, final List<JsonValue> history, final String baseUrl,
+			final String apiKey, final String model, final String focusMapFile, final boolean enableTools,
+			final String systemPromptOverride) throws Exception {
 		final String key = apiKey == null ? "" : apiKey.trim();
 		if (key.length() == 0) {
 			throw new IllegalStateException(
@@ -60,7 +72,10 @@ public final class McpWebAgent {
 		}
 
 		final List<JsonValue> messages = new ArrayList<JsonValue>();
-		messages.add(message("system", systemPromptForFocus(focusMapFile)));
+		final String system = systemPromptOverride != null && systemPromptOverride.trim().length() > 0
+				? systemPromptOverride.trim()
+				: systemPromptForFocus(focusMapFile);
+		messages.add(message("system", system));
 		if (history != null) {
 			for (int i = 0; i < history.size(); i++) {
 				final Map<String, JsonValue> item = history.get(i).asMap();
@@ -76,7 +91,8 @@ public final class McpWebAgent {
 		}
 		messages.add(message("user", message));
 
-		final List<JsonValue> openaiTools = toOpenAiTools(protocol.getWebToolDefinitions());
+		final List<JsonValue> openaiTools = enableTools ? toOpenAiTools(protocol.getWebToolDefinitions())
+				: new ArrayList<JsonValue>();
 		final List<JsonValue> toolTrace = new ArrayList<JsonValue>();
 		final List<JsonValue> rounds = new ArrayList<JsonValue>();
 		final StringBuilder allReasoning = new StringBuilder();
@@ -110,8 +126,11 @@ public final class McpWebAgent {
 			}
 			LlmThoughtTrace.appendParagraph(allReasoning, reasoning);
 
-			if (toolCalls.isEmpty()) {
+			if (toolCalls.isEmpty() || !enableTools) {
 				finalReply = content;
+				if (!enableTools && toolCalls.size() > 0 && finalReply.length() == 0) {
+					finalReply = "游客对话不能查询导图。请点选预设问题，或登录后再提问。";
+				}
 				rounds.add(JsonValue.ofMap(LlmThoughtTrace.roundMap(reasoning, content, new ArrayList<JsonValue>())));
 				break;
 			}

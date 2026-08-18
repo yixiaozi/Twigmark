@@ -59,6 +59,8 @@
   var mapsWarmPoll = null;
   var editingProfileId = "";
   var creatingProfile = false;
+  var guestMode = false;
+  var guestPresets = [];
 
   var nodeById = {};
   var parentById = {};
@@ -111,8 +113,178 @@
     appView.classList.remove("hidden");
   }
 
+  function toggleHidden(el, hide) {
+    if (!el) return;
+    el.classList.toggle("hidden", !!hide);
+  }
+
+  function setGuestMode(on) {
+    guestMode = !!on;
+    document.body.classList.toggle("guest-mode", guestMode);
+    document.querySelectorAll("[data-member-only]").forEach(function (el) {
+      toggleHidden(el, guestMode);
+    });
+    toggleHidden(document.getElementById("guest-idea-box"), !guestMode);
+    toggleHidden(document.getElementById("preset-chips"), !guestMode);
+    toggleHidden(document.getElementById("btn-show-login"), !guestMode);
+    toggleHidden(document.getElementById("btn-logout"), guestMode);
+    toggleHidden(document.getElementById("member-side-top"), guestMode);
+    toggleHidden(convList, guestMode);
+    toggleHidden(inputEl, guestMode);
+    toggleHidden(sendBtn, guestMode);
+    if (inputEl) inputEl.disabled = guestMode;
+    if (sendBtn) sendBtn.disabled = guestMode;
+    var hint = document.getElementById("composer-hint");
+    if (hint) {
+      hint.textContent = guestMode
+        ? "游客只能点选上方问题，不能自由输入。左侧可提交功能想法。"
+        : "用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答";
+    }
+    who.textContent = guestMode ? "游客试用" : username || "已登录";
+    if (guestMode) {
+      conversationId = "";
+      renderPresetChips();
+    } else {
+      var chips = document.getElementById("preset-chips");
+      if (chips) chips.innerHTML = "";
+    }
+  }
+
+  function enterGuest() {
+    token = "";
+    username = "";
+    conversationId = "";
+    if (convList) convList.innerHTML = "";
+    setGuestMode(true);
+    showApp();
+    switchView("chat");
+    renderGuestWelcome();
+  }
+
+  function renderPresetChips() {
+    var wrap = document.getElementById("preset-chips");
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    guestPresets.forEach(function (p) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "preset-chip";
+      btn.textContent = p.title || p.id;
+      btn.addEventListener("click", function () {
+        sendGuestPreset(p);
+      });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function renderGuestWelcome() {
+    if (!chatEl) return;
+    chatEl.innerHTML = "";
+    if (convTitleInput) convTitleInput.value = "游客试用";
+    addMessage(
+      chatEl,
+      "system",
+      "未登录只能点选下方预设问题，无法自由输入，以免误查私人导图。登录后可浏览导图库并提问。左侧「功能搜集箱」可提交希望增加的能力。"
+    );
+    setStatus("游客试用", "ok");
+  }
+
+  function sendGuestPreset(preset) {
+    if (busy || !preset || !preset.id) return;
+    busy = true;
+    document.querySelectorAll(".preset-chip").forEach(function (btn) {
+      btn.disabled = true;
+    });
+    addMessage(chatEl, "user", preset.title || preset.id);
+    var pending = addThinkingPlaceholder(chatEl);
+    setStatus("思索中…", "warn");
+    api("/guest/chat", {
+      method: "POST",
+      body: JSON.stringify({ presetId: preset.id }),
+    })
+      .then(function (res) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
+        if (!res.ok) {
+          addMessage(chatEl, "assistant", "错误：" + ((res.body && res.body.error) || res.status));
+          setStatus("出错", "err");
+          return;
+        }
+        addMessage(chatEl, "assistant", (res.body && res.body.reply) || "", (res.body && res.body.model) || "");
+        setStatus("游客试用", "ok");
+      })
+      .catch(function (e) {
+        if (pending && pending.parentNode) pending.parentNode.removeChild(pending);
+        addMessage(chatEl, "assistant", "网络错误：" + (e && e.message ? e.message : e));
+        setStatus("网络错误", "err");
+      })
+      .then(function () {
+        busy = false;
+        document.querySelectorAll(".preset-chip").forEach(function (btn) {
+          btn.disabled = false;
+        });
+      });
+  }
+
+  function submitIdea() {
+    var textEl = document.getElementById("idea-text");
+    var contactEl = document.getElementById("idea-contact");
+    var note = document.getElementById("idea-note");
+    var text = ((textEl && textEl.value) || "").trim();
+    if (note) note.textContent = "";
+    api("/guest/ideas", {
+      method: "POST",
+      body: JSON.stringify({
+        text: text,
+        contact: ((contactEl && contactEl.value) || "").trim(),
+      }),
+    }).then(function (res) {
+      if (!res.ok) {
+        if (note) note.textContent = (res.body && res.body.error) || "提交失败";
+        return;
+      }
+      if (textEl) textEl.value = "";
+      if (note) note.textContent = "已投进搜集箱，谢谢。";
+      toast("已投进搜集箱");
+    });
+  }
+
+  function loadIdeas() {
+    var el = document.getElementById("ideas-list");
+    if (!el) return;
+    el.innerHTML = '<p class="muted">加载中…</p>';
+    api("/guest/ideas").then(function (res) {
+      if (!res.ok) {
+        el.innerHTML = '<p class="err">' + escapeHtml((res.body && res.body.error) || "无法加载") + "</p>";
+        return;
+      }
+      var ideas = (res.body && res.body.ideas) || [];
+      if (!ideas.length) {
+        el.innerHTML = '<p class="muted">还没有人投递想法。</p>';
+        return;
+      }
+      el.innerHTML = "";
+      ideas.forEach(function (idea) {
+        var card = document.createElement("article");
+        card.className = "idea-card";
+        var t = document.createElement("p");
+        t.className = "idea-text";
+        t.textContent = idea.text || "";
+        var meta = document.createElement("p");
+        meta.className = "muted tiny";
+        var bits = [formatTime(idea.createdAt)];
+        if (idea.contact) bits.push(idea.contact);
+        if (idea.ip) bits.push(idea.ip);
+        meta.textContent = bits.filter(Boolean).join(" · ");
+        card.appendChild(t);
+        card.appendChild(meta);
+        el.appendChild(card);
+      });
+    });
+  }
+
   function switchView(name) {
-    ["library", "chat", "settings", "shares"].forEach(function (v) {
+    if (guestMode && name !== "chat") name = "chat";
+    ["library", "chat", "settings", "shares", "ideas"].forEach(function (v) {
       var el = document.getElementById("view-" + v);
       if (el) el.classList.toggle("hidden", v !== name);
     });
@@ -120,6 +292,11 @@
       btn.classList.toggle("active", btn.getAttribute("data-view") === name);
     });
     if (name === "chat") {
+      if (guestMode) {
+        if (!chatEl.childNodes.length) renderGuestWelcome();
+        scrollToBottom(chatEl);
+        return;
+      }
       loadConversations();
       loadProfilesInto(profileSelect);
       scrollToBottom(chatEl);
@@ -133,6 +310,9 @@
     }
     if (name === "shares") {
       loadOwnShares();
+    }
+    if (name === "ideas") {
+      loadIdeas();
     }
   }
 
@@ -565,12 +745,13 @@
       var s = res.body;
       var regBtn = document.getElementById("btn-register");
       if (s.registrationOpen) {
-        authHint.textContent = "首次使用请注册唯一账号。导图库与对话共用此登录。";
+        authHint.textContent = "首次使用请注册唯一账号。也可以先不登录，点选预设问题试用对话。";
         if (regBtn) regBtn.classList.remove("hidden");
       } else {
-        authHint.textContent = "请登录。推荐配置 OpenRouter 后即可对导图提问。";
+        authHint.textContent = "登录后可浏览导图并自由提问。也可以先以游客点选预设问题。";
         if (regBtn) regBtn.classList.add("hidden");
       }
+      if (s.presets && s.presets.length) guestPresets = s.presets;
       if (token) {
         return api("/me").then(function (meRes) {
           if (meRes.ok && meRes.body) {
@@ -589,6 +770,7 @@
     username = body.username || "";
     localStorage.setItem(TOKEN_KEY, token);
     who.textContent = username;
+    setGuestMode(false);
     showApp();
     switchView("library");
     return Promise.all([loadProfiles(), loadMaps(), loadConversations()]);
@@ -757,7 +939,8 @@
         if (res.status === 401) {
           token = "";
           localStorage.removeItem(TOKEN_KEY);
-          showAuth("请重新登录");
+          enterGuest();
+          toast("登录已过期，已切换到游客试用");
         }
         return;
       }
@@ -1414,7 +1597,7 @@
   }
 
   function sendChat() {
-    if (busy) return;
+    if (guestMode || busy) return;
     var text = (inputEl.value || "").trim();
     if (!text) return;
     busy = true;
@@ -1439,7 +1622,8 @@
           if (res.status === 401) {
             token = "";
             localStorage.removeItem(TOKEN_KEY);
-            showAuth("请重新登录");
+            enterGuest();
+            toast("登录已过期，已切换到游客试用");
           }
           return;
         }
@@ -1480,13 +1664,21 @@
   document.getElementById("btn-register").addEventListener("click", function () {
     doAuth(true);
   });
+  document.getElementById("btn-guest").addEventListener("click", function () {
+    enterGuest();
+  });
+  document.getElementById("btn-show-login").addEventListener("click", function () {
+    showAuth("");
+  });
   document.getElementById("btn-logout").addEventListener("click", function () {
     api("/logout", { method: "POST" }).finally(function () {
-      token = "";
       localStorage.removeItem(TOKEN_KEY);
-      showAuth("");
+      enterGuest();
+      toast("已退出，正在游客试用");
     });
   });
+  document.getElementById("btn-idea").addEventListener("click", submitIdea);
+  document.getElementById("btn-refresh-ideas").addEventListener("click", loadIdeas);
   document.getElementById("btn-refresh-maps").addEventListener("click", loadMaps);
   mapFilter.addEventListener("input", function () {
     clearTimeout(filterTimer);
@@ -1624,18 +1816,19 @@
 
   refreshStatus().then(function () {
     if (!token) {
-      showAuth("");
+      enterGuest();
       return;
     }
     api("/me").then(function (res) {
       if (!res.ok) {
         token = "";
         localStorage.removeItem(TOKEN_KEY);
-        showAuth("");
+        enterGuest();
         return;
       }
       username = res.body.username;
       who.textContent = username;
+      setGuestMode(false);
       showApp();
       switchView("library");
       loadProfiles();

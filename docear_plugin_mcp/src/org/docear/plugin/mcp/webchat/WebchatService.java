@@ -143,6 +143,53 @@ public final class WebchatService {
 		return username;
 	}
 
+	public static String optionalUsername(final String token) {
+		if (token == null || token.trim().length() == 0) {
+			return "";
+		}
+		try {
+			return requireUsername(token);
+		}
+		catch (Exception e) {
+			return "";
+		}
+	}
+
+	public static Map submitFeatureIdea(final String textRaw, final String contactRaw, final String ip,
+			final String userAgent) throws Exception {
+		final String text = sanitizeIdea(textRaw, 2000);
+		if (text.length() < 4) {
+			throw new IllegalArgumentException("请写得再具体一点（至少 4 个字）");
+		}
+		final String contact = sanitizeIdea(contactRaw, 120);
+		final String id = WebchatPassword.newId();
+		WebchatDatabase.local().insertFeatureIdea(id, text, contact, ip == null ? "" : ip,
+				userAgent == null ? "" : userAgent);
+		final Map result = new LinkedHashMap();
+		result.put("id", id);
+		result.put("ok", Boolean.TRUE);
+		return result;
+	}
+
+	public static List listFeatureIdeas(final int limit) throws Exception {
+		return WebchatDatabase.local().listFeatureIdeas(limit);
+	}
+
+	private static String sanitizeIdea(final String raw, final int max) {
+		if (raw == null) {
+			return "";
+		}
+		final StringBuilder sb = new StringBuilder();
+		final String trimmed = raw.trim();
+		for (int i = 0; i < trimmed.length() && sb.length() < max; i++) {
+			final char ch = trimmed.charAt(i);
+			if (ch == '\n' || ch == '\r' || ch == '\t' || ch >= 32) {
+				sb.append(ch);
+			}
+		}
+		return sb.toString().trim();
+	}
+
 	public static List<Map<String, Object>> listProfiles(final String username) throws Exception {
 		final Map byId = new LinkedHashMap();
 		final List dbs = openAll();

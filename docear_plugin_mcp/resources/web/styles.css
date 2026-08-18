@@ -575,6 +575,46 @@ kbd {
   display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding-top: 0.35rem;
 }
 
+.preset-chips {
+  display: flex; flex-wrap: wrap; gap: 0.45rem; padding: 0.15rem 0.15rem 0.55rem;
+}
+.preset-chip {
+  border: 1px solid var(--line); background: rgba(255,255,255,0.03);
+  color: var(--text); border-radius: 999px; padding: 0.4rem 0.8rem; cursor: pointer;
+  font-size: 0.86rem;
+}
+.preset-chip:hover {
+  border-color: rgba(95, 208, 187, 0.45); color: var(--accent-hi);
+  background: var(--accent-dim);
+}
+.preset-chip:disabled { opacity: 0.55; cursor: wait; }
+
+.guest-idea-box {
+  margin-top: 0.85rem; padding: 0.85rem 0.8rem; border: 1px solid var(--line);
+  border-radius: 14px; background: rgba(6, 10, 18, 0.4); display: grid; gap: 0.5rem;
+}
+.guest-idea-box h3 { margin: 0; font-size: 0.95rem; }
+.guest-idea-box textarea, .guest-idea-box input {
+  width: 100%; border: 1px solid var(--line); background: rgba(8, 14, 24, 0.72);
+  color: var(--text); border-radius: 12px; padding: 0.6rem 0.7rem; min-width: 0;
+}
+.guest-idea-box textarea { resize: vertical; min-height: 84px; }
+.guest-idea-box input:focus, .guest-idea-box textarea:focus {
+  outline: none; border-color: rgba(95, 208, 187, 0.55);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.ideas-list { display: grid; gap: 0.7rem; }
+.idea-card {
+  border: 1px solid var(--line); border-radius: 14px; padding: 0.85rem 0.95rem;
+  background: rgba(6, 10, 18, 0.35);
+}
+.idea-text { margin: 0 0 0.4rem; white-space: pre-wrap; line-height: 1.5; }
+
+body.guest-mode .title-edit,
+body.guest-mode .top-actions { display: none !important; }
+body.guest-mode #btn-logout { display: none !important; }
+
 .settings-page { max-width: 1080px; margin: 0 auto; padding: 1.25rem 1rem 2rem; overflow: auto; height: 100%; }
 .settings-split {
   display: grid; grid-template-columns: minmax(240px, 280px) minmax(0, 1fr); gap: 1.1rem;
@@ -757,7 +797,7 @@ select {
   .app { grid-template-rows: auto 1fr var(--mobile-nav-h); }
   .app-nav, .app-bar-right .pill { display: none; }
   .mobile-nav {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.25rem;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 0.25rem;
     border-top: 1px solid var(--line); background: rgba(6, 10, 18, 0.92);
     padding: 0.4rem 0.55rem calc(0.4rem + env(safe-area-inset-bottom));
   }

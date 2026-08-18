@@ -200,6 +200,18 @@ public final class McpHttpServer {
 				webchatApi.handleChat(exchange, readBody(exchange));
 				return;
 			}
+			if ("/api/guest/chat".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleGuestChat(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/guest/ideas".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleSubmitIdea(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/guest/ideas".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleListIdeas(exchange);
+				return;
+			}
 			if ("/api/maps".equals(path) && "GET".equalsIgnoreCase(method)) {
 				WebMapsApi.handleListMaps(exchange);
 				return;

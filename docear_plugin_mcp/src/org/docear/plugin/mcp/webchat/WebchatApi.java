@@ -36,7 +36,10 @@ public final class WebchatApi {
 		final boolean hasUsers = WebchatService.anyUserExists();
 		map.put("hasUsers", JsonValue.ofBoolean(hasUsers));
 		map.put("registrationOpen", JsonValue.ofBoolean(!hasUsers));
-		map.put("accountRequired", JsonValue.ofBoolean(true));
+		map.put("accountRequired", JsonValue.ofBoolean(false));
+		map.put("guestChat", JsonValue.ofBoolean(true));
+		map.put("llmConfigured", JsonValue.ofBoolean(WebchatService.isSharedLlmConfigured()));
+		map.put("presets", JsonValue.ofList(WebchatService.toJsonMaps(GuestCatalog.listPublic())));
 		return JsonWriter.write(JsonValue.ofMap(map));
 	}
 
@@ -501,6 +504,87 @@ public final class WebchatApi {
 		catch (Exception e) {
 			WebSecurity.logAndSanitize("webchat chat failed", e);
 			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleGuestChat(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			WebSecurity.requireRateLimit("guest-chat", exchange, 12);
+			if (!WebchatService.isSharedLlmConfigured()) {
+				throw new IllegalStateException("主人尚未配置大模型，游客对话暂不可用");
+			}
+			final Map args = JsonParser.parse(body).asMap();
+			final String presetId = str(args, "presetId");
+			final GuestCatalog.Preset preset = GuestCatalog.find(presetId);
+			if (preset == null) {
+				throw new IllegalArgumentException("unknown preset");
+			}
+			final String owner = WebchatService.getSharedOwnerUsername();
+			final Map endpoint = WebchatService.resolveLlmEndpoint(owner, "");
+			McpRequestContext.beginWeb("guest", McpRole.READ);
+			final Map<String, JsonValue> result;
+			try {
+				result = webAgent.chatFaq(preset.prompt, nullToEmpty((String) endpoint.get("baseUrl")),
+						nullToEmpty((String) endpoint.get("apiKey")), nullToEmpty((String) endpoint.get("model")));
+			}
+			finally {
+				McpRequestContext.end();
+			}
+			final Map<String, JsonValue> out = new LinkedHashMap<String, JsonValue>();
+			out.put("presetId", JsonValue.ofString(preset.id));
+			out.put("title", JsonValue.ofString(preset.title));
+			out.put("reply", result.get("reply"));
+			out.put("model", result.get("model"));
+			if (result.containsKey("reasoning") && result.get("reasoning") != null) {
+				out.put("reasoning", result.get("reasoning"));
+			}
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(out)));
+		}
+		catch (IllegalArgumentException e) {
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
+		}
+		catch (IllegalStateException e) {
+			writeJson(exchange, 400, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			WebSecurity.logAndSanitize("guest chat failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleSubmitIdea(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			WebSecurity.requireRateLimit("guest-idea", exchange, 8);
+			final Map args = JsonParser.parse(body).asMap();
+			final String ua = header(exchange, "User-Agent");
+			final Map result = WebchatService.submitFeatureIdea(str(args, "text"), str(args, "contact"),
+					WebSecurity.clientIp(exchange), ua);
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(result))));
+		}
+		catch (IllegalArgumentException e) {
+			final int code = e.getMessage() != null && e.getMessage().indexOf("too many") >= 0 ? 429 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			WebSecurity.logAndSanitize("feature idea failed", e);
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleListIdeas(final HttpExchange exchange) throws IOException {
+		try {
+			WebchatService.requireUsername(extractSessionToken(exchange));
+			final List rows = WebchatService.listFeatureIdeas(200);
+			final Map map = new LinkedHashMap();
+			map.put("ideas", JsonValue.ofList(WebchatService.toJsonMaps(rows)));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
+		}
+		catch (IllegalArgumentException e) {
+			writeJson(exchange, 401, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(e.getMessage()));
 		}
 	}
 
