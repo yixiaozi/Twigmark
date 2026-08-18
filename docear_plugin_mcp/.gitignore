@@ -2,3 +2,4 @@ _data/
 build_audit_test/
 build_access_test/
 build_web_audit_test/
+build_mindmap_paths_test/

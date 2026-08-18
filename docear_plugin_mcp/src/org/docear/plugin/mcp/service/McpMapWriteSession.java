@@ -107,6 +107,29 @@ final class McpMapWriteSession {
 		}
 	}
 
+	static void rememberHeadlessMap(final File file, final MapModel map) {
+		if (file == null || map == null) {
+			return;
+		}
+		try {
+			final String cacheKey = file.getCanonicalPath();
+			synchronized (CACHE_LOCK) {
+				HEADLESS_CACHE.put(cacheKey, map);
+				while (HEADLESS_CACHE.size() > HEADLESS_CACHE_MAX) {
+					final Iterator it = HEADLESS_CACHE.keySet().iterator();
+					if (!it.hasNext()) {
+						break;
+					}
+					it.next();
+					it.remove();
+				}
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("MCP rememberHeadlessMap failed: " + e.getMessage());
+		}
+	}
+
 	MapModel getMap() {
 		return map;
 	}

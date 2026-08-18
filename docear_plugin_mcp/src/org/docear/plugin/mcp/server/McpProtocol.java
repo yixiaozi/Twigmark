@@ -392,8 +392,8 @@ public final class McpProtocol {
 				schema("interval", "number", false), schema("weekDays", "string", false),
 				schema("taskLevel", "number", false), schema("jinji", "number", false)));
 		tools.add(tool("create_mindmap",
-				"Create a new .mm file on disk. Returns rootNodeId for subsequent add_node/add_nodes. "
-						+ "Prefer add_nodes (one batch) after create. Optionally open it in Docear UI.",
+				"Create a new .mm file in the mind map library. Relative filePath is resolved under the library root "
+						+ "(not the server working directory). Returns mapFile and rootNodeId for add_nodes.",
 				schema("filePath", "string", true), schema("rootText", "string", false),
 				schema("openInUi", "boolean", false)));
 		tools.add(tool("copy_nodes",
@@ -514,6 +514,12 @@ public final class McpProtocol {
 			}
 			textResult = dispatchTool(name, args);
 			return toolResult(textResult);
+		}
+		catch (IllegalArgumentException e) {
+			success = false;
+			errorMessage = e.getMessage();
+			textResult = errorMessage;
+			return toolError(errorMessage == null ? "invalid argument" : errorMessage);
 		}
 		catch (Exception e) {
 			success = false;

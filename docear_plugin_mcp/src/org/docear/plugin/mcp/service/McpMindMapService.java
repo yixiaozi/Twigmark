@@ -1281,6 +1281,10 @@ public final class McpMindMapService {
 		if (direct.isFile() && direct.exists()) {
 			return rememberResolved(cacheKey, direct);
 		}
+		final File libraryRelative = resolveLibraryRelativeExisting(trimmed);
+		if (libraryRelative != null) {
+			return rememberResolved(cacheKey, libraryRelative);
+		}
 
 		final List allFiles = new ArrayList();
 		final List scanCached = WorkspaceSideTabScanCache.getMindMapFilesOrCollect();
@@ -1343,7 +1347,8 @@ public final class McpMindMapService {
 			throw new IllegalArgumentException("Mind map not found");
 		}
 		if (!isUnderAnyScanRoot(file)) {
-			throw new IllegalArgumentException("Mind map not found");
+			throw new IllegalArgumentException("Mind map not found: " + file.getAbsolutePath()
+					+ " (not inside the mind map library)");
 		}
 		return file;
 	}
@@ -1537,6 +1542,57 @@ public final class McpMindMapService {
 
 	static File resolveMindMapFileForWrite(final String filePath) {
 		return resolveMindMapFileQuiet(filePath);
+	}
+
+	static File resolveMindMapFileForCreate(final String filePath) {
+		final File[] roots = MindMapDataRootResolver.getScanRoots();
+		final File target = McpMindMapPaths.resolveCreateTarget(roots, filePath);
+		if (target.exists()) {
+			throw new IllegalArgumentException("File already exists: " + target.getAbsolutePath());
+		}
+		final File parent = target.getParentFile();
+		if (parent != null && !parent.exists() && !parent.mkdirs()) {
+			throw new IllegalArgumentException("Cannot create directory: " + parent.getAbsolutePath());
+		}
+		return target;
+	}
+
+	static void rememberCreatedMindMap(final String hint, final File file) {
+		if (file == null) {
+			return;
+		}
+		try {
+			rememberResolved(normalizePathForMatch(file.getAbsolutePath()), file);
+			if (hint != null && hint.trim().length() > 0) {
+				rememberResolved(normalizePathForMatch(hint.trim()), file);
+			}
+			WorkspaceSideTabScanCache.invalidate();
+		}
+		catch (Exception e) {
+			LogUtils.warn("rememberCreatedMindMap failed: " + e.getMessage());
+		}
+	}
+
+	private static File resolveLibraryRelativeExisting(final String trimmed) {
+		if (trimmed == null || trimmed.length() == 0) {
+			return null;
+		}
+		final File raw = new File(trimmed.replace('\\', '/'));
+		if (raw.isAbsolute()) {
+			return null;
+		}
+		final File[] roots = MindMapDataRootResolver.getScanRoots();
+		for (int i = 0; i < roots.length; i++) {
+			if (roots[i] == null) {
+				continue;
+			}
+			final File candidate = new File(roots[i], trimmed);
+			if (candidate.isFile() && candidate.getName().toLowerCase().endsWith(".mm")
+					&& isUnderProject(candidate, roots[i])) {
+				return candidate;
+			}
+		}
+		return null;
 	}
 
 	private static File resolveMindMapFile(final String filePath) {

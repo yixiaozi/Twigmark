@@ -375,13 +375,7 @@ public final class McpNodeService {
 		ensureWritable();
 		return (String) EdtRunner.run(new Task() {
 			public Object run() throws Exception {
-				if (filePath == null || filePath.trim().length() == 0) {
-					throw new IllegalArgumentException("filePath is required.");
-				}
-				final File file = new File(filePath.trim());
-				if (file.exists()) {
-					throw new IllegalArgumentException("File already exists: " + file.getAbsolutePath());
-				}
+				final File file = McpMindMapService.resolveMindMapFileForCreate(filePath);
 				final String name = rootText != null && rootText.trim().length() > 0 ? rootText.trim() : file.getName();
 				final org.freeplane.features.map.MapModel map = WorkspaceNewMapAction.createNewMap(file.toURI(), name,
 						true);
@@ -390,6 +384,8 @@ public final class McpNodeService {
 				}
 				// Older WorkspaceNewMapAction builds omit MapStyle; nested add_nodes needs it.
 				McpMapWriteSession.ensureMapStyle(map);
+				McpMapWriteSession.rememberHeadlessMap(file, map);
+				McpMindMapService.rememberCreatedMindMap(filePath, file);
 				final String rootNodeId = map.getRootNode() != null ? map.getRootNode().createID() : "";
 				if (openInUi) {
 					WorkspaceNewMapAction.openMap(file.toURI());

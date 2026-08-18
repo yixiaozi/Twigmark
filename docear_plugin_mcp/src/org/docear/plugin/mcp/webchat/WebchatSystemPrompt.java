@@ -106,7 +106,8 @@ public final class WebchatSystemPrompt {
 			sb.append("8. 记账：add_finance_transaction(amount 元字符串，flow=expense|income|transfer|borrow|lend|credit；");
 			sb.append("转账必须 account+accountTo)。先 list_finance_categories / list_finance_accounts 对齐已有名称。\n");
 			sb.append("9. 一批修改结束后如需同步远程，再 git_sync，不要每个节点都 sync。\n");
-			sb.append("10. 捕获到收件箱：quick_capture。新建导图：create_mindmap 后立刻 add_nodes。\n\n");
+			sb.append("10. 捕获到收件箱：quick_capture。新建导图：create_mindmap 用库内相对路径（如 项目/笔记.mm），");
+			sb.append("返回的 mapFile/rootNodeId 立刻交给 add_nodes。\n\n");
 		}
 
 		sb.append("## 反例\n");
