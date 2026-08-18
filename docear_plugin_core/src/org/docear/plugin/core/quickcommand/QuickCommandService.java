@@ -9,6 +9,7 @@ import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.ui.ribbon.RibbonBuilder;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.McpHeadlessFlags;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 
@@ -23,6 +24,10 @@ public final class QuickCommandService {
 		modeController.addAction(new QuickCommandAction());
 		Controller.getCurrentController().addAction(modeController.getAction(QuickCommandAction.KEY));
 		scheduleInAppAcceleratorRegistration(modeController);
+		if (McpHeadlessFlags.isLeanMemory()) {
+			LogUtils.info("QuickCommand: lean memory — skip full-library node/icon/file warmup");
+			return;
+		}
 		// Warm map/launch indexes in background after startup.
 		EventQueue.invokeLater(new Runnable() {
 			public void run() {

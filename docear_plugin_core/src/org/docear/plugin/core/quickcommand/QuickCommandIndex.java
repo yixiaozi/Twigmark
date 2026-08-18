@@ -16,6 +16,7 @@ import javax.xml.parsers.SAXParserFactory;
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.McpHeadlessFlags;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
@@ -70,6 +71,9 @@ final class QuickCommandIndex {
 	}
 
 	void ensureIconsAsync() {
+		if (McpHeadlessFlags.isLeanMemory()) {
+			return;
+		}
 		if (iconsReady.get() || !iconsScanning.compareAndSet(false, true)) {
 			return;
 		}
@@ -88,6 +92,9 @@ final class QuickCommandIndex {
 	}
 
 	void ensureAllNodesAsync() {
+		if (McpHeadlessFlags.isLeanMemory()) {
+			return;
+		}
 		if (allNodesReady.get() || !allNodesScanning.compareAndSet(false, true)) {
 			return;
 		}
@@ -106,6 +113,9 @@ final class QuickCommandIndex {
 	}
 
 	void ensureFilesAsync() {
+		if (McpHeadlessFlags.isLeanMemory()) {
+			return;
+		}
 		if (filesReady.get() || !filesScanning.compareAndSet(false, true)) {
 			return;
 		}

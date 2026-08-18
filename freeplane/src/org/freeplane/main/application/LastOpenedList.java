@@ -50,6 +50,7 @@ import org.freeplane.core.ui.components.UITools;
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.ConfigurationUtils;
 import org.freeplane.core.util.LogUtils;
+import org.freeplane.core.util.McpHeadlessFlags;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.util.WorkingDirectoryMapPaths;
 import org.freeplane.features.map.IMapChangeListener;
@@ -238,6 +239,10 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	public void openMapsOnStart() {
+		if (McpHeadlessFlags.isLeanMemory()) {
+			LogUtils.info("Lean memory: skip restoring session maps");
+			return;
+		}
 		final boolean loadLastMap = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAP);
 		final boolean loadLastMaps = ResourceController.getResourceController().getBooleanProperty(LOAD_LAST_MAPS);
 		final SessionOpenMapsStore sessionStore = SessionOpenMapsStore.getInstance();

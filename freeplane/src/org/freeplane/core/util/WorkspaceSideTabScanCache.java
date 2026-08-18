@@ -127,6 +127,10 @@ public final class WorkspaceSideTabScanCache {
 	}
 
 	private static void preloadAllFiles() {
+		if (McpHeadlessFlags.isLeanMemory()) {
+			LogUtils.info("WorkspaceSideTabScanCache: lean memory — skip all-files preload");
+			return;
+		}
 		try {
 			final List<File> files = new ArrayList<File>();
 			final File[] scanRoots = MindMapDataRootResolver.getScanRoots();
