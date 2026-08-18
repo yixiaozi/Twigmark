@@ -24,13 +24,19 @@ import org.freeplane.core.util.MindMapWorkspaceContextScanner;
 import org.freeplane.core.util.MindMapWorkspaceContextScanner.IconItem;
 import org.freeplane.core.util.WorkspaceSideTabSnapshot;
 import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
+import org.freeplane.core.util.ColorUtils;
+import org.freeplane.features.cloud.CloudModel;
 import org.freeplane.features.icon.IconController;
 import org.freeplane.features.icon.MindIcon;
 import org.freeplane.features.icon.factory.MindIconFactory;
 import org.freeplane.features.icon.mindmapmode.MIconController;
+import org.freeplane.features.link.ConnectorModel;
 import org.freeplane.features.link.LinkController;
+import org.freeplane.features.link.LinkModel;
 import org.freeplane.features.link.NodeLinks;
 import org.freeplane.features.link.mindmapmode.MLinkController;
+import org.freeplane.features.nodestyle.NodeStyleModel;
+import org.freeplane.view.swing.features.filepreview.ExternalResource;
 import org.freeplane.features.encrypt.EncryptionConfig;
 import org.freeplane.features.encrypt.EncryptionController;
 import org.freeplane.features.map.EncryptionModel;
@@ -443,6 +449,7 @@ public final class McpNodeService {
 		data.put("jinji", JsonValue.ofNumber(Integer.valueOf(ReminderTaskAttributes.readJinjiFromNode(node))));
 
 		data.put("privacy", JsonValue.ofString(readPrivacyLevel(node)));
+		putStyleFields(data, node);
 		putEncryptionFields(data, node);
 
 		try {
@@ -466,6 +473,50 @@ public final class McpNodeService {
 		final DocearNodePrivacyExtensionController.DocearNodePrivacyExtension privacy = DocearNodePrivacyExtensionController
 				.getExtension(node);
 		return privacy != null ? privacy.getPrivacyLevel().name() : DocearPrivacyLevel.PUBLIC.name();
+	}
+
+	private static void putStyleFields(final Map<String, JsonValue> data, final NodeModel node) {
+		final CloudModel cloud = CloudModel.getModel(node);
+		data.put("cloud", JsonValue.ofBoolean(cloud != null));
+		if (cloud != null) {
+			data.put("cloudColor", JsonValue.ofString(ColorUtils.colorToString(cloud.getColor())));
+			data.put("cloudShape", JsonValue.ofString(cloud.getShape() != null ? cloud.getShape().name() : ""));
+		}
+		else {
+			data.put("cloudColor", JsonValue.ofString(""));
+			data.put("cloudShape", JsonValue.ofString(""));
+		}
+		data.put("nodeColor", JsonValue.ofString(nullToEmpty(ColorUtils.colorToString(NodeStyleModel.getColor(node)))));
+		data.put("backgroundColor",
+				JsonValue.ofString(nullToEmpty(ColorUtils.colorToString(NodeStyleModel.getBackgroundColor(node)))));
+		data.put("fontFamily", JsonValue.ofString(nullToEmpty(NodeStyleModel.getFontFamilyName(node))));
+		final Integer fontSize = NodeStyleModel.getFontSize(node);
+		data.put("fontSize", fontSize != null ? JsonValue.ofNumber(fontSize) : JsonValue.ofNull());
+		data.put("bold", JsonValue.ofBoolean(Boolean.TRUE.equals(NodeStyleModel.isBold(node))));
+		data.put("italic", JsonValue.ofBoolean(Boolean.TRUE.equals(NodeStyleModel.isItalic(node))));
+		data.put("nodeShape", JsonValue.ofString(nullToEmpty(NodeStyleModel.getShape(node))));
+		final ExternalResource image = (ExternalResource) node.getExtension(ExternalResource.class);
+		data.put("imageUri", JsonValue.ofString(image != null && image.getUri() != null ? image.getUri().toString() : ""));
+		final List<JsonValue> arrows = new ArrayList<JsonValue>();
+		final Collection links = NodeLinks.getLinks(node);
+		if (links != null) {
+			for (final Iterator it = links.iterator(); it.hasNext();) {
+				final LinkModel link = (LinkModel) it.next();
+				if (!(link instanceof ConnectorModel)) {
+					continue;
+				}
+				final ConnectorModel connector = (ConnectorModel) link;
+				final Map<String, JsonValue> row = new LinkedHashMap<String, JsonValue>();
+				row.put("targetNodeId", JsonValue.ofString(connector.getTargetID()));
+				row.put("label", JsonValue.ofString(nullToEmpty(connector.getMiddleLabel())));
+				arrows.add(JsonValue.ofMap(row));
+			}
+		}
+		data.put("arrowLinks", JsonValue.ofList(arrows));
+	}
+
+	private static String nullToEmpty(final String value) {
+		return value != null ? value : "";
 	}
 
 	private static List<JsonValue> toIconJson(final Collection icons) {

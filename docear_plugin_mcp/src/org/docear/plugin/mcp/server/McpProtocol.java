@@ -14,6 +14,7 @@ import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpFinanceService;
 import org.docear.plugin.mcp.service.McpGitService;
 import org.docear.plugin.mcp.service.McpMindMapService;
+import org.docear.plugin.mcp.service.McpNodeEditService;
 import org.docear.plugin.mcp.service.McpNodeService;
 import org.docear.plugin.mcp.service.McpPomodoroService;
 import org.docear.plugin.mcp.service.McpRelationshipGraphService;
@@ -160,7 +161,7 @@ public final class McpProtocol {
 				schema("filePath", "string", true), schema("maxDepth", "number", false),
 				schema("includeFolded", "boolean", false)));
 		tools.add(tool("get_node_details",
-				"Get full details for one node: note, link, icons, tags, reminders, privacy, encryption, parent path.",
+				"Get full details for one node: note, link, icons, tags, reminders, privacy, cloud/style, imageUri, arrowLinks, encryption, parent path.",
 				schema("filePath", "string", true), schema("nodeId", "string", true)));
 		tools.add(tool("list_pinned", "List pinned nodes from the workspace sidebar.",
 				schema("limit", "number", false)));
@@ -394,6 +395,76 @@ public final class McpProtocol {
 						+ "Prefer add_nodes (one batch) after create. Optionally open it in Docear UI.",
 				schema("filePath", "string", true), schema("rootText", "string", false),
 				schema("openInUi", "boolean", false)));
+		tools.add(tool("copy_nodes",
+				"Copy a whole subtree (the node and all descendants) into the MCP clipboard. Does not change the map. "
+						+ "Paste later with paste_nodes. IDs are regenerated on paste into the same map.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("cut_nodes",
+				"Cut a whole subtree into the MCP clipboard and delete it from the map (not the root). "
+						+ "Paste with paste_nodes.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("paste_nodes",
+				"Paste the MCP clipboard subtree under parentNodeId. New node IDs are generated if they collide. "
+						+ "Requires a prior copy_nodes or cut_nodes in this MCP process.",
+				schema("filePath", "string", false), schema("parentNodeId", "string", true)));
+		tools.add(tool("clone_nodes",
+				"Clone a whole subtree under parentNodeId (default: the source parent). Source is kept. "
+						+ "Pasted nodes get new IDs. Cannot clone a node onto its own descendants.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("parentNodeId", "string", false)));
+		tools.add(tool("undo_map",
+				"Undo the last actor on this map's undo stack, then save. filePath selects the map.",
+				schema("filePath", "string", false)));
+		tools.add(tool("redo_map",
+				"Redo the last undone actor on this map, then save. filePath selects the map.",
+				schema("filePath", "string", false)));
+		tools.add(tool("add_arrow_link",
+				"Create a Freeplane arrowlink (connector) from sourceNodeId to targetNodeId in the same map. "
+						+ "This is not a hyperlink (use set_node_link for LINK). Optional middle label and #RRGGBB color.",
+				schema("filePath", "string", false), schema("sourceNodeId", "string", true),
+				schema("targetNodeId", "string", true), schema("label", "string", false),
+				schema("color", "string", false)));
+		tools.add(tool("remove_arrow_link",
+				"Remove arrowlink connectors from sourceNodeId to targetNodeId in the same map.",
+				schema("filePath", "string", false), schema("sourceNodeId", "string", true),
+				schema("targetNodeId", "string", true)));
+		tools.add(tool("set_node_cloud",
+				"Set or clear the node cloud (color bubble around a branch). enabled=false removes it. "
+						+ "color=#RRGGBB. shape: ARC|STAR|RECT|ROUND_RECT.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("enabled", "boolean", false), schema("color", "string", false),
+				schema("shape", "string", false)));
+		tools.add(tool("set_node_style",
+				"Set node font/color/shape. Omit a field to leave it. color/backgroundColor: #RRGGBB or 'clear'. "
+						+ "shape: fork|bubble|as_parent|combined. fontSize 1-96.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("color", "string", false), schema("backgroundColor", "string", false),
+				schema("fontFamily", "string", false), schema("fontSize", "number", false),
+				schema("bold", "boolean", false), schema("italic", "boolean", false),
+				schema("shape", "string", false)));
+		tools.add(tool("set_node_details",
+				"Write node details (the Freeplane 'details' HTML under the node, not the note). "
+						+ "Empty detailsHtml clears it. hidden=true collapses details.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("detailsHtml", "string", false), schema("hidden", "boolean", false)));
+		tools.add(tool("set_node_privacy",
+				"Set Docear node privacy: PUBLIC, DEMO, or PRIVATE.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("privacy", "string", true)));
+		tools.add(tool("set_node_image",
+				"Attach an image as ExternalObject on the node (inline preview). imagePath is a file path or URI.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("imagePath", "string", true)));
+		tools.add(tool("clear_node_image",
+				"Remove the ExternalObject image preview from a node (does not delete the file).",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("set_node_attachment",
+				"Attach a file: set the node LINK to the file URI. Images also get an ExternalObject preview.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("attachmentPath", "string", true)));
+		tools.add(tool("clear_reminder",
+				"Remove the reminder hook and cycle attrs from a node (one-time or recurring).",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
 		tools.add(tool("list_projects", "List workspace projects."));
 		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
 		tools.add(tool("sync_todoist", "Sync reminders to Todoist."));
@@ -725,6 +796,65 @@ public final class McpProtocol {
 		else if ("create_mindmap".equals(name)) {
 			textResult = McpNodeService.createMindmap(required(args, "filePath"), argString(args, "rootText", ""),
 					argBool(args, "openInUi", false));
+		}
+		else if ("copy_nodes".equals(name)) {
+			textResult = McpNodeEditService.copyNodes(argString(args, "filePath", ""), required(args, "nodeId"));
+		}
+		else if ("cut_nodes".equals(name)) {
+			textResult = McpNodeEditService.cutNodes(argString(args, "filePath", ""), required(args, "nodeId"));
+		}
+		else if ("paste_nodes".equals(name)) {
+			textResult = McpNodeEditService.pasteNodes(argString(args, "filePath", ""), required(args, "parentNodeId"));
+		}
+		else if ("clone_nodes".equals(name)) {
+			textResult = McpNodeEditService.cloneNodes(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "parentNodeId", ""));
+		}
+		else if ("undo_map".equals(name)) {
+			textResult = McpNodeEditService.undoMap(argString(args, "filePath", ""));
+		}
+		else if ("redo_map".equals(name)) {
+			textResult = McpNodeEditService.redoMap(argString(args, "filePath", ""));
+		}
+		else if ("add_arrow_link".equals(name)) {
+			textResult = McpNodeEditService.addArrowLink(argString(args, "filePath", ""), required(args, "sourceNodeId"),
+					required(args, "targetNodeId"), argString(args, "label", ""), argString(args, "color", ""));
+		}
+		else if ("remove_arrow_link".equals(name)) {
+			textResult = McpNodeEditService.removeArrowLink(argString(args, "filePath", ""),
+					required(args, "sourceNodeId"), required(args, "targetNodeId"));
+		}
+		else if ("set_node_cloud".equals(name)) {
+			textResult = McpNodeEditService.setNodeCloud(argString(args, "filePath", ""), required(args, "nodeId"),
+					argBoolOptional(args, "enabled"), argOptional(args, "color"), argOptional(args, "shape"));
+		}
+		else if ("set_node_style".equals(name)) {
+			textResult = McpNodeEditService.setNodeStyle(argString(args, "filePath", ""), required(args, "nodeId"),
+					argOptional(args, "color"), argOptional(args, "backgroundColor"), argOptional(args, "fontFamily"),
+					argIntOptional(args, "fontSize"), argBoolOptional(args, "bold"), argBoolOptional(args, "italic"),
+					argOptional(args, "shape"));
+		}
+		else if ("set_node_details".equals(name)) {
+			textResult = McpNodeEditService.setNodeDetails(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "detailsHtml", ""), argBoolOptional(args, "hidden"));
+		}
+		else if ("set_node_privacy".equals(name)) {
+			textResult = McpNodeEditService.setNodePrivacy(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "privacy"));
+		}
+		else if ("set_node_image".equals(name)) {
+			textResult = McpNodeEditService.setNodeImage(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "imagePath"));
+		}
+		else if ("clear_node_image".equals(name)) {
+			textResult = McpNodeEditService.clearNodeImage(argString(args, "filePath", ""), required(args, "nodeId"));
+		}
+		else if ("set_node_attachment".equals(name)) {
+			textResult = McpNodeEditService.setNodeAttachment(argString(args, "filePath", ""), required(args, "nodeId"),
+					required(args, "attachmentPath"));
+		}
+		else if ("clear_reminder".equals(name)) {
+			textResult = McpNodeEditService.clearReminder(argString(args, "filePath", ""), required(args, "nodeId"));
 		}
 		else if ("list_projects".equals(name)) {
 			textResult = McpWorkspaceService.listProjects();
@@ -1147,6 +1277,27 @@ public final class McpProtocol {
 
 	private static int argInt(final Map<String, JsonValue> args, final String key, final int defaultValue) {
 		return args.containsKey(key) ? args.get(key).asInt(defaultValue) : defaultValue;
+	}
+
+	private static String argOptional(final Map<String, JsonValue> args, final String key) {
+		if (!args.containsKey(key) || args.get(key) == null || args.get(key).isNull()) {
+			return null;
+		}
+		return args.get(key).asString();
+	}
+
+	private static Boolean argBoolOptional(final Map<String, JsonValue> args, final String key) {
+		if (!args.containsKey(key) || args.get(key) == null || args.get(key).isNull()) {
+			return null;
+		}
+		return Boolean.valueOf(args.get(key).asBoolean());
+	}
+
+	private static Integer argIntOptional(final Map<String, JsonValue> args, final String key) {
+		if (!args.containsKey(key) || args.get(key) == null || args.get(key).isNull()) {
+			return null;
+		}
+		return Integer.valueOf(args.get(key).asInt(0));
 	}
 
 	private static long argLong(final Map<String, JsonValue> args, final String key, final long defaultValue) {

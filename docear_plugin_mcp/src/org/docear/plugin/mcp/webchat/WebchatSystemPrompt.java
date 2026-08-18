@@ -97,7 +97,11 @@ public final class WebchatSystemPrompt {
 			sb.append("4. 记笔记要分层：先大类（概览 / 工具 / 资源 / 用法），再分子项；一条节点一个主题，避免超长单句。\n");
 			sb.append("5. 写入后看返回的 mapFile、saved、createdCount；向用户汇报当前图、父节点、写了什么。\n");
 			sb.append("6. 待办 create_todo；完成 complete_todo；提醒 set_reminder / set_recurring_reminder；");
-			sb.append("优先级 set_priority(level 1-7)；移动 move_node。\n");
+			sb.append("清除提醒 clear_reminder；优先级 set_priority(level 1-7)；移动 move_node。\n");
+			sb.append("6b. 子树：copy_nodes / cut_nodes / paste_nodes / clone_nodes；撤销 undo_map / redo_map。\n");
+			sb.append("6c. 箭头关联 add_arrow_link / remove_arrow_link（不是超链接；超链接用 set_node_link）。\n");
+			sb.append("6d. 样式 set_node_cloud / set_node_style；详细资料 set_node_details；隐私 set_node_privacy；");
+			sb.append("配图 set_node_image / clear_node_image；附件 set_node_attachment。\n");
 			sb.append("7. 番茄：start_pomodoro / pause_pomodoro / stop_pomodoro（可省略 nodeId=当前选中）。\n");
 			sb.append("8. 记账：add_finance_transaction(amount 元字符串，flow=expense|income|transfer|borrow|lend|credit；");
 			sb.append("转账必须 account+accountTo)。先 list_finance_categories / list_finance_accounts 对齐已有名称。\n");

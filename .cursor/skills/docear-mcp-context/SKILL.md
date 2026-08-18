@@ -297,8 +297,11 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - **财务**：`ensure_finance_map`、`get_finance_summary`、`add_finance_transaction`、`list_finance_transactions`、分类/账户/预算/订阅/优惠券 CRUD、`get_finance_report`；资源 `docear://finance/summary`
 - **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
 - 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
-- 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`
-- 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`create_mindmap`
+- 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`、`clear_reminder`
+- 子树剪贴板：`copy_nodes` / `cut_nodes` / `paste_nodes` / `clone_nodes`（整棵子树；粘贴后同图会生成新 ID）
+- 撤销/重做：`undo_map` / `redo_map`（针对该图内存撤销栈，然后保存）
+- 箭头关联：`add_arrow_link` / `remove_arrow_link`（同图 source→target；不是超链接 LINK）
+- 写结构/属性：`move_node`、`set_node_folded`、`set_node_link`、`set_node_note`、`set_node_details`、`set_node_tags`、`toggle_pin`、`set_node_icon`、`set_node_cloud`、`set_node_style`、`set_node_privacy`、`set_node_image`、`clear_node_image`、`set_node_attachment`、`create_mindmap`
 - **加密**：`encrypt_node`（加锁并写入 ENCRYPTED_CONTENT）、`decrypt_node`（本会话解锁，文件仍加密）、`remove_node_encryption`（永久去掉密码保护）。`password` 可选，缺省用本机加密设置里的默认密码；审计日志会把密码打成 `***`
 - 打开导图：`open_mindmap`（`filePath` 来自上下文 `mapFile`）
 - 审计日志：`list_audit_log`、`list_audit_traces`、`get_audit_stats`

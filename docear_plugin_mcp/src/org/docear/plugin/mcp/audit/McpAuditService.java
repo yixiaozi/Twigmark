@@ -113,7 +113,14 @@ public final class McpAuditService {
 		    || "remove_node_encryption".equals(toolName)
 		    || "set_node_tags".equals(toolName) || "toggle_pin".equals(toolName)
 		    || "set_node_icon".equals(toolName) || "set_recurring_reminder".equals(toolName)
-		    || "create_mindmap".equals(toolName)) {
+		    || "create_mindmap".equals(toolName)
+		    || "copy_nodes".equals(toolName) || "cut_nodes".equals(toolName) || "paste_nodes".equals(toolName)
+		    || "clone_nodes".equals(toolName) || "undo_map".equals(toolName) || "redo_map".equals(toolName)
+		    || "add_arrow_link".equals(toolName) || "remove_arrow_link".equals(toolName)
+		    || "set_node_cloud".equals(toolName) || "set_node_style".equals(toolName)
+		    || "set_node_details".equals(toolName) || "set_node_privacy".equals(toolName)
+		    || "set_node_image".equals(toolName) || "clear_node_image".equals(toolName)
+		    || "set_node_attachment".equals(toolName) || "clear_reminder".equals(toolName)) {
 			return McpOperationIntent.NODE;
 		}
 		if ("list_projects".equals(toolName)) {

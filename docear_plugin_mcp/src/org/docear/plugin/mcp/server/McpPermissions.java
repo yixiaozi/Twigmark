@@ -154,6 +154,22 @@ public final class McpPermissions {
 		set.add("create_mindmap");
 		set.add("quick_capture");
 		set.add("sync_todoist");
+		set.add("copy_nodes");
+		set.add("cut_nodes");
+		set.add("paste_nodes");
+		set.add("clone_nodes");
+		set.add("undo_map");
+		set.add("redo_map");
+		set.add("add_arrow_link");
+		set.add("remove_arrow_link");
+		set.add("set_node_cloud");
+		set.add("set_node_style");
+		set.add("set_node_details");
+		set.add("set_node_privacy");
+		set.add("set_node_image");
+		set.add("clear_node_image");
+		set.add("set_node_attachment");
+		set.add("clear_reminder");
 		return set;
 	}
 

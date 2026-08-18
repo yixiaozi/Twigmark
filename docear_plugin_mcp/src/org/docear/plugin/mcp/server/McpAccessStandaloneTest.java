@@ -44,6 +44,22 @@ public final class McpAccessStandaloneTest {
 		if (!McpPermissions.canCall(McpRole.WRITE, "add_node")) {
 			throw new IllegalStateException("write can add_node");
 		}
+		if (!McpPermissions.canCall(McpRole.WRITE, "copy_nodes")
+				|| !McpPermissions.canCall(McpRole.WRITE, "clone_nodes")
+				|| !McpPermissions.canCall(McpRole.WRITE, "undo_map")
+				|| !McpPermissions.canCall(McpRole.WRITE, "add_arrow_link")
+				|| !McpPermissions.canCall(McpRole.WRITE, "set_node_cloud")
+				|| !McpPermissions.canCall(McpRole.WRITE, "set_node_style")
+				|| !McpPermissions.canCall(McpRole.WRITE, "set_node_details")
+				|| !McpPermissions.canCall(McpRole.WRITE, "set_node_privacy")
+				|| !McpPermissions.canCall(McpRole.WRITE, "set_node_image")
+				|| !McpPermissions.canCall(McpRole.WRITE, "clear_reminder")) {
+			throw new IllegalStateException("write can new node-edit tools");
+		}
+		if (McpPermissions.canCall(McpRole.READ, "clone_nodes")
+				|| McpPermissions.canCall(McpRole.READ, "set_node_privacy")) {
+			throw new IllegalStateException("read cannot new write tools");
+		}
 		if (McpPermissions.canCall(McpRole.WRITE, "git_sync")) {
 			throw new IllegalStateException("write cannot git_sync");
 		}
