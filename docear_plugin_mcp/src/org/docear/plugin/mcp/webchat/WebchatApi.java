@@ -39,7 +39,7 @@ public final class WebchatApi {
 		map.put("accountRequired", JsonValue.ofBoolean(false));
 		map.put("guestChat", JsonValue.ofBoolean(true));
 		map.put("llmConfigured", JsonValue.ofBoolean(WebchatService.isSharedLlmConfigured()));
-		map.put("presets", JsonValue.ofList(WebchatService.toJsonMaps(GuestCatalog.listPublic())));
+		map.put("presets", JsonValue.ofList(WebchatService.toJsonMaps(WebchatService.listPublicPresets())));
 		return JsonWriter.write(JsonValue.ofMap(map));
 	}
 
@@ -515,7 +515,7 @@ public final class WebchatApi {
 			}
 			final Map args = JsonParser.parse(body).asMap();
 			final String presetId = str(args, "presetId");
-			final GuestCatalog.Preset preset = GuestCatalog.find(presetId);
+			final GuestCatalog.Preset preset = WebchatService.findGuestPreset(presetId);
 			if (preset == null) {
 				throw new IllegalArgumentException("unknown preset");
 			}
@@ -586,6 +586,82 @@ public final class WebchatApi {
 		catch (Exception e) {
 			writeJson(exchange, 500, error(e.getMessage()));
 		}
+	}
+
+	public void handleListManagedPresets(final HttpExchange exchange) throws IOException {
+		try {
+			WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map map = new LinkedHashMap();
+			map.put("presets", JsonValue.ofList(WebchatService.toJsonMaps(WebchatService.listManagedPresets())));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
+		}
+		catch (IllegalArgumentException e) {
+			writeJson(exchange, 401, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleSavePreset(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final Integer sort = args.containsKey("sortOrder") ? Integer.valueOf(jsonInt(args.get("sortOrder"), 100))
+					: null;
+			final Boolean enabled = args.containsKey("enabled") ? Boolean.valueOf(jsonBool(args.get("enabled"), true))
+					: null;
+			final Map result = WebchatService.saveGuestPreset(str(args, "id"), str(args, "title"), str(args, "prompt"),
+					sort, enabled);
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(WebchatService.plainToJson(result))));
+		}
+		catch (IllegalArgumentException e) {
+			final int code = e.getMessage() != null && e.getMessage().indexOf("login") >= 0 ? 401 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	public void handleDeletePreset(final HttpExchange exchange, final String body) throws IOException {
+		try {
+			WebchatService.requireUsername(extractSessionToken(exchange));
+			final Map args = JsonParser.parse(body).asMap();
+			final boolean ok = WebchatService.deleteGuestPreset(str(args, "id"));
+			final Map map = new LinkedHashMap();
+			map.put("ok", JsonValue.ofBoolean(ok));
+			writeJson(exchange, 200, JsonWriter.write(JsonValue.ofMap(map)));
+		}
+		catch (IllegalArgumentException e) {
+			final int code = e.getMessage() != null && e.getMessage().indexOf("login") >= 0 ? 401 : 400;
+			writeJson(exchange, code, error(e.getMessage()));
+		}
+		catch (Exception e) {
+			writeJson(exchange, 500, error(WebSecurity.safePublicError()));
+		}
+	}
+
+	private static int jsonInt(final Object v, final int fallback) {
+		if (v instanceof JsonValue) {
+			return ((JsonValue) v).asInt(fallback);
+		}
+		try {
+			return Integer.parseInt(String.valueOf(v));
+		}
+		catch (Exception e) {
+			return fallback;
+		}
+	}
+
+	private static boolean jsonBool(final Object v, final boolean fallback) {
+		if (v instanceof JsonValue) {
+			return ((JsonValue) v).asBoolean();
+		}
+		if (v instanceof Boolean) {
+			return ((Boolean) v).booleanValue();
+		}
+		return fallback;
 	}
 
 	private List buildHistoryFromDb(final String username, final String conversationId) {
