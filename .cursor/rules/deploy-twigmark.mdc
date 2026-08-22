@@ -1,0 +1,45 @@
+---
+description: 改代码后部署到本机 Twigmark.app（用户要求自动替换应用）
+alwaysApply: true
+---
+
+# 改代码后部署到 Twigmark
+
+用户要求：**修改完成后自动替换本机应用程序**，不要只停在仓库 `dist/`。
+
+## 默认（Mac）
+
+代码改完且需要验证/可用时，运行：
+
+```bash
+./scripts/deploy-twigmark-mac.sh
+```
+
+- 目标：`/Applications/Twigmark.app`（可用环境变量 `TWIGMARK_APP` 覆盖）
+- 会退出正在运行的 Twigmark，同步插件（含新建模块），再启动
+- 仅插件变更时用增量同步；需要整包时加 `--full`（`ant macosxapp` 后整体替换）
+
+例：只部署 Mermaid 插件：
+
+```bash
+./scripts/deploy-twigmark-mac.sh --plugin mermaid
+```
+
+## Windows（若在 Windows 会话）
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
+```
+
+默认装到仓库 `dist\TwigmarkDist`（或 `DOCEAR_DIST_DIR`）。
+
+## 允许
+
+- 关 Twigmark / 覆盖 `/Applications/Twigmark.app` / 启动应用（用户已授权「自动替换」）
+- 模块 `ant dist` + 上述部署脚本
+
+## 仍须注意
+
+- **不要**在纯问答、未改代码的回合里无故关进程重装
+- **不要**把自动部署挂回会在每次 `stop` 都触发的空钩子误伤；由 Agent 在「改完代码」后主动跑部署脚本
+- 完整 `macosxapp` 很慢；日常优先增量 `deploy-twigmark-mac.sh`，用户明确说「整包/full」再用 `--full`

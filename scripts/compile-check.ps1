@@ -57,6 +57,7 @@ $moduleMap = @{
     "docear_plugin_mcp"    = @{ BuildFile = "docear_plugin_mcp\ant\build.xml";    Target = "build" }
     "docear_plugin_ai"     = @{ BuildFile = "docear_plugin_ai\ant\build.xml";     Target = "build" }
     "docear_plugin_drawio" = @{ BuildFile = "docear_plugin_drawio\ant\build.xml"; Target = "build" }
+    "docear_plugin_mermaid" = @{ BuildFile = "docear_plugin_mermaid\ant\build.xml"; Target = "build" }
     "freeplane_plugin_workspace" = @{ BuildFile = "freeplane_plugin_workspace\ant\build.xml"; Target = "build" }
     "freeplane_plugin_bugreport" = @{ BuildFile = "freeplane_plugin_bugreport\ant\build.xml"; Target = "build" }
 }

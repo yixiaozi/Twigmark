@@ -1,28 +1,12 @@
 ---
-description: Never run the user's Docear deploy/launch build after code changes
-alwaysApply: true
+description: 部署策略由 deploy-twigmark 规则接管；本文件保留历史说明
+alwaysApply: false
 ---
 
-# 改代码后不要替用户「生成/部署」Docear
+# （已废止）禁止自动部署
 
-用户日常在用 Docear。完整生成脚本会 **关掉正在运行的软件** 并覆盖安装目录，打断使用。
+用户已改为要求「改完代码自动替换 Twigmark 应用」。
 
-## 禁止（除非用户明确要求「生成 / 部署 / 打包 / 重启 Docear」）
+请遵循：`.cursor/rules/deploy-twigmark.mdc`
 
-- `build-docear.bat`
-- `scripts/build-docear-to-dist.ps1`
-- `.cursor/hooks/build-docear-last.ps1`（已改为空操作；**禁止**再写回自动部署）
-- 在 `.cursor/hooks.json` 的 `stop` / `afterAgentResponse` 里挂部署脚本
-- 任何会调用 `Stop-RunningDocear`、解压到 `E:\Temp\DocearDist` / `E:\SoftWare\Docear`、或启动 `docear.exe` 的命令
-
-## 说明
-
-曾因项目 `.cursor/hooks.json` 的 `stop` 钩子在每次 Agent 结束时跑 `build-docear-last.ps1`，导致关进程并重写 `E:\Temp\DocearDist`。该钩子已清空。
-
-## 允许（验证编译）
-
-- `compile-check.bat` 或 `scripts/compile-check.ps1`
-- 例：`powershell -ExecutionPolicy Bypass -File .\scripts\compile-check.ps1 -Modules freeplane`
-- 直接对单个模块跑 ant `dist`/`build` **仅写入仓库内 build/dist**，不关进程、不部署
-
-改完代码后默认只说明改了什么；需要用户自行在方便时运行 `build-docear.bat` 才会装到运行目录。
+历史原因：曾因 `stop` 钩子每次 Agent 结束都跑完整部署而打断使用。现改为 **仅在改代码后由 Agent 主动部署**，不再用空操作的 `stop` 钩子误伤。

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<style>
+html, body { margin: 0; padding: 8px; background: #ffffff; }
+#container { display: inline-block; }
+#container svg { max-width: none; }
+#error { color: #b00020; font: 12px/1.4 sans-serif; white-space: pre-wrap; }
+</style>
+<script src="mermaid.min.js"></script>
+</head>
+<body>
+<div id="container"></div>
+<div id="error"></div>
+<script>
+mermaid.initialize({
+  startOnLoad: false,
+  securityLevel: 'strict',
+  theme: 'default',
+  flowchart: { htmlLabels: false }
+});
+
+function renderMermaid(code) {
+  var container = document.getElementById('container');
+  var error = document.getElementById('error');
+  container.innerHTML = '';
+  error.textContent = '';
+  var id = 'mmd-' + Date.now();
+  try {
+    mermaid.render(id, code).then(function (out) {
+      container.innerHTML = out.svg;
+      requestAnimationFrame(function () {
+        var svg = container.querySelector('svg');
+        var w = svg ? Math.ceil(svg.getBoundingClientRect().width) : 1;
+        var h = svg ? Math.ceil(svg.getBoundingClientRect().height) : 1;
+        if (window.javaBridge && window.javaBridge.onSuccess) {
+          window.javaBridge.onSuccess(w, h);
+        }
+      });
+    }).catch(function (e) {
+      var msg = (e && e.message) ? e.message : String(e);
+      error.textContent = msg;
+      if (window.javaBridge && window.javaBridge.onError) {
+        window.javaBridge.onError(msg);
+      }
+    });
+  } catch (e) {
+    var msg2 = (e && e.message) ? e.message : String(e);
+    error.textContent = msg2;
+    if (window.javaBridge && window.javaBridge.onError) {
+      window.javaBridge.onError(msg2);
+    }
+  }
+}
+</script>
+</body>
+</html>
