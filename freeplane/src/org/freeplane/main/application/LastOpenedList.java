@@ -22,7 +22,6 @@ package org.freeplane.main.application;
 import java.awt.Component;
 import java.awt.Frame;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -82,17 +81,13 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	public static final String LOAD_LAST_MAP = "load_last_map";
 	public static final String LOAD_LAST_MAPS = "load_last_maps";
 	/**
-	 * Legacy property — ignored. Startup restores all session maps; extras are
-	 * opened one-by-one after the main window is shown (see
-	 * {@link #scheduleDeferredStartupOpens}).
+	 * Legacy property — ignored. Startup opens only the last focused session map.
 	 */
 	public static final String LOAD_LAST_MAPS_MAX = "load_last_maps_max";
 // // 	private final Controller controller;
 	private static boolean PORTABLE_APP = System.getProperty("portableapp", "false").equals("true");
 	private static String USER_DRIVE = System.getProperty("user.home", "").substring(0, 2);
 	final private List<String> currenlyOpenedList = new LinkedList<String>();
-	/** Timer that opens remaining session maps after the frame is visible. */
-	private Timer deferredStartupOpenTimer;
 	/**
 	 * Contains Restore strings.
 	 */
@@ -286,8 +281,9 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 	}
 
 	/**
-	 * Open the focused map immediately so the first paint has content; queue the
-	 * rest one-by-one on a Swing timer so the main window can show and stay responsive.
+	 * Open only the last focused map. Restoring every session map then switching
+	 * back forces a second full HTML layout of the focused map on the EDT and
+	 * freezes the window for minutes on large maps.
 	 */
 	private void openSessionMapsWithoutBlockingStartup(final List<String> startList, final String lastMap) {
 		if (startList == null || startList.isEmpty()) {
@@ -306,54 +302,11 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		if (focusedEntry == null) {
 			focusedEntry = startList.get(0);
 		}
+		if (startList.size() > 1) {
+			LogUtils.info("Opening last focused map only; " + (startList.size() - 1)
+			        + " other session map(s) left closed to avoid layout freeze");
+		}
 		safeOpen(focusedEntry, true);
-		final List<String> deferred = new LinkedList<String>();
-		for (int i = 0; i < startList.size(); i++) {
-			final String entry = startList.get(i);
-			if (!entry.equals(focusedEntry)) {
-				deferred.add(entry);
-			}
-		}
-		if (deferred.isEmpty()) {
-			if (lastMap != null) {
-				tryToChangeToMapView(lastMap);
-			}
-			return;
-		}
-		scheduleDeferredStartupOpens(deferred, lastMap);
-	}
-
-	/**
-	 * Opens each restoreable after a short delay so {@code frame.setVisible} and
-	 * paints can run between maps. Must be called from the EDT.
-	 */
-	private void scheduleDeferredStartupOpens(final List<String> maps, final String lastMapFocus) {
-		if (deferredStartupOpenTimer != null) {
-			deferredStartupOpenTimer.stop();
-			deferredStartupOpenTimer = null;
-		}
-		final LinkedList<String> queue = new LinkedList<String>(maps);
-		LogUtils.info("Deferring restore of " + queue.size()
-		        + " map(s) until after the main window is shown");
-		deferredStartupOpenTimer = new Timer(40, new ActionListener() {
-			public void actionPerformed(final ActionEvent e) {
-				if (queue.isEmpty()) {
-					deferredStartupOpenTimer.stop();
-					deferredStartupOpenTimer = null;
-					if (lastMapFocus != null) {
-						tryToChangeToMapView(lastMapFocus);
-					}
-					LogUtils.info("Deferred startup map restore finished");
-					return;
-				}
-				final String next = queue.removeFirst();
-				safeOpen(next, true);
-			}
-		});
-		// Wait until createFrame finishes setVisible / toFront on the same EDT burst.
-		deferredStartupOpenTimer.setInitialDelay(80);
-		deferredStartupOpenTimer.setRepeats(true);
-		deferredStartupOpenTimer.start();
 	}
 
 	public boolean hasRestorableSessionMaps() {
@@ -483,10 +436,6 @@ public class LastOpenedList implements IMapViewChangeListener, IMapChangeListene
 		if (persistOpenedNowTimer != null) {
 			persistOpenedNowTimer.stop();
 			persistOpenedNowTimer = null;
-		}
-		if (deferredStartupOpenTimer != null) {
-			deferredStartupOpenTimer.stop();
-			deferredStartupOpenTimer = null;
 		}
 		// Snapshot open maps while views still exist, then freeze so the subsequent
 		// quit-time tab closes cannot rewrite the file to open.count=0.

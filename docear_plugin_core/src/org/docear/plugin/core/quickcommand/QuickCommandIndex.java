@@ -17,9 +17,20 @@ import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.McpHeadlessFlags;
+import org.freeplane.core.util.MindMapNodeSearchIndex;
+import org.freeplane.core.util.MindMapWorkspaceContextScanner;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.core.util.MindMapDataRootResolver;
 import org.freeplane.core.util.WorkspaceSideTabScanCache;
+import org.freeplane.core.util.WorkspaceSideTabSnapshot;
+import org.freeplane.core.util.WorkspaceSideTabSnapshotRegistry;
+import org.freeplane.features.icon.IconController;
+import org.freeplane.features.icon.MindIcon;
+import org.freeplane.features.map.MapModel;
+import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
+
+import javax.swing.SwingUtilities;
 import org.xml.sax.Attributes;
 import org.xml.sax.helpers.DefaultHandler;
 
@@ -29,6 +40,7 @@ import org.xml.sax.helpers.DefaultHandler;
 final class QuickCommandIndex {
 	private static final String PROP_LAUNCH_FOLDERS = "quickcommand.launch_folders";
 	private static final String SKIP_ICON = "button_ok";
+	private static final String TODO_ICON_NAME = "hourglass";
 	private static final int MAX_ICON_NODES = 20000;
 	private static final int MAX_ALL_NODES = 50000;
 	private static final int MAX_WORKSPACE_FILES = 40000;
@@ -47,9 +59,13 @@ final class QuickCommandIndex {
 	private final AtomicBoolean allNodesReady = new AtomicBoolean();
 	private final AtomicBoolean filesReady = new AtomicBoolean();
 	private final AtomicBoolean launchReady = new AtomicBoolean();
+	private final AtomicBoolean mapsScanning = new AtomicBoolean();
 	private final AtomicBoolean iconsScanning = new AtomicBoolean();
 	private final AtomicBoolean allNodesScanning = new AtomicBoolean();
 	private final AtomicBoolean filesScanning = new AtomicBoolean();
+	private final AtomicBoolean allTodosScanning = new AtomicBoolean();
+	private volatile List cachedAllTodoRows;
+	private volatile boolean allTodosScanComplete;
 
 	private QuickCommandIndex() {
 	}
@@ -62,6 +78,25 @@ final class QuickCommandIndex {
 		if (!mapsReady.get()) {
 			rebuildMaps();
 		}
+	}
+
+	void ensureMapsAsync() {
+		if (mapsReady.get() || !mapsScanning.compareAndSet(false, true)) {
+			return;
+		}
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					rebuildMaps();
+				}
+				finally {
+					mapsScanning.set(false);
+				}
+			}
+		}, "QuickCommand-MapIndex");
+		thread.setDaemon(true);
+		thread.setPriority(Thread.MIN_PRIORITY + 1);
+		thread.start();
 	}
 
 	void ensureLaunch() {
@@ -134,6 +169,7 @@ final class QuickCommandIndex {
 	}
 
 	void rebuildMaps() {
+		invalidateMindmapFileCache();
 		final List files = new ArrayList();
 		MindMapDataRootResolver.collectMindmapFiles(files);
 		final List entries = new ArrayList(files.size());
@@ -244,8 +280,14 @@ final class QuickCommandIndex {
 	}
 
 	List filterMaps(final String query, final int limit) {
-		ensureMaps();
 		final String q = normalize(query);
+		if (!mapsReady.get()) {
+			ensureMapsAsync();
+			final List pending = new ArrayList();
+			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.maps"),
+			        TextUtils.getText("QuickCommand.index.maps.detail")));
+			return pending;
+		}
 		final List source;
 		synchronized (lock) {
 			source = mapEntries;
@@ -467,16 +509,6 @@ final class QuickCommandIndex {
 
 	List filterAllNodes(final String query, final int limit) {
 		final String q = normalize(query);
-		final List source;
-		synchronized (lock) {
-			source = allNodeEntries;
-		}
-		if (!allNodesReady.get()) {
-			ensureAllNodesAsync();
-			final List pending = new ArrayList();
-			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.nodes"), TextUtils.getText("QuickCommand.index.nodes.detail")));
-			return pending;
-		}
 		final QuickCommandHistory history = QuickCommandHistory.getInstance();
 		final List scored = new ArrayList();
 		final Set seen = new HashSet();
@@ -484,12 +516,7 @@ final class QuickCommandIndex {
 			final List recent = history.getRecentIconNodes();
 			for (int i = recent.size() - 1; i >= 0; i--) {
 				final QuickCommandHistory.RecentIcon recentIcon = (QuickCommandHistory.RecentIcon) recent.get(i);
-				final IconEntry entry = findIconEntry(source, recentIcon);
-				if (entry != null && seen.add(iconKey(entry))) {
-					scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, true,
-					        i, entry.modifiedAt));
-				}
-				else if (entry == null && recentIcon.mapPath != null) {
+				if (recentIcon.mapPath != null) {
 					final File file = new File(recentIcon.mapPath);
 					if (file.isFile() && seen.add(recentIcon.nodeId + "|" + recentIcon.mapPath)) {
 						scored.add(QuickCommandCandidate.iconNode(recentIcon.text, recentIcon.mapName, file,
@@ -500,21 +527,222 @@ final class QuickCommandIndex {
 			sortByModifiedDesc(scored);
 			return take(scored, limit);
 		}
-		for (int i = 0; i < source.size(); i++) {
-			final IconEntry entry = (IconEntry) source.get(i);
-			if (!PinyinMatch.matches(entry.text, entry.fullPinyin, entry.initials, q)
-			        && !PinyinMatch.matches(entry.mapName, entry.mapFullPinyin, entry.mapInitials, q)) {
-				continue;
-			}
-			if (!seen.add(iconKey(entry))) {
-				continue;
-			}
-			final int rank = history.iconRank(entry.nodeId, entry.file);
-			scored.add(QuickCommandCandidate.iconNode(entry.text, entry.mapName, entry.file, entry.nodeId, rank >= 0,
-			        rank, entry.modifiedAt));
+		final List files = collectMindmapFilesSorted();
+		final String needle = q.toLowerCase(Locale.ROOT);
+		appendNodeHits(scored, seen, history,
+		        MindMapNodeSearchIndex.search(files, needle, limit, 0L));
+		if (scored.size() < limit && !PinyinMatch.containsChinese(q)) {
+			appendNodeHits(scored, seen, history, searchPinyinFuzzy(files, q, limit - scored.size()));
+		}
+		if (scored.size() < limit) {
+			appendMapNameHits(scored, seen, history, files, q, needle, limit);
 		}
 		sortByModifiedDesc(scored);
 		return take(scored, limit);
+	}
+
+	private static void appendNodeHits(final List scored, final Set seen, final QuickCommandHistory history,
+	        final List hits) {
+		if (hits == null || hits.isEmpty()) {
+			return;
+		}
+		for (int i = 0; i < hits.size(); i++) {
+			final MindMapNodeSearchIndex.Hit hit = (MindMapNodeSearchIndex.Hit) hits.get(i);
+			final String key = hit.nodeId + "|" + hit.mapFile.getAbsolutePath();
+			if (!seen.add(key)) {
+				continue;
+			}
+			final String mapName = stripMm(hit.mapFile.getName());
+			final int rank = history.iconRank(hit.nodeId, hit.mapFile);
+			scored.add(QuickCommandCandidate.iconNode(hit.nodeText, mapName, hit.mapFile, hit.nodeId, rank >= 0, rank,
+			        hit.modifiedAt));
+		}
+	}
+
+	private static List searchPinyinFuzzy(final List files, final String query, final int limit) {
+		if (limit <= 0 || files == null || files.isEmpty()) {
+			return Collections.EMPTY_LIST;
+		}
+		return MindMapNodeSearchIndex.searchFiltered(files, new MindMapNodeSearchIndex.NodeFilter() {
+			public boolean matches(final File mapFile, final String nodeText) {
+				return PinyinMatch.matches(nodeText, null, null, query);
+			}
+		}, limit, 0L);
+	}
+
+	private static void appendMapNameHits(final List scored, final Set seen, final QuickCommandHistory history,
+	        final List files, final String query, final String needle, final int limit) {
+		for (int i = 0; i < files.size() && scored.size() < limit; i++) {
+			final File file = (File) files.get(i);
+			final String mapName = stripMm(file.getName());
+			if (!matchesQuery(mapName, query)) {
+				continue;
+			}
+			final List oneFile = Collections.singletonList(file);
+			List fileHits = MindMapNodeSearchIndex.search(oneFile, needle, limit - scored.size(), 0L);
+			if (fileHits.isEmpty()) {
+				fileHits = MindMapNodeSearchIndex.search(oneFile, "", Math.min(3, limit - scored.size()), 0L);
+			}
+			appendNodeHits(scored, seen, history, fileHits);
+		}
+	}
+
+	List filterCurrentMapTodos(final String query, final int limit) {
+		final String q = normalize(query);
+		final MapModel map = Controller.getCurrentController().getMap();
+		if (map == null || map.getRootNode() == null) {
+			final List hint = new ArrayList();
+			hint.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.hint.noMap"),
+			        TextUtils.getText("QuickCommand.hint.noMap.detail")));
+			return hint;
+		}
+		final File mapFile = map.getFile();
+		final String mapName = mapFile != null ? stripMm(mapFile.getName())
+		        : TextUtils.getText("QuickCommand.kind.map");
+		final List rows = new ArrayList();
+		collectTodoRows(map.getRootNode(), mapFile, mapName, rows);
+		return filterTodoRows(rows, q, limit);
+	}
+
+	List filterAllTodos(final String query, final int limit) {
+		final String q = normalize(query);
+		if (!allTodosDataReady() && SwingUtilities.isEventDispatchThread()) {
+			ensureAllTodosAsync();
+			final List pending = new ArrayList();
+			pending.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.index.todos"),
+			        TextUtils.getText("QuickCommand.index.todos.detail")));
+			return pending;
+		}
+		return filterTodoRows(collectAllTodoRows(), q, limit);
+	}
+
+	void ensureAllTodosAsync() {
+		if (allTodosDataReady() || !allTodosScanning.compareAndSet(false, true)) {
+			return;
+		}
+		final Thread thread = new Thread(new Runnable() {
+			public void run() {
+				try {
+					collectAllTodoRows();
+				}
+				finally {
+					allTodosScanning.set(false);
+				}
+			}
+		}, "QuickCommand-AllTodoIndex");
+		thread.setDaemon(true);
+		thread.setPriority(Thread.MIN_PRIORITY + 1);
+		thread.start();
+	}
+
+	boolean allTodosSnapshotReady() {
+		return allTodosDataReady();
+	}
+
+	private boolean allTodosDataReady() {
+		if (!WorkspaceSideTabSnapshotRegistry.getSnapshot().getTodos().isEmpty()) {
+			return true;
+		}
+		return allTodosScanComplete;
+	}
+
+	private static List collectAllTodoRows() {
+		final List rows = new ArrayList();
+		final List source = WorkspaceSideTabSnapshotRegistry.getSnapshot().getTodos();
+		if (source != null && !source.isEmpty()) {
+			for (int i = 0; i < source.size(); i++) {
+				final WorkspaceSideTabSnapshot.TodoEntry entry = (WorkspaceSideTabSnapshot.TodoEntry) source.get(i);
+				if (entry == null || entry.mapFile == null || entry.nodeId == null) {
+					continue;
+				}
+				rows.add(new TodoRow(entry.nodeText, stripMm(entry.mapFile.getName()), entry.mapFile, entry.nodeId,
+				        entry.mapFile.lastModified()));
+			}
+			return rows;
+		}
+		final List cached = INSTANCE.cachedAllTodoRows;
+		if (cached != null) {
+			return cached;
+		}
+		final List scanned = MindMapWorkspaceContextScanner.scanAllTodos();
+		for (int i = 0; i < scanned.size(); i++) {
+			final MindMapWorkspaceContextScanner.TodoItem item = (MindMapWorkspaceContextScanner.TodoItem) scanned.get(i);
+			if (item == null || item.mapFile == null || item.nodeId == null) {
+				continue;
+			}
+			rows.add(new TodoRow(item.nodeText, stripMm(item.mapFile.getName()), item.mapFile, item.nodeId,
+			        item.mapFile.lastModified()));
+		}
+		INSTANCE.cachedAllTodoRows = rows;
+		INSTANCE.allTodosScanComplete = true;
+		return rows;
+	}
+
+	private static void collectTodoRows(final NodeModel node, final File mapFile, final String mapName,
+	        final List rows) {
+		if (node == null) {
+			return;
+		}
+		if (hasHourglassIcon(node)) {
+			final String text = normalizeText(node.getText());
+			if (text.length() > 0 && !"bin".equalsIgnoreCase(text)) {
+				final long modified = mapFile != null ? mapFile.lastModified() : 0L;
+				rows.add(new TodoRow(text, mapName, mapFile, node.createID(), modified));
+			}
+		}
+		for (final NodeModel child : node.getChildren()) {
+			collectTodoRows(child, mapFile, mapName, rows);
+		}
+	}
+
+	private static List filterTodoRows(final List rows, final String query, final int limit) {
+		final List scored = new ArrayList();
+		if (rows == null || rows.isEmpty()) {
+			return scored;
+		}
+		final String q = normalize(query);
+		for (int i = 0; i < rows.size(); i++) {
+			final TodoRow row = (TodoRow) rows.get(i);
+			if (q.length() > 0 && !matchesQuery(row.text, q) && !matchesQuery(row.mapName, q)) {
+				continue;
+			}
+			scored.add(QuickCommandCandidate.todo(row.text, row.mapName, row.file, row.nodeId, row.modifiedAt));
+		}
+		sortByModifiedDesc(scored);
+		return take(scored, limit);
+	}
+
+	private static boolean hasHourglassIcon(final NodeModel node) {
+		if (node == null) {
+			return false;
+		}
+		final java.util.Collection icons = IconController.getController().getIcons(node);
+		if (icons == null) {
+			return false;
+		}
+		for (final Object iconObj : icons) {
+			if (iconObj instanceof MindIcon
+			        && TODO_ICON_NAME.equalsIgnoreCase(((MindIcon) iconObj).getName())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static final class TodoRow {
+		final String text;
+		final String mapName;
+		final File file;
+		final String nodeId;
+		final long modifiedAt;
+
+		TodoRow(final String text, final String mapName, final File file, final String nodeId, final long modifiedAt) {
+			this.text = text;
+			this.mapName = mapName;
+			this.file = file;
+			this.nodeId = nodeId;
+			this.modifiedAt = modifiedAt;
+		}
 	}
 
 	FileEntry findFileExact(final String query, final QuickCommandCandidate selected) {
@@ -550,23 +778,7 @@ final class QuickCommandIndex {
 			        PinyinMatch.fullPinyin(selected.detail), PinyinMatch.initials(selected.detail),
 			        selected.mapFile.lastModified());
 		}
-		final String q = normalize(query);
-		if (q.length() == 0) {
-			return null;
-		}
-		synchronized (lock) {
-			IconEntry contains = null;
-			for (int i = 0; i < allNodeEntries.size(); i++) {
-				final IconEntry entry = (IconEntry) allNodeEntries.get(i);
-				if (entry.text.equalsIgnoreCase(q)) {
-					return entry;
-				}
-				if (contains == null && PinyinMatch.matches(entry.text, entry.fullPinyin, entry.initials, q)) {
-					contains = entry;
-				}
-			}
-			return contains;
-		}
+		return null;
 	}
 
 	boolean iconsReady() {
@@ -846,7 +1058,40 @@ final class QuickCommandIndex {
 		if (text == null) {
 			return "";
 		}
-		return HtmlUtils.htmlToPlain(text).replaceAll("\\s+", " ").trim();
+		return HtmlUtils.removeHtmlTagsFromString(text).replaceAll("\\s+", " ").trim();
+	}
+
+	private static List cachedMindmapFiles;
+
+	private static boolean matchesQuery(final String text, final String query) {
+		if (text == null || text.length() == 0 || query == null || query.length() == 0) {
+			return false;
+		}
+		if (text.toLowerCase(Locale.ROOT).contains(query.toLowerCase(Locale.ROOT))) {
+			return true;
+		}
+		return PinyinMatch.matches(text, null, null, query);
+	}
+
+	private static List collectMindmapFilesSorted() {
+		if (cachedMindmapFiles != null) {
+			return cachedMindmapFiles;
+		}
+		final List files = new ArrayList();
+		MindMapDataRootResolver.collectMindmapFiles(files);
+		Collections.sort(files, new Comparator() {
+			public int compare(final Object a, final Object b) {
+				final long ma = ((File) a).lastModified();
+				final long mb = ((File) b).lastModified();
+				return ma < mb ? 1 : (ma > mb ? -1 : 0);
+			}
+		});
+		cachedMindmapFiles = files;
+		return files;
+	}
+
+	static void invalidateMindmapFileCache() {
+		cachedMindmapFiles = null;
 	}
 
 	private static String stripMm(final String name) {

@@ -1,6 +1,7 @@
 package org.docear.plugin.core.quickcommand;
 
 import org.freeplane.core.ui.theme.DocearUiTheme;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 
 import java.awt.BorderLayout;
@@ -21,6 +22,10 @@ import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.List;
+import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
@@ -38,6 +43,7 @@ import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
@@ -66,6 +72,15 @@ final class QuickCommandDialog extends JDialog {
 	private final JList list = new JList(listModel);
 	private final JLabel hintLabel = new JLabel(" ");
 	private boolean suppressFilter;
+	private final ExecutorService searchExecutor = Executors.newSingleThreadExecutor(new java.util.concurrent.ThreadFactory() {
+		public Thread newThread(final Runnable runnable) {
+			final Thread thread = new Thread(runnable, "QuickCommand-Search");
+			thread.setDaemon(true);
+			return thread;
+		}
+	});
+	private final AtomicInteger searchGeneration = new AtomicInteger(0);
+	private Timer searchDebounce;
 
 	QuickCommandDialog() {
 		super((java.awt.Frame) null, "", false);
@@ -86,6 +101,10 @@ final class QuickCommandDialog extends JDialog {
 
 			@Override
 			public void windowClosed(final WindowEvent e) {
+				searchGeneration.incrementAndGet();
+				if (searchDebounce != null) {
+					searchDebounce.stop();
+				}
 				if (current == QuickCommandDialog.this) {
 					current = null;
 				}
@@ -235,8 +254,72 @@ final class QuickCommandDialog extends JDialog {
 			return;
 		}
 		final String text = input.getText();
+		if (needsAsyncSearch(text)) {
+			scheduleAsyncSuggestions(text);
+			return;
+		}
+		applySuggestions(text, QuickCommandController.suggest(text));
+	}
+
+	private boolean needsAsyncSearch(final String text) {
+		return needsAsyncAllNodeSearch(text) || needsAsyncAllTodoSearch(text);
+	}
+
+	private boolean needsAsyncAllTodoSearch(final String text) {
+		if (text == null) {
+			return false;
+		}
+		return text.indexOf("!!") >= 0 && !QuickCommandIndex.getInstance().allTodosSnapshotReady();
+	}
+
+	private boolean needsAsyncAllNodeSearch(final String text) {
+		if (text == null) {
+			return false;
+		}
+		final int star = text.lastIndexOf('*');
+		return star >= 0;
+	}
+
+	private void scheduleAsyncSuggestions(final String text) {
+		if (searchDebounce != null) {
+			searchDebounce.stop();
+		}
+		if (text != null && text.indexOf("!!") >= 0) {
+			hintLabel.setText(TextUtils.getText("QuickCommand.index.todos"));
+		}
+		else {
+			hintLabel.setText(TextUtils.getText("QuickCommand.index.nodes"));
+		}
+		searchDebounce = new Timer(250, new java.awt.event.ActionListener() {
+			public void actionPerformed(final java.awt.event.ActionEvent e) {
+				searchDebounce.stop();
+				final int generation = searchGeneration.incrementAndGet();
+				searchExecutor.submit(new Runnable() {
+					public void run() {
+						try {
+							final List suggestions = QuickCommandController.suggest(text);
+							SwingUtilities.invokeLater(new Runnable() {
+								public void run() {
+									if (generation != searchGeneration.get() || !isDisplayable()) {
+										return;
+									}
+									applySuggestions(text, suggestions);
+								}
+							});
+						}
+						catch (Exception ex) {
+							LogUtils.warn("QuickCommand async search failed.", ex);
+						}
+					}
+				});
+			}
+		});
+		searchDebounce.setRepeats(false);
+		searchDebounce.start();
+	}
+
+	private void applySuggestions(final String text, final List suggestions) {
 		list.putClientProperty(HIGHLIGHT_QUERY_KEY, extractHighlightQuery(text));
-		final List suggestions = QuickCommandController.suggest(text);
 		listModel.clear();
 		for (int i = 0; i < suggestions.size(); i++) {
 			listModel.addElement(suggestions.get(i));
@@ -255,6 +338,14 @@ final class QuickCommandDialog extends JDialog {
 		final int atAt = raw.indexOf("@@");
 		if (atAt >= 0) {
 			return raw.substring(atAt + 2).trim();
+		}
+		final int bangBang = raw.indexOf("!!");
+		if (bangBang >= 0) {
+			return raw.substring(bangBang + 2).trim();
+		}
+		final int bang = indexOfSingleBang(raw);
+		if (bang >= 0) {
+			return raw.substring(bang + 1).trim();
 		}
 		final int star = raw.lastIndexOf('*');
 		if (star >= 0) {
@@ -276,6 +367,12 @@ final class QuickCommandDialog extends JDialog {
 		if (text.indexOf("@@") >= 0) {
 			hintLabel.setText(TextUtils.getText("QuickCommand.hint.iconNodes"));
 		}
+		else if (text.indexOf("!!") >= 0) {
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.allTodos"));
+		}
+		else if (indexOfSingleBang(text) >= 0) {
+			hintLabel.setText(TextUtils.getText("QuickCommand.hint.mapTodos"));
+		}
 		else if (text.indexOf('*') >= 0) {
 			hintLabel.setText(TextUtils.getText("QuickCommand.hint.allNodes"));
 		}
@@ -294,6 +391,10 @@ final class QuickCommandDialog extends JDialog {
 	}
 
 	private void submit(final boolean asTask) {
+		searchGeneration.incrementAndGet();
+		if (searchDebounce != null) {
+			searchDebounce.stop();
+		}
 		final QuickCommandCandidate selected = (QuickCommandCandidate) list.getSelectedValue();
 		final String text = input.getText();
 		final String completed = QuickCommandController.completeIntoInput(text, selected);
@@ -361,13 +462,11 @@ final class QuickCommandDialog extends JDialog {
 			current.focusInput();
 			return;
 		}
-		QuickCommandIndex.getInstance().ensureMaps();
-		QuickCommandIndex.getInstance().ensureLaunch();
-		QuickCommandIndex.getInstance().ensureIconsAsync();
-		QuickCommandIndex.getInstance().ensureFilesAsync();
-		QuickCommandIndex.getInstance().ensureAllNodesAsync();
 		current = new QuickCommandDialog();
 		current.setVisible(true);
+		QuickCommandIndex.getInstance().ensureMapsAsync();
+		QuickCommandIndex.getInstance().ensureIconsAsync();
+		QuickCommandIndex.getInstance().ensureFilesAsync();
 	}
 
 	private static final class ThinScrollBarUI extends BasicScrollBarUI {
@@ -440,7 +539,7 @@ final class QuickCommandDialog extends JDialog {
 			badgeLabel.setHorizontalAlignment(SwingConstants.CENTER);
 			badgeLabel.setPreferredSize(new Dimension(36, 28));
 
-			final String highlighted = PinyinMatch.highlightHtml(label, query, MATCH_RED);
+			final String highlighted = literalHighlightHtml(label, query, MATCH_RED);
 			final boolean useHtml = query.length() > 0 && highlighted.startsWith("<html>");
 			final String mainText;
 			if (useHtml) {
@@ -462,6 +561,7 @@ final class QuickCommandDialog extends JDialog {
 			texts.setOpaque(false);
 			texts.add(main, BorderLayout.CENTER);
 			if (item != null && (item.kind == QuickCommandCandidate.Kind.ICON_NODE
+			        || item.kind == QuickCommandCandidate.Kind.TODO
 			        || item.kind == QuickCommandCandidate.Kind.FILE) && detail != null && detail.length() > 0) {
 				texts.add(sub, BorderLayout.EAST);
 			}
@@ -474,5 +574,77 @@ final class QuickCommandDialog extends JDialog {
 			row.setBackground(isSelected ? ACCENT_SOFT : (index % 2 == 0 ? PANEL : ROW_ALT));
 			return row;
 		}
+	}
+
+	/** Fast literal highlight for the result list — avoids fuzzy pinyin work on every cell paint. */
+	private static String literalHighlightHtml(final String label, final String query, final String colorHex) {
+		if (label == null || label.length() == 0) {
+			return "";
+		}
+		if (query == null || query.trim().length() == 0) {
+			return label;
+		}
+		final String q = query.trim().toLowerCase(Locale.ROOT);
+		final String lower = label.toLowerCase(Locale.ROOT);
+		final int idx = lower.indexOf(q);
+		if (idx < 0) {
+			return label;
+		}
+		final String color = colorHex == null || colorHex.length() == 0 ? MATCH_RED : colorHex;
+		final StringBuilder sb = new StringBuilder(label.length() + 32);
+		sb.append("<html>");
+		if (idx > 0) {
+			sb.append(escapeHtmlText(label.substring(0, idx)));
+		}
+		sb.append("<font color=\"").append(color).append("\">");
+		sb.append(escapeHtmlText(label.substring(idx, idx + q.length())));
+		sb.append("</font>");
+		if (idx + q.length() < label.length()) {
+			sb.append(escapeHtmlText(label.substring(idx + q.length())));
+		}
+		return sb.toString();
+	}
+
+	private static String escapeHtmlText(final String text) {
+		if (text == null || text.length() == 0) {
+			return "";
+		}
+		final StringBuilder sb = new StringBuilder(text.length() + 8);
+		for (int i = 0; i < text.length(); i++) {
+			final char c = text.charAt(i);
+			if (c == '<') {
+				sb.append("&lt;");
+			}
+			else if (c == '>') {
+				sb.append("&gt;");
+			}
+			else if (c == '&') {
+				sb.append("&amp;");
+			}
+			else if (c == '"') {
+				sb.append("&quot;");
+			}
+			else {
+				sb.append(c);
+			}
+		}
+		return sb.toString();
+	}
+
+	private static int indexOfSingleBang(final String input) {
+		if (input == null) {
+			return -1;
+		}
+		for (int i = 0; i < input.length(); i++) {
+			if (input.charAt(i) != '!') {
+				continue;
+			}
+			if (i + 1 < input.length() && input.charAt(i + 1) == '!') {
+				i++;
+				continue;
+			}
+			return i;
+		}
+		return -1;
 	}
 }

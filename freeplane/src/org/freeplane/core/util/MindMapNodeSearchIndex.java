@@ -184,6 +184,85 @@ public final class MindMapNodeSearchIndex {
 	 * (already lower-cased; empty = match all with time filter). Returns up to {@code limit}
 	 * hits sorted by node {@code MODIFIED} descending.
 	 */
+	/** Predicate for {@link #searchFiltered}; kept free of plugin types so core stays dependency-free. */
+	public interface NodeFilter {
+		boolean matches(File mapFile, String nodeText);
+	}
+
+	/**
+	 * Like {@link #search} but uses {@code filter} instead of a literal substring.
+	 * {@code files} should be newest-first for best early-stop behaviour.
+	 */
+	public static List searchFiltered(final List files, final NodeFilter filter, final int limit,
+			final long modifiedAfterMillis) {
+		if (filter == null) {
+			return Collections.EMPTY_LIST;
+		}
+		final int want = limit > 0 ? limit : Integer.MAX_VALUE;
+		final List candidates = new ArrayList();
+		long worstKeptModified = Long.MIN_VALUE;
+		boolean trackingTop = false;
+
+		for (int i = 0; i < files.size(); i++) {
+			final File file = (File) files.get(i);
+			if (file == null || !file.isFile()) {
+				continue;
+			}
+			synchronized (LOCK) {
+				STATS.filesScanned++;
+			}
+			if (modifiedAfterMillis > 0L && file.lastModified() < modifiedAfterMillis) {
+				synchronized (LOCK) {
+					STATS.filesSkippedByMtime++;
+				}
+				continue;
+			}
+			if (trackingTop && want != Integer.MAX_VALUE && file.lastModified() < worstKeptModified) {
+				synchronized (LOCK) {
+					STATS.earlyStops++;
+				}
+				break;
+			}
+
+			final FileIndex index = getOrBuildIndex(file);
+			if (index == null) {
+				continue;
+			}
+			if (modifiedAfterMillis > 0L && index.maxNodeModified < modifiedAfterMillis) {
+				continue;
+			}
+			for (int j = 0; j < index.nodes.size(); j++) {
+				final IndexedNode node = (IndexedNode) index.nodes.get(j);
+				if (modifiedAfterMillis > 0L && node.modifiedAt < modifiedAfterMillis) {
+					continue;
+				}
+				if (trackingTop && node.modifiedAt < worstKeptModified) {
+					continue;
+				}
+				if (!filter.matches(file, node.nodeText)) {
+					continue;
+				}
+				candidates.add(new Hit(file, node.nodeId, node.nodeText, node.modifiedAt, node.parentNodeId,
+						node.parentPath, node.depth));
+			}
+
+			if (want != Integer.MAX_VALUE && candidates.size() >= want) {
+				sortHitsByModifiedDesc(candidates);
+				while (candidates.size() > want) {
+					candidates.remove(candidates.size() - 1);
+				}
+				worstKeptModified = ((Hit) candidates.get(candidates.size() - 1)).modifiedAt;
+				trackingTop = true;
+			}
+		}
+
+		sortHitsByModifiedDesc(candidates);
+		if (want != Integer.MAX_VALUE && candidates.size() > want) {
+			return new ArrayList(candidates.subList(0, want));
+		}
+		return candidates;
+	}
+
 	public static List search(final List files, final String needle, final int limit, final long modifiedAfterMillis) {
 		final String needleLower = needle == null ? "" : needle;
 		final int want = limit > 0 ? limit : Integer.MAX_VALUE;

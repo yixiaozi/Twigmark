@@ -548,12 +548,11 @@ public class MAttributeController extends AttributeController {
 
 	public int editAttribute(final NodeModel pNode, final String pName, final String pNewValue) {
 		createAttributeTableModel(pNode);
-		final Attribute newAttribute = new Attribute(pName, pNewValue);
 		final NodeAttributeTableModel attributes = NodeAttributeTableModel.getModel(pNode);
 		for (int i = 0; i < attributes.getRowCount(); i++) {
 			if (pName.equals(attributes.getAttribute(i).getName())) {
 				if (pNewValue != null) {
-					setAttribute(pNode, i, newAttribute);
+					setAttribute(pNode, i, new Attribute(pName, pNewValue));
 				}
 				else {
 					removeAttribute(pNode, i);
@@ -564,7 +563,7 @@ public class MAttributeController extends AttributeController {
 		if (pNewValue == null) {
 			return -1;
 		}
-		return addAttribute(pNode, newAttribute);
+		return addAttribute(pNode, new Attribute(pName, pNewValue));
 	}
 
 	@Override

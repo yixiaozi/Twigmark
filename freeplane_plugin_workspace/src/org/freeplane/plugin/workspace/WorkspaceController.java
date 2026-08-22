@@ -234,7 +234,8 @@ public final class WorkspaceController implements IExtension {
 	}
 	
 	public static WorkspaceModel getCurrentModel() {
-		return getCurrentModeExtension().getModel();
+		final AWorkspaceModeExtension ext = getCurrentModeExtension();
+		return ext == null ? null : ext.getModel();
 	}
 
 	public static AWorkspaceModeExtension getModeExtension(ModeController modeController) {

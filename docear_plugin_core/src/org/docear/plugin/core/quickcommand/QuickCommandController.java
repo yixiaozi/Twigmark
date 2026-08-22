@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import javax.swing.SwingUtilities;
+
 import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
@@ -41,6 +43,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderHook;
  * note@@图标节点 + Shift → add reminder child under icon node (silent)
  * #文件名               → search/open files under mindmap data roots
  * *节点文字             → search/open any node across all maps
+ * !关键词               → search todos in the current map
+ * !!关键词              → search todos across all maps
  * chrome / notepad      → quick launch
  * mindmaps / allicons / allnodes / allfiles → rebuild indexes
  * </pre>
@@ -61,6 +65,16 @@ final class QuickCommandController {
 		if (atAt >= 0) {
 			final String query = input.substring(atAt + 2).trim();
 			return QuickCommandIndex.getInstance().filterIconNodes(query, 40);
+		}
+		final int bangBang = indexOfBangBang(input);
+		if (bangBang >= 0) {
+			final String query = input.substring(bangBang + 2).trim();
+			return QuickCommandIndex.getInstance().filterAllTodos(query, 40);
+		}
+		final int bang = indexOfSingleBang(input);
+		if (bang >= 0) {
+			final String query = input.substring(bang + 1).trim();
+			return QuickCommandIndex.getInstance().filterCurrentMapTodos(query, 40);
 		}
 		final int star = input.lastIndexOf('*');
 		if (star >= 0) {
@@ -89,6 +103,8 @@ final class QuickCommandController {
 		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.icon"), TextUtils.getText("QuickCommand.example.icon.detail")));
 		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.file"), TextUtils.getText("QuickCommand.example.file.detail")));
 		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.node"), TextUtils.getText("QuickCommand.example.node.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.todo"), TextUtils.getText("QuickCommand.example.todo.detail")));
+		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.allTodos"), TextUtils.getText("QuickCommand.example.allTodos.detail")));
 		hints.add(QuickCommandCandidate.hint(TextUtils.getText("QuickCommand.example.pinyin"), TextUtils.getText("QuickCommand.example.pinyin.detail")));
 		return hints;
 	}
@@ -108,6 +124,9 @@ final class QuickCommandController {
 					        selected.nodeId);
 					return openMapAndSelect(selected.mapFile, selected.nodeId);
 				}
+				if (selected != null && selected.kind == QuickCommandCandidate.Kind.TODO) {
+					return openTodo(selected);
+				}
 				return false;
 			}
 			if (selected != null && selected.kind == QuickCommandCandidate.Kind.COMMAND) {
@@ -126,6 +145,14 @@ final class QuickCommandController {
 			if (atAt >= 0) {
 				return executeAtAt(input, atAt, selected, asTask);
 			}
+			final int bangBang = indexOfBangBang(input);
+			if (bangBang >= 0) {
+				return executeBangBang(input, bangBang, selected);
+			}
+			final int bang = indexOfSingleBang(input);
+			if (bang >= 0) {
+				return executeBang(input, bang, selected);
+			}
 			final int star = input.lastIndexOf('*');
 			if (star >= 0) {
 				return executeStar(input, star, selected, asTask);
@@ -143,6 +170,9 @@ final class QuickCommandController {
 			}
 			if (selected != null && selected.kind == QuickCommandCandidate.Kind.ICON_NODE) {
 				return openMapAndSelect(selected.mapFile, selected.nodeId);
+			}
+			if (selected != null && selected.kind == QuickCommandCandidate.Kind.TODO) {
+				return openTodo(selected);
 			}
 			final List launch = QuickCommandIndex.getInstance().filterLaunch(input, 1);
 			if (!launch.isEmpty()) {
@@ -254,10 +284,78 @@ final class QuickCommandController {
 		return addUnderNode(entry.file, entry.nodeId, left, asTask);
 	}
 
+	private static boolean executeBangBang(final String input, final int bangBang, final QuickCommandCandidate selected) {
+		if (selected != null && selected.kind == QuickCommandCandidate.Kind.TODO && selected.mapFile != null
+		        && selected.nodeId != null) {
+			return openTodo(selected);
+		}
+		LogUtils.warn("QuickCommand: todo not found: " + input.substring(bangBang + 2).trim());
+		return false;
+	}
+
+	private static boolean executeBang(final String input, final int bang, final QuickCommandCandidate selected) {
+		if (selected != null && selected.kind == QuickCommandCandidate.Kind.TODO && selected.mapFile != null
+		        && selected.nodeId != null) {
+			return openTodo(selected);
+		}
+		LogUtils.warn("QuickCommand: current-map todo not found: " + input.substring(bang + 1).trim());
+		return false;
+	}
+
+	private static boolean openTodo(final QuickCommandCandidate selected) {
+		if (selected == null || selected.mapFile == null || selected.nodeId == null) {
+			return false;
+		}
+		QuickCommandHistory.getInstance().recordIconNode(selected.label, selected.detail, selected.mapFile,
+		        selected.nodeId);
+		QuickCommandHistory.getInstance().recordMap(selected.detail);
+		final MapModel current = Controller.getCurrentController().getMap();
+		if (current != null && isSameFile(current.getFile(), selected.mapFile)) {
+			return selectInCurrentMap(selected.nodeId);
+		}
+		return openMapAndSelect(selected.mapFile, selected.nodeId);
+	}
+
+	private static boolean selectInCurrentMap(final String nodeId) {
+		if (nodeId == null) {
+			return false;
+		}
+		try {
+			final MapModel map = Controller.getCurrentController().getMap();
+			if (map == null) {
+				return false;
+			}
+			final NodeModel node = map.getNodeForID(nodeId);
+			if (node == null) {
+				return false;
+			}
+			final MMapController mapController = (MMapController) MModeController.getMModeController().getMapController();
+			unfoldAncestors(mapController, node);
+			Controller.getCurrentController().getSelection().selectAsTheOnlyOneSelected(node);
+			mapController.centerNode(node);
+			bringDocearForward();
+			return true;
+		}
+		catch (Exception e) {
+			LogUtils.warn("QuickCommand: select todo in current map failed", e);
+			return false;
+		}
+	}
+
 	private static boolean executeStar(final String input, final int star, final QuickCommandCandidate selected,
 	        final boolean asTask) {
 		final String left = input.substring(0, star).trim();
 		final String right = input.substring(star + 1).trim();
+		if (selected != null && selected.kind == QuickCommandCandidate.Kind.ICON_NODE && selected.mapFile != null
+		        && selected.nodeId != null) {
+			QuickCommandHistory.getInstance().recordIconNode(selected.label, selected.detail, selected.mapFile,
+			        selected.nodeId);
+			QuickCommandHistory.getInstance().recordMap(selected.detail);
+			if (left.length() == 0) {
+				return openMapAndSelect(selected.mapFile, selected.nodeId);
+			}
+			return addUnderNode(selected.mapFile, selected.nodeId, left, asTask);
+		}
 		final QuickCommandIndex.IconEntry entry = QuickCommandIndex.getInstance().findAllNode(right, selected);
 		if (entry == null) {
 			LogUtils.warn("QuickCommand: node not found: " + right);
@@ -379,10 +477,41 @@ final class QuickCommandController {
 		if (mapFile == null || nodeId == null) {
 			return false;
 		}
-		if (!openMap(mapFile)) {
-			return false;
-		}
-		selectNodeWithRetry(mapFile, nodeId, 0);
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				try {
+					final URL url = Compat.fileToUrl(mapFile);
+					if (url == null) {
+						return;
+					}
+					final IMapViewManager mapViewManager = Controller.getCurrentController().getMapViewManager();
+					if (mapViewManager.tryToChangeToMapView(url)) {
+						bringDocearForward();
+						selectNodeWithRetry(mapFile, nodeId, 0);
+						return;
+					}
+					bringDocearForward();
+					final org.freeplane.features.ui.ViewController viewController = Controller.getCurrentController()
+					        .getViewController();
+					if (viewController != null) {
+						viewController.setWaitingCursor(true);
+					}
+					try {
+						if (openMap(mapFile)) {
+							selectNodeWithRetry(mapFile, nodeId, 0);
+						}
+					}
+					finally {
+						if (viewController != null) {
+							viewController.setWaitingCursor(false);
+						}
+					}
+				}
+				catch (Exception e) {
+					LogUtils.warn("QuickCommand: open map and select failed " + mapFile, e);
+				}
+			}
+		});
 		return true;
 	}
 
@@ -667,5 +796,29 @@ final class QuickCommandController {
 			return -1;
 		}
 		return input.indexOf("@@");
+	}
+
+	private static int indexOfBangBang(final String input) {
+		if (input == null) {
+			return -1;
+		}
+		return input.indexOf("!!");
+	}
+
+	private static int indexOfSingleBang(final String input) {
+		if (input == null) {
+			return -1;
+		}
+		for (int i = 0; i < input.length(); i++) {
+			if (input.charAt(i) != '!') {
+				continue;
+			}
+			if (i + 1 < input.length() && input.charAt(i + 1) == '!') {
+				i++;
+				continue;
+			}
+			return i;
+		}
+		return -1;
 	}
 }

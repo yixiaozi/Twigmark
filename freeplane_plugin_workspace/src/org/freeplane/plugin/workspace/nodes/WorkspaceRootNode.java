@@ -19,6 +19,7 @@ import org.freeplane.plugin.workspace.components.menu.WorkspacePopupMenuBuilder;
 import org.freeplane.plugin.workspace.event.IWorkspaceNodeActionListener;
 import org.freeplane.plugin.workspace.event.WorkspaceActionEvent;
 import org.freeplane.plugin.workspace.model.AWorkspaceTreeNode;
+import org.freeplane.plugin.workspace.model.WorkspaceModel;
 import org.freeplane.plugin.workspace.model.project.AWorkspaceProject;
 
 public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActionListener {
@@ -114,18 +115,23 @@ public class WorkspaceRootNode extends AFolderNode implements IWorkspaceNodeActi
 			node = super.getChildAt(childIndex);
 		}
 		if(node == null) {
-			node = (AWorkspaceTreeNode) WorkspaceController.getCurrentModel().getChild(this, childIndex);
+			final WorkspaceModel model = WorkspaceController.getCurrentModel();
+			if (model != null) {
+				node = (AWorkspaceTreeNode) model.getChild(this, childIndex);
+			}
 		}
 		return node;
 	}
 
 	public int getChildCount() {
-		int offset = super.getChildCount(); 
-		return WorkspaceController.getCurrentModel().getProjects().size()+offset;
+		int offset = super.getChildCount();
+		final WorkspaceModel model = WorkspaceController.getCurrentModel();
+		return (model == null ? 0 : model.getProjects().size()) + offset;
 	}
 
 	public int getIndex(TreeNode node) {
-		return WorkspaceController.getCurrentModel().getIndexOfChild(this, node);
+		final WorkspaceModel model = WorkspaceController.getCurrentModel();
+		return model == null ? -1 : model.getIndexOfChild(this, node);
 	}
 
 	public boolean getAllowsChildren() {
