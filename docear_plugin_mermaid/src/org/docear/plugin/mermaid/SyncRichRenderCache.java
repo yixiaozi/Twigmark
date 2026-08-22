@@ -11,9 +11,9 @@ final class SyncRichRenderCache {
 	private SyncRichRenderCache() {
 	}
 
-	static RichPreviewIcon getOrRender(final String kind, final String source,
+	static RichPreviewIcon getOrRender(final String kind, final String source, final float zoom,
 			final java.util.concurrent.Callable<RichPreviewIcon> renderer) {
-		final String key = RichCache.hash(kind, source);
+		final String key = RichCache.hash(kind, source + RichPreviewScale.zoomCacheSuffix(zoom));
 		final RichPreviewIcon cached = CACHE.get(key);
 		if (cached != null) {
 			return cached;
@@ -28,5 +28,9 @@ final class SyncRichRenderCache {
 		catch (Exception e) {
 			return RichPreviewIcon.error(kind, e.getMessage());
 		}
+	}
+
+	static RichPreviewIcon peek(final String kind, final String source, final float zoom) {
+		return CACHE.get(RichCache.hash(kind, source + RichPreviewScale.zoomCacheSuffix(zoom)));
 	}
 }

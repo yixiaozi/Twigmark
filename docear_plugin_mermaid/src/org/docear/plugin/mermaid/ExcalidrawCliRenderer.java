@@ -56,6 +56,10 @@ final class ExcalidrawCliRenderer {
 	}
 
 	static BufferedImage render(final String source) throws Exception {
+		return render(source, RichPreviewScale.DEFAULT);
+	}
+
+	static BufferedImage render(final String source, final float zoom) throws Exception {
 		if (!ensureAvailable()) {
 			throw new IllegalStateException("Excalidraw unavailable: " + lastError);
 		}
@@ -78,6 +82,7 @@ final class ExcalidrawCliRenderer {
 			final ProcessBuilder pb = new ProcessBuilder(cmd);
 			pb.redirectErrorStream(true);
 			pb.directory(shellDir);
+			pb.environment().put("TWIGMARK_PREVIEW_ZOOM", RichPreviewScale.format(RichPreviewScale.clamp(zoom)));
 			final String chrome = findChromeExecutable();
 			if (chrome != null) {
 				pb.environment().put("PUPPETEER_EXECUTABLE_PATH", chrome);

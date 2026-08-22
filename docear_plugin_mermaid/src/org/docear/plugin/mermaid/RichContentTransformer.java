@@ -41,42 +41,78 @@ public final class RichContentTransformer extends AbstractContentTransformer {
 		if (block == null || block.source == null || block.source.length() == 0) {
 			return null;
 		}
+		final float zoom = RichPreviewScale.get(node);
+		if (RichPreviewScale.isShowingInterim(node)) {
+			final Icon cached = RichPreviewCrispRender.tryCached(block, zoom);
+			if (cached != null && RichPreviewCrispRender.hasFullImage(cached)) {
+				RichPreviewScale.rememberCrisp(node, cached, zoom);
+				return cached;
+			}
+			final Icon interim = RichPreviewScale.applyInterim(node, zoom);
+			if (interim != null) {
+				if (RichPreviewScale.isAwaitingCrisp(node)) {
+					RichPreviewCrispRender.ensureQueued(node, block, zoom);
+				}
+				return interim;
+			}
+		}
+		Icon icon = null;
 		switch (block.kind) {
 			case MERMAID:
-				return MermaidRenderService.getInstance().getIcon(block.source, node);
+				icon = MermaidRenderService.getInstance().getIcon(block.source, node, zoom);
+				break;
 			case PLANTUML:
-				return PlantUmlRenderService.getInstance().getIcon(block.source, node);
+				icon = PlantUmlRenderService.getInstance().getIcon(block.source, node, zoom);
+				break;
 			case TABLE:
-				return SyncRichRenderCache.getOrRender("table", block.source,
+				icon = SyncRichRenderCache.getOrRender("table", block.source, zoom,
 						new java.util.concurrent.Callable<RichPreviewIcon>() {
 							@Override
 							public RichPreviewIcon call() {
-								return TableRenderer.render(block.source);
+								return TableRenderer.render(block.source, zoom);
 							}
 						});
+				break;
 			case CODE:
-				return SyncRichRenderCache.getOrRender("code", block.language + "\0" + block.source,
+				icon = SyncRichRenderCache.getOrRender("code", block.language + "\0" + block.source, zoom,
 						new java.util.concurrent.Callable<RichPreviewIcon>() {
 							@Override
 							public RichPreviewIcon call() {
-								return CodeHighlightRenderer.render(block.language, block.source);
+								return CodeHighlightRenderer.render(block.language, block.source, zoom);
 							}
 						});
+				break;
 			case EXCALIDRAW:
-				return ExcalidrawRenderService.getInstance().getIcon(block.source, node);
+				icon = ExcalidrawRenderService.getInstance().getIcon(block.source, node, zoom);
+				break;
 			case STRUCTURED:
-				return SyncRichRenderCache.getOrRender("structured", block.language + "\0" + block.source,
+				icon = SyncRichRenderCache.getOrRender("structured", block.language + "\0" + block.source, zoom,
 						new java.util.concurrent.Callable<RichPreviewIcon>() {
 							@Override
 							public RichPreviewIcon call() {
-								return StructuredDataRenderer.render(block.language, block.source);
+								return StructuredDataRenderer.render(block.language, block.source, zoom);
 							}
 						});
+				break;
+			case CITATION:
+				icon = SyncRichRenderCache.getOrRender("cite", block.source, zoom,
+						new java.util.concurrent.Callable<RichPreviewIcon>() {
+							@Override
+							public RichPreviewIcon call() {
+								return CitationCardRenderer.render(block.source, zoom);
+							}
+						});
+				break;
+			case TODO:
+				icon = TodoChecklistRenderer.render(block.source, zoom);
+				break;
 			case MATH:
 				return null;
 			default:
 				return null;
 		}
+		RichPreviewScale.rememberCrisp(node, icon, zoom);
+		return icon;
 	}
 
 	@Override

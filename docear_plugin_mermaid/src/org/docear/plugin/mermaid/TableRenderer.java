@@ -15,13 +15,13 @@ final class TableRenderer {
 	private TableRenderer() {
 	}
 
-	static RichPreviewIcon render(final String source) {
+	static RichPreviewIcon render(final String source, final float zoom) {
 		try {
 			final List<String[]> rows = parseTable(source);
 			if (rows.isEmpty()) {
 				return RichPreviewIcon.error("table", "empty table");
 			}
-			return RichPreviewIcon.fromImage("table", draw(rows));
+			return RichPreviewIcon.fromNativeImage("table", draw(rows, zoom));
 		}
 		catch (Throwable t) {
 			return RichPreviewIcon.error("table", t.getMessage());
@@ -55,9 +55,11 @@ final class TableRenderer {
 		return rows;
 	}
 
-	private static BufferedImage draw(final List<String[]> rows) {
-		final Font headerFont = new Font(Font.SANS_SERIF, Font.BOLD, 13);
-		final Font cellFont = new Font(Font.SANS_SERIF, Font.PLAIN, 12);
+	private static BufferedImage draw(final List<String[]> rows, final float zoom) {
+		final int maxW = RichPreviewScale.displayMaxWidth("table", zoom);
+		final int maxH = RichPreviewScale.displayMaxHeight("table", zoom);
+		final Font headerFont = new Font(Font.SANS_SERIF, Font.BOLD, RichPreviewScale.fontSize(13, zoom));
+		final Font cellFont = new Font(Font.SANS_SERIF, Font.PLAIN, RichPreviewScale.fontSize(12, zoom));
 		final int cols = maxCols(rows);
 		final int[] colWidths = new int[cols];
 		final FontMetrics headerFm = metrics(headerFont);
@@ -67,17 +69,17 @@ final class TableRenderer {
 			for (int c = 0; c < cols; c++) {
 				final String text = c < row.length ? row[c] : "";
 				final FontMetrics fm = r == 0 ? headerFm : cellFm;
-				colWidths[c] = Math.max(colWidths[c], fm.stringWidth(text) + 16);
+				colWidths[c] = Math.max(colWidths[c], fm.stringWidth(text) + RichPreviewScale.fontSize(16, zoom));
 			}
 		}
 		int tableW = 1;
 		for (int c = 0; c < cols; c++) {
 			tableW += colWidths[c];
 		}
-		final int rowH = Math.max(headerFm.getHeight(), cellFm.getHeight()) + 10;
+		final int rowH = Math.max(headerFm.getHeight(), cellFm.getHeight()) + RichPreviewScale.fontSize(10, zoom);
 		final int tableH = rowH * rows.size() + 1;
-		final int w = Math.min(RichPreviewIcon.MAX_WIDTH, tableW);
-		final int h = Math.min(RichPreviewIcon.MAX_HEIGHT, tableH);
+		final int w = Math.min(maxW, tableW);
+		final int h = Math.min(maxH, tableH);
 		final BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g2 = img.createGraphics();
 		try {

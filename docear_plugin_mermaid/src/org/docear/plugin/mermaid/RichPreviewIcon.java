@@ -20,8 +20,8 @@ import org.freeplane.core.ui.components.WidthConstrainedIcon;
  */
 public final class RichPreviewIcon implements ZoomableRichIcon {
 
-	public static final int MAX_WIDTH = 360;
-	public static final int MAX_HEIGHT = 240;
+	public static final int MAX_WIDTH = 480;
+	public static final int MAX_HEIGHT = 320;
 
 	private final ImageIcon image;
 	private final BufferedImage fullImage;
@@ -29,32 +29,73 @@ public final class RichPreviewIcon implements ZoomableRichIcon {
 	private final String placeholder;
 	private final boolean error;
 	private final int maxWidth;
+	private final int maxHeight;
 	private final int width;
 	private final int height;
 
 	public static RichPreviewIcon fromImage(final String kind, final BufferedImage img) {
-		return new RichPreviewIcon(kind, img, null, false, MAX_WIDTH);
+		return new RichPreviewIcon(kind, img, null, false, MAX_WIDTH, MAX_HEIGHT);
+	}
+
+	public static RichPreviewIcon fromImage(final String kind, final BufferedImage img, final int maxWidth,
+			final int maxHeight) {
+		return new RichPreviewIcon(kind, img, null, false, maxWidth, maxHeight);
+	}
+
+	/** Image is already at the intended display resolution (no bitmap upscale). */
+	public static RichPreviewIcon fromNativeImage(final String kind, final BufferedImage img) {
+		if (img == null) {
+			return placeholder(kind, kind + "…");
+		}
+		return new RichPreviewIcon(kind, img, null, false, img.getWidth(), img.getHeight(), false);
 	}
 
 	public static RichPreviewIcon placeholder(final String kind, final String label) {
-		return new RichPreviewIcon(kind, null, label != null ? label : kind + "…", false, MAX_WIDTH);
+		return new RichPreviewIcon(kind, null, label != null ? label : kind + "…", false, MAX_WIDTH, MAX_HEIGHT);
 	}
 
 	public static RichPreviewIcon error(final String kind, final String message) {
 		final String msg = message != null && message.length() > 0 ? message : kind + " render failed";
-		return new RichPreviewIcon(kind, null, truncate(msg, 120), true, MAX_WIDTH);
+		return new RichPreviewIcon(kind, null, truncate(msg, 120), true, MAX_WIDTH, MAX_HEIGHT);
 	}
 
 	private RichPreviewIcon(final String kind, final BufferedImage img, final String placeholder,
-			final boolean error, final int maxWidth) {
+			final boolean error, final int maxWidth, final int maxHeight) {
+		this(kind, img, placeholder, error, maxWidth, maxHeight, false);
+	}
+
+	/**
+	 * Fast bitmap resize for in-progress zoom gestures (blurry but immediate).
+	 * {@code ratio} is relative to the current icon size (1 = unchanged).
+	 */
+	public RichPreviewIcon withDisplayScaleRatio(final float ratio) {
+		if (fullImage == null || Math.abs(ratio - 1f) < 0.01f) {
+			return this;
+		}
+		final float r = ratio <= 0f ? 1f : ratio;
+		final int targetW = Math.max(40, Math.round(width * r));
+		final int targetH = Math.max(30, Math.round(height * r));
+		if (targetW == width && targetH == height) {
+			return this;
+		}
+		return new RichPreviewIcon(kindLabel, fullImage, null, false, targetW, targetH, true);
+	}
+
+	/** @deprecated Use {@link #withDisplayScaleRatio(float)} for interim zoom. */
+	public RichPreviewIcon withDisplayScale(final float scale) {
+		return withDisplayScaleRatio(scale);
+	}
+
+	private RichPreviewIcon(final String kind, final BufferedImage img, final String placeholder,
+			final boolean error, final int maxWidth, final int maxHeight, final boolean allowUpscale) {
 		this.kindLabel = kind != null ? kind : "preview";
 		this.placeholder = placeholder;
 		this.error = error;
 		this.maxWidth = maxWidth > 0 ? maxWidth : MAX_WIDTH;
+		this.maxHeight = maxHeight > 0 ? maxHeight : MAX_HEIGHT;
 		this.fullImage = img;
 		if (img != null) {
-			final BufferedImage fitted = fit(img, this.maxWidth, MAX_HEIGHT);
-			final Image scaled = scaleToMax(fitted, this.maxWidth, MAX_HEIGHT);
+			final Image scaled = scaleToFit(img, this.maxWidth, this.maxHeight, allowUpscale);
 			this.image = new ImageIcon(scaled);
 			this.width = Math.max(1, this.image.getIconWidth());
 			this.height = Math.max(1, this.image.getIconHeight());
@@ -85,11 +126,11 @@ public final class RichPreviewIcon implements ZoomableRichIcon {
 			return this;
 		}
 		if (fullImage != null) {
-			final Image scaled = scaleToMax(fullImage, newMaxWidth, MAX_HEIGHT);
+			final Image scaled = scaleToFit(fullImage, newMaxWidth, maxHeight, true);
 			final BufferedImage buf = toBufferedImage(scaled);
-			return new RichPreviewIcon(kindLabel, buf, null, false, newMaxWidth);
+			return new RichPreviewIcon(kindLabel, buf, null, false, newMaxWidth, maxHeight);
 		}
-		return new RichPreviewIcon(kindLabel, null, placeholder, error, newMaxWidth);
+		return new RichPreviewIcon(kindLabel, null, placeholder, error, newMaxWidth, maxHeight);
 	}
 
 	@Override
@@ -132,7 +173,7 @@ public final class RichPreviewIcon implements ZoomableRichIcon {
 		if (src.getWidth() <= maxW && src.getHeight() <= maxH) {
 			return src;
 		}
-		return toBufferedImage(scaleToMax(src, maxW, maxH));
+		return toBufferedImage(scaleToFit(src, maxW, maxH, false));
 	}
 
 	private static BufferedImage toBufferedImage(final Image src) {
@@ -148,24 +189,35 @@ public final class RichPreviewIcon implements ZoomableRichIcon {
 		return out;
 	}
 
-	private static Image scaleToMax(final Image src, final int maxW, final int maxH) {
+	private static Image scaleToFit(final Image src, final int maxW, final int maxH, final boolean allowUpscale) {
 		final int w = src.getWidth(null);
 		final int h = src.getHeight(null);
 		if (w <= 0 || h <= 0) {
 			return src;
 		}
-		final double scale = Math.min(1.0, Math.min(maxW / (double) w, maxH / (double) h));
-		if (scale >= 0.999) {
+		double scale = Math.min(maxW / (double) w, maxH / (double) h);
+		if (!allowUpscale) {
+			scale = Math.min(1.0, scale);
+		}
+		if (Math.abs(scale - 1.0) < 0.001) {
 			return src;
 		}
 		final int nw = Math.max(1, (int) Math.round(w * scale));
 		final int nh = Math.max(1, (int) Math.round(h * scale));
 		final BufferedImage out = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g2 = out.createGraphics();
-		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
+		        allowUpscale ? RenderingHints.VALUE_INTERPOLATION_BICUBIC
+		                : RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+		g2.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+		g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 		g2.drawImage(src, 0, 0, nw, nh, null);
 		g2.dispose();
 		return out;
+	}
+
+	private static Image scaleToMax(final Image src, final int maxW, final int maxH) {
+		return scaleToFit(src, maxW, maxH, false);
 	}
 
 	private static FontMetrics metrics(final Font font) {

@@ -15,26 +15,28 @@ final class CodeHighlightRenderer {
 	private CodeHighlightRenderer() {
 	}
 
-	static RichPreviewIcon render(final String language, final String source) {
+	static RichPreviewIcon render(final String language, final String source, final float zoom) {
 		try {
-			return RichPreviewIcon.fromImage("code", draw(language, source));
+			return RichPreviewIcon.fromNativeImage("code", draw(language, source, zoom));
 		}
 		catch (Throwable t) {
 			return RichPreviewIcon.error("code", t.getMessage());
 		}
 	}
 
-	private static BufferedImage draw(final String language, final String source) {
-		final Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+	private static BufferedImage draw(final String language, final String source, final float zoom) {
+		final int maxW = RichPreviewScale.displayMaxWidth("code", zoom);
+		final int maxH = RichPreviewScale.displayMaxHeight("code", zoom);
+		final Font font = new Font(Font.MONOSPACED, Font.PLAIN, RichPreviewScale.fontSize(12, zoom));
 		final FontMetrics fm = metrics(font);
 		final String[] lines = source.split("\n", -1);
 		final int lineCount = Math.min(lines.length, 40);
-		int maxW = 80;
+		int contentW = 80;
 		for (int i = 0; i < lineCount; i++) {
-			maxW = Math.max(maxW, fm.stringWidth(lines[i]) + 40);
+			contentW = Math.max(contentW, fm.stringWidth(lines[i]) + 40);
 		}
-		final int w = Math.min(RichPreviewIcon.MAX_WIDTH, maxW);
-		final int h = Math.min(RichPreviewIcon.MAX_HEIGHT, lineCount * (fm.getHeight() + 2) + 24);
+		final int w = Math.min(maxW, contentW);
+		final int h = Math.min(maxH, lineCount * (fm.getHeight() + 2) + RichPreviewScale.fontSize(24, zoom));
 		final BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g2 = img.createGraphics();
 		try {
@@ -43,11 +45,11 @@ final class CodeHighlightRenderer {
 			g2.fillRect(0, 0, w, h);
 			g2.setFont(font);
 			g2.setColor(new Color(0x88, 0x88, 0x88));
-			g2.drawString(language != null ? language : "code", 8, 16);
+			g2.drawString(language != null ? language : "code", 8, RichPreviewScale.fontSize(16, zoom));
 			final Set<String> keywords = keywordsFor(language);
-			int y = 28;
+			int y = RichPreviewScale.fontSize(28, zoom);
 			for (int i = 0; i < lineCount && y < h - fm.getHeight(); i++) {
-				drawLine(g2, fm, lines[i], keywords, 8, y);
+				drawLine(g2, fm, lines[i], keywords, 8, y, maxW);
 				y += fm.getHeight() + 2;
 			}
 			if (lines.length > lineCount) {
@@ -62,7 +64,7 @@ final class CodeHighlightRenderer {
 	}
 
 	private static void drawLine(final Graphics2D g2, final FontMetrics fm, final String line,
-			final Set<String> keywords, final int x, final int y) {
+			final Set<String> keywords, final int x, final int y, final int maxW) {
 		final String[] tokens = line.split("(\\b)", -1);
 		int cx = x;
 		for (int i = 0; i < tokens.length; i++) {
@@ -84,7 +86,7 @@ final class CodeHighlightRenderer {
 			}
 			g2.drawString(token, cx, y);
 			cx += fm.stringWidth(token);
-			if (cx > RichPreviewIcon.MAX_WIDTH - 8) {
+			if (cx > maxW - 8) {
 				break;
 			}
 		}

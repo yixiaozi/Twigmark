@@ -37,26 +37,39 @@ final class ExcalidrawRenderService {
 		return INSTANCE;
 	}
 
-	RichPreviewIcon getIcon(final String source, final NodeModel node) {
-		final String key = RichCache.hash("excalidraw", source);
-		final RichPreviewIcon cached = memoryCache.get(key);
+	RichPreviewIcon getIcon(final String source, final NodeModel node, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final RichPreviewIcon cached = peekCached(source, z);
 		if (cached != null) {
 			return cached;
-		}
-		final RichPreviewIcon fromDisk = loadDisk(key);
-		if (fromDisk != null) {
-			memoryCache.put(key, fromDisk);
-			return fromDisk;
 		}
 		if (!ExcalidrawCliRenderer.ensureAvailable()) {
 			return RichPreviewIcon.error("excalidraw", ExcalidrawCliRenderer.getLastError());
 		}
+		final String key = RichCache.hash("excalidraw", source + RichPreviewScale.zoomCacheSuffix(z));
 		registerWaiter(key, node);
 		if (inFlight.putIfAbsent(key, Boolean.TRUE) == null) {
-			queue.offer(new RenderRequest(key, source));
+			queue.offer(new RenderRequest(key, source, z));
 			schedulePump();
 		}
 		return RichPreviewIcon.placeholder("excalidraw", "Excalidraw…");
+	}
+
+	RichPreviewIcon peekCached(final String source, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final String key = RichCache.hash("excalidraw", source + RichPreviewScale.zoomCacheSuffix(z));
+		final RichPreviewIcon cached = memoryCache.get(key);
+		if (cached != null) {
+			return cached;
+		}
+		if (Math.abs(z - RichPreviewScale.DEFAULT) < 0.01f) {
+			final RichPreviewIcon fromDisk = loadDisk(key, z);
+			if (fromDisk != null) {
+				memoryCache.put(key, fromDisk);
+				return fromDisk;
+			}
+		}
+		return null;
 	}
 
 	private void schedulePump() {
@@ -70,9 +83,11 @@ final class ExcalidrawRenderService {
 					RenderRequest req;
 					while ((req = queue.poll()) != null) {
 						try {
-							final BufferedImage img = ExcalidrawCliRenderer.render(req.source);
-							saveDisk(req.key, img);
-							finish(req.key, RichPreviewIcon.fromImage("excalidraw", img));
+							final BufferedImage img = ExcalidrawCliRenderer.render(req.source, req.zoom);
+							if (Math.abs(req.zoom - RichPreviewScale.DEFAULT) < 0.01f) {
+								saveDisk(req.key, img);
+							}
+							finish(req.key, RichPreviewScale.iconForBitmap("excalidraw", img, req.zoom));
 						}
 						catch (Throwable t) {
 							LogUtils.warn("Excalidraw render failed", t);
@@ -149,13 +164,13 @@ final class ExcalidrawRenderService {
 		});
 	}
 
-	private RichPreviewIcon loadDisk(final String key) {
+	private RichPreviewIcon loadDisk(final String key, final float zoom) {
 		try {
 			final File png = RichCache.pngFile(key);
 			if (png.isFile()) {
 				final BufferedImage img = ImageIO.read(png);
 				if (img != null) {
-					return RichPreviewIcon.fromImage("excalidraw", img);
+					return RichPreviewScale.iconForBitmap("excalidraw", img, zoom);
 				}
 			}
 		}
@@ -177,10 +192,12 @@ final class ExcalidrawRenderService {
 	private static final class RenderRequest {
 		final String key;
 		final String source;
+		final float zoom;
 
-		RenderRequest(final String key, final String source) {
+		RenderRequest(final String key, final String source, final float zoom) {
 			this.key = key;
 			this.source = source;
+			this.zoom = zoom;
 		}
 	}
 }

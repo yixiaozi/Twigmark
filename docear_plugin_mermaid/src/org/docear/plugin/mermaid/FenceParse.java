@@ -9,7 +9,7 @@ import org.freeplane.core.util.HtmlUtils;
 public final class FenceParse {
 
 	public enum Kind {
-		MERMAID, PLANTUML, MATH, TABLE, CODE, EXCALIDRAW, STRUCTURED, NONE
+		MERMAID, PLANTUML, MATH, TABLE, CODE, EXCALIDRAW, STRUCTURED, CITATION, TODO, NONE
 	}
 
 	public static final class Block {
@@ -99,6 +99,13 @@ public final class FenceParse {
 		if (lower.startsWith("```yaml") || lower.equals("```yml")) {
 			return new Block(Kind.STRUCTURED, "yaml", rest);
 		}
+		if (lower.startsWith("```cite") || lower.startsWith("```citation") || lower.equals("```ref")
+				|| lower.equals("```bib")) {
+			return new Block(Kind.CITATION, "cite", rest);
+		}
+		if (lower.startsWith("```todo") || lower.startsWith("```checklist") || lower.equals("```task")) {
+			return new Block(Kind.TODO, "todo", rest);
+		}
 		if (firstLine.startsWith("```") && firstLine.length() > 3) {
 			final String lang = firstLine.substring(3).trim();
 			if (lang.length() > 0 && !lang.contains(" ")) {
@@ -133,6 +140,12 @@ public final class FenceParse {
 		}
 		if ("yaml".equals(t) || "yml".equals(t)) {
 			return new Block(Kind.STRUCTURED, "yaml", source);
+		}
+		if ("cite".equals(t) || "citation".equals(t) || "ref".equals(t) || "bib".equals(t)) {
+			return new Block(Kind.CITATION, "cite", source);
+		}
+		if ("todo".equals(t) || "checklist".equals(t) || "task".equals(t)) {
+			return new Block(Kind.TODO, "todo", source);
 		}
 		if ("code".equals(t)) {
 			return new Block(Kind.CODE, "text", source);

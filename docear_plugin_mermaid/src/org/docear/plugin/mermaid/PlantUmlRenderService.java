@@ -4,7 +4,6 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -22,7 +21,6 @@ import org.freeplane.features.mode.ModeController;
 final class PlantUmlRenderService {
 
 	private static final PlantUmlRenderService INSTANCE = new PlantUmlRenderService();
-	private static final int MEMORY_CACHE_MAX = 32;
 
 	private final ConcurrentHashMap<String, RichPreviewIcon> memoryCache =
 			new ConcurrentHashMap<String, RichPreviewIcon>();
@@ -39,26 +37,39 @@ final class PlantUmlRenderService {
 		return INSTANCE;
 	}
 
-	RichPreviewIcon getIcon(final String source, final NodeModel node) {
-		final String key = RichCache.hash("plantuml", source);
-		final RichPreviewIcon cached = memoryCache.get(key);
+	RichPreviewIcon getIcon(final String source, final NodeModel node, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final RichPreviewIcon cached = peekCached(source, z);
 		if (cached != null) {
 			return cached;
-		}
-		final RichPreviewIcon fromDisk = loadDisk(key);
-		if (fromDisk != null) {
-			memoryCache.put(key, fromDisk);
-			return fromDisk;
 		}
 		if (!PlantUmlCliRenderer.ensureAvailable()) {
 			return RichPreviewIcon.error("plantuml", PlantUmlCliRenderer.getLastError());
 		}
+		final String key = RichCache.hash("plantuml", source + RichPreviewScale.zoomCacheSuffix(z));
 		registerWaiter(key, node);
 		if (inFlight.putIfAbsent(key, Boolean.TRUE) == null) {
-			queue.offer(new RenderRequest(key, source));
+			queue.offer(new RenderRequest(key, source, z));
 			schedulePump();
 		}
 		return RichPreviewIcon.placeholder("plantuml", "PlantUML…");
+	}
+
+	RichPreviewIcon peekCached(final String source, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final String key = RichCache.hash("plantuml", source + RichPreviewScale.zoomCacheSuffix(z));
+		final RichPreviewIcon cached = memoryCache.get(key);
+		if (cached != null) {
+			return cached;
+		}
+		if (Math.abs(z - RichPreviewScale.DEFAULT) < 0.01f) {
+			final RichPreviewIcon fromDisk = loadDisk(key, z);
+			if (fromDisk != null) {
+				memoryCache.put(key, fromDisk);
+				return fromDisk;
+			}
+		}
+		return null;
 	}
 
 	private void schedulePump() {
@@ -72,9 +83,11 @@ final class PlantUmlRenderService {
 					RenderRequest req;
 					while ((req = queue.poll()) != null) {
 						try {
-							final BufferedImage img = PlantUmlCliRenderer.render(req.source);
-							saveDisk(req.key, img);
-							finish(req.key, RichPreviewIcon.fromImage("plantuml", img));
+							final BufferedImage img = PlantUmlCliRenderer.render(req.source, req.zoom);
+							if (Math.abs(req.zoom - RichPreviewScale.DEFAULT) < 0.01f) {
+								saveDisk(req.key, img);
+							}
+							finish(req.key, RichPreviewScale.iconForBitmap("plantuml", img, req.zoom));
 						}
 						catch (Throwable t) {
 							LogUtils.warn("PlantUML render failed", t);
@@ -151,13 +164,13 @@ final class PlantUmlRenderService {
 		});
 	}
 
-	private RichPreviewIcon loadDisk(final String key) {
+	private RichPreviewIcon loadDisk(final String key, final float zoom) {
 		try {
 			final File png = RichCache.pngFile(key);
 			if (png.isFile()) {
 				final BufferedImage img = ImageIO.read(png);
 				if (img != null) {
-					return RichPreviewIcon.fromImage("plantuml", img);
+					return RichPreviewScale.iconForBitmap("plantuml", img, zoom);
 				}
 			}
 		}
@@ -179,10 +192,12 @@ final class PlantUmlRenderService {
 	private static final class RenderRequest {
 		final String key;
 		final String source;
+		final float zoom;
 
-		RenderRequest(final String key, final String source) {
+		RenderRequest(final String key, final String source, final float zoom) {
 			this.key = key;
 			this.source = source;
+			this.zoom = zoom;
 		}
 	}
 }

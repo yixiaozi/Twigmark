@@ -49,6 +49,10 @@ final class MermaidCliRenderer {
 	}
 
 	static BufferedImage render(final String source) throws Exception {
+		return render(source, RichPreviewScale.DEFAULT);
+	}
+
+	static BufferedImage render(final String source, final float zoom) throws Exception {
 		if (!ensureAvailable()) {
 			throw new IllegalStateException("Mermaid CLI unavailable: " + lastError);
 		}
@@ -82,6 +86,10 @@ final class MermaidCliRenderer {
 			cmd.add(input.getAbsolutePath());
 			cmd.add("-o");
 			cmd.add(output.getAbsolutePath());
+			final int width = RichPreviewScale.displayMaxWidth(
+					MermaidRenderService.looksLikeGantt(source) ? "gantt" : "mermaid", zoom);
+			cmd.add("-w");
+			cmd.add(String.valueOf(width));
 			cmd.add("-b");
 			cmd.add("transparent");
 			cmd.add("-p");

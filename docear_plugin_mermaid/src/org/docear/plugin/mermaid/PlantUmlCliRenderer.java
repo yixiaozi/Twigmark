@@ -56,6 +56,10 @@ final class PlantUmlCliRenderer {
 	}
 
 	static BufferedImage render(final String source) throws Exception {
+		return render(source, RichPreviewScale.DEFAULT);
+	}
+
+	static BufferedImage render(final String source, final float zoom) throws Exception {
 		if (!ensureAvailable()) {
 			throw new IllegalStateException("PlantUML unavailable: " + lastError);
 		}
@@ -72,7 +76,7 @@ final class PlantUmlCliRenderer {
 			finally {
 				w.close();
 			}
-			final List<String> cmd = buildCommand(input);
+			final List<String> cmd = buildCommand(input, zoom);
 			final ProcessBuilder pb = new ProcessBuilder(cmd);
 			pb.redirectErrorStream(true);
 			pb.directory(work);
@@ -105,7 +109,7 @@ final class PlantUmlCliRenderer {
 		}
 	}
 
-	private static List<String> buildCommand(final File input) {
+	private static List<String> buildCommand(final File input, final float zoom) {
 		final List<String> cmd = new ArrayList<String>();
 		if (plantumlCommand != null) {
 			if (isMac()) {
@@ -115,6 +119,10 @@ final class PlantUmlCliRenderer {
 			cmd.add(plantumlCommand);
 			cmd.add("-charset");
 			cmd.add("UTF-8");
+			if (RichPreviewScale.clamp(zoom) > 1.01f) {
+				cmd.add("-scale");
+				cmd.add(String.valueOf(Math.max(1, Math.round(RichPreviewScale.clamp(zoom)))));
+			}
 			cmd.add("-tpng");
 			cmd.add(input.getAbsolutePath());
 		}
@@ -124,6 +132,10 @@ final class PlantUmlCliRenderer {
 			cmd.add(plantumlJar);
 			cmd.add("-charset");
 			cmd.add("UTF-8");
+			if (RichPreviewScale.clamp(zoom) > 1.01f) {
+				cmd.add("-scale");
+				cmd.add(String.valueOf(Math.max(1, Math.round(RichPreviewScale.clamp(zoom)))));
+			}
 			cmd.add("-tpng");
 			cmd.add(input.getAbsolutePath());
 		}

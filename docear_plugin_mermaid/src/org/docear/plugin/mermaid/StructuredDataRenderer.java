@@ -21,20 +21,22 @@ final class StructuredDataRenderer {
 	private StructuredDataRenderer() {
 	}
 
-	static RichPreviewIcon render(final String format, final String source) {
+	static RichPreviewIcon render(final String format, final String source, final float zoom) {
 		try {
 			final StructuredValue root = StructuredDataParser.parse(source, format);
-			return RichPreviewIcon.fromImage(format != null ? format : "data", draw(format, root));
+			return RichPreviewIcon.fromNativeImage(format != null ? format : "data", draw(format, root, zoom));
 		}
 		catch (Throwable t) {
 			return RichPreviewIcon.error(format != null ? format : "data", t.getMessage());
 		}
 	}
 
-	private static BufferedImage draw(final String format, final StructuredValue root) {
-		final Font labelFont = new Font(Font.SANS_SERIF, Font.PLAIN, 11);
-		final Font keyFont = new Font(Font.MONOSPACED, Font.BOLD, 12);
-		final Font valueFont = new Font(Font.MONOSPACED, Font.PLAIN, 12);
+	private static BufferedImage draw(final String format, final StructuredValue root, final float zoom) {
+		final int maxW = RichPreviewScale.displayMaxWidth(format != null ? format : "data", zoom);
+		final int maxH = RichPreviewScale.displayMaxHeight(format != null ? format : "data", zoom);
+		final Font labelFont = new Font(Font.SANS_SERIF, Font.PLAIN, RichPreviewScale.fontSize(11, zoom));
+		final Font keyFont = new Font(Font.MONOSPACED, Font.BOLD, RichPreviewScale.fontSize(12, zoom));
+		final Font valueFont = new Font(Font.MONOSPACED, Font.PLAIN, RichPreviewScale.fontSize(12, zoom));
 		final FontMetrics labelFm = metrics(labelFont);
 		final FontMetrics keyFm = metrics(keyFont);
 		final FontMetrics valueFm = metrics(valueFont);
@@ -44,13 +46,13 @@ final class StructuredDataRenderer {
 			lines.subList(MAX_LINES, lines.size()).clear();
 			lines.add(new Line(0, LineKind.META, "…", null));
 		}
-		int maxW = 120;
+		int maxContentW = 120;
 		for (int i = 0; i < lines.size(); i++) {
-			maxW = Math.max(maxW, lineWidth(lines.get(i), keyFm, valueFm) + PAD_X * 2);
+			maxContentW = Math.max(maxContentW, lineWidth(lines.get(i), keyFm, valueFm) + PAD_X * 2);
 		}
 		final int lineH = Math.max(keyFm.getHeight(), valueFm.getHeight()) + 3;
-		final int w = Math.min(RichPreviewIcon.MAX_WIDTH, maxW);
-		final int h = Math.min(RichPreviewIcon.MAX_HEIGHT, PAD_TOP + lines.size() * lineH + 8);
+		final int w = Math.min(maxW, maxContentW);
+		final int h = Math.min(maxH, PAD_TOP + lines.size() * lineH + 8);
 		final BufferedImage img = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
 		final Graphics2D g2 = img.createGraphics();
 		try {

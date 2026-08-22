@@ -101,26 +101,62 @@ public final class MermaidRenderService {
 	}
 
 	public RichPreviewIcon getIcon(final String source, final NodeModel node) {
-		final String key = RichCache.hash("mermaid", source);
-		final RichPreviewIcon cached = memoryCache.get(key);
+		return getIcon(source, node, RichPreviewScale.DEFAULT);
+	}
+
+	public RichPreviewIcon getIcon(final String source, final NodeModel node, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final RichPreviewIcon cached = peekCached(source, z);
 		if (cached != null) {
 			return cached;
-		}
-		final RichPreviewIcon fromDisk = loadDiskCache(key);
-		if (fromDisk != null) {
-			putMemory(key, fromDisk);
-			return fromDisk;
 		}
 		ensureStarted();
 		if (unavailable || backend == Backend.NONE) {
 			return RichPreviewIcon.error("mermaid", unavailableReason);
 		}
+		final boolean gantt = looksLikeGantt(source);
+		final String kind = gantt ? "gantt" : "mermaid";
+		final String key = RichCache.hash(kind, source + RichPreviewScale.zoomCacheSuffix(z));
 		registerWaiter(key, node);
 		if (inFlight.putIfAbsent(key, Boolean.TRUE) == null) {
-			queue.offer(new RenderRequest(key, source));
+			queue.offer(new RenderRequest(key, source, z, gantt));
 			schedulePump();
 		}
-		return RichPreviewIcon.placeholder("mermaid", "Mermaid…");
+		return RichPreviewIcon.placeholder(gantt ? "gantt" : "mermaid", gantt ? "Gantt…" : "Mermaid…");
+	}
+
+	/** Cache-only lookup; never queues render or returns placeholder. */
+	RichPreviewIcon peekCached(final String source, final float zoom) {
+		final float z = RichPreviewScale.clamp(zoom);
+		final boolean gantt = looksLikeGantt(source);
+		final String kind = gantt ? "gantt" : "mermaid";
+		final String key = RichCache.hash(kind, source + RichPreviewScale.zoomCacheSuffix(z));
+		final RichPreviewIcon cached = memoryCache.get(key);
+		if (cached != null) {
+			return cached;
+		}
+		if (Math.abs(z - RichPreviewScale.DEFAULT) < 0.01f) {
+			final RichPreviewIcon fromDisk = loadDiskCache(key, source, gantt);
+			if (fromDisk != null) {
+				putMemory(key, fromDisk);
+				return fromDisk;
+			}
+		}
+		return null;
+	}
+
+	static boolean looksLikeGantt(final String source) {
+		if (source == null) {
+			return false;
+		}
+		final String t = source.trim().toLowerCase();
+		return t.startsWith("gantt") || t.indexOf("\ngantt") >= 0;
+	}
+
+	private static RichPreviewIcon mermaidImage(final String source, final BufferedImage img, final float zoom) {
+		final boolean gantt = looksLikeGantt(source);
+		final String kind = gantt ? "gantt" : "mermaid";
+		return RichPreviewScale.iconForBitmap(kind, img, zoom);
 	}
 
 	private void registerWaiter(final String key, final NodeModel node) {
@@ -176,8 +212,8 @@ public final class MermaidRenderService {
 		while ((req = queue.poll()) != null) {
 			currentRequest = req;
 			try {
-				final BufferedImage img = MermaidCliRenderer.render(req.source);
-				completeCurrent(RichPreviewIcon.fromImage("mermaid", img), img);
+				final BufferedImage img = MermaidCliRenderer.render(req.source, req.zoom);
+				completeCurrent(mermaidImage(req.source, img, req.zoom), img);
 			}
 			catch (Throwable t) {
 				LogUtils.warn("Mermaid CLI render failed", t);
@@ -297,9 +333,13 @@ public final class MermaidRenderService {
 		// Completion via Bridge.onSuccess / onError (FX thread) — do not wait here.
 	}
 
-	private BufferedImage snapshotRaw(final int contentW, final int contentH) throws Exception {
-		final int w = Math.max(40, Math.min(RichPreviewIcon.MAX_WIDTH + 16, contentW + 16));
-		final int h = Math.max(30, Math.min(RichPreviewIcon.MAX_HEIGHT + 16, contentH + 16));
+	private BufferedImage snapshotRaw(final int contentW, final int contentH, final float zoom,
+			final boolean gantt) throws Exception {
+		final int capW = RichPreviewScale.displayMaxWidth(gantt ? "gantt" : "mermaid", zoom) + 16;
+		final int capH = RichPreviewScale.displayMaxHeight(gantt ? "gantt" : "mermaid", zoom) + 16;
+		final float z = RichPreviewScale.clamp(zoom);
+		final int w = Math.max(40, Math.min(capW, Math.round((contentW + 16) * z)));
+		final int h = Math.max(30, Math.min(capH, Math.round((contentH + 16) * z)));
 		webView.getClass().getMethod("setPrefSize", double.class, double.class).invoke(webView, (double) w,
 				(double) h);
 		final Class<?> writableImageClass = Class.forName("javafx.scene.image.WritableImage");
@@ -331,7 +371,7 @@ public final class MermaidRenderService {
 			return;
 		}
 		if (png != null) {
-			savePngCache(req.key, png);
+			savePngCache(req.key, png, req.zoom);
 		}
 		finishRequest(req.key, icon);
 		currentRequest = null;
@@ -397,13 +437,13 @@ public final class MermaidRenderService {
 		return dir;
 	}
 
-	private RichPreviewIcon loadDiskCache(final String key) {
+	private RichPreviewIcon loadDiskCache(final String key, final String source, final boolean gantt) {
 		try {
 			final File png = RichCache.pngFile(key);
 			if (png.isFile()) {
 				final BufferedImage img = ImageIO.read(png);
 				if (img != null) {
-					return RichPreviewIcon.fromImage("mermaid", img);
+					return mermaidImage(source, img, RichPreviewScale.DEFAULT);
 				}
 			}
 		}
@@ -413,7 +453,10 @@ public final class MermaidRenderService {
 		return null;
 	}
 
-	private void savePngCache(final String key, final BufferedImage image) {
+	private void savePngCache(final String key, final BufferedImage image, final float zoom) {
+		if (Math.abs(RichPreviewScale.clamp(zoom) - RichPreviewScale.DEFAULT) >= 0.01f) {
+			return;
+		}
 		try {
 			if (image == null) {
 				return;
@@ -488,10 +531,14 @@ public final class MermaidRenderService {
 	private static final class RenderRequest {
 		final String key;
 		final String source;
+		final float zoom;
+		final boolean gantt;
 
-		RenderRequest(final String key, final String source) {
+		RenderRequest(final String key, final String source, final float zoom, final boolean gantt) {
 			this.key = key;
 			this.source = source;
+			this.zoom = zoom;
+			this.gantt = gantt;
 		}
 	}
 
@@ -511,8 +558,8 @@ public final class MermaidRenderService {
 			try {
 				final int width = toInt(w, 400);
 				final int height = toInt(h, 300);
-				final BufferedImage png = snapshotRaw(width, height);
-				completeCurrent(RichPreviewIcon.fromImage("mermaid", png), png);
+				final BufferedImage png = snapshotRaw(width, height, request.zoom, request.gantt);
+				completeCurrent(mermaidImage(request.source, png, request.zoom), png);
 			}
 			catch (Throwable t) {
 				LogUtils.warn("Mermaid: snapshot failed", t);

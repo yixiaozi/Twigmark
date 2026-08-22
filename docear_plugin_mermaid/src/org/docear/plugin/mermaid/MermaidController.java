@@ -36,6 +36,7 @@ public final class MermaidController {
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: could not register format pattern", t);
 		}
+		RichPreviewZoomIo.install(modeController);
 		RichPreviewController.install(modeController);
 		MermaidRenderService.getInstance().ensureStarted();
 		PlantUmlCliRenderer.ensureAvailable();

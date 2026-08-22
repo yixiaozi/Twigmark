@@ -61,6 +61,7 @@ import org.docear.plugin.core.todoist.TodoistIntegrationService;
 import org.docear.plugin.core.logger.DocearLogEvent;
 import org.docear.plugin.core.ui.OverlayViewport;
 import org.docear.plugin.core.ui.MapActivityOverlay;
+import org.docear.plugin.core.ui.MapMinimapOverlay;
 import org.docear.plugin.core.ui.MapTagFilterOverlay;
 import org.docear.plugin.core.ui.ribbons.DocearNodePrivacyContributorFactory;
 import org.docear.plugin.core.workspace.WorkingDirectoryDefaults;
@@ -817,6 +818,7 @@ public class CoreConfiguration extends ALanguageController {
 		}
 		MapTagFilterOverlay.install();
 		MapActivityOverlay.install();
+		MapMinimapOverlay.install();
 	}
 	
 	private void registerListeners(ModeController modeController) {
