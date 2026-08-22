@@ -72,6 +72,8 @@ import org.freeplane.features.nodestyle.NodeStyleModel;
 import org.freeplane.features.styles.MapViewLayout;
 import org.freeplane.features.text.ShortenedTextModel;
 import org.freeplane.features.text.TextController;
+import org.freeplane.view.swing.features.filepreview.ViewerController;
+import org.freeplane.view.swing.map.MainView.ConnectorLocation;
 import org.freeplane.view.swing.map.attribute.AttributeView;
 import org.freeplane.view.swing.map.cloud.CloudView;
 import org.freeplane.view.swing.map.cloud.CloudViewFactory;
@@ -449,8 +451,42 @@ public class NodeView extends JComponent implements INodeView {
         final Point relativeLocation = getRelativeLocation(target);
         relativeLocation.x += target.getMainView().getWidth()/2;
         relativeLocation.y += target.getMainView().getHeight()/2;
-        return mainView.getConnectorPoint(relativeLocation);
+        final Point point = mainView.getConnectorPoint(relativeLocation);
+        return mapConnectorPointToAttachedImage(point, mainView.getConnectorLocation(relativeLocation));
     }
+
+	/**
+	 * When this node has a visible attached image, move edge/link connectors
+	 * from the text (MainView) to the image mid-line so lines meet the picture.
+	 * Result stays in MainView coordinates.
+	 */
+	public Point mapConnectorPointToAttachedImage(final Point pointInMainView, final ConnectorLocation location) {
+		if (pointInMainView == null || mainView == null) {
+			return pointInMainView;
+		}
+		final JComponent viewer = getContent(ViewerController.VIEWER_POSITION);
+		if (viewer == null || !viewer.isVisible() || viewer.getParent() == null) {
+			return pointInMainView;
+		}
+		final int vx;
+		final int vy = viewer.getHeight() / 2;
+		if (ConnectorLocation.LEFT.equals(location)) {
+			vx = 0;
+		}
+		else if (ConnectorLocation.RIGHT.equals(location)) {
+			vx = Math.max(0, viewer.getWidth() - 1);
+		}
+		else {
+			vx = viewer.getWidth() / 2;
+		}
+		return SwingUtilities.convertPoint(viewer, new Point(vx, vy), mainView);
+	}
+
+	/** Left/right edge anchor, shifted to attached image mid-height when present. */
+	public Point getSideEdgePoint(final boolean left) {
+		final Point point = left ? mainView.getLeftPoint() : mainView.getRightPoint();
+		return mapConnectorPointToAttachedImage(point, left ? ConnectorLocation.LEFT : ConnectorLocation.RIGHT);
+	}
 
     public Point getRelativeLocation(NodeView target) {
         Component component;  
@@ -1158,19 +1194,22 @@ public class NodeView extends JComponent implements INodeView {
         relativeLocation.x += targetMainView.getWidth()/2;
         relativeLocation.y += targetMainView.getHeight()/2;
         final Point inPoint = mainView.getConnectorPoint(relativeLocation);
-        UITools.convertPointToAncestor(targetMainView, inPoint, this);
+        final Point inMapped = mapConnectorPointToAttachedImage(inPoint, mainView.getConnectorLocation(relativeLocation));
+        UITools.convertPointToAncestor(mainView, inMapped, this);
                 
         relativeLocation.x -= targetMainView.getWidth()/2;
         relativeLocation.y -= targetMainView.getHeight()/2;
         relativeLocation.x = - relativeLocation.x + mainView.getWidth()/2;
         relativeLocation.y = - relativeLocation.y + mainView.getHeight()/2;
 		final Point outPoint = targetMainView.getConnectorPoint(relativeLocation);
-		UITools.convertPointToAncestor(getMainView(), outPoint, this);
+		final Point outMapped = target.mapConnectorPointToAttachedImage(outPoint,
+		        targetMainView.getConnectorLocation(relativeLocation));
+		UITools.convertPointToAncestor(targetMainView, outMapped, this);
 		
-		final int x = Math.min(inPoint.x, outPoint.x);
-		final int y = Math.min(inPoint.y, outPoint.y);
-		final int w = Math.abs(inPoint.x - outPoint.x);
-		final int h = Math.abs(inPoint.y - outPoint.y);
+		final int x = Math.min(inMapped.x, outMapped.x);
+		final int y = Math.min(inMapped.y, outMapped.y);
+		final int w = Math.abs(inMapped.x - outMapped.x);
+		final int h = Math.abs(inMapped.y - outMapped.y);
 		final int EXTRA = 50;
 		repaint(x - EXTRA, y - EXTRA, w + EXTRA * 2, h + EXTRA * 2);
 	}

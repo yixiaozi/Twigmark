@@ -49,17 +49,17 @@ public class HorizontalEdgeView extends EdgeView {
 	    }
 	    else{
 	        if(getTarget().isLeft()){
-	            start = getSource().getMainView().getLeftPoint();
+	            start = getSource().getSideEdgePoint(true);
 	        }
 	        else{
-	            start = getSource().getMainView().getRightPoint();
+	            start = getSource().getSideEdgePoint(false);
 	        }
 	    }
         if(getTarget().isLeft()){
-            end = getTarget().getMainView().getRightPoint();
+            end = getTarget().getSideEdgePoint(false);
         }
         else{
-            end = getTarget().getMainView().getLeftPoint();
+            end = getTarget().getSideEdgePoint(true);
         }
     }
 

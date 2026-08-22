@@ -377,7 +377,7 @@ public class ViewerController extends PersistentNodeHook implements INodeViewLif
 	static private ExternalImagePopupMenu imagePopupMenu;
 	private static final int BORDER_SIZE = 1;
 	private static final Color BORDER_COLOR = Color.BLACK;
-	static final int VIEWER_POSITION = 5;
+	public static final int VIEWER_POSITION = 5;
 	private final MyMouseListener mouseListener = new MyMouseListener();
 	final private Set<IViewerFactory> factories;
 

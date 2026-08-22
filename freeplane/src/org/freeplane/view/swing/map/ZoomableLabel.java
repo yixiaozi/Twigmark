@@ -23,6 +23,7 @@ import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.nodestyle.NodeStyleController;
+import org.freeplane.view.swing.features.filepreview.ExternalResource;
 
 @SuppressWarnings("serial")
 public class ZoomableLabel extends JLabel {
@@ -118,7 +119,7 @@ public class ZoomableLabel extends JLabel {
 					break;
 				}
 			}
-			isLong = widthMustBeRestricted || lines.length > 1;
+			isLong = widthMustBeRestricted || lines.length > 1 || hasAttachedImage(node);
 		}
 		if (isHtml) {
 			if (nodeText.indexOf("<img") >= 0 && nodeText.indexOf("<base ") < 0) {
@@ -149,13 +150,26 @@ public class ZoomableLabel extends JLabel {
 			setText(text);
 		}
 		else if (isLong) {
-			String text = HtmlUtils.plainToHTML(nodeText);
-			setText(text);
+			String source = hasAttachedImage(node) ? insertWrapOpportunities(nodeText) : nodeText;
+			setText(HtmlUtils.plainToHTML(source));
 		}
 		else {
 			setText(nodeText);
 		}
     }
+
+	private static boolean hasAttachedImage(final NodeView node) {
+		return node != null && node.getModel() != null
+		        && node.getModel().getExtension(ExternalResource.class) != null;
+	}
+
+	/** Prefer wrapping at filename separators so a long UUID does not stay on one line. */
+	private static String insertWrapOpportunities(final String text) {
+		if (text == null || text.indexOf('\u200B') >= 0) {
+			return text;
+		}
+		return text.replace("-", "-\u200B").replace("_", "_\u200B");
+	}
 	
 	public ZoomableLabel() {
 		setUI(ZoomableLabelUI.createUI(this));
@@ -176,12 +190,9 @@ public class ZoomableLabel extends JLabel {
 	}
 
 	protected boolean useFractionalMetrics() {
-		final MapView map = getMap();
-		if (map.isPrinting()) {
-			return true;
-		}
-		final float zoom = map.getZoom();
-		return 1f != zoom;
+		// Always use fractional metrics so layout matches paint at every zoom (including 100%).
+		// Previously zoom==1 used a different path and caused clipped/missing glyphs.
+		return true;
 	}
 
 	protected FontMetrics getFontMetrics() {

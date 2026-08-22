@@ -30,6 +30,8 @@ import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 
+import org.freeplane.core.util.Compat;
+
 /**
  * @author Dimitry Polivaev
  * Aug 23, 2011
@@ -61,6 +63,12 @@ public class EventBuffer implements KeyEventDispatcher, FocusListener {
 		if(ke.equals(dispatchedEvent)){
 			return false;
 		}
+		if (textComponent != null && textComponent.isShowing() && textComponent.hasFocus()) {
+			// Editor already has focus: let native IME handle the key. Replaying
+			// KEY_TYPED via dispatchEvent commits Latin letters on macOS.
+			deactivate();
+			return false;
+		}
 		if(textComponent != null){
 			KeyEvent newEvent = new KeyEvent(textComponent, ke.getID(), ke.getWhen(), ke.getModifiers(), ke.getKeyCode(), ke.getKeyChar(), ke.getKeyLocation());
 			events.add(newEvent);
@@ -85,8 +93,12 @@ public class EventBuffer implements KeyEventDispatcher, FocusListener {
 	public void focusGained(final FocusEvent e) {
 		try{
 			textComponent.removeFocusListener(this);
+			final boolean skipImeLetters = Compat.isMacOsX();
 			for (int i = 0; i < events.size(); i++) {
 				final KeyEvent ke = events.get(i);
+				if (skipImeLetters && isMacImeLetter(ke)) {
+					continue;
+				}
 				if(ke.getComponent().equals(textComponent))
 					dispatchedEvent = ke;
 				else{
@@ -99,6 +111,19 @@ public class EventBuffer implements KeyEventDispatcher, FocusListener {
 		finally{
 			deactivate();
 		}
+	}
+
+	/** Letter keys that macOS IME (Pinyin etc.) must see natively — replaying KEY_TYPED inserts a committed Latin letter. */
+	private static boolean isMacImeLetter(final KeyEvent ke) {
+		if (ke.isAltDown() || ke.isControlDown() || ke.isMetaDown()) {
+			return false;
+		}
+		final char ch = ke.getKeyChar();
+		if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+			return true;
+		}
+		final int code = ke.getKeyCode();
+		return code >= KeyEvent.VK_A && code <= KeyEvent.VK_Z;
 	}
 
 	public void focusLost(final FocusEvent e) {

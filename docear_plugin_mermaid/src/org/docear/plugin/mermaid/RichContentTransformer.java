@@ -21,6 +21,7 @@ public final class RichContentTransformer extends AbstractContentTransformer {
 	@Override
 	public Object transformContent(final TextController textController, final Object content, final NodeModel node,
 			final Object transformedExtension) throws TransformationException {
+		// Keep original source in node text for editing; preview is via TEXT_RENDERING_ICON only.
 		return content;
 	}
 
@@ -30,11 +31,13 @@ public final class RichContentTransformer extends AbstractContentTransformer {
 		if (transformedExtension != node.getUserObject() || content == null) {
 			return null;
 		}
+		// getIcon may receive HighlightedTransformedObject wrapper; always parse stored node text.
+		final String raw = node.getUserObject() != null ? node.getUserObject().toString() : content.toString();
 		final String nodeFormat = textController.getNodeFormat(node);
 		if (PatternFormat.IDENTITY_PATTERN.equals(nodeFormat)) {
 			return null;
 		}
-		final FenceParse.Block block = FenceParse.parse(content.toString(), nodeFormat);
+		final FenceParse.Block block = FenceParse.parse(raw, nodeFormat);
 		if (block == null || block.source == null || block.source.length() == 0) {
 			return null;
 		}
@@ -44,9 +47,31 @@ public final class RichContentTransformer extends AbstractContentTransformer {
 			case PLANTUML:
 				return PlantUmlRenderService.getInstance().getIcon(block.source, node);
 			case TABLE:
-				return TableRenderer.render(block.source);
+				return SyncRichRenderCache.getOrRender("table", block.source,
+						new java.util.concurrent.Callable<RichPreviewIcon>() {
+							@Override
+							public RichPreviewIcon call() {
+								return TableRenderer.render(block.source);
+							}
+						});
 			case CODE:
-				return CodeHighlightRenderer.render(block.language, block.source);
+				return SyncRichRenderCache.getOrRender("code", block.language + "\0" + block.source,
+						new java.util.concurrent.Callable<RichPreviewIcon>() {
+							@Override
+							public RichPreviewIcon call() {
+								return CodeHighlightRenderer.render(block.language, block.source);
+							}
+						});
+			case EXCALIDRAW:
+				return ExcalidrawRenderService.getInstance().getIcon(block.source, node);
+			case STRUCTURED:
+				return SyncRichRenderCache.getOrRender("structured", block.language + "\0" + block.source,
+						new java.util.concurrent.Callable<RichPreviewIcon>() {
+							@Override
+							public RichPreviewIcon call() {
+								return StructuredDataRenderer.render(block.language, block.source);
+							}
+						});
 			case MATH:
 				return null;
 			default:

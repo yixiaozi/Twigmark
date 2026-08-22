@@ -92,6 +92,7 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 	private RelationshipGraphSpatialIndex spatialIndex = new RelationshipGraphSpatialIndex(120.0);
 	private Set<String> matchedNodeKeys = new HashSet<String>();
 	private boolean performanceMode;
+	private boolean layoutFrozen;
 	private boolean loading;
 	private String loadingMessage = "";
 	private String modeHelpHint = "\u62d6\u62fd\u7a7a\u767d\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u53cc\u51fb\u6253\u5f00";
@@ -151,6 +152,22 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 		return selectedNode;
 	}
 
+	public RelationshipGraphIndex getIndex() {
+		return index;
+	}
+
+	public void setLayoutFrozen(final boolean frozen) {
+		this.layoutFrozen = frozen;
+		if (frozen) {
+			layoutRunning = false;
+		}
+		repaint();
+	}
+
+	public boolean isLayoutFrozen() {
+		return layoutFrozen;
+	}
+
 	public void setGraphIndex(final RelationshipGraphIndex newIndex) {
 		setGraphIndex(newIndex, false);
 	}
@@ -194,6 +211,11 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 			}
 			else {
 				scheduleSpatialIndexRebuild();
+			}
+			if (org.docear.plugin.core.canvas.GraphCanvasBridge.applySavedLayout(index.getGraphMode(), index)) {
+				layoutRunning = false;
+				layoutFrozen = true;
+				spatialIndex.rebuild(index);
 			}
 		}
 		else {
@@ -312,6 +334,7 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 	}
 
 	public void refreshLayout() {
+		layoutFrozen = false;
 		if (index != null && index.getNodeCount() > 0) {
 			final int w = Math.max(getWidth(), 400);
 			final int h = Math.max(getHeight(), 300);
@@ -357,7 +380,7 @@ public class RelationshipGraphCanvas extends JPanel implements javax.swing.Scrol
 	private void startLayoutTimer() {
 		layoutTimer = new Timer(layoutTimerDelayMs, new java.awt.event.ActionListener() {
 			public void actionPerformed(final java.awt.event.ActionEvent e) {
-				if (!layoutRunning || index == null || draggedNode != null || panningCanvas) {
+				if (layoutFrozen || !layoutRunning || index == null || draggedNode != null || panningCanvas) {
 					return;
 				}
 				if (layoutIterations >= layoutMaxIterations) {

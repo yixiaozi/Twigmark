@@ -45,6 +45,9 @@ import org.freeplane.core.util.SideTabMetricKeys;
 import org.freeplane.core.util.SideTabMetricRegistry;
 import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.mindmapmode.MModeController;
+import org.docear.plugin.core.canvas.DocearCanvasController;
+import org.docear.plugin.core.canvas.GraphCanvasBridge;
+import org.docear.plugin.core.canvas.JsonCanvasDocument;
 import org.freeplane.plugin.workspace.actions.MindMapOpenLocationAction;
 import org.freeplane.plugin.workspace.components.RelationshipGraphTabBridge;
 import org.freeplane.plugin.workspace.components.TagGroupFilterBarFactory;
@@ -95,6 +98,7 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 	/** True while the left 「关系图」tab is selected; forces presenting completed scans into the viewport. */
 	private volatile boolean graphTabActive;
 	private volatile int scanGeneration;
+	private JButton editLayoutButton;
 
 	public RelationshipGraphSideTabPanel() {
 		super(new BorderLayout(4, 4));
@@ -119,7 +123,10 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 				onSubTabChanged();
 			}
 		});
-		add(subTabs, BorderLayout.CENTER);
+		final JPanel center = new JPanel(new BorderLayout(0, 4));
+		center.add(buildCanvasActionBar(), BorderLayout.NORTH);
+		center.add(subTabs, BorderLayout.CENTER);
+		add(center, BorderLayout.CENTER);
 		setMinimumSize(new Dimension(220, 320));
 		setPreferredSize(new Dimension(280, 420));
 		// Defer canvas wiring until first activation — keep tab install off the
@@ -253,6 +260,113 @@ public class RelationshipGraphSideTabPanel extends JPanel {
 			return "\u6536\u85cf\u6807\u7b7e\u2194\u6536\u85cf\u5bfc\u56fe \u00b7 \u53cc\u51fb\u6807\u7b7e=\u805a\u7126 \u00b7 \u53cc\u51fb\u5bfc\u56fe=\u6253\u5f00";
 		}
 		return "\u5bfc\u56fe\u95f4\u8d85\u94fe\u63a5 \u00b7 \u62d6\u62fd\u5e73\u79fb \u00b7 \u6eda\u8f6e\u7f29\u653e \u00b7 \u53cc\u51fb\u6253\u5f00";
+	}
+
+	private JPanel buildCanvasActionBar() {
+		final JPanel bar = new JPanel(new java.awt.GridLayout(0, 2, 4, 4));
+		editLayoutButton = new JButton("\u7f16\u8f91\u5e03\u5c40");
+		editLayoutButton.setToolTipText("\u51bb\u7ed3\u81ea\u52a8\u6392\u5e03\uff0c\u5141\u8bb8\u62d6\u62fd\u8282\u70b9\u5e76\u4fdd\u5b58\u4f4d\u7f6e");
+		editLayoutButton.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				toggleEditLayout();
+			}
+		});
+		final JButton saveLayout = new JButton("\u4fdd\u5b58\u5e03\u5c40");
+		saveLayout.setToolTipText("\u628a\u5f53\u524d\u8282\u70b9\u4f4d\u7f6e\u5b58\u6210 JSON Canvas");
+		saveLayout.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				saveCurrentLayout();
+			}
+		});
+		final JButton openCanvas = new JButton("\u6253\u5f00\u4e3a\u753b\u677f");
+		openCanvas.setToolTipText("\u5bfc\u51fa\u5f53\u524d\u5173\u7cfb\u56fe\u4e3a\u53ef\u7f16\u8f91\u7684 .canvas");
+		openCanvas.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				exportCurrentGraphAsCanvas();
+			}
+		});
+		final JButton newCanvas = new JButton("\u65b0\u5efa\u753b\u677f");
+		newCanvas.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				if (DocearCanvasController.getController() != null) {
+					DocearCanvasController.getController().createNewCanvas();
+				}
+			}
+		});
+		final JButton relayout = new JButton("\u91cd\u65b0\u5e03\u5c40");
+		relayout.setToolTipText("\u6e05\u9664\u5df2\u4fdd\u5b58\u4f4d\u7f6e\uff0c\u91cd\u65b0\u529b\u5bfc\u5411\u5e03\u5c40");
+		relayout.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				resetSavedLayout();
+			}
+		});
+		bar.add(editLayoutButton);
+		bar.add(saveLayout);
+		bar.add(openCanvas);
+		bar.add(newCanvas);
+		bar.add(relayout);
+		return bar;
+	}
+
+	private void toggleEditLayout() {
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service == null) {
+			return;
+		}
+		final RelationshipGraphCanvas canvas = service.getCanvas();
+		final boolean next = !canvas.isLayoutFrozen();
+		canvas.setLayoutFrozen(next);
+		if (editLayoutButton != null) {
+			editLayoutButton.setText(next ? "\u9000\u51fa\u7f16\u8f91" : "\u7f16\u8f91\u5e03\u5c40");
+		}
+		canvas.setModeHelpHint(next
+				? "\u7f16\u8f91\u5e03\u5c40\uff1a\u62d6\u62fd\u8282\u70b9\u5b9a\u4f4d \u00b7 \u4fdd\u5b58\u5e03\u5c40\u540e\u4e0b\u6b21\u751f\u6548"
+				: modeHelpHint(graphMode));
+	}
+
+	private void saveCurrentLayout() {
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service == null || service.getCanvas().getIndex() == null) {
+			return;
+		}
+		GraphCanvasBridge.saveLayout(graphMode, service.getCanvas().getIndex());
+		service.getCanvas().setLayoutFrozen(true);
+		if (editLayoutButton != null) {
+			editLayoutButton.setText("\u9000\u51fa\u7f16\u8f91");
+		}
+	}
+
+	private void exportCurrentGraphAsCanvas() {
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service == null || service.getCanvas().getIndex() == null) {
+			return;
+		}
+		final JsonCanvasDocument doc = GraphCanvasBridge.fromGraph(service.getCanvas().getIndex());
+		final javax.swing.JFileChooser chooser = new javax.swing.JFileChooser(DocearCanvasController.defaultDir());
+		chooser.setDialogTitle("\u5bfc\u51fa\u4e3a\u753b\u677f");
+		chooser.setSelectedFile(new java.io.File(DocearCanvasController.defaultDir(), "\u5173\u7cfb\u56fe.canvas"));
+		if (chooser.showSaveDialog(this) != javax.swing.JFileChooser.APPROVE_OPTION) {
+			return;
+		}
+		java.io.File file = chooser.getSelectedFile();
+		if (!file.getName().toLowerCase().endsWith(".canvas")) {
+			file = new java.io.File(file.getParentFile(), file.getName() + ".canvas");
+		}
+		if (DocearCanvasController.getController() != null) {
+			DocearCanvasController.getController().exportGraphAsCanvas(file, doc);
+		}
+	}
+
+	private void resetSavedLayout() {
+		GraphCanvasBridge.clearLayout(graphMode);
+		final RelationshipGraphService service = RelationshipGraphService.getService();
+		if (service != null) {
+			service.getCanvas().setLayoutFrozen(false);
+			service.getCanvas().refreshLayout();
+		}
+		if (editLayoutButton != null) {
+			editLayoutButton.setText("\u7f16\u8f91\u5e03\u5c40");
+		}
 	}
 
 	private void wireCanvasListeners() {

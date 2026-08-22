@@ -115,13 +115,17 @@ public class LatexRenderer extends AbstractContentTransformer implements IEditBa
 		String nodeFormat = textController.getNodeFormat(node);
 		final String latexText = getLatexNode(text, nodeFormat, true);
 		if(latexText != null){
+			// ```math``` fences: use default node editor (full fence text), not LaTeX syntax kit.
+			if (extractMathFence(text) != null) {
+				return null;
+			}
 			JEditorPane textEditor = new JEditorPane();
 			textEditor.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
 			final JRestrictedSizeScrollPane scrollPane = new JRestrictedSizeScrollPane(textEditor);
 			scrollPane.setMinimumSize(new Dimension(0, 60));
 			final EditNodeDialog editNodeDialog = new LatexEditor(node, latexText, firstKeyEvent, editControl, false, textEditor);
 			editNodeDialog.setTitle(TextUtils.getText("latex_editor"));
-			textEditor.setContentType("text/latex");
+			textEditor.setContentType("text/plain");
 			return editNodeDialog;
 		}
 		return null;

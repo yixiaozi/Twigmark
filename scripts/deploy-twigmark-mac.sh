@@ -85,6 +85,16 @@ build_mermaid() {
   (cd "$REPO_ROOT/docear_plugin_mermaid" && "$ANT" -f ant/build.xml dist)
 }
 
+build_core() {
+  echo "==== Build docear_plugin_core ===="
+  (cd "$REPO_ROOT/docear_plugin_core" && "$ANT" -f ant/build.xml dist)
+}
+
+build_freeplane() {
+  echo "==== Build org.freeplane.core ===="
+  (cd "$REPO_ROOT/freeplane" && "$ANT" -f ant/build.xml osgi_dist)
+}
+
 deploy_plugins_incremental() {
   if [[ -n "$ONLY_PLUGIN" ]]; then
     case "$ONLY_PLUGIN" in
@@ -92,6 +102,21 @@ deploy_plugins_incremental() {
         build_mermaid
         sync_plugin_dir "org.docear.plugin.mermaid" \
           "$REPO_ROOT/docear_plugin_mermaid/dist/org.docear.plugin.mermaid"
+        ;;
+      core|org.docear.plugin.core)
+        build_core
+        sync_plugin_dir "org.docear.plugin.core" \
+          "$REPO_ROOT/docear_plugin_core/dist/org.docear.plugin.core"
+        ;;
+      freeplane|org.freeplane.core)
+        build_freeplane
+        sync_plugin_dir "org.freeplane.core" \
+          "$REPO_ROOT/freeplane/dist/org.freeplane.core"
+        mkdir -p "$APP/Contents/Resources/Java/core"
+        rm -rf "$APP/Contents/Resources/Java/core/org.freeplane.core"
+        ditto "$REPO_ROOT/freeplane/dist/org.freeplane.core" \
+          "$APP/Contents/Resources/Java/core/org.freeplane.core"
+        echo "Synced org.freeplane.core -> $APP/Contents/Resources/Java/core/org.freeplane.core"
         ;;
       *)
         echo "Unknown --plugin $ONLY_PLUGIN" >&2

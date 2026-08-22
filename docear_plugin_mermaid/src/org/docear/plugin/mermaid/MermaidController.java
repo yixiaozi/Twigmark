@@ -36,9 +36,10 @@ public final class MermaidController {
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: could not register format pattern", t);
 		}
-		RichPreviewController.install();
+		RichPreviewController.install(modeController);
 		MermaidRenderService.getInstance().ensureStarted();
 		PlantUmlCliRenderer.ensureAvailable();
+		ExcalidrawCliRenderer.ensureAvailable();
 	}
 
 	private static void addLanguageResources() {

@@ -10,6 +10,7 @@ import javax.swing.SwingUtilities;
 
 import org.freeplane.core.resources.ResourceController;
 import org.freeplane.core.ui.ControllerPopupMenuListener;
+import org.freeplane.core.util.Compat;
 import org.freeplane.core.ui.IEditHandler;
 import org.freeplane.core.ui.IEditHandler.FirstAction;
 import org.freeplane.core.ui.KeyBindingProcessor;
@@ -119,6 +120,18 @@ public class DefaultNodeKeyListener implements KeyListener {
 					editHandler.edit(e, FirstAction.EDIT_CURRENT, false);
 				}
 				return;
+			default:
+				if (Compat.isMacOsX() && editHandler != null && isMacImeStartKey(e)) {
+					final String keyTypeActionString = ResourceController.getResourceController().getProperty(
+					        "key_type_action", FirstAction.EDIT_CURRENT.toString());
+					final FirstAction keyTypeAction = FirstAction.valueOf(keyTypeActionString);
+					if (!FirstAction.IGNORE.equals(keyTypeAction)) {
+						editHandler.edit(e, keyTypeAction, false);
+						e.consume();
+					}
+					return;
+				}
+				break;
 			case KeyEvent.VK_CONTEXT_MENU:
 				final ModeController modeController = Controller.getCurrentModeController();
 				final NodeModel node = Controller.getCurrentModeController().getMapController().getSelectedNode();
@@ -137,6 +150,10 @@ public class DefaultNodeKeyListener implements KeyListener {
 
 	public void keyTyped(final KeyEvent e) {
 		if ((e.isAltDown() || e.isControlDown() || e.isMetaDown())) {
+			return;
+		}
+		if (Compat.isMacOsX() && isMacImeStartKey(e)) {
+			// Letters already started the editor in keyPressed (IME-safe).
 			return;
 		}
 		final String keyTypeActionString = ResourceController.getResourceController().getProperty("key_type_action",
@@ -159,4 +176,16 @@ public class DefaultNodeKeyListener implements KeyListener {
 	private boolean isControlCharacter(char keyChar) {
 	    return keyChar == KeyEvent.CHAR_UNDEFINED || keyChar <= KeyEvent.VK_SPACE|| keyChar == KeyEvent.VK_DELETE;
     }
+
+	private static boolean isMacImeStartKey(final KeyEvent e) {
+		if (e.isAltDown() || e.isControlDown() || e.isMetaDown()) {
+			return false;
+		}
+		final char ch = e.getKeyChar();
+		if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+			return true;
+		}
+		final int code = e.getKeyCode();
+		return code >= KeyEvent.VK_A && code <= KeyEvent.VK_Z;
+	}
 }

@@ -528,6 +528,9 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (lower.endsWith(".drawio")) {
 			return title.substring(0, title.length() - 7);
 		}
+		if (lower.endsWith(".canvas")) {
+			return title.substring(0, title.length() - 7);
+		}
 		return title;
 	}
 

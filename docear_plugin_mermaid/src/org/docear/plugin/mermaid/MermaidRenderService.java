@@ -314,8 +314,7 @@ public final class MermaidRenderService {
 	}
 
 	private void finishRequest(final String key, final RichPreviewIcon icon) {
-		// Do not permanently cache hard failures — allow retry after env fixes.
-		if (icon != null) {
+		if (icon != null && icon.getFullImage() != null) {
 			putMemory(key, icon);
 		}
 		inFlight.remove(key);

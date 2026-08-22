@@ -20,8 +20,8 @@ import org.freeplane.core.ui.components.WidthConstrainedIcon;
  */
 public final class RichPreviewIcon implements ZoomableRichIcon {
 
-	public static final int MAX_WIDTH = 640;
-	public static final int MAX_HEIGHT = 480;
+	public static final int MAX_WIDTH = 360;
+	public static final int MAX_HEIGHT = 240;
 
 	private final ImageIcon image;
 	private final BufferedImage fullImage;
@@ -96,17 +96,6 @@ public final class RichPreviewIcon implements ZoomableRichIcon {
 	public void paintIcon(final Component c, final Graphics g, final int x, final int y) {
 		if (image != null) {
 			image.paintIcon(c, g, x, y);
-			if (fullImage != null && !error) {
-				final Graphics2D g2 = (Graphics2D) g.create();
-				try {
-					g2.setColor(new Color(0, 0, 0, 80));
-					g2.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 10));
-					g2.drawString("dbl-click zoom", x + 4, y + height - 4);
-				}
-				finally {
-					g2.dispose();
-				}
-			}
 			return;
 		}
 		final Graphics2D g2 = (Graphics2D) g.create();

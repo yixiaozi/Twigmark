@@ -32,10 +32,13 @@ import java.awt.datatransfer.Transferable;
 import java.awt.event.ActionEvent;
 import java.awt.event.FocusEvent;
 import java.awt.event.FocusListener;
+import java.awt.event.InputMethodEvent;
+import java.awt.event.InputMethodListener;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
+import java.text.AttributedCharacterIterator;
 import java.io.IOException;
 import java.io.Writer;
 import java.net.URI;
@@ -43,6 +46,7 @@ import javax.swing.Action;
 import javax.swing.ActionMap;
 import javax.swing.Icon;
 import javax.swing.InputMap;
+import javax.swing.JComponent;
 import javax.swing.JEditorPane;
 import javax.swing.JLabel;
 import javax.swing.JMenu;
@@ -94,6 +98,7 @@ import org.freeplane.features.text.mindmapmode.MTextController;
 import org.freeplane.features.ui.IMapViewChangeListener;
 import org.freeplane.features.ui.IMapViewManager;
 import org.freeplane.features.url.UrlManager;
+import org.freeplane.view.swing.features.filepreview.ViewerController;
 import org.freeplane.view.swing.map.MainView;
 import org.freeplane.view.swing.map.MapView;
 import org.freeplane.view.swing.map.NodeView;
@@ -709,6 +714,13 @@ public class EditNodeTextField extends EditNodeBase {
 			maxWidth -= parent.getIconTextGap();
 		}
 		maxWidth = mapView.getZoomed(maxWidth);
+		final JComponent imageViewer = nodeView.getContent(ViewerController.VIEWER_POSITION);
+		if (imageViewer != null && imageViewer.isVisible()) {
+			final int imageWidth = imageViewer.getPreferredSize().width;
+			if (imageWidth > 0) {
+				maxWidth = Math.min(maxWidth, imageWidth);
+			}
+		}
 		extraWidth = ResourceController.getResourceController().getIntProperty("editor_extra_width", 80);
 		extraWidth = mapView.getZoomed(extraWidth);
 		final TextFieldListener textFieldListener = new TextFieldListener();
@@ -756,6 +768,10 @@ public class EditNodeTextField extends EditNodeBase {
 			parent.add(textfield, 0);
 		else
 			mapView.add(textfield, 0);
+		if (Compat.isMacOsX()) {
+			installMacImeLeadingLetterGuard(textfield);
+			textfield.requestFocus();
+		}
 		final EventBuffer eventQueue = MTextController.getController().getEventQueue();
 		KeyEvent firstEvent = eventQueue.getFirstEvent();
 		redispatchKeyEvents(textfield, firstEvent);
@@ -778,6 +794,76 @@ public class EditNodeTextField extends EditNodeBase {
 			layout();
 		}
 		textfield.repaint();
-		textfield.requestFocusInWindow();
+		if (!textfield.hasFocus()) {
+			textfield.requestFocusInWindow();
+		}
+	}
+
+	/**
+	 * macOS: if the first IME letter was committed before composition started,
+	 * drop that stray Latin character when composition begins.
+	 */
+	private void installMacImeLeadingLetterGuard(final JEditorPane pane) {
+		final long openedAt = System.currentTimeMillis();
+		pane.addInputMethodListener(new InputMethodListener() {
+			public void caretPositionChanged(final InputMethodEvent event) {
+			}
+
+			public void inputMethodTextChanged(final InputMethodEvent event) {
+				if (event == null || System.currentTimeMillis() - openedAt > 1200L) {
+					return;
+				}
+				final AttributedCharacterIterator composed = event.getText();
+				if (composed == null || composed.getEndIndex() <= composed.getBeginIndex()) {
+					return;
+				}
+				if (event.getCommittedCharacterCount() > 0) {
+					return;
+				}
+				stripStrayLeadingLatinLetter(pane);
+			}
+		});
+	}
+
+	private static void stripStrayLeadingLatinLetter(final JTextComponent component) {
+		try {
+			final Document doc = component.getDocument();
+			if (!(doc instanceof HTMLDocument)) {
+				return;
+			}
+			final HTMLDocument html = (HTMLDocument) doc;
+			int composedStart = -1;
+			int length = html.getLength();
+			for (int offset = 0; offset < length;) {
+				final Element leaf = html.getCharacterElement(offset);
+				if (leaf == null) {
+					break;
+				}
+				final AttributeSet attrs = leaf.getAttributes();
+				if (attrs != null && attrs.isDefined(StyleConstants.ComposedTextAttribute)) {
+					composedStart = leaf.getStartOffset();
+					break;
+				}
+				final int end = leaf.getEndOffset();
+				if (end <= offset) {
+					break;
+				}
+				offset = end;
+			}
+			if (composedStart <= 0) {
+				return;
+			}
+			final int probe = composedStart - 1;
+			final String prev = html.getText(probe, 1);
+			if (prev == null || prev.length() != 1) {
+				return;
+			}
+			final char ch = prev.charAt(0);
+			if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')) {
+				html.remove(probe, 1);
+			}
+		}
+		catch (Exception e) {
+		}
 	}
 }

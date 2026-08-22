@@ -9,7 +9,7 @@ import org.freeplane.core.util.HtmlUtils;
 public final class FenceParse {
 
 	public enum Kind {
-		MERMAID, PLANTUML, MATH, TABLE, CODE, NONE
+		MERMAID, PLANTUML, MATH, TABLE, CODE, EXCALIDRAW, STRUCTURED, NONE
 	}
 
 	public static final class Block {
@@ -47,6 +47,15 @@ public final class FenceParse {
 		if (looksLikeMarkdownTable(text)) {
 			return new Block(Kind.TABLE, "table", text);
 		}
+		if (ExcalidrawNormalize.looksLikeJson(text)) {
+			return new Block(Kind.EXCALIDRAW, "excalidraw", text);
+		}
+		if (StructuredDataParser.looksLikeJson(text)) {
+			return new Block(Kind.STRUCTURED, "json", text);
+		}
+		if (StructuredDataParser.looksLikeYaml(text)) {
+			return new Block(Kind.STRUCTURED, "yaml", text);
+		}
 		return null;
 	}
 
@@ -81,6 +90,15 @@ public final class FenceParse {
 		if (lower.startsWith("```table") || lower.equals("```md-table")) {
 			return new Block(Kind.TABLE, "table", rest);
 		}
+		if (lower.startsWith("```excalidraw")) {
+			return new Block(Kind.EXCALIDRAW, "excalidraw", rest);
+		}
+		if (lower.startsWith("```json") || lower.equals("```jsonc")) {
+			return new Block(Kind.STRUCTURED, "json", rest);
+		}
+		if (lower.startsWith("```yaml") || lower.equals("```yml")) {
+			return new Block(Kind.STRUCTURED, "yaml", rest);
+		}
 		if (firstLine.startsWith("```") && firstLine.length() > 3) {
 			final String lang = firstLine.substring(3).trim();
 			if (lang.length() > 0 && !lang.contains(" ")) {
@@ -106,6 +124,15 @@ public final class FenceParse {
 		}
 		if ("table".equals(t)) {
 			return new Block(Kind.TABLE, "table", source);
+		}
+		if ("excalidraw".equals(t) || "excalidraw-json".equals(t)) {
+			return new Block(Kind.EXCALIDRAW, "excalidraw", source);
+		}
+		if ("json".equals(t) || "jsonc".equals(t)) {
+			return new Block(Kind.STRUCTURED, "json", source);
+		}
+		if ("yaml".equals(t) || "yml".equals(t)) {
+			return new Block(Kind.STRUCTURED, "yaml", source);
 		}
 		if ("code".equals(t)) {
 			return new Block(Kind.CODE, "text", source);

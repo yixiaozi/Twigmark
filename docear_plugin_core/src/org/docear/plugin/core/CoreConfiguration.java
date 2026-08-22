@@ -583,6 +583,7 @@ public class CoreConfiguration extends ALanguageController {
 		TodoistIntegrationService.install(modeController);
 		EagleIntegrationService.install(modeController);
 		RelationshipGraphIntegration.install((org.freeplane.features.mode.mindmapmode.MModeController) modeController);
+		org.docear.plugin.core.canvas.DocearCanvasController.install(modeController);
 		modeController.addAction(new DocearRemoveNodeLinkAction());
 		if("true".equals(System.getProperty("docear.debug", "false"))) {
 			modeController.addAction(new DocearSetNodePrivacyAction());

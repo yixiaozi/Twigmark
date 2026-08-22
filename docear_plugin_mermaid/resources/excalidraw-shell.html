@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Excalidraw Export</title>
+</head>
+<body>
+<script type="module">
+  import { exportToCanvas } from "./node_modules/@excalidraw/utils/dist/prod/index.js";
+
+  window.exportExcalidraw = async function exportExcalidraw(jsonText) {
+    const data = JSON.parse(jsonText);
+    const elements = data.elements || [];
+    if (!elements.length) {
+      throw new Error("excalidraw: no elements");
+    }
+    const canvas = await exportToCanvas({
+      elements: elements,
+      appState: data.appState || { viewBackgroundColor: "#ffffff" },
+      files: data.files || null,
+      maxWidthOrHeight: 2048,
+      getDimensions: function(width, height) {
+        return { width: width, height: height, scale: 1 };
+      }
+    });
+    return canvas.toDataURL("image/png");
+  };
+  window.excalidrawShellReady = true;
+</script>
+</body>
+</html>
