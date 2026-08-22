@@ -47,9 +47,36 @@ public class LatexRenderer extends AbstractContentTransformer implements IEditBa
 		}
 		else if(LatexFormat.LATEX_FORMAT.equals(nodeFormat)){
 			return nodeText;
-		} else {
+		}
+		final String fenced = extractMathFence(nodeText);
+		if (fenced != null) {
+			return fenced;
+		}
+		return null;
+	}
+
+	/** Supports {@code ```math}, {@code ```latex}, {@code ```tex} fenced blocks. */
+	private static String extractMathFence(final String nodeText) {
+		if (nodeText == null) {
 			return null;
 		}
+		String text = nodeText.trim();
+		if (!text.startsWith("```")) {
+			return null;
+		}
+		final int lineEnd = text.indexOf('\n');
+		if (lineEnd < 0) {
+			return null;
+		}
+		final String firstLine = text.substring(0, lineEnd).trim().toLowerCase();
+		if (!firstLine.startsWith("```math") && !firstLine.startsWith("```latex") && !firstLine.equals("```tex")) {
+			return null;
+		}
+		final int close = text.lastIndexOf("```");
+		if (close > lineEnd) {
+			return text.substring(lineEnd + 1, close).trim();
+		}
+		return text.substring(lineEnd + 1).trim();
 	}
 
 	@Override

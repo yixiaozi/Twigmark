@@ -10,7 +10,6 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -37,7 +36,7 @@ public final class MermaidRenderService {
 	private static final MermaidRenderService INSTANCE = new MermaidRenderService();
 	private static final int MEMORY_CACHE_MAX = 64;
 
-	private final ConcurrentHashMap<String, MermaidIcon> memoryCache = new ConcurrentHashMap<String, MermaidIcon>();
+	private final ConcurrentHashMap<String, RichPreviewIcon> memoryCache = new ConcurrentHashMap<String, RichPreviewIcon>();
 	private final ConcurrentHashMap<String, Boolean> inFlight = new ConcurrentHashMap<String, Boolean>();
 	private final ConcurrentHashMap<String, List<WeakReference<NodeModel>>> waiters =
 			new ConcurrentHashMap<String, List<WeakReference<NodeModel>>>();
@@ -101,37 +100,37 @@ public final class MermaidRenderService {
 		INSTANCE.queue.clear();
 	}
 
-	public MermaidIcon getIcon(final String source, final NodeModel node) {
-		final String hash = hash(source);
-		final MermaidIcon cached = memoryCache.get(hash);
+	public RichPreviewIcon getIcon(final String source, final NodeModel node) {
+		final String key = RichCache.hash("mermaid", source);
+		final RichPreviewIcon cached = memoryCache.get(key);
 		if (cached != null) {
 			return cached;
 		}
-		final MermaidIcon fromDisk = loadDiskCache(hash);
+		final RichPreviewIcon fromDisk = loadDiskCache(key);
 		if (fromDisk != null) {
-			putMemory(hash, fromDisk);
+			putMemory(key, fromDisk);
 			return fromDisk;
 		}
 		ensureStarted();
 		if (unavailable || backend == Backend.NONE) {
-			return MermaidIcon.error(unavailableReason);
+			return RichPreviewIcon.error("mermaid", unavailableReason);
 		}
-		registerWaiter(hash, node);
-		if (inFlight.putIfAbsent(hash, Boolean.TRUE) == null) {
-			queue.offer(new RenderRequest(hash, source));
+		registerWaiter(key, node);
+		if (inFlight.putIfAbsent(key, Boolean.TRUE) == null) {
+			queue.offer(new RenderRequest(key, source));
 			schedulePump();
 		}
-		return MermaidIcon.placeholder("Mermaid…");
+		return RichPreviewIcon.placeholder("mermaid", "Mermaid…");
 	}
 
-	private void registerWaiter(final String hash, final NodeModel node) {
+	private void registerWaiter(final String key, final NodeModel node) {
 		if (node == null) {
 			return;
 		}
-		List<WeakReference<NodeModel>> list = waiters.get(hash);
+		List<WeakReference<NodeModel>> list = waiters.get(key);
 		if (list == null) {
 			list = new ArrayList<WeakReference<NodeModel>>();
-			final List<WeakReference<NodeModel>> prev = waiters.putIfAbsent(hash, list);
+			final List<WeakReference<NodeModel>> prev = waiters.putIfAbsent(key, list);
 			if (prev != null) {
 				list = prev;
 			}
@@ -178,12 +177,12 @@ public final class MermaidRenderService {
 			currentRequest = req;
 			try {
 				final BufferedImage img = MermaidCliRenderer.render(req.source);
-				completeCurrent(MermaidIcon.fromImage(img), img);
+				completeCurrent(RichPreviewIcon.fromImage("mermaid", img), img);
 			}
 			catch (Throwable t) {
 				LogUtils.warn("Mermaid CLI render failed", t);
-				completeCurrent(MermaidIcon.error(t.getMessage() != null ? t.getMessage() : "CLI render failed"),
-						null);
+				completeCurrent(RichPreviewIcon.error("mermaid",
+						t.getMessage() != null ? t.getMessage() : "CLI render failed"), null);
 			}
 		}
 		currentRequest = null;
@@ -222,7 +221,8 @@ public final class MermaidRenderService {
 		}
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: render pump failed", t);
-			finishRequest(req.hash, MermaidIcon.error(t.getMessage() != null ? t.getMessage() : "render failed"));
+			finishRequest(req.key, RichPreviewIcon.error("mermaid",
+					t.getMessage() != null ? t.getMessage() : "render failed"));
 			busy.set(false);
 			currentRequest = null;
 			schedulePump();
@@ -251,8 +251,8 @@ public final class MermaidRenderService {
 	}
 
 	private void failAllInFlight(final String reason) {
-		for (final String hash : new ArrayList<String>(inFlight.keySet())) {
-			finishRequest(hash, MermaidIcon.error(reason));
+		for (final String key : new ArrayList<String>(inFlight.keySet())) {
+			finishRequest(key, RichPreviewIcon.error("mermaid", reason));
 		}
 		queue.clear();
 		busy.set(false);
@@ -298,8 +298,8 @@ public final class MermaidRenderService {
 	}
 
 	private BufferedImage snapshotRaw(final int contentW, final int contentH) throws Exception {
-		final int w = Math.max(40, Math.min(MermaidIcon.MAX_WIDTH + 16, contentW + 16));
-		final int h = Math.max(30, Math.min(MermaidIcon.MAX_HEIGHT + 16, contentH + 16));
+		final int w = Math.max(40, Math.min(RichPreviewIcon.MAX_WIDTH + 16, contentW + 16));
+		final int h = Math.max(30, Math.min(RichPreviewIcon.MAX_HEIGHT + 16, contentH + 16));
 		webView.getClass().getMethod("setPrefSize", double.class, double.class).invoke(webView, (double) w,
 				(double) h);
 		final Class<?> writableImageClass = Class.forName("javafx.scene.image.WritableImage");
@@ -313,16 +313,16 @@ public final class MermaidRenderService {
 				.invoke(null, snapshot, null);
 	}
 
-	private void finishRequest(final String hash, final MermaidIcon icon) {
+	private void finishRequest(final String key, final RichPreviewIcon icon) {
 		// Do not permanently cache hard failures — allow retry after env fixes.
 		if (icon != null) {
-			putMemory(hash, icon);
+			putMemory(key, icon);
 		}
-		inFlight.remove(hash);
-		refreshWaiters(hash);
+		inFlight.remove(key);
+		refreshWaiters(key);
 	}
 
-	private void completeCurrent(final MermaidIcon icon, final BufferedImage png) {
+	private void completeCurrent(final RichPreviewIcon icon, final BufferedImage png) {
 		final RenderRequest req = currentRequest;
 		if (req == null) {
 			if (backend != Backend.CLI) {
@@ -332,9 +332,9 @@ public final class MermaidRenderService {
 			return;
 		}
 		if (png != null) {
-			savePngCache(req.hash, png);
+			savePngCache(req.key, png);
 		}
-		finishRequest(req.hash, icon);
+		finishRequest(req.key, icon);
 		currentRequest = null;
 		if (backend != Backend.CLI) {
 			busy.set(false);
@@ -342,8 +342,8 @@ public final class MermaidRenderService {
 		}
 	}
 
-	private void refreshWaiters(final String hash) {
-		final List<WeakReference<NodeModel>> list = waiters.remove(hash);
+	private void refreshWaiters(final String key) {
+		final List<WeakReference<NodeModel>> list = waiters.remove(key);
 		if (list == null) {
 			return;
 		}
@@ -374,16 +374,16 @@ public final class MermaidRenderService {
 		});
 	}
 
-	private void putMemory(final String hash, final MermaidIcon icon) {
-		memoryCache.put(hash, icon);
+	private void putMemory(final String key, final RichPreviewIcon icon) {
+		memoryCache.put(key, icon);
 		if (memoryCache.size() <= MEMORY_CACHE_MAX) {
 			return;
 		}
 		int removed = 0;
 		final Iterator<String> it = memoryCache.keySet().iterator();
 		while (it.hasNext() && removed < 8 && memoryCache.size() > MEMORY_CACHE_MAX) {
-			final String key = it.next();
-			if (!key.equals(hash)) {
+			final String k = it.next();
+			if (!k.equals(key)) {
 				it.remove();
 				removed++;
 			}
@@ -398,13 +398,13 @@ public final class MermaidRenderService {
 		return dir;
 	}
 
-	private MermaidIcon loadDiskCache(final String hash) {
-		final File png = new File(cacheDir(), hash + ".png");
+	private RichPreviewIcon loadDiskCache(final String key) {
 		try {
+			final File png = RichCache.pngFile(key);
 			if (png.isFile()) {
 				final BufferedImage img = ImageIO.read(png);
 				if (img != null) {
-					return MermaidIcon.fromImage(img);
+					return RichPreviewIcon.fromImage("mermaid", img);
 				}
 			}
 		}
@@ -414,12 +414,12 @@ public final class MermaidRenderService {
 		return null;
 	}
 
-	private void savePngCache(final String hash, final BufferedImage image) {
+	private void savePngCache(final String key, final BufferedImage image) {
 		try {
 			if (image == null) {
 				return;
 			}
-			ImageIO.write(image, "png", new File(cacheDir(), hash + ".png"));
+			ImageIO.write(image, "png", RichCache.pngFile(key));
 		}
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: disk cache write failed", t);
@@ -486,27 +486,12 @@ public final class MermaidRenderService {
 		}
 	}
 
-	private static String hash(final String source) {
-		try {
-			final MessageDigest md = MessageDigest.getInstance("SHA-256");
-			final byte[] dig = md.digest(source.getBytes(StandardCharsets.UTF_8));
-			final StringBuilder sb = new StringBuilder(dig.length * 2);
-			for (int i = 0; i < dig.length; i++) {
-				sb.append(String.format("%02x", dig[i] & 0xff));
-			}
-			return sb.toString();
-		}
-		catch (Exception e) {
-			return Integer.toHexString(source.hashCode());
-		}
-	}
-
 	private static final class RenderRequest {
-		final String hash;
+		final String key;
 		final String source;
 
-		RenderRequest(final String hash, final String source) {
-			this.hash = hash;
+		RenderRequest(final String key, final String source) {
+			this.key = key;
 			this.source = source;
 		}
 	}
@@ -528,16 +513,18 @@ public final class MermaidRenderService {
 				final int width = toInt(w, 400);
 				final int height = toInt(h, 300);
 				final BufferedImage png = snapshotRaw(width, height);
-				completeCurrent(MermaidIcon.fromImage(png), png);
+				completeCurrent(RichPreviewIcon.fromImage("mermaid", png), png);
 			}
 			catch (Throwable t) {
 				LogUtils.warn("Mermaid: snapshot failed", t);
-				completeCurrent(MermaidIcon.error(t.getMessage()), null);
+				completeCurrent(RichPreviewIcon.error("mermaid", t.getMessage()), null);
 			}
 		}
 
 		public void onError(final Object message) {
-			completeCurrent(MermaidIcon.error(message != null ? String.valueOf(message) : "render error"), null);
+			completeCurrent(
+					RichPreviewIcon.error("mermaid", message != null ? String.valueOf(message) : "render error"),
+					null);
 		}
 
 		private int toInt(final Object o, final int fallback) {

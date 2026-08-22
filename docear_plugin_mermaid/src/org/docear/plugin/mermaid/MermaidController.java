@@ -10,7 +10,7 @@ import org.freeplane.features.mode.ModeController;
 import org.freeplane.features.text.TextController;
 
 /**
- * Registers Mermaid text transformer and format pattern.
+ * Registers rich-content text transformer (Mermaid, PlantUML, tables, code) and format pattern.
  */
 public final class MermaidController {
 
@@ -24,7 +24,7 @@ public final class MermaidController {
 		addLanguageResources();
 		final TextController textController = modeController.getExtension(TextController.class);
 		if (textController != null) {
-			textController.addTextTransformer(new MermaidContentTransformer());
+			textController.addTextTransformer(new RichContentTransformer());
 		}
 		try {
 			final FormatController formatController = modeController.getController()
@@ -36,7 +36,9 @@ public final class MermaidController {
 		catch (Throwable t) {
 			LogUtils.warn("Mermaid: could not register format pattern", t);
 		}
+		RichPreviewController.install();
 		MermaidRenderService.getInstance().ensureStarted();
+		PlantUmlCliRenderer.ensureAvailable();
 	}
 
 	private static void addLanguageResources() {
