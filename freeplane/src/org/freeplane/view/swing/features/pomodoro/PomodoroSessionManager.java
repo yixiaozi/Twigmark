@@ -200,7 +200,15 @@ public final class PomodoroSessionManager {
 		}
 		updateTickState();
 		fireChanged();
-		hideWindow();
+		// Only close the dock when no session is still running. Stopping one node
+		// (e.g. a paused one via its context menu) must not hide a dock that is
+		// showing another node whose pomodoro is still running.
+		if (getRunningNode() != null) {
+			refreshWindow();
+		}
+		else {
+			hideWindow();
+		}
 	}
 
 	/** Append a completed session for a wall-clock range (timer was not running). */
