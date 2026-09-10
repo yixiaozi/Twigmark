@@ -297,6 +297,7 @@
 					<ribbon_action action="TimeListAction" />
 					<ribbon_action action="ReminderHookAction" />
 					<ribbon_action action="StartPomodoroAction" accelerator="control shift P" />
+					<ribbon_action action="StartPomodoroFromPastAction" />
 					<ribbon_action action="PausePomodoroAction" accelerator="control shift O" />
 					<ribbon_action action="StopPomodoroAction" accelerator="control shift E" />
 					<ribbon_action action="TogglePomodoroAction" accelerator="control shift U" />

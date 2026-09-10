@@ -147,6 +147,37 @@ public final class PomodoroSessionManager {
 		refreshWindow();
 	}
 
+	/**
+	 * Start a running session anchored at a past wall-clock time, so the live
+	 * clock already shows the elapsed minutes (for when the timer was started
+	 * late). A fresh session replaces any not-yet-committed one on the node.
+	 */
+	public void startFromPast(final NodeModel node, final long pastStartMs) {
+		if (node == null) {
+			return;
+		}
+		final long now = System.currentTimeMillis();
+		if (pastStartMs <= 0 || pastStartMs > now) {
+			// Nothing sensible to anchor to: fall back to a normal start.
+			start(node);
+			return;
+		}
+		pauseAllRunningExcept(node);
+		final PomodoroExtension next = extensionCopy(node);
+		next.setEnabled(true);
+		next.setSessionAt(pastStartMs);
+		next.setSessionPauses("");
+		next.setPausedAt(0);
+		next.setActiveMs(0);
+		next.setState(PomodoroExtension.STATE_RUNNING);
+		next.setStartedAt(pastStartMs);
+		PomodoroAttributes.write(node, next);
+		ensureTickRunning();
+		showWindow();
+		fireChanged();
+		refreshWindow();
+	}
+
 	public void pause(final NodeModel node) {
 		if (node == null) {
 			return;

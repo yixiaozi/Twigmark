@@ -18,6 +18,7 @@ public final class PomodoroController implements IExtension {
 		final PomodoroSessionManager manager = PomodoroSessionManager.install(modeController);
 		TextController.getController(modeController).addTextTransformer(new PomodoroTextTransformer());
 		modeController.addAction(new StartPomodoroAction());
+		modeController.addAction(new StartPomodoroFromPastAction());
 		modeController.addAction(new PausePomodoroAction());
 		modeController.addAction(new StopPomodoroAction());
 		modeController.addAction(new TogglePomodoroAction());

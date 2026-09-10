@@ -22,6 +22,21 @@ final class StartPomodoroAction extends AFreeplaneAction {
 	}
 }
 
+final class StartPomodoroFromPastAction extends AFreeplaneAction {
+	private static final long serialVersionUID = 1L;
+
+	StartPomodoroFromPastAction() {
+		super("StartPomodoroFromPastAction");
+	}
+
+	public void actionPerformed(final ActionEvent e) {
+		final NodeModel node = Controller.getCurrentController().getSelection().getSelected();
+		if (node != null) {
+			PomodoroStartFromDialog.showForNode(node);
+		}
+	}
+}
+
 final class PausePomodoroAction extends AFreeplaneAction {
 	private static final long serialVersionUID = 1L;
 
