@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twigmark — 本地优先思维导图工作台</title>
+    <meta
+      name="description"
+      content="Twigmark：本地优先的桌面思维导图与个人知识工作台。由 Mantou（馒头）维护。想法、任务、专注与 AI 协作，数据留在本机。"
+    />
+    <meta property="og:title" content="Twigmark" />
+    <meta
+      property="og:description"
+      content="本地优先的桌面思维导图与个人知识工作台"
+    />
+    <meta property="og:url" content="https://twigmark.com/" />
+    <meta property="og:image" content="https://twigmark.com/assets/twigmark.png" />
+    <meta name="theme-color" content="#07131c" />
+    <link rel="icon" href="./assets/twigmark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+      <svg class="branch-field" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice">
+        <defs>
+          <linearGradient id="twigStroke" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#5ef0d0" stop-opacity="0.85" />
+            <stop offset="100%" stop-color="#4aa8ff" stop-opacity="0.55" />
+          </linearGradient>
+        </defs>
+        <g class="branch-draw" fill="none" stroke="url(#twigStroke)" stroke-width="3.2" stroke-linecap="round">
+          <path d="M180 470 C340 460, 420 320, 560 290 C700 260, 820 340, 980 220" />
+          <path d="M560 290 C610 390, 700 470, 860 520" />
+          <path d="M420 400 C500 520, 560 610, 640 720" />
+        </g>
+        <g class="nodes" fill="#f4fbf8">
+          <circle class="node n1" cx="180" cy="470" r="18" />
+          <circle class="node n2" cx="560" cy="290" r="12" />
+          <circle class="node n3" cx="980" cy="220" r="9" />
+          <circle class="node n4" cx="860" cy="520" r="11" />
+          <circle class="node n5" cx="640" cy="720" r="8" />
+        </g>
+      </svg>
+    </div>
+
+    <header class="top">
+      <a class="brand-lockup" href="./">
+        <img src="./assets/twigmark.png" width="40" height="40" alt="" />
+        <span>Twigmark</span>
+      </a>
+      <nav aria-label="主导航">
+        <a href="#why">为何本地</a>
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">源码</a>
+        <a id="nav-releases" href="https://github.com/yixiaozi/Twigmark/releases" rel="noopener">发布</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-labelledby="brand-title">
+        <img class="hero-mark" src="./assets/twigmark.png" width="96" height="96" alt="" />
+        <h1 id="brand-title">Twigmark</h1>
+        <p class="lede">
+          本地优先的桌面思维导图与个人知识工作台。<br />
+          想法、任务、专注与 AI，收进同一套本机导图。
+        </p>
+        <div class="cta-row">
+          <a
+            id="download-btn"
+            class="btn btn-primary"
+            href="https://github.com/yixiaozi/Twigmark/releases/latest"
+            rel="noopener"
+            >获取最新版</a
+          >
+          <a class="btn btn-ghost" href="https://github.com/yixiaozi/Twigmark" rel="noopener">GitHub</a>
+        </div>
+        <p class="meta">
+          <span>v<strong id="version-label">1.2.0</strong></span>
+          <span id="status-label">stable</span>
+          <span id="published-label"></span>
+          <span>GPL · Mantou</span>
+        </p>
+      </section>
+
+      <section id="why" class="why" aria-labelledby="why-title">
+        <h2 id="why-title">枝干上的第二大脑</h2>
+        <p class="why-intro">不绑云账号。导图是主干，工作流与 AI 是侧枝。</p>
+        <ol class="spine">
+          <li>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <h3>导图仍是主角</h3>
+              <p>节点、链接、折叠、样式与本地工作区——桌面端完整编辑。</p>
+            </div>
+          </li>
+          <li>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <h3>时间与专注</h3>
+              <p>提醒、待办、番茄钟、报表与剪切板历史，贴着节点生长。</p>
+            </div>
+          </li>
+          <li>
+            <span class="dot" aria-hidden="true"></span>
+            <div>
+              <h3>AI 可接入</h3>
+              <p>本机 MCP，让 Cursor 等助手读写导图；数据默认不出你的机器。</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="./assets/twigmark.png" width="28" height="28" alt="" />
+        <strong>Twigmark</strong>
+      </div>
+      <p>
+        Mantou（馒头）·
+        <a href="https://github.com/yixiaozi" rel="noopener">yixiaozi</a>
+        ·
+        <a id="notes-link" href="https://github.com/yixiaozi/Twigmark/blob/master/RELEASE_NOTES.md" rel="noopener"
+          >发布说明</a
+        >
+        ·
+        <a href="https://github.com/yixiaozi/Twigmark/blob/master/LICENSE" rel="noopener">GPL v2</a>
+      </p>
+      <p class="footnote">基于 Freeplane / Docear · twigmark.com</p>
+    </footer>
+
+    <script src="./assets/app.js" defer></script>
+  </body>
+</html>
