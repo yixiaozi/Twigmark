@@ -77,7 +77,21 @@ fi
 printf '%s\n' '/data/mindmaps' > "$STAGE/runtime/working-directory.txt"
 printf '%s\n' '/data/docear' > "$STAGE/runtime/config-directory.txt"
 
-cat > "$STAGE/bin/start-docear-mcp.sh" <<EOF
+# Prefer checked-in VPS start script (reads key from /opt/docear/mcp-api-key.txt).
+VPS_START="$ROOT/deploy/vps/docear-mcp/start-docear-mcp.sh"
+VPS_UNIT="$ROOT/deploy/vps/docear-mcp/docear-mcp.service"
+if [[ -f "$VPS_START" ]]; then
+	cp "$VPS_START" "$STAGE/bin/start-docear-mcp.sh"
+	# If host/port differ from defaults, rewrite JVM flags in the staged copy.
+	if [[ "$MCP_HOST" != "127.0.0.1" || "$MCP_PORT" != "7720" ]]; then
+		sed -i.bak \
+			-e "s/-Dmcp.host=127.0.0.1/-Dmcp.host=${MCP_HOST}/" \
+			-e "s/-Dmcp.port=7720/-Dmcp.port=${MCP_PORT}/" \
+			"$STAGE/bin/start-docear-mcp.sh"
+		rm -f "$STAGE/bin/start-docear-mcp.sh.bak"
+	fi
+else
+	cat > "$STAGE/bin/start-docear-mcp.sh" <<EOF
 #!/bin/bash
 set -euo pipefail
 export LANG=en_US.UTF-8
@@ -85,6 +99,8 @@ export LC_ALL=en_US.UTF-8
 RUNTIME=/opt/docear/runtime
 DATA=/data/docear
 MAPS=/data/mindmaps
+API_KEY_FILE=/opt/docear/mcp-api-key.txt
+MCP_API_KEY="\$(tr -d '\\r\\n' < "\$API_KEY_FILE")"
 mkdir -p "\$DATA" "\$MAPS" /var/log/docear
 printf '%s\\n' "\$MAPS" > "\$RUNTIME/working-directory.txt"
 printf '%s\\n' "\$DATA" > "\$RUNTIME/config-directory.txt"
@@ -101,7 +117,7 @@ exec xvfb-run -a -s "-screen 0 800x600x16" java -Xms64m -Xmx512m -XX:+UseSerialG
   -Dmcp.host=${MCP_HOST} \\
   -Dmcp.port=${MCP_PORT} \\
   -Dmcp.auth.enabled=true \\
-  -Dmcp.auth.apiKey=${MCP_API_KEY} \\
+  -Dmcp.auth.apiKey=\${MCP_API_KEY} \\
   -Dmcp.web.enabled=true \\
   -Dmcp.web.readOnlyTools=true \\
   -Dmcp.publicBaseUrl=https://webchat.mantoublog.top \\
@@ -115,10 +131,14 @@ exec xvfb-run -a -s "-screen 0 800x600x16" java -Xms64m -Xmx512m -XX:+UseSerialG
   -xargs "\$RUNTIME/props.xargs" \\
   -xargs "\$RUNTIME/init.xargs"
 EOF
+fi
 chmod +x "$STAGE/bin/start-docear-mcp.sh"
 printf '%s\n' "$MCP_API_KEY" > "$STAGE/bin/mcp-api-key.txt"
 
-cat > "$STAGE/bin/docear-mcp.service" <<'EOF'
+if [[ -f "$VPS_UNIT" ]]; then
+	cp "$VPS_UNIT" "$STAGE/bin/docear-mcp.service"
+else
+	cat > "$STAGE/bin/docear-mcp.service" <<'EOF'
 [Unit]
 Description=Docear headless MCP server
 After=network.target
@@ -138,6 +158,7 @@ StandardError=append:/var/log/docear/mcp.err.log
 [Install]
 WantedBy=multi-user.target
 EOF
+fi
 
 ssh_cmd "$TARGET" 'mkdir -p /opt/docear/runtime /opt/docear/bin /data/mindmaps /data/docear /var/log/docear /root/docear-data-backups'
 

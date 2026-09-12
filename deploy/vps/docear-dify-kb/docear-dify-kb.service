@@ -1,0 +1,16 @@
+[Unit]
+Description=Docear MCP to Dify External Knowledge API Gateway
+After=network.target docear-mcp.service
+Wants=docear-mcp.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/docear-dify-kb
+EnvironmentFile=/opt/docear-dify-kb/env
+ExecStart=/usr/local/bin/uvicorn app:app --host 127.0.0.1 --port 7721 --log-level info
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

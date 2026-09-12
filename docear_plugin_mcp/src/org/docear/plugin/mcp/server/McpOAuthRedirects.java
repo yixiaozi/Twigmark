@@ -5,7 +5,10 @@ import java.util.Locale;
 
 import org.docear.plugin.mcp.DocearMcpConfig;
 
-/** HTTPS redirect allowlist for Grok / xAI OAuth callbacks. */
+/**
+ * OAuth redirect allowlist for Grok / xAI (HTTPS) and desktop MCP clients
+ * (custom schemes such as {@code cursor://anysphere.cursor-mcp/...}).
+ */
 public final class McpOAuthRedirects {
 	private McpOAuthRedirects() {
 	}
@@ -21,10 +24,17 @@ public final class McpOAuthRedirects {
 		catch (Exception e) {
 			return false;
 		}
-		if (uri.getScheme() == null || uri.getHost() == null) {
+		if (uri.getScheme() == null || uri.getScheme().isEmpty()) {
 			return false;
 		}
 		final String scheme = uri.getScheme().toLowerCase(Locale.US);
+		// Cursor / VS Code style app callbacks are not https://host/...
+		if (isDesktopAppScheme(scheme)) {
+			return true;
+		}
+		if (uri.getHost() == null) {
+			return false;
+		}
 		final String host = uri.getHost().toLowerCase(Locale.US);
 		if (isLoopback(host)) {
 			return "http".equals(scheme) || "https".equals(scheme);
@@ -43,6 +53,10 @@ public final class McpOAuthRedirects {
 			}
 		}
 		return false;
+	}
+
+	private static boolean isDesktopAppScheme(final String scheme) {
+		return "cursor".equals(scheme) || "vscode".equals(scheme) || "vscode-insiders".equals(scheme);
 	}
 
 	public static String hostOf(final String redirectUri) {

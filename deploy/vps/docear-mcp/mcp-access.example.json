@@ -1,0 +1,11 @@
+{
+  "keys": [
+    {
+      "id": "readonly-agent",
+      "name": "Read-only agent",
+      "role": "read",
+      "secret": "tm_replace_with_generated_read_key",
+      "enabled": false
+    }
+  ]
+}

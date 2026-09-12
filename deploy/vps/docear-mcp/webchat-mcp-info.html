@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docear 思维导图 MCP · 馒头导航</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #60a5fa;
+      --ok: #4ade80;
+      --warn: #fbbf24;
+      --bad: #f87171;
+      --line: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: linear-gradient(180deg, #0b1220 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+    .badge {
+      display: inline-block;
+      font-size: .75rem;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border: 1px solid color-mix(in srgb, var(--accent) 40%, #000);
+      background: color-mix(in srgb, var(--accent) 12%, #0f172a);
+      border-radius: 999px;
+      padding: .25rem .7rem;
+      margin-bottom: 1rem;
+    }
+    h1 { font-size: 1.9rem; line-height: 1.2; margin: 0 0 .5rem; }
+    .lead { color: var(--muted); font-size: 1.05rem; margin: 0 0 1.5rem; }
+    .card {
+      background: rgba(30, 41, 59, .92);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1rem;
+    }
+    h2 { font-size: 1rem; margin: 0 0 .75rem; }
+    ul { margin: 0; padding-left: 1.2rem; }
+    li { margin: .35rem 0; color: #cbd5e1; }
+    .status { display: flex; align-items: center; gap: .55rem; font-size: .95rem; }
+    .dot {
+      width: .65rem; height: .65rem; border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 4px rgba(148,163,184,.15);
+    }
+    .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px rgba(74,222,128,.15); }
+    .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px rgba(251,191,36,.15); }
+    .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px rgba(248,113,113,.15); }
+    .note {
+      border-left: 3px solid var(--accent);
+      padding: .75rem 1rem;
+      background: color-mix(in srgb, var(--accent) 10%, transparent);
+      border-radius: 0 10px 10px 0;
+      color: #cbd5e1;
+      font-size: .95rem;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: .88em;
+      background: #0f172a;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: .1rem .35rem;
+      word-break: break-all;
+    }
+    .footer { margin-top: 1.5rem; color: var(--muted); font-size: .85rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="badge">基础设施 · MCP</div>
+    <h1>Docear 思维导图 MCP</h1>
+    <p class="lead">通过 Model Context Protocol，让 AI 助手静默查询与写入 Docear 思维导图知识库。</p>
+
+    <div class="card">
+      <h2>服务状态</h2>
+      <div class="status">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-text">正在检测…</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>能做什么</h2>
+      <ul>
+        <li>搜索导图节点与标签</li>
+        <li>读取每日对话归档与复盘</li>
+        <li>创建或更新导图节点</li>
+        <li>配合 Git 同步个人知识库</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>访问说明</h2>
+      <div class="note">
+        本页为公开简介。实际 MCP 接口 <code>/mcp</code> 需要 <strong>API Key / Bearer Token</strong>，未授权请求会返回 401。
+      </div>
+      <ul style="margin-top: .9rem;">
+        <li>MCP 端点：<code>https://webchat.mantoublog.top/mcp</code></li>
+        <li>Web 对话界面：<a href="https://webchat.mantoublog.top">webchat.mantoublog.top</a></li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <h2>如何获取访问权限</h2>
+      <p style="margin:0;color:#cbd5e1;">此服务为私人思维导图助手，不向公网开放匿名调用。如需在 Cursor 等客户端连接，请联系管理员获取 API Key。</p>
+    </div>
+
+    <p class="footer">
+<a href="https://webchat.mantoublog.top" target="_blank" rel="noopener">打开 WebChat</a>
+      ·
+      <a href="https://home.mantoublog.top">返回馒头导航</a>
+    </p>
+  </div>
+  <script>
+    (async () => {
+      const dot = document.getElementById('status-dot');
+      const text = document.getElementById('status-text');
+      try {
+        const res = await fetch('https://webchat.mantoublog.top/health', { cache: 'no-store' });
+        if (res.ok) {
+          dot.className = 'dot ok';
+          text.textContent = '在线 · Docear MCP 服务正常运行';
+          return;
+        }
+        dot.className = 'dot warn';
+        text.textContent = '网关可达 · MCP 后端响应异常';
+      } catch (_) {
+        dot.className = 'dot bad';
+        text.textContent = '离线 · 无法连接后端服务';
+      }
+    })();
+  </script>
+</body>
+</html>

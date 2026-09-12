@@ -45,6 +45,12 @@ public final class McpOAuthStandaloneTest {
 		if (McpOAuthRedirects.allowed("https://evil.example/cb")) {
 			throw new IllegalStateException("random https must fail");
 		}
+		if (!McpOAuthRedirects.allowed("cursor://anysphere.cursor-mcp/oauth/callback")) {
+			throw new IllegalStateException("cursor scheme");
+		}
+		if (McpOAuthRedirects.allowed("javascript:alert(1)")) {
+			throw new IllegalStateException("javascript scheme must fail");
+		}
 	}
 
 	private static void assertClientId() {
