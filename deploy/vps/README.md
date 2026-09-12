@@ -44,7 +44,7 @@
 
 1. MCP：`Authorization: Bearer <mcp-api-key>`（owner，见启动参数 `-Dmcp.auth.role=owner`）
 2. 网页 Webchat：账号密码（库在 `/data/docear/webchat-*.db`）
-3. OAuth（Grok / Cursor）：源码 `McpOAuthRedirects` 已允许 `cursor://` 等桌面自定义 scheme；勿再依赖服务器上临时 jar patch
+3. OAuth（Grok / Cursor）：源码 `McpOAuthRedirects` 已允许 `cursor://`；`mcp.oauth.accessTtlSeconds=0` 表示令牌永不过期且持久化到 `webchat-*.db`（重启仍有效）
 4. Dify KB：`/dify-kb/` 使用 `DIFY_KB_API_KEY` Bearer
 
 ## 部署

@@ -167,9 +167,29 @@ public final class DocearMcpConfig {
 		return McpRole.parse(getString("oauth.role", "write"));
 	}
 
+	/**
+	 * Access / refresh token lifetime in seconds.
+	 * {@code 0} = never expire (persisted; survives process restart).
+	 * Positive values below 300 are raised to 300.
+	 */
 	public static int getOauthAccessTtlSeconds() {
 		final int sec = getInt("oauth.accessTtlSeconds", 86400);
+		if (sec == 0) {
+			return 0;
+		}
 		return sec < 300 ? 300 : sec;
+	}
+
+	/**
+	 * Value for OAuth {@code expires_in}. When TTL is 0 (never expire), returns a large
+	 * positive number so clients do not treat the token as already expired.
+	 */
+	public static int getOauthExpiresInSeconds() {
+		final int ttl = getOauthAccessTtlSeconds();
+		if (ttl == 0) {
+			return 10 * 365 * 24 * 3600;
+		}
+		return ttl;
 	}
 
 	/** Extra redirect hosts besides grok.com / x.ai / x.com. */

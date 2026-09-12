@@ -72,6 +72,7 @@ exec java -Xms64m -Xmx512m -XX:+UseSerialGC -Xss256k -XX:MaxMetaspaceSize=128m -
   -Dmcp.web.readOnlyTools=true \
   -Dmcp.publicBaseUrl=https://webchat.mantoublog.top \
   -Dmcp.oauth.role=write \
+  -Dmcp.oauth.accessTtlSeconds=0 \
   -Dmcp.skipFullTagScan=true \
   -Dmcp.lowMemory=true \
   -Dmcp.auth.role=owner \

@@ -121,6 +121,13 @@ Cursor 远程 HTTP MCP 示例（经 HTTPS 反代，**不要**把 7720 对公网�
 
 Key 的角色决定该客户端能看到/调用哪些工具。网页账号与 MCP Key 相互独立。
 
+### OAuth 令牌有效期
+
+- JVM / 属性：`mcp.oauth.accessTtlSeconds`（默认见 `mcp.properties`）
+- **`0` = 永不过期**：写入 `webchat-*.db` 的 `oauth_tokens.expires_at=0`，进程重启后仍从库加载
+- 对外 `expires_in` 在永不过期时返回约 10 年的秒数，避免客户端把 `0` 当成「已过期」
+- 授权码（code）仍为短期（约 10 分钟），与 access/refresh 无关
+
 ## 安全建议
 
 1. 公网务必开 MCP API Key，并加 HTTPS 反代  

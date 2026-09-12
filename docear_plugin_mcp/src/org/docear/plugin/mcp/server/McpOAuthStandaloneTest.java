@@ -12,6 +12,7 @@ public final class McpOAuthStandaloneTest {
 		assertRedirects();
 		assertClientId();
 		assertCodeFlow();
+		assertNeverExpireSemantics();
 		System.out.println("McpOAuthStandaloneTest OK");
 	}
 
@@ -113,6 +114,52 @@ public final class McpOAuthStandaloneTest {
 		}
 		if (svc.resolveAccessToken("mto_deadbeef") != null) {
 			throw new IllegalStateException("unknown token");
+		}
+	}
+
+	private static void assertNeverExpireSemantics() {
+		if (McpOAuthService.isExpired(0L)) {
+			throw new IllegalStateException("expiresAt=0 must mean never expire");
+		}
+		if (McpOAuthService.isExpired(-1L)) {
+			throw new IllegalStateException("expiresAt<=0 must mean never expire");
+		}
+		if (!McpOAuthService.isExpired(1L)) {
+			throw new IllegalStateException("past positive expiresAt must be expired");
+		}
+		final String prop = "mcp.oauth.accessTtlSeconds";
+		final String prev = System.getProperty(prop);
+		try {
+			System.setProperty(prop, "0");
+			final McpOAuthService svc = McpOAuthService.forTests(new McpOAuthService.PasswordGate() {
+				public String verify(final String username, final String password) {
+					return "bob";
+				}
+			});
+			final String verifier = McpOAuthPkce.randomHex(32);
+			final String challenge = McpOAuthPkce.challengeS256(verifier);
+			final String code = svc.loginAndCreateCode("bob", "x", "twigmark", "https://grok.com/oauth/callback",
+					challenge, "mcp");
+			final java.util.Map tokens = svc.exchangeCode(code, "twigmark", "https://grok.com/oauth/callback", verifier);
+			final String access = (String) tokens.get("access_token");
+			final String expiresIn = (String) tokens.get("expires_in");
+			if (svc.resolveAccessToken(access) == null) {
+				throw new IllegalStateException("never-expire access must resolve");
+			}
+			if (expiresIn == null || Integer.parseInt(expiresIn) < 86400) {
+				throw new IllegalStateException("expires_in for never-expire must be large, got " + expiresIn);
+			}
+		}
+		catch (Exception e) {
+			throw new IllegalStateException("never-expire flow", e);
+		}
+		finally {
+			if (prev == null) {
+				System.clearProperty(prop);
+			}
+			else {
+				System.setProperty(prop, prev);
+			}
 		}
 	}
 }

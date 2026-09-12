@@ -153,7 +153,7 @@ public final class McpOAuthService {
 		if (grant == null && persist) {
 			grant = loadByRefresh(hash);
 		}
-		if (grant == null || grant.expiresAt < System.currentTimeMillis()) {
+		if (grant == null || isExpired(grant.expiresAt)) {
 			throw new IllegalArgumentException("invalid_grant");
 		}
 		deleteRefresh(hash);
@@ -172,7 +172,7 @@ public final class McpOAuthService {
 				tokens.put(hash, grant);
 			}
 		}
-		if (grant == null || grant.expiresAt < System.currentTimeMillis()) {
+		if (grant == null || isExpired(grant.expiresAt)) {
 			return null;
 		}
 		final McpRole live = DocearMcpConfig.getOauthRole();
@@ -181,13 +181,15 @@ public final class McpOAuthService {
 
 	private Map<String, String> issueTokens(final String username, final String clientId, final String scope) {
 		final int ttl = DocearMcpConfig.getOauthAccessTtlSeconds();
+		final int expiresIn = DocearMcpConfig.getOauthExpiresInSeconds();
 		final long now = System.currentTimeMillis();
 		final AccessGrant grant = new AccessGrant();
 		grant.username = username;
 		grant.clientId = clientId;
 		grant.scope = scope;
 		grant.role = DocearMcpConfig.getOauthRole();
-		grant.expiresAt = now + ttl * 1000L;
+		// 0 = never expire (also how message shares encode "no expiry")
+		grant.expiresAt = ttl == 0 ? 0L : now + ttl * 1000L;
 		final String access = "mto_" + McpOAuthPkce.randomHex(24);
 		final String refreshTok = "mtr_" + McpOAuthPkce.randomHex(24);
 		final String accessHash = McpOAuthPkce.sha256Hex(access);
@@ -206,10 +208,15 @@ public final class McpOAuthService {
 		final Map<String, String> out = new java.util.LinkedHashMap<String, String>();
 		out.put("access_token", access);
 		out.put("token_type", "Bearer");
-		out.put("expires_in", String.valueOf(ttl));
+		out.put("expires_in", String.valueOf(expiresIn));
 		out.put("refresh_token", refreshTok);
 		out.put("scope", scope);
 		return out;
+	}
+
+	/** {@code expiresAt <= 0} means never expire (persisted across restarts). */
+	static boolean isExpired(final long expiresAt) {
+		return expiresAt > 0L && expiresAt < System.currentTimeMillis();
 	}
 
 	private static String normalizeScope(final String scope) {
