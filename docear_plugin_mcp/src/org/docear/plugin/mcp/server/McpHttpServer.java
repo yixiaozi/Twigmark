@@ -229,6 +229,18 @@ public final class McpHttpServer {
 				webchatApi.handleListIdeas(exchange);
 				return;
 			}
+			if ("/api/guest/presets".equals(path) && "GET".equalsIgnoreCase(method)) {
+				webchatApi.handleListManagedPresets(exchange);
+				return;
+			}
+			if ("/api/guest/presets".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleSavePreset(exchange, readBody(exchange));
+				return;
+			}
+			if ("/api/guest/presets/delete".equals(path) && "POST".equalsIgnoreCase(method)) {
+				webchatApi.handleDeletePreset(exchange, readBody(exchange));
+				return;
+			}
 			if ("/api/maps".equals(path) && "GET".equalsIgnoreCase(method)) {
 				WebMapsApi.handleListMaps(exchange);
 				return;
