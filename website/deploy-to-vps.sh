@@ -19,6 +19,8 @@ scp "$ROOT/nginx-twigmark.conf" "$TARGET:/etc/nginx/sites-available/twigmark"
 ssh "$TARGET" 'bash -s' <<'REMOTE'
 set -euo pipefail
 ln -sfn /etc/nginx/sites-available/twigmark /etc/nginx/sites-enabled/twigmark
+chown -R www-data:www-data /var/www/twigmark
+chmod -R u=rwX,g=rX,o=rX /var/www/twigmark
 nginx -t
 systemctl reload nginx
 

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>介绍 — Twigmark</title>
+    <meta
+      name="description"
+      content="Twigmark 是什么：本地优先思维导图工作台，三分钟上手，无强制云账号。"
+    />
+    <meta name="theme-color" content="#07131c" />
+    <link rel="icon" href="./assets/twigmark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body class="page">
+    <div class="atmosphere atmosphere-soft" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+    </div>
+
+    <header class="top">
+      <a class="brand-lockup" href="./">
+        <img src="./assets/twigmark.png" width="40" height="40" alt="" />
+        <span>Twigmark</span>
+      </a>
+      <nav aria-label="主导航">
+        <a href="./features.html">功能</a>
+        <a class="is-active" href="./about.html">介绍</a>
+        <a href="./changelog.html">更新</a>
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">源码</a>
+      </nav>
+    </header>
+
+    <main class="page-main">
+      <header class="page-hero">
+        <p class="eyebrow">About</p>
+        <h1>介绍</h1>
+        <p class="page-lede">
+          Twigmark 由 Mantou（馒头）维护。基于 Freeplane / Docear（GPL），面向日常整理与 AI 协作，而不是云端学术套件。
+        </p>
+      </header>
+
+      <section class="feature-block">
+        <h2>解决什么问题</h2>
+        <p class="prose">
+          把想法、任务、文献线索、专注记录和 AI 读写，收进<strong>同一套本地导图</strong>。
+        </p>
+        <ul class="plain-list">
+          <li>导图仍是主角：节点、链接、图标、折叠、样式</li>
+          <li>工作流补齐：提醒、待办、番茄、报表、剪切板历史</li>
+          <li>AI 可接入：本机 MCP，Cursor 等助手读写导图</li>
+          <li>不依赖 docear.org；没有强制账号与云同步</li>
+        </ul>
+        <p class="prose muted">适合个人知识库、项目规划、学习笔记、日常待办与「第二大脑」式整理。</p>
+      </section>
+
+      <section class="feature-block">
+        <h2>为什么快</h2>
+        <ul class="plain-list">
+          <li><strong>本地启动</strong>：数据在本机目录，不先过云端登录墙</li>
+          <li><strong>文件即真相</strong>：<code>.mm</code> 可备份、可 Git、可随身拷</li>
+          <li><strong>MCP 即插</strong>：本机端口对接助手，少一层中转</li>
+          <li><strong>按需加载</strong>：报表等 Tab 先开后载，少卡主界面</li>
+        </ul>
+      </section>
+
+      <section class="feature-block">
+        <h2>三分钟上手</h2>
+        <ol class="steps">
+          <li>解压便携包（或安装包），运行启动器（文件名可能仍是 <code>docear.exe</code>）。</li>
+          <li>首次选择<strong>主目录</strong>（导图与数据放这里）。</li>
+          <li>欢迎图里：<kbd>Insert</kbd> 新建子节点，<kbd>Enter</kbd> 编辑，<kbd>Ctrl+S</kbd> 保存。</li>
+          <li>之后可用「帮助 → 教程」再打开上手图。</li>
+        </ol>
+      </section>
+
+      <section class="feature-block">
+        <h2>运行环境</h2>
+        <ul class="plain-list">
+          <li>Java 8（JRE / JDK）</li>
+          <li>Draw.io 需要 JavaFX（打包脚本可注入）</li>
+          <li>可选：Cursor（MCP）、Git、Todoist 等</li>
+          <li>当前主要发行目标：Windows（亦有 Mac 构建路径）</li>
+        </ul>
+      </section>
+
+      <p class="page-foot-cta">
+        <a class="btn btn-primary" id="download-btn" href="https://github.com/yixiaozi/Twigmark/releases/latest" rel="noopener"
+          >获取最新版</a
+        >
+        <a class="btn btn-ghost" href="./features.html">看功能清单</a>
+      </p>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="./assets/twigmark.png" width="28" height="28" alt="" />
+        <strong>Twigmark</strong>
+      </div>
+      <p>
+        Mantou · <a href="./">首页</a> · <a href="./changelog.html">更新</a> ·
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">GitHub</a>
+      </p>
+      <p class="footnote">基于 Freeplane / Docear</p>
+    </footer>
+    <script src="./assets/app.js" defer></script>
+  </body>
+</html>

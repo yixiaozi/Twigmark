@@ -1,6 +1,13 @@
 # Twigmark 官网（twigmark.com）
 
-静态落地页，部署到 VPS `/var/www/twigmark`。
+静态多页落地站，部署到 VPS `/var/www/twigmark`。
+
+| 路径 | 说明 |
+|------|------|
+| `/` | 首页 |
+| `/features.html` | 功能一览 |
+| `/about.html` | 介绍与上手 |
+| `/changelog.html` | 更新历史 |
 
 ## 本地预览
 

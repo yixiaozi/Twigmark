@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>更新历史 — Twigmark</title>
+    <meta name="description" content="Twigmark 更新历史：1.2.0 产品化、MCP、国际化等。" />
+    <meta name="theme-color" content="#07131c" />
+    <link rel="icon" href="./assets/twigmark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body class="page">
+    <div class="atmosphere atmosphere-soft" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+    </div>
+
+    <header class="top">
+      <a class="brand-lockup" href="./">
+        <img src="./assets/twigmark.png" width="40" height="40" alt="" />
+        <span>Twigmark</span>
+      </a>
+      <nav aria-label="主导航">
+        <a href="./features.html">功能</a>
+        <a href="./about.html">介绍</a>
+        <a class="is-active" href="./changelog.html">更新</a>
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">源码</a>
+      </nav>
+    </header>
+
+    <main class="page-main">
+      <header class="page-hero">
+        <p class="eyebrow">Changelog</p>
+        <h1>更新历史</h1>
+        <p class="page-lede">
+          精简自仓库 <code>CHANGELOG.md</code> / <code>RELEASE_NOTES.md</code>。完整条目见 GitHub。
+        </p>
+        <p class="meta">
+          当前 <strong id="version-label">1.2.0</strong>
+          <span id="status-label">stable</span>
+          <span id="published-label"></span>
+        </p>
+      </header>
+
+      <article class="release">
+        <header class="release-head">
+          <h2>1.2.0</h2>
+          <time datetime="2026-08-07">2026-08-07</time>
+        </header>
+        <p class="prose">产品表皮与发布工程定型：品牌 Twigmark · Mantou，stable 版号，可复现打包。</p>
+
+        <h3>产品化</h3>
+        <ul class="plain-list">
+          <li>对外名称 Twigmark；切断 docear.org 联网与死链</li>
+          <li>根级 LICENSE（GPL-2）与第三方声明</li>
+          <li>Windows 便携打包脚本；3 分钟上手欢迎图；新图标</li>
+        </ul>
+
+        <h3>MCP</h3>
+        <ul class="plain-list">
+          <li>API Key 认证；公网绑定强制 Key</li>
+          <li>网页版 <code>/web/</code>：登录、导图库、对话与大模型配置</li>
+          <li>桌面右侧聊天与网页共用配置；访问审计</li>
+        </ul>
+
+        <h3>国际化</h3>
+        <ul class="plain-list">
+          <li>报表 / 日历 / 财务 / 番茄 / 快捷键等硬编码改为 EN / zh_CN 资源</li>
+          <li>About / 设置品牌文案统一为 Twigmark</li>
+        </ul>
+
+        <h3>同期基线能力</h3>
+        <ul class="plain-list">
+          <li>报表：多 Tab、先开后载、Ctrl+W、快速切换</li>
+          <li>快捷键编辑器：可读修饰键、Ribbon 分类</li>
+          <li>剪切板历史：记录每次出现时间</li>
+        </ul>
+      </article>
+
+      <article class="release release-muted">
+        <header class="release-head">
+          <h2>更早</h2>
+        </header>
+        <p class="prose muted">
+          Freeplane / Docear 上游变更见各自文档。本站只跟踪 Twigmark 产品线。
+        </p>
+        <p>
+          <a href="https://github.com/yixiaozi/Twigmark/blob/master/CHANGELOG.md" rel="noopener">完整 CHANGELOG →</a>
+          ·
+          <a id="nav-releases" href="https://github.com/yixiaozi/Twigmark/releases" rel="noopener">GitHub Releases →</a>
+        </p>
+      </article>
+
+      <p class="page-foot-cta">
+        <a class="btn btn-primary" id="download-btn" href="https://github.com/yixiaozi/Twigmark/releases/latest" rel="noopener"
+          >获取最新版</a
+        >
+        <a class="btn btn-ghost" href="./">回首页</a>
+      </p>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="./assets/twigmark.png" width="28" height="28" alt="" />
+        <strong>Twigmark</strong>
+      </div>
+      <p>
+        Mantou · <a href="./">首页</a> · <a href="./features.html">功能</a> ·
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">GitHub</a>
+      </p>
+      <p class="footnote">精简自仓库更新说明</p>
+    </footer>
+    <script src="./assets/app.js" defer></script>
+  </body>
+</html>

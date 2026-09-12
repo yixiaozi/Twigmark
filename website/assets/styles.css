@@ -321,6 +321,247 @@ footer {
   max-width: 36rem;
 }
 
+.speed-strip {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin: 1.1rem 0 0;
+  padding: 0;
+}
+
+.speed-strip li {
+  padding: 0.35rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #c9f7ec;
+  background: rgba(62, 224, 196, 0.1);
+  border: 1px solid rgba(94, 240, 208, 0.28);
+}
+
+.home-block {
+  padding: 0 0 4.5rem;
+}
+
+.home-block-tight {
+  padding-bottom: 5rem;
+}
+
+.block-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.35rem;
+}
+
+.block-head h2,
+.home-block > h2 {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: clamp(1.55rem, 3.5vw, 2.1rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.text-link {
+  font-size: 0.92rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.peek-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1.1rem;
+}
+
+.peek {
+  display: block;
+  padding: 1.05rem 0.15rem 1.05rem 0;
+  color: inherit;
+  border-top: 1px solid rgba(148, 220, 230, 0.16);
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.peek:hover {
+  text-decoration: none;
+  color: #dffaf3;
+  border-top-color: rgba(94, 240, 208, 0.55);
+}
+
+.peek h3 {
+  margin: 0 0 0.35rem;
+  font-family: var(--font-brand);
+  font-size: 1.08rem;
+  font-weight: 650;
+}
+
+.peek p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+/* Inner pages */
+.page .hero {
+  min-height: auto;
+}
+
+.atmosphere-soft .branch-field {
+  display: none;
+}
+
+.page-main {
+  position: relative;
+  z-index: 1;
+  width: min(820px, calc(100% - 2.5rem));
+  margin: 0 auto;
+  padding: 2.2rem 0 3rem;
+}
+
+.page-hero {
+  margin-bottom: 2.4rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.55rem;
+  font-family: var(--font-brand);
+  font-size: 0.82rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+
+.page-hero h1 {
+  margin: 0 0 0.7rem;
+  font-family: var(--font-brand);
+  font-size: clamp(2.2rem, 6vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.page-lede {
+  margin: 0;
+  color: #c5dde4;
+  font-size: 1.05rem;
+  max-width: 38rem;
+}
+
+.feature-block {
+  margin-bottom: 2.4rem;
+  padding-top: 0.2rem;
+}
+
+.feature-block h2 {
+  margin: 0 0 0.85rem;
+  font-family: var(--font-brand);
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.feature-block h3 {
+  margin: 1.1rem 0 0.55rem;
+  font-family: var(--font-brand);
+  font-size: 1.02rem;
+  font-weight: 650;
+  color: #d7f6ef;
+}
+
+.plain-list {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: #a7c2cb;
+}
+
+.plain-list li {
+  margin: 0.4rem 0;
+}
+
+.plain-list strong {
+  color: #e7f7f2;
+  font-weight: 600;
+}
+
+code,
+kbd {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 0.3em;
+  background: rgba(255, 255, 255, 0.06);
+  color: #d5f3ea;
+}
+
+kbd {
+  border: 1px solid rgba(148, 220, 230, 0.25);
+}
+
+.prose {
+  margin: 0 0 0.9rem;
+  color: #c5dde4;
+}
+
+.prose.muted,
+.muted {
+  color: var(--muted);
+}
+
+.steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #a7c2cb;
+}
+
+.steps li {
+  margin: 0.55rem 0;
+}
+
+.page-foot-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin: 2.5rem 0 0;
+}
+
+.release {
+  margin-bottom: 2.6rem;
+  padding-bottom: 0.4rem;
+  border-top: 1px solid rgba(148, 220, 230, 0.16);
+  padding-top: 1.4rem;
+}
+
+.release-muted {
+  opacity: 0.92;
+}
+
+.release-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.7rem;
+}
+
+.release-head h2 {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 1.45rem;
+}
+
+.release-head time {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.top nav a.is-active {
+  color: var(--teal);
+}
+
 .footer {
   padding: 0 0 2.8rem;
   color: var(--muted);
@@ -416,6 +657,15 @@ footer {
 
   .lede br {
     display: none;
+  }
+
+  .peek-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .block-head {
+    flex-direction: column;
+    align-items: flex-start;
   }
 }
 

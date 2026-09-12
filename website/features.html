@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>功能 — Twigmark</title>
+    <meta name="description" content="Twigmark 功能一览：导图、提醒番茄、MCP、标签关系图、PDF、Draw.io、财务等。" />
+    <meta name="theme-color" content="#07131c" />
+    <link rel="icon" href="./assets/twigmark.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&family=Outfit:wght@500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./assets/styles.css" />
+  </head>
+  <body class="page">
+    <div class="atmosphere atmosphere-soft" aria-hidden="true">
+      <div class="glow glow-a"></div>
+      <div class="glow glow-b"></div>
+    </div>
+
+    <header class="top">
+      <a class="brand-lockup" href="./">
+        <img src="./assets/twigmark.png" width="40" height="40" alt="" />
+        <span>Twigmark</span>
+      </a>
+      <nav aria-label="主导航">
+        <a class="is-active" href="./features.html">功能</a>
+        <a href="./about.html">介绍</a>
+        <a href="./changelog.html">更新</a>
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">源码</a>
+      </nav>
+    </header>
+
+    <main class="page-main">
+      <header class="page-hero">
+        <p class="eyebrow">Capabilities</p>
+        <h1>功能一览</h1>
+        <p class="page-lede">从仓库 README 整理。尽量短句，方便扫读。</p>
+      </header>
+
+      <section id="maps" class="feature-block">
+        <h2>思维导图与工作区</h2>
+        <ul class="plain-list">
+          <li>桌面导图编辑：节点、备注、属性、样式、图标、链接、筛选、导入导出</li>
+          <li>左侧工作区 / 项目管理本地项目与 <code>.mm</code> 文件</li>
+          <li>Ribbon：文件、节点、格式、链接、视图等</li>
+          <li>导图快速切换；多文档 / 报表 Tab（可分组，Ctrl+W 关闭）</li>
+        </ul>
+      </section>
+
+      <section id="time" class="feature-block">
+        <h2>效率与时间</h2>
+        <ul class="plain-list">
+          <li><strong>提醒与待办</strong>：一次性 / 周期、紧急度、侧栏时间线</li>
+          <li><strong>安排中心</strong>：日历 / 日程，与提醒、计划工时联动</li>
+          <li><strong>番茄钟</strong>：节点级计时、暂停与补记、历史与皮肤</li>
+          <li><strong>报表中心</strong>：活动、专注、MCP 审计；先开 Tab 再加载</li>
+          <li><strong>剪切板历史</strong>：相同内容合并，记录每次出现时间</li>
+          <li><strong>快捷键编辑器</strong>：查看默认键、按 Ribbon 分类改绑</li>
+        </ul>
+      </section>
+
+      <section id="knowledge" class="feature-block">
+        <h2>知识组织</h2>
+        <ul class="plain-list">
+          <li>标签分组（可嵌套）、收藏与钉选</li>
+          <li>关系图谱：导图 / 节点 / 标签关联浏览</li>
+          <li>节点隐私级别、加密导图（按需）</li>
+        </ul>
+      </section>
+
+      <section id="ai" class="feature-block">
+        <h2>AI 与自动化</h2>
+        <ul class="plain-list">
+          <li><strong>MCP</strong>（本机 / 可公网）：默认 <code>127.0.0.1:7720</code>；API Key；网页版 <code>/web/</code></li>
+          <li>大模型与对话存本机库；多机同步可汇总历史；带访问审计</li>
+          <li><strong>AI 助手侧栏</strong>：围绕选中节点生成内容（可选）</li>
+          <li><strong>Git 侧栏</strong>：工作区导图仓库状态、提交与同步（可选）</li>
+          <li><strong>Todoist 同步</strong>（可选）</li>
+        </ul>
+      </section>
+
+      <section id="ext" class="feature-block">
+        <h2>文献、图示与扩展</h2>
+        <ul class="plain-list">
+          <li>PDF 批注导入与监控文件夹</li>
+          <li>参考文献（BibTeX / JabRef）</li>
+          <li>Draw.io 内嵌编辑（需 JavaFX）</li>
+          <li>LaTeX / 公式、脚本、SVG、地图等上游插件能力</li>
+        </ul>
+      </section>
+
+      <section id="finance" class="feature-block">
+        <h2>个人财务（可选）</h2>
+        <ul class="plain-list">
+          <li>账本导图 + 侧栏：收支、转账、预算、订阅</li>
+          <li>也可经 MCP 记账</li>
+        </ul>
+      </section>
+
+      <p class="page-foot-cta">
+        <a class="btn btn-primary" id="download-btn" href="https://github.com/yixiaozi/Twigmark/releases/latest" rel="noopener"
+          >获取最新版</a
+        >
+        <a class="btn btn-ghost" href="./about.html">先看介绍</a>
+      </p>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <img src="./assets/twigmark.png" width="28" height="28" alt="" />
+        <strong>Twigmark</strong>
+      </div>
+      <p>
+        Mantou · <a href="./">首页</a> · <a href="./changelog.html">更新</a> ·
+        <a href="https://github.com/yixiaozi/Twigmark" rel="noopener">GitHub</a>
+      </p>
+      <p class="footnote">内容源自仓库 README</p>
+    </footer>
+    <script src="./assets/app.js" defer></script>
+  </body>
+</html>
