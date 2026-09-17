@@ -33,6 +33,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStreamWriter;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.io.RandomAccessFile;
 import java.io.Reader;
 import java.io.SequenceInputStream;
@@ -909,11 +911,46 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 				}
 			}
 			if(isValidMapFile(tmpFile)) {
-				if(file.exists()) {
-					file.delete();
-				}
-				tmpFile.renameTo(file);
+				publishTempFile(tmpFile, file);
 			}
+			else {
+				// Invalid save: never leave a stray ~temp behind in the map folder.
+				tmpFile.delete();
+			}
+		}
+	}
+
+	/**
+	 * Move the validated temp map ({@code ~name}) onto the real file without ever
+	 * deleting the original before the new content is in place. This prevents the
+	 * old delete-then-rename hazard that could leave the map as {@code ~name} (and
+	 * lose the original) when the rename failed — e.g. the target being locked by
+	 * a cloud-sync client on Windows.
+	 */
+	private static void publishTempFile(final File tmpFile, final File file) {
+		try {
+			Files.move(tmpFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING,
+					StandardCopyOption.ATOMIC_MOVE);
+			return;
+		}
+		catch (Exception atomicFailed) {
+			// Atomic move unsupported (e.g. across mounts) — fall through to a plain replace.
+		}
+		try {
+			Files.move(tmpFile.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+			return;
+		}
+		catch (Exception moveFailed) {
+			// Last resort: copy content over (original stays intact if this fails), then drop the temp.
+			try {
+				FileUtils.copyFile(tmpFile, file);
+			}
+			catch (Exception copyFailed) {
+				LogUtils.severe("Could not publish saved map " + file.getAbsolutePath()
+						+ "; temporary copy kept at " + tmpFile.getAbsolutePath(), copyFailed);
+				return;
+			}
+			tmpFile.delete();
 		}
 	}
 	
