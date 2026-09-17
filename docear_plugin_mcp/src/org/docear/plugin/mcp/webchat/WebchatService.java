@@ -188,6 +188,124 @@ public final class WebchatService {
 		return WebchatDatabase.local().listFeatureIdeas(limit);
 	}
 
+	public static List listPublicPresets() {
+		try {
+			final List rows = WebchatDatabase.local().listGuestPresets(false);
+			if (rows != null && !rows.isEmpty()) {
+				return publicPresetRows(rows);
+			}
+		}
+		catch (Exception ignored) {
+		}
+		return GuestCatalog.listPublic();
+	}
+
+	public static List listManagedPresets() throws Exception {
+		final List rows = WebchatDatabase.local().listGuestPresets(true);
+		if (rows != null && !rows.isEmpty()) {
+			return rows;
+		}
+		return GuestCatalog.builtInPresetsAsMaps();
+	}
+
+	public static GuestCatalog.Preset findGuestPreset(final String id) {
+		try {
+			final Map row = WebchatDatabase.local().getGuestPreset(id);
+			if (row != null && Boolean.TRUE.equals(row.get("enabled"))) {
+				return new GuestCatalog.Preset(strMap(row, "id"), strMap(row, "title"), strMap(row, "prompt"));
+			}
+			if (row != null) {
+				return null;
+			}
+		}
+		catch (Exception ignored) {
+		}
+		return GuestCatalog.find(id);
+	}
+
+	public static Map saveGuestPreset(final String idRaw, final String titleRaw, final String promptRaw,
+			final Integer sortOrder, final Boolean enabled) throws Exception {
+		final String title = sanitizeIdea(titleRaw, 80);
+		final String prompt = sanitizeIdea(promptRaw, 4000);
+		if (title.length() < 2) {
+			throw new IllegalArgumentException("标题至少 2 个字");
+		}
+		if (prompt.length() < 8) {
+			throw new IllegalArgumentException("提示词太短，模型需要知道怎么回答");
+		}
+		String id = idRaw == null ? "" : idRaw.trim().toLowerCase();
+		if (id.length() == 0) {
+			id = slugPresetId(title);
+		}
+		id = sanitizePresetId(id);
+		if (id.length() < 2) {
+			throw new IllegalArgumentException("编号只能用字母、数字和短横线");
+		}
+		final int order = sortOrder == null ? 100 : sortOrder.intValue();
+		final boolean on = enabled == null ? true : enabled.booleanValue();
+		WebchatDatabase.local().upsertGuestPreset(id, title, prompt, order, on);
+		final Map result = new LinkedHashMap();
+		result.put("id", id);
+		result.put("ok", Boolean.TRUE);
+		return result;
+	}
+
+	public static boolean deleteGuestPreset(final String idRaw) throws Exception {
+		final String id = sanitizePresetId(idRaw == null ? "" : idRaw.trim().toLowerCase());
+		if (id.length() < 2) {
+			throw new IllegalArgumentException("缺少问题编号");
+		}
+		return WebchatDatabase.local().deleteGuestPreset(id);
+	}
+
+	private static List publicPresetRows(final List rows) {
+		final List out = new ArrayList();
+		for (int i = 0; i < rows.size(); i++) {
+			final Map src = (Map) rows.get(i);
+			final Map row = new LinkedHashMap();
+			row.put("id", src.get("id"));
+			row.put("title", src.get("title"));
+			out.add(row);
+		}
+		return out;
+	}
+
+	private static String strMap(final Map row, final String key) {
+		final Object v = row.get(key);
+		return v == null ? "" : String.valueOf(v);
+	}
+
+	private static String sanitizePresetId(final String raw) {
+		final StringBuilder sb = new StringBuilder();
+		for (int i = 0; i < raw.length() && sb.length() < 40; i++) {
+			final char ch = raw.charAt(i);
+			if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-') {
+				sb.append(ch);
+			}
+		}
+		return sb.toString();
+	}
+
+	private static String slugPresetId(final String title) {
+		final StringBuilder sb = new StringBuilder();
+		final String t = title.toLowerCase();
+		for (int i = 0; i < t.length() && sb.length() < 24; i++) {
+			final char ch = t.charAt(i);
+			if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+				sb.append(ch);
+			}
+			else if (ch == ' ' || ch == '_' || ch == '-') {
+				if (sb.length() > 0 && sb.charAt(sb.length() - 1) != '-') {
+					sb.append('-');
+				}
+			}
+		}
+		if (sb.length() < 2) {
+			return "q-" + WebchatPassword.newId().substring(0, 8);
+		}
+		return sb.toString();
+	}
+
 	private static String sanitizeIdea(final String raw, final int max) {
 		if (raw == null) {
 			return "";

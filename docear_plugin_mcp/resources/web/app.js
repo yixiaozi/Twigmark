@@ -138,7 +138,7 @@
     if (hint) {
       hint.textContent = guestMode
         ? "游客只能点选上方问题，不能自由输入。左侧可提交功能想法。"
-        : "用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答";
+        : "你在最右 · 助手在最左 · 思索过程可展开";
     }
     who.textContent = guestMode ? "游客试用" : username || "已登录";
     if (guestMode) {
@@ -249,6 +249,7 @@
   }
 
   function loadIdeas() {
+    loadManagedPresets();
     var el = document.getElementById("ideas-list");
     if (!el) return;
     el.innerHTML = '<p class="muted">加载中…</p>';
@@ -280,6 +281,105 @@
         el.appendChild(card);
       });
     });
+  }
+
+  function loadManagedPresets() {
+    var el = document.getElementById("preset-editor");
+    if (!el) return;
+    el.innerHTML = '<p class="muted">加载中…</p>';
+    api("/guest/presets").then(function (res) {
+      if (!res.ok) {
+        el.innerHTML = '<p class="err">' + escapeHtml((res.body && res.body.error) || "无法加载访客问题") + "</p>";
+        return;
+      }
+      renderPresetEditor((res.body && res.body.presets) || []);
+    });
+  }
+
+  function renderPresetEditor(presets) {
+    var el = document.getElementById("preset-editor");
+    if (!el) return;
+    el.innerHTML = "";
+    if (!presets.length) {
+      el.innerHTML = '<p class="muted">还没有访客问题，点下方新增。</p>';
+    }
+    presets.forEach(function (p) {
+      el.appendChild(presetCard(p));
+    });
+  }
+
+  function presetCard(p) {
+    var card = document.createElement("article");
+    card.className = "preset-card";
+    card.setAttribute("data-id", p.id || "");
+    var idLine = document.createElement("div");
+    idLine.className = "id";
+    idLine.textContent = p.id ? "编号 " + p.id : "新问题（保存后生成编号）";
+    var title = document.createElement("input");
+    title.placeholder = "标题（游客看到的问题）";
+    title.value = p.title || "";
+    var prompt = document.createElement("textarea");
+    prompt.placeholder = "给模型的提示词（游客看不到）";
+    prompt.value = p.prompt || "";
+    var row = document.createElement("div");
+    row.className = "row";
+    var en = document.createElement("label");
+    en.className = "check";
+    en.innerHTML = '<input type="checkbox" /> 启用';
+    en.querySelector("input").checked = p.enabled !== false;
+    var save = document.createElement("button");
+    save.type = "button";
+    save.className = "primary small";
+    save.textContent = "保存";
+    save.addEventListener("click", function () {
+      api("/guest/presets", {
+        method: "POST",
+        body: JSON.stringify({
+          id: p.id || "",
+          title: title.value,
+          prompt: prompt.value,
+          enabled: en.querySelector("input").checked,
+          sortOrder: p.sortOrder || 0,
+        }),
+      }).then(function (res) {
+        if (!res.ok) {
+          toast((res.body && res.body.error) || "保存失败");
+          return;
+        }
+        toast("已保存访客问题");
+        loadManagedPresets();
+      });
+    });
+    var del = document.createElement("button");
+    del.type = "button";
+    del.className = "ghost small";
+    del.textContent = "删除";
+    del.addEventListener("click", function () {
+      if (!p.id) {
+        card.parentNode && card.parentNode.removeChild(card);
+        return;
+      }
+      if (!window.confirm("删除这个问题？游客将不能再点选。")) return;
+      api("/guest/presets/delete", {
+        method: "POST",
+        body: JSON.stringify({ id: p.id }),
+      }).then(function (res) {
+        if (!res.ok) {
+          toast((res.body && res.body.error) || "删除失败");
+          return;
+        }
+        toast("已删除");
+        loadManagedPresets();
+      });
+    });
+    row.appendChild(en);
+    row.appendChild(save);
+    row.appendChild(del);
+    card.appendChild(idLine);
+    card.appendChild(title);
+    card.appendChild(prompt);
+    card.appendChild(row);
+    return card;
   }
 
   var auditTimer = null;
@@ -330,17 +430,26 @@
       }
       var s = (res.body && res.body.summary) || {};
       var dbCount = res.body.dbCount || 0;
+      var writes = res.body.writeCount || 0;
+      var count = s.count || 0;
+      var ok = s.successCount || 0;
+      var fail = s.failCount || 0;
+      var rate = count ? Math.round((ok * 100) / count) : 0;
       if (summaryEl) {
         summaryEl.textContent =
-          "共 " +
-          (s.count || 0) +
-          " 次调用 · 成功 " +
-          (s.successCount || 0) +
-          " · 失败 " +
-          (s.failCount || 0) +
-          (s.avgDurationMs ? " · 平均 " + s.avgDurationMs + "ms" : "") +
-          (dbCount ? " · " + dbCount + " 个审计库" : "");
+          (dbCount ? dbCount + " 个审计库 · " : "") +
+          (s.avgDurationMs ? "平均 " + s.avgDurationMs + "ms" : "");
       }
+      renderAuditStats({
+        count: count,
+        ok: ok,
+        fail: fail,
+        rate: rate,
+        writes: writes,
+        avg: s.avgDurationMs || 0,
+      });
+      renderAuditByAction(res.body.byAction || []);
+      renderAuditByDay(res.body.byDay || []);
       if (actorSel) {
         var actors = res.body.actors || [];
         actorSel.innerHTML = '<option value="">全部调用方</option>';
@@ -372,6 +481,94 @@
       }
       auditEvents = (res.body && res.body.events) || [];
       renderAuditEvents(auditEvents);
+    });
+  }
+
+  function renderAuditStats(s) {
+    var el = document.getElementById("audit-stats");
+    if (!el) return;
+    el.innerHTML = "";
+    [
+      { k: "调用次数", n: s.count, s: "当前筛选范围", cls: "" },
+      { k: "成功率", n: s.rate + "%", s: "成功 " + s.ok + " · 失败 " + s.fail, cls: s.fail ? "warn" : "ok" },
+      { k: "写入", n: s.writes, s: "改导图 / 待办等", cls: "" },
+      { k: "平均耗时", n: (s.avg || 0) + "ms", s: "含查与改", cls: "" },
+    ].forEach(function (item) {
+      var card = document.createElement("div");
+      card.className = "stat-card " + item.cls;
+      card.innerHTML = '<p class="k"></p><p class="n"></p><p class="s"></p>';
+      card.querySelector(".k").textContent = item.k;
+      card.querySelector(".n").textContent = item.n;
+      card.querySelector(".s").textContent = item.s;
+      el.appendChild(card);
+    });
+  }
+
+  function renderAuditByAction(rows) {
+    var el = document.getElementById("audit-by-action");
+    if (!el) return;
+    el.innerHTML = "";
+    rows = (rows || []).slice().sort(function (a, b) {
+      return (b.count || 0) - (a.count || 0);
+    });
+    if (!rows.length) {
+      el.innerHTML = '<p class="muted tiny">这段时间没有调用。</p>';
+      return;
+    }
+    var max = rows[0].count || 1;
+    rows.slice(0, 8).forEach(function (row) {
+      var line = document.createElement("div");
+      line.className = "stat-bar-row";
+      var lab = document.createElement("span");
+      lab.className = "lab";
+      lab.textContent = row.action || "(未知)";
+      var bar = document.createElement("div");
+      bar.className = "stat-bar";
+      var i = document.createElement("i");
+      i.style.width = Math.max(4, Math.round(((row.count || 0) * 100) / max)) + "%";
+      bar.appendChild(i);
+      var cnt = document.createElement("span");
+      cnt.className = "cnt";
+      cnt.textContent = String(row.count || 0);
+      line.appendChild(lab);
+      line.appendChild(bar);
+      line.appendChild(cnt);
+      el.appendChild(line);
+    });
+  }
+
+  function renderAuditByDay(rows) {
+    var el = document.getElementById("audit-by-day");
+    if (!el) return;
+    el.innerHTML = "";
+    rows = (rows || []).slice().sort(function (a, b) {
+      return (a.bucketTs || 0) - (b.bucketTs || 0);
+    });
+    if (!rows.length) {
+      el.innerHTML = '<p class="muted tiny">暂无按日数据</p>';
+      return;
+    }
+    var max = 1;
+    rows.forEach(function (row) {
+      if ((row.count || 0) > max) max = row.count;
+    });
+    rows.forEach(function (row) {
+      var col = document.createElement("div");
+      col.className = "day-col";
+      var bar = document.createElement("div");
+      bar.className = "bar";
+      bar.style.height = Math.max(6, Math.round(((row.count || 0) * 72) / max)) + "px";
+      var d = document.createElement("span");
+      d.className = "d";
+      try {
+        var dt = new Date(Number(row.bucketTs));
+        d.textContent = dt.getMonth() + 1 + "/" + dt.getDate();
+      } catch (e) {
+        d.textContent = "";
+      }
+      col.appendChild(bar);
+      col.appendChild(d);
+      el.appendChild(col);
     });
   }
 
@@ -1230,7 +1427,7 @@
         var sub = m.relativePath || m.path || "";
         if (sub.indexOf(g.name + "/") === 0) sub = sub.substring(g.name.length + 1);
         btn.querySelector(".s").textContent =
-          sub + " · " + formatSize(m.size) + " · " + (m.modifiedAt || "").replace(/:\d{2}$/, "");
+          shortMapPath(sub) + " · " + formatSize(m.size) + " · " + (m.modifiedAt || "").replace(/:\d{2}$/, "");
         btn.addEventListener("click", function () {
           openMap(m);
         });
@@ -1240,6 +1437,13 @@
       wrap.appendChild(body);
       mapList.appendChild(wrap);
     });
+  }
+
+  function shortMapPath(path) {
+    var p = String(path || "").replace(/\\/g, "/");
+    var parts = p.split("/").filter(Boolean);
+    if (parts.length <= 2) return p;
+    return parts.slice(-2).join("/");
   }
 
   function nodeMatches(node, needle) {
@@ -1882,6 +2086,16 @@
   });
   document.getElementById("btn-idea").addEventListener("click", submitIdea);
   document.getElementById("btn-refresh-ideas").addEventListener("click", loadIdeas);
+  var addPreset = document.getElementById("btn-preset-add");
+  if (addPreset) {
+    addPreset.addEventListener("click", function () {
+      var el = document.getElementById("preset-editor");
+      if (!el) return;
+      var empty = el.querySelector("p.muted");
+      if (empty) empty.parentNode.removeChild(empty);
+      el.appendChild(presetCard({ title: "", prompt: "", enabled: true, sortOrder: 99 }));
+    });
+  }
   document.getElementById("btn-refresh-audit").addEventListener("click", loadAudit);
   ["audit-q", "audit-actor", "audit-range", "audit-writes"].forEach(function (id) {
     var el = document.getElementById(id);

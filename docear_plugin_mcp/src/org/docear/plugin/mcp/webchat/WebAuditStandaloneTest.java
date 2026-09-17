@@ -22,6 +22,7 @@ public final class WebAuditStandaloneTest {
 		assertWriteFilters();
 		assertLabels();
 		assertUngroupedMerge();
+		assertWriteCount();
 		System.out.println("WebAuditStandaloneTest OK");
 	}
 
@@ -188,6 +189,21 @@ public final class WebAuditStandaloneTest {
 		}
 		if (String.valueOf(first.get("actions")).indexOf("add_node") < 0) {
 			throw new IllegalStateException("ungrouped actions: " + first.get("actions"));
+		}
+	}
+
+	private static void assertWriteCount() {
+		final List byAction = new ArrayList();
+		final Map read = new LinkedHashMap();
+		read.put("action", "search_nodes");
+		read.put("count", Integer.valueOf(10));
+		byAction.add(read);
+		final Map write = new LinkedHashMap();
+		write.put("action", "add_node");
+		write.put("count", Integer.valueOf(2));
+		byAction.add(write);
+		if (WebAuditFilters.writeCount(byAction) != 2) {
+			throw new IllegalStateException("writeCount");
 		}
 	}
 
