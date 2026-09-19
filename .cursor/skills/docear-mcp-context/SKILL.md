@@ -86,6 +86,8 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 当前状态、最近想法、「现在喜欢谁」 | 先 `list_recently_modified`（默认近 365 天），再 `search_nodes` 且 `modifiedWithinDays: 365` |
 | 历史全文、考古 | `search_nodes` 传 `modifiedWithinDays: 0`（不限时间；按节点 MODIFIED 新→旧；建议加 `projectId`） |
 | 只在某个文件里搜 | `search_nodes` 传 `filePath`（可用 `子目录/文件名.mm` 消歧） |
+| 拼音/模糊找导图 | `search_nodes` 传 `mode: "fuzzy"`（按导图文件名全拼/首字母匹配；`matchKind=map_name`） |
+| 单图内拼音搜节点 | `search_nodes` 传 `mode: "fuzzy"` + `filePath`（节点 TEXT 拼音；大库勿省略 filePath） |
 
 结果字段：`modifiedAt` / `modifiedAtMillis`、`parentPath`、`depth`、`parentNodeId`。
 
@@ -298,7 +300,7 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - **番茄钟**：`get_running_pomodoro`、`list_pomodoro_sessions`、`get_pomodoro_stats`、`get_pomodoro_history`；写：`start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`；资源 `docear://pomodoro/running`、`docear://pomodoro/stats`
 - **财务**：`ensure_finance_map`、`get_finance_summary`、`add_finance_transaction`、`list_finance_transactions`、分类/账户/预算/订阅/优惠券 CRUD、`get_finance_report`；资源 `docear://finance/summary`
 - **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
-- 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays`）、`list_recently_modified`
+- 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays` / `mode=keyword|fuzzy`）、`list_recently_modified`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`、`clear_reminder`
 - 子树剪贴板：`copy_nodes` / `cut_nodes` / `paste_nodes` / `clone_nodes`（整棵子树；粘贴后同图会生成新 ID）
 - 撤销/重做：`undo_map` / `redo_map`（针对该图内存撤销栈，然后保存）

@@ -29,6 +29,7 @@ import org.xml.sax.helpers.DefaultHandler;
 
 import org.docear.plugin.core.features.DocearNodePrivacyExtensionController;
 import org.docear.plugin.core.features.DocearNodePrivacyExtensionController.DocearPrivacyLevel;
+import org.docear.plugin.core.quickcommand.PinyinMatch;
 import org.docear.plugin.core.todoist.TodoistSyncService;
 import org.docear.plugin.mcp.DocearMcpConfig;
 import org.docear.plugin.mcp.json.JsonParser;
@@ -394,26 +395,199 @@ public final class McpMindMapService {
 
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
 			final String filePath, final String projectId) {
-		final String needle = query == null ? "" : query.trim().toLowerCase();
+		return searchNodes(query, limit, modifiedWithinDays, filePath, projectId, "keyword");
+	}
+
+	/**
+	 * @param mode {@code keyword} (default, literal substring) or {@code fuzzy}
+	 *             (pinyin / initials / subsequence, same rules as QuickCommand;
+	 *             also matches map file names).
+	 */
+	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
+			final String filePath, final String projectId, final String mode) {
+		final String rawQuery = query == null ? "" : query.trim();
+		final String needle = rawQuery.toLowerCase();
 		if (needle.length() == 0 && (filePath == null || filePath.trim().length() == 0)) {
 			return JsonValue.ofList(Collections.EMPTY_LIST).toJson();
 		}
+		final boolean fuzzy = isFuzzyMode(mode);
 		if (filePath != null && filePath.trim().length() > 0) {
 			final File file = resolveMindMapFileByPath(filePath.trim());
 			final List files = new ArrayList();
 			files.add(file);
+			if (fuzzy) {
+				return JsonValue.ofList(toScoredSearchHitJson(searchFuzzy(files, rawQuery, limit, 0L))).toJson();
+			}
 			final List hits = MindMapNodeSearchIndex.search(files, needle, limit, 0L);
 			return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 		}
 		final long cutoff = modifiedWithinDays > 0
 				? System.currentTimeMillis() - modifiedWithinDays * MILLIS_PER_DAY
 				: 0L;
+		if (fuzzy) {
+			final File projectRoot = resolveProjectRoot(projectId);
+			// Do NOT sort-by-mtime here: Dropbox lastModified() on the whole library is too slow.
+			final List files = collectSearchScopeFiles(projectRoot);
+			return JsonValue.ofList(toScoredSearchHitJson(searchFuzzy(files, rawQuery, limit, cutoff))).toJson();
+		}
 		final List hits = searchAllNodesSorted(needle, limit, cutoff, projectId);
 		return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 	}
 
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays) {
-		return searchNodes(query, limit, modifiedWithinDays, null, null);
+		return searchNodes(query, limit, modifiedWithinDays, null, null, "keyword");
+	}
+
+	private static boolean isFuzzyMode(final String mode) {
+		if (mode == null) {
+			return false;
+		}
+		final String m = mode.trim().toLowerCase();
+		return "fuzzy".equals(m) || "pinyin".equals(m);
+	}
+
+	private static final int FUZZY_MAX_FILES = 200;
+	private static final int FUZZY_TEXT_CHARS = 160;
+
+	/**
+	 * Fuzzy search:
+	 * <ol>
+	 * <li>literal TEXT hits</li>
+	 * <li>map-file-name pinyin / initials (returns sample nodes from matching maps)</li>
+	 * <li>node-text pinyin only when scope is a single map ({@code filePath}) — full-library
+	 * pinyin over every node is too expensive on large workspaces</li>
+	 * </ol>
+	 */
+	private static List searchFuzzy(final List files, final String query, final int limit, final long modifiedAfterMillis) {
+		final int want = limit > 0 ? limit : 50;
+		final String needle = query == null ? "" : query.trim().toLowerCase();
+		final List scored = new ArrayList();
+		final Set seen = new java.util.HashSet();
+		final boolean singleMap = files != null && files.size() == 1;
+		// Map-name matching is cheap — scan the full file list by name only.
+		final List mapScope = files;
+
+		if (needle.length() == 0) {
+			final List textScope = singleMap ? files : limitFilesForFuzzy(files);
+			final List all = MindMapNodeSearchIndex.search(textScope, "", want, modifiedAfterMillis);
+			for (int i = 0; i < all.size(); i++) {
+				final Hit hit = (Hit) all.get(i);
+				scored.add(new ScoredHit(hit, "text", 100));
+			}
+			return scored;
+		}
+
+		// Fuzzy without filePath: skip library-wide literal TEXT scan (Dropbox cold
+		// index builds dominate). Keyword mode already covers literal search.
+		if (singleMap) {
+			final List literal = MindMapNodeSearchIndex.search(files, needle, want, modifiedAfterMillis);
+			appendScoredHits(scored, seen, literal, "text", 100);
+		}
+
+		if (scored.size() < want) {
+			appendFuzzyMapNameHits(scored, seen, mapScope, query, needle, want - scored.size(), modifiedAfterMillis);
+		}
+
+		// Node-level pinyin: only inside one map (filePath).
+		if (scored.size() < want && singleMap && !PinyinMatch.containsChinese(query)) {
+			final int remain = want - scored.size();
+			final List pinyinHits = MindMapNodeSearchIndex.searchFiltered(files, new MindMapNodeSearchIndex.NodeFilter() {
+				public boolean matches(final File mapFile, final String nodeText) {
+					if (nodeText == null || nodeText.length() == 0) {
+						return false;
+					}
+					final String sample = nodeText.length() > FUZZY_TEXT_CHARS
+							? nodeText.substring(0, FUZZY_TEXT_CHARS)
+							: nodeText;
+					if (sample.toLowerCase().indexOf(needle) >= 0) {
+						return false;
+					}
+					return PinyinMatch.matchesFast(sample, null, null, query);
+				}
+			}, remain, modifiedAfterMillis);
+			appendScoredHits(scored, seen, pinyinHits, "pinyin", 70);
+		}
+
+		Collections.sort(scored, new Comparator() {
+			public int compare(final Object o1, final Object o2) {
+				final ScoredHit a = (ScoredHit) o1;
+				final ScoredHit b = (ScoredHit) o2;
+				if (a.score != b.score) {
+					return a.score > b.score ? -1 : 1;
+				}
+				if (a.hit.modifiedAt != b.hit.modifiedAt) {
+					return a.hit.modifiedAt < b.hit.modifiedAt ? 1 : -1;
+				}
+				return 0;
+			}
+		});
+		if (scored.size() > want) {
+			return new ArrayList(scored.subList(0, want));
+		}
+		return scored;
+	}
+
+	private static List limitFilesForFuzzy(final List files) {
+		if (files == null || files.size() <= FUZZY_MAX_FILES) {
+			return files;
+		}
+		return new ArrayList(files.subList(0, FUZZY_MAX_FILES));
+	}
+
+	private static void appendScoredHits(final List scored, final Set seen, final List hits, final String matchKind,
+			final int score) {
+		if (hits == null || hits.isEmpty()) {
+			return;
+		}
+		for (int i = 0; i < hits.size(); i++) {
+			final Hit hit = (Hit) hits.get(i);
+			final String key = hit.nodeId + "|" + hit.mapFile.getAbsolutePath();
+			if (!seen.add(key)) {
+				continue;
+			}
+			scored.add(new ScoredHit(hit, matchKind, score));
+		}
+	}
+
+	private static void appendFuzzyMapNameHits(final List scored, final Set seen, final List files, final String query,
+			final String needle, final int remain, final long modifiedAfterMillis) {
+		if (remain <= 0 || files == null) {
+			return;
+		}
+		int added = 0;
+		for (int i = 0; i < files.size() && added < remain; i++) {
+			final File file = (File) files.get(i);
+			if (file == null) {
+				continue;
+			}
+			final String mapName = stripMmExtension(file.getName());
+			// Name-only match — never open/parse the .mm here (Dropbox cold reads dominate).
+			final boolean nameHit = mapName.toLowerCase().indexOf(needle) >= 0
+					|| PinyinMatch.matchesMapName(mapName, query);
+			if (!nameHit) {
+				continue;
+			}
+			final String key = "|" + file.getAbsolutePath();
+			if (!seen.add(key)) {
+				continue;
+			}
+			// Synthetic hit: map identity without loading node index.
+			final Hit hit = new Hit(file, "", mapName, 0L, "", "", 0);
+			scored.add(new ScoredHit(hit, "map_name", 40));
+			added++;
+		}
+	}
+
+	private static final class ScoredHit {
+		final Hit hit;
+		final String matchKind;
+		final int score;
+
+		ScoredHit(final Hit hit, final String matchKind, final int score) {
+			this.hit = hit;
+			this.matchKind = matchKind;
+			this.score = score;
+		}
 	}
 
 	public static String listRecentlyModified(final String query, final int limit, final int modifiedWithinDays) {
@@ -468,19 +642,35 @@ public final class McpMindMapService {
 	private static List<JsonValue> toSearchHitJson(final List hits) {
 		final List<JsonValue> json = new ArrayList<JsonValue>();
 		for (int i = 0; i < hits.size(); i++) {
-			final Hit match = (Hit) hits.get(i);
-			final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
-			item.put("mapFile", JsonValue.ofString(match.mapFile.getAbsolutePath()));
-			item.put("nodeId", JsonValue.ofString(match.nodeId));
-			item.put("nodeText", JsonValue.ofString(match.nodeText));
-			item.put("modifiedAtMillis", JsonValue.ofNumber(match.modifiedAt));
-			item.put("modifiedAt", JsonValue.ofString(MODIFIED_DATE_FORMAT.format(new Date(match.modifiedAt))));
-			item.put("parentNodeId", JsonValue.ofString(match.parentNodeId != null ? match.parentNodeId : ""));
-			item.put("parentPath", JsonValue.ofString(match.parentPath != null ? match.parentPath : ""));
-			item.put("depth", JsonValue.ofNumber(Integer.valueOf(match.depth)));
-			json.add(JsonValue.ofMap(item));
+			json.add(hitToJson((Hit) hits.get(i), null, -1));
 		}
 		return json;
+	}
+
+	private static List<JsonValue> toScoredSearchHitJson(final List scoredHits) {
+		final List<JsonValue> json = new ArrayList<JsonValue>();
+		for (int i = 0; i < scoredHits.size(); i++) {
+			final ScoredHit scored = (ScoredHit) scoredHits.get(i);
+			json.add(hitToJson(scored.hit, scored.matchKind, scored.score));
+		}
+		return json;
+	}
+
+	private static JsonValue hitToJson(final Hit match, final String matchKind, final int score) {
+		final Map<String, JsonValue> item = new LinkedHashMap<String, JsonValue>();
+		item.put("mapFile", JsonValue.ofString(match.mapFile.getAbsolutePath()));
+		item.put("nodeId", JsonValue.ofString(match.nodeId));
+		item.put("nodeText", JsonValue.ofString(match.nodeText));
+		item.put("modifiedAtMillis", JsonValue.ofNumber(match.modifiedAt));
+		item.put("modifiedAt", JsonValue.ofString(MODIFIED_DATE_FORMAT.format(new Date(match.modifiedAt))));
+		item.put("parentNodeId", JsonValue.ofString(match.parentNodeId != null ? match.parentNodeId : ""));
+		item.put("parentPath", JsonValue.ofString(match.parentPath != null ? match.parentPath : ""));
+		item.put("depth", JsonValue.ofNumber(Integer.valueOf(match.depth)));
+		if (matchKind != null && matchKind.length() > 0) {
+			item.put("matchKind", JsonValue.ofString(matchKind));
+			item.put("score", JsonValue.ofNumber(Integer.valueOf(score)));
+		}
+		return JsonValue.ofMap(item);
 	}
 
 	private static File resolveProjectRoot(final String projectId) {
