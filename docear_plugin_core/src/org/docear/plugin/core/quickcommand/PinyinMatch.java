@@ -8,12 +8,14 @@ import com.github.promeg.pinyinhelper.Pinyin;
  * Chinese fuzzy match aligned with DocearReminder (CN / full pinyin / initials /
  * subsequence), plus mixed Chinese+pinyin segment matching so queries like
  * {@code wuxi}, {@code wx}, {@code wui}, {@code wi}, {@code 吴xi} hit {@code 无锡}.
+ * <p>
+ * Public for MCP {@code search_nodes(mode=fuzzy)} and other callers outside this package.
  */
-final class PinyinMatch {
+public final class PinyinMatch {
 	private PinyinMatch() {
 	}
 
-	static String fullPinyin(final String text) {
+	public static String fullPinyin(final String text) {
 		if (text == null || text.length() == 0) {
 			return "";
 		}
@@ -25,7 +27,7 @@ final class PinyinMatch {
 		}
 	}
 
-	static String initials(final String text) {
+	public static String initials(final String text) {
 		if (text == null || text.length() == 0) {
 			return "";
 		}
@@ -43,7 +45,7 @@ final class PinyinMatch {
 		return sb.toString();
 	}
 
-	static boolean matches(final String text, final String fullPinyin, final String initials, final String query) {
+	public static boolean matches(final String text, final String fullPinyin, final String initials, final String query) {
 		if (query == null || query.length() == 0) {
 			return true;
 		}
@@ -70,7 +72,70 @@ final class PinyinMatch {
 		return mixedMatch(text, q);
 	}
 
-	static boolean containsChinese(final String value) {
+	/**
+	 * Faster fuzzy for large MCP library scans: literal + full pinyin + initials +
+	 * initials/full subsequence. Skips recursive {@link #mixedMatch} (too expensive
+	 * on long node TEXT across thousands of maps).
+	 */
+	public static boolean matchesFast(final String text, final String fullPinyin, final String initials,
+			final String query) {
+		if (query == null || query.length() == 0) {
+			return true;
+		}
+		if (text == null || text.length() == 0) {
+			return false;
+		}
+		final String q = query.toLowerCase(Locale.ROOT).trim();
+		if (q.length() == 0) {
+			return true;
+		}
+		final String t = text.toLowerCase(Locale.ROOT);
+		if (containsChinese(q)) {
+			return t.contains(q);
+		}
+		if (t.contains(q)) {
+			return true;
+		}
+		final String full = fullPinyin == null || fullPinyin.length() == 0 ? fullPinyin(text) : fullPinyin;
+		final String jx = initials == null || initials.length() == 0 ? initials(text) : initials;
+		return full.contains(q) || jx.contains(q) || subsequence(jx, q) || subsequence(full, q);
+	}
+
+	/**
+	 * Stricter fuzzy for mind-map <em>file names</em>: literal / full-pinyin contains,
+	 * plus initials equality or prefix (and initials contains only when query length ≥ 3).
+	 * Avoids short queries like {@code cw} matching most Chinese titles.
+	 */
+	public static boolean matchesMapName(final String mapName, final String query) {
+		if (query == null || query.length() == 0) {
+			return true;
+		}
+		if (mapName == null || mapName.length() == 0) {
+			return false;
+		}
+		final String q = query.toLowerCase(Locale.ROOT).trim();
+		if (q.length() == 0) {
+			return true;
+		}
+		final String t = mapName.toLowerCase(Locale.ROOT);
+		if (containsChinese(q)) {
+			return t.contains(q);
+		}
+		if (t.contains(q)) {
+			return true;
+		}
+		final String full = fullPinyin(mapName);
+		if (full.contains(q)) {
+			return true;
+		}
+		final String jx = initials(mapName);
+		if (jx.equals(q) || jx.startsWith(q)) {
+			return true;
+		}
+		return q.length() >= 3 && jx.contains(q);
+	}
+
+	public static boolean containsChinese(final String value) {
 		if (value == null || value.length() == 0) {
 			return false;
 		}
@@ -83,7 +148,7 @@ final class PinyinMatch {
 	}
 
 	/** DocearReminder StationInfo.Search: filter chars appear in order. */
-	static boolean subsequence(final String text, final String filter) {
+	public static boolean subsequence(final String text, final String filter) {
 		if (filter == null || filter.length() == 0) {
 			return true;
 		}
@@ -113,7 +178,7 @@ final class PinyinMatch {
 	 * Text characters may be skipped (so {@code xi} matches {@code 无锡}).
 	 * Chinese-to-Chinese same-pinyin fuzzy is intentionally disabled.
 	 */
-	static boolean mixedMatch(final String text, final String query) {
+	public static boolean mixedMatch(final String text, final String query) {
 		if (query == null || query.length() == 0) {
 			return true;
 		}
@@ -229,7 +294,7 @@ final class PinyinMatch {
 	 * Build HTML that paints characters contributing to the fuzzy match in {@code colorHex}
 	 * (e.g. {@code #DC2626}). Returns plain text when there is nothing to highlight.
 	 */
-	static String highlightHtml(final String text, final String query, final String colorHex) {
+	public static String highlightHtml(final String text, final String query, final String colorHex) {
 		if (text == null || text.length() == 0) {
 			return "";
 		}
@@ -269,7 +334,7 @@ final class PinyinMatch {
 	}
 
 	/** Which characters in {@code text} participate in matching {@code query}. */
-	static boolean[] matchedChars(final String text, final String query) {
+	public static boolean[] matchedChars(final String text, final String query) {
 		final boolean[] hit = new boolean[text == null ? 0 : text.length()];
 		if (text == null || text.length() == 0 || query == null || query.length() == 0) {
 			return hit;

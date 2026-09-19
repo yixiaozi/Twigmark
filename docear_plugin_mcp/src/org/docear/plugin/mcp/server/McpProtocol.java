@@ -15,6 +15,7 @@ import org.docear.plugin.mcp.json.JsonWriter;
 import org.docear.plugin.mcp.service.McpContextService;
 import org.docear.plugin.mcp.service.McpFinanceService;
 import org.docear.plugin.mcp.service.McpGitService;
+import org.docear.plugin.mcp.service.McpMapControlService;
 import org.docear.plugin.mcp.service.McpMindMapService;
 import org.docear.plugin.mcp.service.McpNodeEditService;
 import org.docear.plugin.mcp.service.McpNodeService;
@@ -281,11 +282,15 @@ public final class McpProtocol {
 				schema("reportId", "string", false), schema("from", "string", false), schema("to", "string", false),
 				schema("showInViewport", "boolean", false)));
 		tools.add(tool("search_nodes",
-				"Fast keyword search over node TEXT (indexed + disk spill). Default modifiedWithinDays=365. "
-						+ "Pass 0 for unlimited. Prefer filePath/projectId on large workspaces.",
+				"Fast keyword or fuzzy search over node TEXT (indexed + disk spill). "
+						+ "mode=keyword (default) = literal substring; mode=fuzzy = map-name pinyin/initials "
+						+ "plus node pinyin (full map when filePath set; otherwise first ~200 maps). "
+						+ "searchIn=text|note|details|tags|all (default text; note/tags/details scan up to 40 maps). "
+						+ "Default modifiedWithinDays=365. Pass 0 for unlimited. Prefer filePath/projectId on large workspaces.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false), schema("filePath", "string", false),
-				schema("projectId", "string", false)));
+				schema("projectId", "string", false), schema("mode", "string", false),
+				schema("searchIn", "string", false)));
 		tools.add(tool("list_recently_modified",
 				"List recently modified nodes (node MODIFIED). Uses search index; default modifiedWithinDays=365.",
 				schema("query", "string", false), schema("limit", "number", false),
@@ -467,6 +472,82 @@ public final class McpProtocol {
 				schema("attachmentPath", "string", true)));
 		tools.add(tool("clear_reminder",
 				"Remove the reminder hook and cycle attrs from a node (one-time or recurring).",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		// --- Full map control (lifecycle / batch / attributes / layout / save) ---
+		tools.add(tool("list_open_maps",
+				"List mind maps currently open in the Docear UI (mapFile, title, saved, active)."));
+		tools.add(tool("close_mindmap",
+				"Close an open mind map tab. withoutSave=true discards unsaved changes. "
+						+ "Omit filePath to close the active map.",
+				schema("filePath", "string", false), schema("withoutSave", "boolean", false)));
+		tools.add(tool("delete_mindmap",
+				"Permanently delete a .mm file from disk. Requires confirm=true. Closes UI tab if open.",
+				schema("filePath", "string", true), schema("confirm", "boolean", true)));
+		tools.add(tool("move_mindmap",
+				"Move/rename a .mm file on disk (and update open UI tab cache). newFilePath is absolute or library-relative.",
+				schema("filePath", "string", true), schema("newFilePath", "string", true)));
+		tools.add(tool("rename_mindmap",
+				"Rename a .mm file in the same directory (newName with or without .mm).",
+				schema("filePath", "string", true), schema("newName", "string", true)));
+		tools.add(tool("replace_node_text",
+				"Find/replace across a map. searchIn=text|note|details|all. regex=true uses Java Pattern. "
+						+ "dryRun=true previews changes without saving. Max 500 changes.",
+				schema("filePath", "string", false), schema("find", "string", true),
+				schema("replace", "string", false), schema("regex", "boolean", false),
+				schema("searchIn", "string", false), schema("limit", "number", false),
+				schema("dryRun", "boolean", false)));
+		tools.add(tool("bulk_update_nodes",
+				"Batch-update nodes in ONE save. updates: JSON array of "
+						+ "{nodeId, text?, noteHtml?, detailsHtml?, folded?}. Max 200. dryRun previews.",
+				schema("filePath", "string", false), schema("updates", "array", true),
+				schema("dryRun", "boolean", false)));
+		tools.add(tool("begin_write_batch",
+				"Start a write batch: subsequent mutating tools defer disk save until commit_write_batch. "
+						+ "Use for multi-tool edits on the same map(s)."));
+		tools.add(tool("commit_write_batch",
+				"Flush all dirty maps from the current write batch to disk and end the batch."));
+		tools.add(tool("discard_write_batch",
+				"End the write batch without flushing deferred saves (in-memory edits may remain until map reload)."));
+		tools.add(tool("get_node_attributes",
+				"List Freeplane attributes (name/value pairs) on a node.",
+				schema("filePath", "string", false), schema("nodeId", "string", true)));
+		tools.add(tool("set_node_attribute",
+				"Set or add a Freeplane attribute on a node.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("name", "string", true), schema("value", "string", false)));
+		tools.add(tool("remove_node_attribute",
+				"Remove a Freeplane attribute by name from a node.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("name", "string", true)));
+		tools.add(tool("set_node_edge",
+				"Set the edge (connector to parent): color=#RRGGBB, width=-1..12, style=bezier|linear|sharp_bezier|sharp_linear|hide_edge.",
+				schema("filePath", "string", false), schema("nodeId", "string", true),
+				schema("color", "string", false), schema("width", "number", false),
+				schema("style", "string", false)));
+		tools.add(tool("set_map_layout",
+				"Set map view layout: MAP (default mindmap) or OUTLINE.",
+				schema("filePath", "string", false), schema("layout", "string", true)));
+		tools.add(tool("set_map_background",
+				"Set map background color (#RRGGBB).",
+				schema("filePath", "string", false), schema("color", "string", true)));
+		tools.add(tool("set_map_property",
+				"Set a MapStyle property key/value on the map (advanced).",
+				schema("filePath", "string", false), schema("key", "string", true),
+				schema("value", "string", false)));
+		tools.add(tool("get_map_properties",
+				"Read map title, saved flag, layout, background, and MapStyle properties.",
+				schema("filePath", "string", false)));
+		tools.add(tool("save_map",
+				"Force-save the map to its current file (flush even if Freeplane thinks it is clean).",
+				schema("filePath", "string", false)));
+		tools.add(tool("save_map_as",
+				"Save a copy of the map to newFilePath (library-relative or absolute).",
+				schema("filePath", "string", false), schema("newFilePath", "string", true)));
+		tools.add(tool("reload_map",
+				"Reload the map from disk (discards unsaved in-memory edits for that file).",
+				schema("filePath", "string", false)));
+		tools.add(tool("select_node",
+				"Open the map in UI (if needed) and select a node. Use when the user asks to show/focus a node.",
 				schema("filePath", "string", false), schema("nodeId", "string", true)));
 		tools.add(tool("list_projects", "List workspace projects."));
 		tools.add(tool("quick_capture", "Capture text into the inbox mind map.", schema("text", "string", true)));
@@ -708,7 +789,8 @@ public final class McpProtocol {
 			final int defaultDays = (filePath != null && filePath.trim().length() > 0) ? 0 : 365;
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
 					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", defaultDays),
-					filePath, argString(args, "projectId", ""));
+					filePath, argString(args, "projectId", ""), argString(args, "mode", "keyword"),
+					argString(args, "searchIn", "text"));
 		}
 		else if ("list_recently_modified".equals(name)) {
 			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
@@ -871,6 +953,87 @@ public final class McpProtocol {
 		}
 		else if ("clear_reminder".equals(name)) {
 			textResult = McpNodeEditService.clearReminder(argString(args, "filePath", ""), required(args, "nodeId"));
+		}
+		else if ("list_open_maps".equals(name)) {
+			textResult = McpMapControlService.listOpenMaps();
+		}
+		else if ("close_mindmap".equals(name)) {
+			textResult = McpMapControlService.closeMindmap(argString(args, "filePath", ""),
+					argBool(args, "withoutSave", false));
+		}
+		else if ("delete_mindmap".equals(name)) {
+			textResult = McpMapControlService.deleteMindmap(required(args, "filePath"),
+					argBool(args, "confirm", false));
+		}
+		else if ("move_mindmap".equals(name)) {
+			textResult = McpMapControlService.moveMindmap(required(args, "filePath"), required(args, "newFilePath"));
+		}
+		else if ("rename_mindmap".equals(name)) {
+			textResult = McpMapControlService.renameMindmap(required(args, "filePath"), required(args, "newName"));
+		}
+		else if ("replace_node_text".equals(name)) {
+			textResult = McpMapControlService.replaceNodeText(argString(args, "filePath", ""), required(args, "find"),
+					argString(args, "replace", ""), argBool(args, "regex", false),
+					argString(args, "searchIn", "text"), argInt(args, "limit", 0),
+					argBool(args, "dryRun", false));
+		}
+		else if ("bulk_update_nodes".equals(name)) {
+			if (!args.containsKey("updates") || args.get("updates").isNull()) {
+				throw new IllegalArgumentException("Missing required argument: updates");
+			}
+			textResult = McpMapControlService.bulkUpdateNodes(argString(args, "filePath", ""), args.get("updates"),
+					argBool(args, "dryRun", false));
+		}
+		else if ("begin_write_batch".equals(name)) {
+			textResult = McpMapControlService.beginWriteBatch();
+		}
+		else if ("commit_write_batch".equals(name)) {
+			textResult = McpMapControlService.commitWriteBatch();
+		}
+		else if ("discard_write_batch".equals(name)) {
+			textResult = McpMapControlService.discardWriteBatch();
+		}
+		else if ("get_node_attributes".equals(name)) {
+			textResult = McpMapControlService.getNodeAttributes(argString(args, "filePath", ""),
+					required(args, "nodeId"));
+		}
+		else if ("set_node_attribute".equals(name)) {
+			textResult = McpMapControlService.setNodeAttribute(argString(args, "filePath", ""),
+					required(args, "nodeId"), required(args, "name"), argString(args, "value", ""));
+		}
+		else if ("remove_node_attribute".equals(name)) {
+			textResult = McpMapControlService.removeNodeAttribute(argString(args, "filePath", ""),
+					required(args, "nodeId"), required(args, "name"));
+		}
+		else if ("set_node_edge".equals(name)) {
+			textResult = McpMapControlService.setNodeEdge(argString(args, "filePath", ""), required(args, "nodeId"),
+					argString(args, "color", ""), argIntOptional(args, "width"), argString(args, "style", ""));
+		}
+		else if ("set_map_layout".equals(name)) {
+			textResult = McpMapControlService.setMapLayout(argString(args, "filePath", ""), required(args, "layout"));
+		}
+		else if ("set_map_background".equals(name)) {
+			textResult = McpMapControlService.setMapBackground(argString(args, "filePath", ""),
+					required(args, "color"));
+		}
+		else if ("set_map_property".equals(name)) {
+			textResult = McpMapControlService.setMapProperty(argString(args, "filePath", ""), required(args, "key"),
+					argString(args, "value", ""));
+		}
+		else if ("get_map_properties".equals(name)) {
+			textResult = McpMapControlService.getMapProperties(argString(args, "filePath", ""));
+		}
+		else if ("save_map".equals(name)) {
+			textResult = McpMapControlService.saveMap(argString(args, "filePath", ""));
+		}
+		else if ("save_map_as".equals(name)) {
+			textResult = McpMapControlService.saveMapAs(argString(args, "filePath", ""), required(args, "newFilePath"));
+		}
+		else if ("reload_map".equals(name)) {
+			textResult = McpMapControlService.reloadMap(argString(args, "filePath", ""));
+		}
+		else if ("select_node".equals(name)) {
+			textResult = McpMapControlService.selectNode(argString(args, "filePath", ""), required(args, "nodeId"));
 		}
 		else if ("list_projects".equals(name)) {
 			textResult = McpWorkspaceService.listProjects();

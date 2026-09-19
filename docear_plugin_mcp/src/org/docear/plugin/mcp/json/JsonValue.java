@@ -40,6 +40,14 @@ public final class JsonValue {
 		return value == null;
 	}
 
+	public boolean isList() {
+		return value instanceof List;
+	}
+
+	public boolean isMap() {
+		return value instanceof Map;
+	}
+
 	public String asString() {
 		return value == null ? null : String.valueOf(value);
 	}

@@ -1,8 +1,10 @@
 package org.docear.plugin.mcp.service;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import org.docear.plugin.core.util.MapUtils;
@@ -163,7 +165,109 @@ final class McpMapWriteSession {
 		return node;
 	}
 
+	private static final ThreadLocal BATCH = new ThreadLocal();
+
+	static final class BatchState {
+		final LinkedHashMap dirty = new LinkedHashMap();
+		boolean active = true;
+	}
+
+	/** Start a write batch: session.save() defers until {@link #commitBatch()}. */
+	static void beginBatch() {
+		BATCH.set(new BatchState());
+	}
+
+	static boolean inBatch() {
+		final BatchState state = (BatchState) BATCH.get();
+		return state != null && state.active;
+	}
+
+	static String commitBatch() throws Exception {
+		final BatchState state = (BatchState) BATCH.get();
+		if (state == null || !state.active) {
+			throw new IllegalStateException("No active write batch. Call begin_write_batch first.");
+		}
+		final List saved = new ArrayList();
+		try {
+			for (final Iterator it = state.dirty.entrySet().iterator(); it.hasNext();) {
+				final Map.Entry entry = (Map.Entry) it.next();
+				final McpMapWriteSession session = (McpMapWriteSession) entry.getValue();
+				session.saveNow();
+				saved.add(session.getFile().getAbsolutePath());
+			}
+		}
+		finally {
+			BATCH.remove();
+		}
+		final Map result = new LinkedHashMap();
+		result.put("committed", Boolean.TRUE);
+		result.put("savedMaps", saved);
+		result.put("count", Integer.valueOf(saved.size()));
+		return org.docear.plugin.mcp.json.JsonValue.ofMap(toJsonMap(result)).toJson();
+	}
+
+	static String discardBatch() {
+		BATCH.remove();
+		final Map result = new LinkedHashMap();
+		result.put("discarded", Boolean.TRUE);
+		return org.docear.plugin.mcp.json.JsonValue.ofMap(toJsonMap(result)).toJson();
+	}
+
+	private static Map toJsonMap(final Map raw) {
+		final Map out = new LinkedHashMap();
+		for (final Iterator it = raw.entrySet().iterator(); it.hasNext();) {
+			final Map.Entry e = (Map.Entry) it.next();
+			final Object v = e.getValue();
+			if (v instanceof Boolean) {
+				out.put(e.getKey(), org.docear.plugin.mcp.json.JsonValue.ofBoolean(((Boolean) v).booleanValue()));
+			}
+			else if (v instanceof Integer) {
+				out.put(e.getKey(), org.docear.plugin.mcp.json.JsonValue.ofNumber((Integer) v));
+			}
+			else if (v instanceof List) {
+				final List list = new ArrayList();
+				final List src = (List) v;
+				for (int i = 0; i < src.size(); i++) {
+					list.add(org.docear.plugin.mcp.json.JsonValue.ofString(String.valueOf(src.get(i))));
+				}
+				out.put(e.getKey(), org.docear.plugin.mcp.json.JsonValue.ofList(list));
+			}
+			else {
+				out.put(e.getKey(), org.docear.plugin.mcp.json.JsonValue.ofString(String.valueOf(v)));
+			}
+		}
+		return out;
+	}
+
+	static void invalidateHeadlessCache(final File file) {
+		if (file == null) {
+			return;
+		}
+		try {
+			final String cacheKey = file.getCanonicalPath();
+			synchronized (CACHE_LOCK) {
+				HEADLESS_CACHE.remove(cacheKey);
+			}
+		}
+		catch (Exception e) {
+		}
+	}
+
 	void save() {
+		final BatchState state = (BatchState) BATCH.get();
+		if (state != null && state.active) {
+			try {
+				state.dirty.put(file.getCanonicalPath(), this);
+			}
+			catch (Exception e) {
+				state.dirty.put(file.getAbsolutePath(), this);
+			}
+			return;
+		}
+		saveNow();
+	}
+
+	void saveNow() {
 		try {
 			final MFileManager fileManager = (MFileManager) MFileManager.getController();
 			if (fileManager.save(map, file)) {
