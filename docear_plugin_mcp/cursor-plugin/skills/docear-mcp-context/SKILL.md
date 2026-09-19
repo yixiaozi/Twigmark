@@ -87,7 +87,9 @@ Docear MCP 会记录访问日志，供后续统计。**每次调用工具时**�
 | 历史全文、考古 | `search_nodes` 传 `modifiedWithinDays: 0`（不限时间；按节点 MODIFIED 新→旧；建议加 `projectId`） |
 | 只在某个文件里搜 | `search_nodes` 传 `filePath`（可用 `子目录/文件名.mm` 消歧） |
 | 拼音/模糊找导图 | `search_nodes` 传 `mode: "fuzzy"`（按导图文件名全拼/首字母匹配；`matchKind=map_name`） |
-| 单图内拼音搜节点 | `search_nodes` 传 `mode: "fuzzy"` + `filePath`（节点 TEXT 拼音；大库勿省略 filePath） |
+| 单图内拼音搜节点 | `search_nodes` 传 `mode: "fuzzy"` + `filePath`（节点 TEXT 拼音） |
+| 全库有限拼音搜节点 | `search_nodes` 传 `mode: "fuzzy"`（无 filePath 时最多扫约 200 张图的节点拼音） |
+| 搜备注/标签/详情 | `search_nodes` 传 `searchIn: "note"` / `"tags"` / `"details"` / `"all"`（额外字段最多扫约 40 张图） |
 
 结果字段：`modifiedAt` / `modifiedAtMillis`、`parentPath`、`depth`、`parentNodeId`。
 
@@ -300,7 +302,11 @@ Docear 关系图扫描工作区全部 `.mm` 的超链接（LINK）与箭头关�
 - **番茄钟**：`get_running_pomodoro`、`list_pomodoro_sessions`、`get_pomodoro_stats`、`get_pomodoro_history`；写：`start_pomodoro` / `pause_pomodoro` / `stop_pomodoro`；资源 `docear://pomodoro/running`、`docear://pomodoro/stats`
 - **财务**：`ensure_finance_map`、`get_finance_summary`、`add_finance_transaction`、`list_finance_transactions`、分类/账户/预算/订阅/优惠券 CRUD、`get_finance_report`；资源 `docear://finance/summary`
 - **标签**：`get_tag_catalog`、`list_tag_groups`、`list_tags`、`list_nodes_by_tag`、`list_favorites`；写：`create_tag_group`（可选 `parentId`）、`rename_tag_group`、`move_tag_group`、`delete_tag_group`、`set_tag_group`、`set_tag_color`、`set_node_tags`
-- 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays` / `mode=keyword|fuzzy`）、`list_recently_modified`
+- 搜索：`search_nodes`（`filePath` / `projectId` / `modifiedWithinDays` / `mode=keyword|fuzzy` / `searchIn=text|note|details|tags|all`）、`list_recently_modified`
+- **文件生命周期**：`list_open_maps`、`close_mindmap`、`move_mindmap`、`rename_mindmap`、`delete_mindmap`（owner，需 `confirm=true`）
+- **批量/替换**：`replace_node_text`（可 dryRun）、`bulk_update_nodes`；多工具连写用 `begin_write_batch` → … → `commit_write_batch`（或 `discard_write_batch`）
+- **属性/边线/布局**：`get_node_attributes` / `set_node_attribute` / `remove_node_attribute`、`set_node_edge`、`set_map_layout` / `set_map_background` / `set_map_property` / `get_map_properties`
+- **保存/重载/选中**：`save_map` / `save_map_as` / `reload_map` / `select_node`
 - 写节点：`add_nodes`（批量/多层，优先）、`add_node`（单节点）、`create_todo`、`set_reminder`、`set_recurring_reminder`、`clear_reminder`
 - 子树剪贴板：`copy_nodes` / `cut_nodes` / `paste_nodes` / `clone_nodes`（整棵子树；粘贴后同图会生成新 ID）
 - 撤销/重做：`undo_map` / `redo_map`（针对该图内存撤销栈，然后保存）

@@ -170,6 +170,24 @@ public final class McpPermissions {
 		set.add("clear_node_image");
 		set.add("set_node_attachment");
 		set.add("clear_reminder");
+		set.add("close_mindmap");
+		set.add("move_mindmap");
+		set.add("rename_mindmap");
+		set.add("replace_node_text");
+		set.add("bulk_update_nodes");
+		set.add("begin_write_batch");
+		set.add("commit_write_batch");
+		set.add("discard_write_batch");
+		set.add("set_node_attribute");
+		set.add("remove_node_attribute");
+		set.add("set_node_edge");
+		set.add("set_map_layout");
+		set.add("set_map_background");
+		set.add("set_map_property");
+		set.add("save_map");
+		set.add("save_map_as");
+		set.add("reload_map");
+		set.add("select_node");
 		return set;
 	}
 
@@ -184,6 +202,7 @@ public final class McpPermissions {
 		set.add("list_audit_log");
 		set.add("list_audit_traces");
 		set.add("get_audit_stats");
+		set.add("delete_mindmap");
 		return set;
 	}
 
@@ -194,6 +213,7 @@ public final class McpPermissions {
 		set.add("remove_node_encryption");
 		set.add("export_workspace_snapshot");
 		set.add("git_sync");
+		set.add("delete_mindmap");
 		return set;
 	}
 }

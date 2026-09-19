@@ -395,7 +395,7 @@ public final class McpMindMapService {
 
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
 			final String filePath, final String projectId) {
-		return searchNodes(query, limit, modifiedWithinDays, filePath, projectId, "keyword");
+		return searchNodes(query, limit, modifiedWithinDays, filePath, projectId, "keyword", "text");
 	}
 
 	/**
@@ -405,12 +405,22 @@ public final class McpMindMapService {
 	 */
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
 			final String filePath, final String projectId, final String mode) {
+		return searchNodes(query, limit, modifiedWithinDays, filePath, projectId, mode, "text");
+	}
+
+	/**
+	 * @param searchIn {@code text} (default) | {@code note} | {@code details} | {@code tags} | {@code all}
+	 */
+	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays,
+			final String filePath, final String projectId, final String mode, final String searchIn) {
 		final String rawQuery = query == null ? "" : query.trim();
 		final String needle = rawQuery.toLowerCase();
 		if (needle.length() == 0 && (filePath == null || filePath.trim().length() == 0)) {
 			return JsonValue.ofList(Collections.EMPTY_LIST).toJson();
 		}
+		final String scope = McpMapControlService.normalizeSearchIn(searchIn);
 		final boolean fuzzy = isFuzzyMode(mode);
+		final boolean needExtra = !"text".equals(scope);
 		if (filePath != null && filePath.trim().length() > 0) {
 			final File file = resolveMindMapFileByPath(filePath.trim());
 			final List files = new ArrayList();
@@ -418,8 +428,26 @@ public final class McpMindMapService {
 			if (fuzzy) {
 				return JsonValue.ofList(toScoredSearchHitJson(searchFuzzy(files, rawQuery, limit, 0L))).toJson();
 			}
-			final List hits = MindMapNodeSearchIndex.search(files, needle, limit, 0L);
-			return JsonValue.ofList(toSearchHitJson(hits)).toJson();
+			if ("text".equals(scope)) {
+				final List hits = MindMapNodeSearchIndex.search(files, needle, limit, 0L);
+				return JsonValue.ofList(toSearchHitJson(hits)).toJson();
+			}
+			if ("all".equals(scope)) {
+				final int want = limit > 0 ? limit : 50;
+				final List merged = new ArrayList();
+				final Set seen = new java.util.HashSet();
+				appendUniqueHits(merged, seen, MindMapNodeSearchIndex.search(files, needle, want, 0L));
+				if (merged.size() < want) {
+					appendUniqueHits(merged, seen,
+							McpMapControlService.searchExtraFields(files, rawQuery, "all", want, 0L));
+				}
+				if (merged.size() > want) {
+					return JsonValue.ofList(toSearchHitJson(new ArrayList(merged.subList(0, want)))).toJson();
+				}
+				return JsonValue.ofList(toSearchHitJson(merged)).toJson();
+			}
+			final List fieldHits = McpMapControlService.searchExtraFields(files, rawQuery, scope, limit, 0L);
+			return JsonValue.ofList(toSearchHitJson(fieldHits)).toJson();
 		}
 		final long cutoff = modifiedWithinDays > 0
 				? System.currentTimeMillis() - modifiedWithinDays * MILLIS_PER_DAY
@@ -430,12 +458,44 @@ public final class McpMindMapService {
 			final List files = collectSearchScopeFiles(projectRoot);
 			return JsonValue.ofList(toScoredSearchHitJson(searchFuzzy(files, rawQuery, limit, cutoff))).toJson();
 		}
+		if (needExtra) {
+			final File projectRoot = resolveProjectRoot(projectId);
+			final List files = limitFilesForFuzzy(collectSearchScopeFiles(projectRoot));
+			final int want = limit > 0 ? limit : 50;
+			final List merged = new ArrayList();
+			final Set seen = new java.util.HashSet();
+			if ("all".equals(scope) || "text".equals(scope)) {
+				appendUniqueHits(merged, seen, searchAllNodesSorted(needle, want, cutoff, projectId));
+			}
+			if (!"text".equals(scope) && merged.size() < want) {
+				appendUniqueHits(merged, seen,
+						McpMapControlService.searchExtraFields(files, rawQuery, scope, want, cutoff));
+			}
+			if (merged.size() > want) {
+				return JsonValue.ofList(toSearchHitJson(new ArrayList(merged.subList(0, want)))).toJson();
+			}
+			return JsonValue.ofList(toSearchHitJson(merged)).toJson();
+		}
 		final List hits = searchAllNodesSorted(needle, limit, cutoff, projectId);
 		return JsonValue.ofList(toSearchHitJson(hits)).toJson();
 	}
 
+	private static void appendUniqueHits(final List dest, final Set seen, final List hits) {
+		if (hits == null) {
+			return;
+		}
+		for (int i = 0; i < hits.size(); i++) {
+			final Hit hit = (Hit) hits.get(i);
+			final String key = hit.nodeId + "|" + hit.mapFile.getAbsolutePath();
+			if (!seen.add(key)) {
+				continue;
+			}
+			dest.add(hit);
+		}
+	}
+
 	public static String searchNodes(final String query, final int limit, final int modifiedWithinDays) {
-		return searchNodes(query, limit, modifiedWithinDays, null, null, "keyword");
+		return searchNodes(query, limit, modifiedWithinDays, null, null, "keyword", "text");
 	}
 
 	private static boolean isFuzzyMode(final String mode) {
@@ -454,8 +514,8 @@ public final class McpMindMapService {
 	 * <ol>
 	 * <li>literal TEXT hits</li>
 	 * <li>map-file-name pinyin / initials (returns sample nodes from matching maps)</li>
-	 * <li>node-text pinyin only when scope is a single map ({@code filePath}) — full-library
-	 * pinyin over every node is too expensive on large workspaces</li>
+	 * <li>node-text pinyin: full scan for a single map ({@code filePath}); otherwise
+	 * limited to the first {@link #FUZZY_MAX_FILES} maps (avoid Dropbox cold reads)</li>
 	 * </ol>
 	 */
 	private static List searchFuzzy(final List files, final String query, final int limit, final long modifiedAfterMillis) {
@@ -488,10 +548,12 @@ public final class McpMindMapService {
 			appendFuzzyMapNameHits(scored, seen, mapScope, query, needle, want - scored.size(), modifiedAfterMillis);
 		}
 
-		// Node-level pinyin: only inside one map (filePath).
-		if (scored.size() < want && singleMap && !PinyinMatch.containsChinese(query)) {
+		// Node-level pinyin: one map = full; library = capped file list.
+		if (scored.size() < want && !PinyinMatch.containsChinese(query)) {
 			final int remain = want - scored.size();
-			final List pinyinHits = MindMapNodeSearchIndex.searchFiltered(files, new MindMapNodeSearchIndex.NodeFilter() {
+			final List pinyinScope = singleMap ? files : limitFilesForFuzzy(files);
+			final List pinyinHits = MindMapNodeSearchIndex.searchFiltered(pinyinScope,
+					new MindMapNodeSearchIndex.NodeFilter() {
 				public boolean matches(final File mapFile, final String nodeText) {
 					if (nodeText == null || nodeText.length() == 0) {
 						return false;
