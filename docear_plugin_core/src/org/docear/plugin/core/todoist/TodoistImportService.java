@@ -51,32 +51,17 @@ public final class TodoistImportService {
 		status(callback, TextUtils.getText("todoist.import.status.fetching"));
 		final TodoistApiClient client = new TodoistApiClient(token.trim());
 		try {
+			final String projectId = client.ensureProject(TodoistConfig.getProjectName());
 			List tasks = client.fetchAllActiveTasks();
-			final TodoistMappingStore store = TodoistMappingStore.get();
-			if (unlinkedOnly) {
-				final java.util.ArrayList filtered = new java.util.ArrayList();
-				for (int i = 0; i < tasks.size(); i++) {
-					TodoistImportTask task = (TodoistImportTask) tasks.get(i);
-					if (store.isLinkedToSourceMap(task.id)) {
-						continue;
-					}
-					String syncKey = store.getSyncKeyForTaskId(task.id);
-					if (syncKey == null) {
-						syncKey = TodoistApiClient.syncKeyFromDescription(task.description);
-					}
-					if (syncKey != null) {
-						final int sep = syncKey.lastIndexOf('|');
-						if (sep > 0) {
-							final java.io.File file = new java.io.File(syncKey.substring(0, sep));
-							if (!TodoistConfig.isImportTargetFile(file) && file.isFile()) {
-								continue;
-							}
-						}
-					}
-					filtered.add(task);
+			final java.util.ArrayList outsideDocear = new java.util.ArrayList();
+			for (int i = 0; i < tasks.size(); i++) {
+				TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+				if (projectId != null && projectId.equals(task.projectId)) {
+					continue;
 				}
-				tasks = filtered;
+				outsideDocear.add(task);
 			}
+			tasks = outsideDocear;
 			if (tasks.isEmpty()) {
 				if (!unlinkedOnly) {
 					String warning = TextUtils.getText("todoist.import.empty");
@@ -100,6 +85,7 @@ public final class TodoistImportService {
 			status(callback, TextUtils.getText("todoist.import.status.writing"));
 			final List tasksFinal = tasks;
 			final java.io.File targetFile = TodoistConfig.getImportTargetFile();
+			final TodoistTaskAnchorIndex anchors = TodoistTaskAnchorIndex.scan(targetFile);
 			final TodoistImportResult[] writeResult = new TodoistImportResult[1];
 			final Exception[] writeError = new Exception[1];
 			final boolean mapAlreadyOpen = TodoistNodeLocator.findOpenMap(targetFile) != null;
@@ -107,7 +93,7 @@ public final class TodoistImportService {
 				public void run() {
 					try {
 						writeResult[0] = new TodoistMindMapWriter().write(targetFile, tasksFinal, projectNames,
-								sectionNames, unlinkedOnly);
+								sectionNames, unlinkedOnly, anchors);
 					}
 					catch (Exception e) {
 						writeError[0] = e;

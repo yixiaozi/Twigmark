@@ -1,7 +1,9 @@
 package org.docear.plugin.core.todoist;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import org.freeplane.core.util.LogUtils;
@@ -15,6 +17,64 @@ import org.freeplane.features.mode.Controller;
  */
 final class TodoistNodeLocator {
 	private TodoistNodeLocator() {
+	}
+
+	/** Open node that already stores this Todoist task id. Path is not consulted. */
+	static NodeModel findOpenNodeByTaskId(final String taskId) {
+		if (taskId == null || taskId.length() == 0) {
+			return null;
+		}
+		final Map maps = openMaps();
+		if (maps == null) {
+			return null;
+		}
+		for (Iterator it = maps.values().iterator(); it.hasNext();) {
+			final MapModel map = (MapModel) it.next();
+			final NodeModel found = findNodeWithTaskId(map.getRootNode(), taskId);
+			if (found != null) {
+				return found;
+			}
+		}
+		return null;
+	}
+
+	/** Open node with this mind-map id, in whichever map currently contains it. */
+	static NodeModel findOpenNodeByNodeId(final String nodeId) {
+		if (nodeId == null || nodeId.length() == 0) {
+			return null;
+		}
+		final Map maps = openMaps();
+		if (maps == null) {
+			return null;
+		}
+		for (Iterator it = maps.values().iterator(); it.hasNext();) {
+			final MapModel map = (MapModel) it.next();
+			if (map == null) {
+				continue;
+			}
+			final NodeModel node = map.getNodeForID(nodeId);
+			if (node != null) {
+				return node;
+			}
+		}
+		return null;
+	}
+
+	/** Linked nodes on open maps, excluding the import target. */
+	static List openLinkedNodes() {
+		final List out = new ArrayList();
+		final Map maps = openMaps();
+		if (maps == null) {
+			return out;
+		}
+		for (Iterator it = maps.values().iterator(); it.hasNext();) {
+			final MapModel map = (MapModel) it.next();
+			if (map == null || map.getFile() == null || TodoistConfig.isImportTargetFile(map.getFile())) {
+				continue;
+			}
+			collectLinked(map.getRootNode(), out);
+		}
+		return out;
 	}
 
 	static NodeModel findOpenNodeBySyncKey(final String syncKey) {
@@ -124,6 +184,54 @@ final class TodoistNodeLocator {
 		TodoistReminderFactory.getTaskId(node);
 		for (Iterator it = node.getChildren().iterator(); it.hasNext();) {
 			migrateLegacyOnMap((NodeModel) it.next());
+		}
+	}
+
+	private static Map openMaps() {
+		try {
+			final Controller controller = Controller.getCurrentController();
+			if (controller == null || controller.getMapViewManager() == null) {
+				return null;
+			}
+			return controller.getMapViewManager().getMaps();
+		}
+		catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static NodeModel findNodeWithTaskId(final NodeModel node, final String taskId) {
+		if (node == null) {
+			return null;
+		}
+		if (taskId.equals(TodoistReminderFactory.getTaskId(node))) {
+			return node;
+		}
+		if (node.getChildren() == null) {
+			return null;
+		}
+		for (Iterator it = node.getChildren().iterator(); it.hasNext();) {
+			final NodeModel found = findNodeWithTaskId((NodeModel) it.next(), taskId);
+			if (found != null) {
+				return found;
+			}
+		}
+		return null;
+	}
+
+	private static void collectLinked(final NodeModel node, final List out) {
+		if (node == null) {
+			return;
+		}
+		final String taskId = TodoistReminderFactory.getTaskId(node);
+		if (taskId != null && taskId.length() > 0) {
+			out.add(node);
+		}
+		if (node.getChildren() == null) {
+			return;
+		}
+		for (Iterator it = node.getChildren().iterator(); it.hasNext();) {
+			collectLinked((NodeModel) it.next(), out);
 		}
 	}
 

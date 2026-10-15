@@ -211,7 +211,23 @@ public class FolderFileNode extends DefaultFileNode implements TreeExpansionList
 			if (getModel() != null) {
 				getModel().reload(this);
 			}
+			// reload() clears the expanded state while this event is still running.
+			reexpandLater(event);
 		}
+	}
+
+	private static void reexpandLater(final TreeExpansionEvent event) {
+		final Object source = event.getSource();
+		final javax.swing.tree.TreePath path = event.getPath();
+		if (!(source instanceof javax.swing.JTree) || path == null) {
+			return;
+		}
+		final javax.swing.JTree tree = (javax.swing.JTree) source;
+		javax.swing.SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				tree.expandPath(path);
+			}
+		});
 	}
 
 	public void treeCollapsed(TreeExpansionEvent event) {		

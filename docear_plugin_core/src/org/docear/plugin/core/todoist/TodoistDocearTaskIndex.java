@@ -37,6 +37,19 @@ final class TodoistDocearTaskIndex {
 		return tasks;
 	}
 
+	TodoistImportTask findById(String taskId) {
+		if (taskId == null || taskId.length() == 0) {
+			return null;
+		}
+		for (int i = 0; i < tasks.size(); i++) {
+			TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+			if (taskId.equals(task.id)) {
+				return task;
+			}
+		}
+		return null;
+	}
+
 	void add(TodoistImportTask task) {
 		if (task == null || task.id == null) {
 			return;

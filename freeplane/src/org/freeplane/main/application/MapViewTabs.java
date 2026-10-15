@@ -531,6 +531,12 @@ class MapViewTabs implements IMapViewChangeListener {
 		if (lower.endsWith(".canvas")) {
 			return title.substring(0, title.length() - 7);
 		}
+		if (lower.endsWith(".markdown")) {
+			return title.substring(0, title.length() - 9);
+		}
+		if (lower.endsWith(".md")) {
+			return title.substring(0, title.length() - 3);
+		}
 		return title;
 	}
 

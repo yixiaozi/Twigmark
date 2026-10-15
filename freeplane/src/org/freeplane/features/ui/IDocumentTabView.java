@@ -31,4 +31,12 @@ public interface IDocumentTabView {
 	boolean requestClose(boolean force);
 
 	boolean isModified();
+
+	/**
+	 * Persist this document if it supports saving.
+	 *
+	 * @return {@code true} if save was handled (success or nothing to write);
+	 *         {@code false} if this view does not participate in File→Save
+	 */
+	boolean saveDocument();
 }

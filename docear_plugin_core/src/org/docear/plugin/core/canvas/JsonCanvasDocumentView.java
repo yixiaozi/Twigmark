@@ -95,6 +95,11 @@ public final class JsonCanvasDocumentView extends JPanel implements IDocumentTab
 		return editor.isModified();
 	}
 
+	public boolean saveDocument() {
+		saveQuietly();
+		return true;
+	}
+
 	public void onModifiedChanged(final boolean modified) {
 		DocumentTabSupport.refreshTabTitles();
 	}

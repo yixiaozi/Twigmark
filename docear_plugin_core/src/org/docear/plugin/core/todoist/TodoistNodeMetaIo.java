@@ -18,10 +18,30 @@ import org.freeplane.features.mode.ModeController;
 final class TodoistNodeMetaIo {
 	static final String XML_TASK_ID = "TODOIST_TASK_ID";
 	static final String XML_CONTENT_HASH = "TODOIST_CONTENT_HASH";
+	/** Set when the user moves the node; import must not reparent it. */
+	static final String XML_USER_PLACED = "TODOIST_USER_PLACED";
+	static final String XML_SYNCED_LOCAL = "TODOIST_SYNCED_LOCAL";
+	static final String XML_SYNCED_REMOTE = "TODOIST_SYNCED_REMOTE";
+	/** Identity flag. Independent of the yellow background, which is only a reminder. */
+	static final String XML_LINKED = "TODOIST_LINKED";
+	static final String XML_PROJECT_ID = "TODOIST_PROJECT_ID";
+	static final String XML_SECTION_ID = "TODOIST_SECTION_ID";
 
 	private static boolean installed;
 
 	private TodoistNodeMetaIo() {
+	}
+
+	private static long parseMillis(final String value) {
+		if (value == null || value.trim().length() == 0) {
+			return 0L;
+		}
+		try {
+			return Long.parseLong(value.trim());
+		}
+		catch (NumberFormatException e) {
+			return 0L;
+		}
 	}
 
 	static synchronized void install(final ModeController modeController) {
@@ -47,6 +67,48 @@ final class TodoistNodeMetaIo {
 				}
 			}
 		});
+		readManager.addAttributeHandler("node", XML_USER_PLACED, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel && "true".equalsIgnoreCase(value)) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setUserPlaced(true);
+				}
+			}
+		});
+		readManager.addAttributeHandler("node", XML_SYNCED_LOCAL, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setSyncedLocalMillis(parseMillis(value));
+				}
+			}
+		});
+		readManager.addAttributeHandler("node", XML_SYNCED_REMOTE, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setSyncedRemoteMillis(parseMillis(value));
+				}
+			}
+		});
+		readManager.addAttributeHandler("node", XML_LINKED, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel && "true".equalsIgnoreCase(value)) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setLinked(true);
+				}
+			}
+		});
+		readManager.addAttributeHandler("node", XML_PROJECT_ID, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel && value != null && value.trim().length() > 0) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setProjectId(value.trim());
+				}
+			}
+		});
+		readManager.addAttributeHandler("node", XML_SECTION_ID, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel && value != null && value.trim().length() > 0) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setSectionId(value.trim());
+				}
+			}
+		});
 
 		writeManager.addExtensionAttributeWriter(TodoistNodeMeta.class, new IExtensionAttributeWriter() {
 			public void writeAttributes(final ITreeWriter writer, final Object userObject, final IExtension extension) {
@@ -61,6 +123,24 @@ final class TodoistNodeMetaIo {
 					}
 					if (meta.getContentHash() != null) {
 						writer.addAttribute(XML_CONTENT_HASH, meta.getContentHash());
+					}
+					if (meta.isUserPlaced()) {
+						writer.addAttribute(XML_USER_PLACED, "true");
+					}
+					if (meta.getSyncedLocalMillis() > 0) {
+						writer.addAttribute(XML_SYNCED_LOCAL, Long.toString(meta.getSyncedLocalMillis()));
+					}
+					if (meta.getSyncedRemoteMillis() > 0) {
+						writer.addAttribute(XML_SYNCED_REMOTE, Long.toString(meta.getSyncedRemoteMillis()));
+					}
+					if (meta.isLinked() || (meta.getTaskId() != null && meta.getTaskId().length() > 0)) {
+						writer.addAttribute(XML_LINKED, "true");
+					}
+					if (meta.getProjectId() != null) {
+						writer.addAttribute(XML_PROJECT_ID, meta.getProjectId());
+					}
+					if (meta.getSectionId() != null) {
+						writer.addAttribute(XML_SECTION_ID, meta.getSectionId());
 					}
 				}
 				catch (final Exception e) {

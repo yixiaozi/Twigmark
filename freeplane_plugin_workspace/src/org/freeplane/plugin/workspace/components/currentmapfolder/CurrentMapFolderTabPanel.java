@@ -58,6 +58,7 @@ public final class CurrentMapFolderTabPanel extends JPanel {
 		setName("\u6587\u4ef6");
 		tree.setRootVisible(true);
 		tree.setShowsRootHandles(true);
+		tree.setToggleClickCount(0);
 		tree.setRowHeight(18);
 		tree.setCellRenderer(new FolderTreeCellRenderer());
 		tree.addTreeExpansionListener(new TreeExpansionListener() {
@@ -98,6 +99,17 @@ public final class CurrentMapFolderTabPanel extends JPanel {
 		final SimpleFileTreeNode node = (SimpleFileTreeNode) path.getLastPathComponent();
 		if (e.isPopupTrigger() || e.getButton() == MouseEvent.BUTTON3) {
 			showContextMenu(node, e.getX(), e.getY());
+			return;
+		}
+		if (e.getButton() == MouseEvent.BUTTON1 && node.getFile().isDirectory()) {
+			if (tree.isExpanded(path)) {
+				if (e.getClickCount() >= 2) {
+					tree.collapsePath(path);
+				}
+			}
+			else {
+				tree.expandPath(path);
+			}
 			return;
 		}
 		if (e.getClickCount() >= 2 && e.getButton() == MouseEvent.BUTTON1) {
@@ -281,9 +293,22 @@ public final class CurrentMapFolderTabPanel extends JPanel {
 			return;
 		}
 		final Object last = path.getLastPathComponent();
-		if (last instanceof SimpleFileTreeNode) {
-			((SimpleFileTreeNode) last).loadChildren(treeModel);
+		if (!(last instanceof SimpleFileTreeNode)) {
+			return;
 		}
+		final SimpleFileTreeNode node = (SimpleFileTreeNode) last;
+		if (node.isChildrenLoaded()) {
+			return;
+		}
+		node.loadChildren(treeModel);
+		// nodeStructureChanged drops the expanded state while treeExpanded is still running.
+		SwingUtilities.invokeLater(new Runnable() {
+			public void run() {
+				if (tree.getModel() == treeModel) {
+					tree.expandPath(path);
+				}
+			}
+		});
 	}
 
 	private void updateMetric(final File folder) {

@@ -61,6 +61,7 @@ import org.freeplane.core.resources.components.ComboProperty;
 import org.freeplane.core.resources.components.IPropertyControl;
 import org.freeplane.core.resources.components.IPropertyControlCreator;
 import org.freeplane.core.resources.components.OptionPanelBuilder;
+import org.freeplane.core.ui.ExampleFileFilter;
 import org.freeplane.core.ui.IndexedTree;
 import org.freeplane.core.ui.components.OptionalDontShowMeAgainDialog;
 import org.freeplane.core.ui.components.UITools;
@@ -601,6 +602,9 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 	public void open() {
 		final JFileChooser chooser = getFileChooser(false);
 		chooser.setMultiSelectionEnabled(true);
+		final ExampleFileFilter markdownFilter = new ExampleFileFilter(new String[] { "md", "markdown" },
+		        TextUtils.getText("markdown_files_desc"));
+		chooser.addChoosableFileFilter(markdownFilter);
 		final int returnVal = chooser.showOpenDialog(Controller.getCurrentController().getMapViewManager().getMapViewComponent());
 		if (returnVal != JFileChooser.APPROVE_OPTION) {
 			return;
@@ -611,6 +615,9 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 			final File theFile = selectedFiles[i];
 			try {
 				setLastCurrentDir(theFile.getParentFile());
+				if (org.freeplane.features.ui.DocumentOpenRegistry.tryOpen(theFile)) {
+					continue;
+				}
 				Controller.getCurrentModeController().getMapController().newMap(Compat.fileToUrl(theFile));
 			}
 			catch (final Exception ex) {

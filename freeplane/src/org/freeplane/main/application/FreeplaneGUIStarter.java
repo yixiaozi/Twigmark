@@ -406,8 +406,8 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
         boolean fileLoaded = false;
 		for (int i = 0; i < args.length; i++) {
 			String fileArgument = args[i];
-			if (fileArgument.toLowerCase().endsWith(
-			    org.freeplane.features.url.UrlManager.FREEPLANE_FILE_EXTENSION)) {
+			final String lower = fileArgument.toLowerCase();
+			if (lower.endsWith(org.freeplane.features.url.UrlManager.FREEPLANE_FILE_EXTENSION)) {
 				try {
 					final URL url;
 					if(fileArgument.startsWith("http://")){
@@ -425,6 +425,23 @@ public class FreeplaneGUIStarter implements FreeplaneStarter {
 					final MModeController modeController = (MModeController) controller.getModeController();
 					modeController.getMapController().newMap(url);
 					fileLoaded = true;
+				}
+				catch (final Exception ex) {
+					System.err.println("File " + fileArgument + " not loaded");
+				}
+			}
+			else {
+				try {
+					if (!FileUtils.isAbsolutePath(fileArgument)) {
+						fileArgument = System.getProperty("user.dir") + System.getProperty("file.separator") + fileArgument;
+					}
+					final File file = new File(fileArgument);
+					if (org.freeplane.features.ui.DocumentOpenRegistry.tryOpen(file)) {
+						if (!fileLoaded) {
+							controller.selectMode(MModeController.MODENAME);
+						}
+						fileLoaded = true;
+					}
 				}
 				catch (final Exception ex) {
 					System.err.println("File " + fileArgument + " not loaded");

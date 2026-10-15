@@ -35,6 +35,11 @@ final class TodoistSilentImportWriter {
 
 	static TodoistImportResult write(final File targetFile, final List tasks, final Map projectNames,
 			final Map sectionNames, final boolean preserveLinkedInboxCopies) {
+		return write(targetFile, tasks, projectNames, sectionNames, preserveLinkedInboxCopies, null);
+	}
+
+	static TodoistImportResult write(final File targetFile, final List tasks, final Map projectNames,
+			final Map sectionNames, final boolean preserveLinkedInboxCopies, final TodoistTaskAnchorIndex anchors) {
 		final TodoistImportResult result = new TodoistImportResult();
 		result.targetFile = targetFile == null ? null : targetFile.getAbsolutePath();
 		if (targetFile == null) {
@@ -66,54 +71,35 @@ final class TodoistSilentImportWriter {
 				throw new Exception("Mind map has no root node: " + targetFile.getAbsolutePath());
 			}
 			final Set usedIds = collectIds(mapRootNode);
-			final Element todoistBranch = ensureChildByText(doc, mapRootNode, TODOIST_BRANCH, usedIds);
-			final Map existingByTaskId = indexTaskNodes(todoistBranch);
-			final Set seenTaskIds = new HashSet();
-			final Map grouped = groupTasks(tasks);
-			final List projectIds = new ArrayList(grouped.keySet());
-			Collections.sort(projectIds, new NameComparator(projectNames));
-			for (int p = 0; p < projectIds.size(); p++) {
-				final String projectId = (String) projectIds.get(p);
-				final String projectName = resolveName(projectNames, projectId,
-						TextUtils.getText("todoist.import.unknown_project"));
-				final Element projectNode = ensureChildByText(doc, todoistBranch, projectName, usedIds);
-				final Map sectionMap = (Map) grouped.get(projectId);
-				final List sectionIds = new ArrayList(sectionMap.keySet());
-				Collections.sort(sectionIds, new SectionComparator(sectionNames));
-				for (int s = 0; s < sectionIds.size(); s++) {
-					final String sectionId = (String) sectionIds.get(s);
-					final String sectionName = NO_SECTION_KEY.equals(sectionId)
-							? TextUtils.getText("todoist.import.no_section")
-							: resolveName(sectionNames, sectionId, TextUtils.getText("todoist.import.unknown_section"));
-					final Element sectionNode = ensureChildByText(doc, projectNode, sectionName, usedIds);
-					final List sectionTasks = (List) sectionMap.get(sectionId);
-					for (int t = 0; t < sectionTasks.size(); t++) {
-						final TodoistImportTask task = (TodoistImportTask) sectionTasks.get(t);
-						seenTaskIds.add(task.id);
-						result.totalFetched++;
-						Element existing = (Element) existingByTaskId.remove(task.id);
-						if (existing != null) {
-							if (existing.getParentNode() != sectionNode) {
-								existing.getParentNode().removeChild(existing);
-								sectionNode.appendChild(existing);
-							}
-							if (applyTaskElement(doc, existing, task)) {
-								result.addUpdated("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-							}
-							else {
-								result.addSkipped("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-							}
-						}
-						else {
-							final Element created = createChildNode(doc, sectionNode, "", usedIds);
-							applyTaskElement(doc, created, task);
-							result.addCreated("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-						}
+			final Map existingByTaskId = indexTaskNodes(mapRootNode);
+			final TodoistImportLayout layout = TodoistImportLayout.build(tasks, projectNames, sectionNames);
+			final List projectKeys = layout.projectKeys();
+			for (int p = 0; p < projectKeys.size(); p++) {
+				final String projectKey = (String) projectKeys.get(p);
+				final String projectName = layout.projectLabel(projectKey);
+				final Element projectNode = ensureSection(doc, mapRootNode, projectName, usedIds);
+				final List sectionKeys = layout.sectionKeys(projectKey);
+				for (int s = 0; s < sectionKeys.size(); s++) {
+					final String sectionKey = (String) sectionKeys.get(s);
+					final String sectionName = layout.sectionLabel(sectionKey);
+					final Element sectionNode = ensureSection(doc, projectNode, sectionName, usedIds);
+					final List roots = layout.roots(sectionKey);
+					final String linePrefix = projectName + " / " + sectionName;
+					for (int t = 0; t < roots.size(); t++) {
+						placeTask(doc, sectionNode, (TodoistImportTask) roots.get(t), layout, existingByTaskId,
+								anchors, usedIds, result, linePrefix);
 					}
 				}
 			}
 			removeStaleTaskNodes(existingByTaskId, result, preserveLinkedInboxCopies);
-			pruneEmptyFolders(todoistBranch);
+			pruneEmptyRootFolders(mapRootNode);
+			final Element legacyBranch = findChildByText(mapRootNode, TODOIST_BRANCH);
+			if (legacyBranch != null && !hasTaskId(legacyBranch)) {
+				pruneEmptyFolders(legacyBranch);
+				if (childNodes(legacyBranch).isEmpty()) {
+					mapRootNode.removeChild(legacyBranch);
+				}
+			}
 			if (!TodoistSilentMmUpdater.writeDocumentAtomically(targetFile, doc)) {
 				result.failed++;
 				result.errorMessage = "Could not save silent import map: " + targetFile.getAbsolutePath();
@@ -182,6 +168,9 @@ final class TodoistSilentImportWriter {
 				continue;
 			}
 			final Element stale = (Element) entry.getValue();
+			if ("true".equalsIgnoreCase(stale.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED))) {
+				continue;
+			}
 			final String text = plainText(stale);
 			if (stale.getParentNode() != null) {
 				stale.getParentNode().removeChild(stale);
@@ -214,12 +203,37 @@ final class TodoistSilentImportWriter {
 		boolean changed = false;
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desiredText = parsed.nodeText;
-		if (!desiredText.equals(plainText(node))) {
-			node.setAttribute("TEXT", desiredText);
-			changed = true;
+		final String currentText = plainText(node);
+		if (!desiredText.equals(currentText)) {
+			final long localModified = parseMillis(node.getAttribute("MODIFIED"));
+			final long syncedLocal = parseMillis(node.getAttribute(TodoistNodeMetaIo.XML_SYNCED_LOCAL));
+			final long syncedRemote = parseMillis(node.getAttribute(TodoistNodeMetaIo.XML_SYNCED_REMOTE));
+			if (TodoistSyncService.localTitleWins(localModified, task.updatedAtMillis, syncedLocal, syncedRemote)) {
+				try {
+					final long remote = TodoistSyncService.pushLinkedTitle(task.id, currentText);
+					if (remote > 0) {
+						node.setAttribute(TodoistNodeMetaIo.XML_SYNCED_REMOTE, Long.toString(remote));
+					}
+					if (localModified > 0) {
+						node.setAttribute(TodoistNodeMetaIo.XML_SYNCED_LOCAL, Long.toString(localModified));
+					}
+					changed = true;
+				}
+				catch (Exception e) {
+					LogUtils.warn("Todoist: could not push newer mind-map title for " + task.id, e);
+				}
+			}
+			else if (TodoistSyncClock.choose(localModified, task.updatedAtMillis, syncedLocal,
+					syncedRemote) == TodoistSyncClock.PULL) {
+				node.setAttribute("TEXT", desiredText);
+				changed = true;
+			}
 		}
 		if (!task.id.equals(node.getAttribute(TodoistNodeMetaIo.XML_TASK_ID))) {
 			node.setAttribute(TodoistNodeMetaIo.XML_TASK_ID, task.id);
+			changed = true;
+		}
+		if (ensureTodoistMark(node, task)) {
 			changed = true;
 		}
 		if (parsed.linkUri != null && parsed.linkUri.length() > 0) {
@@ -263,6 +277,18 @@ final class TodoistSilentImportWriter {
 			changed = true;
 		}
 		return changed;
+	}
+
+	private static long parseMillis(final String value) {
+		if (value == null || value.trim().length() == 0) {
+			return 0L;
+		}
+		try {
+			return Long.parseLong(value.trim());
+		}
+		catch (NumberFormatException e) {
+			return 0L;
+		}
 	}
 
 	private static boolean applyCycleAttrs(final Element node, final TodoistCycleMapper.Cycle cycle) {
@@ -477,6 +503,74 @@ final class TodoistSilentImportWriter {
 		}
 	}
 
+	private static void placeTask(final Document doc, final Element canonicalParent, final TodoistImportTask task,
+			final TodoistImportLayout layout, final Map existingByTaskId, final TodoistTaskAnchorIndex anchors,
+			final Set usedIds, final TodoistImportResult result, final String sectionName) {
+		result.totalFetched++;
+		final String line = "[" + sectionName + "] " + parsedLine(task);
+		Element existing = (Element) existingByTaskId.remove(task.id);
+		final File anchoredFile = anchors == null ? null : anchors.fileFor(task.id);
+		if (existing != null) {
+			final boolean userPlaced = "true".equalsIgnoreCase(existing.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED));
+			if (!userPlaced && existing.getParentNode() != canonicalParent) {
+				existing.getParentNode().removeChild(existing);
+				canonicalParent.appendChild(existing);
+			}
+			if (applyTaskElement(doc, existing, task)) {
+				result.addUpdated(line);
+			}
+			else {
+				result.addSkipped(line);
+			}
+		}
+		else if (anchoredFile != null) {
+			result.addSkipped(line + " (kept in " + anchoredFile.getName() + ")");
+			existing = null;
+		}
+		else {
+			existing = createChildNode(doc, canonicalParent, "", usedIds);
+			applyTaskElement(doc, existing, task);
+			result.addCreated(line);
+		}
+		final Element childParent = existing != null ? existing : canonicalParent;
+		final List children = layout.childrenOf(task.id);
+		for (int i = 0; i < children.size(); i++) {
+			placeTask(doc, childParent, (TodoistImportTask) children.get(i), layout, existingByTaskId, anchors,
+					usedIds, result, sectionName);
+		}
+	}
+
+	private static void pruneEmptyRootFolders(final Element root) {
+		final List projects = childNodes(root);
+		for (int p = projects.size() - 1; p >= 0; p--) {
+			final Element project = (Element) projects.get(p);
+			if (hasTaskId(project)) {
+				continue;
+			}
+			final List sections = childNodes(project);
+			for (int s = sections.size() - 1; s >= 0; s--) {
+				final Element section = (Element) sections.get(s);
+				if (!hasTaskId(section) && childNodes(section).isEmpty()) {
+					project.removeChild(section);
+				}
+			}
+			if (childNodes(project).isEmpty()) {
+				root.removeChild(project);
+			}
+		}
+	}
+
+	private static Element ensureSection(final Document doc, final Element root, final String label, final Set usedIds) {
+		final List children = childNodes(root);
+		for (int i = 0; i < children.size(); i++) {
+			final Element child = (Element) children.get(i);
+			if (!hasTaskId(child) && label.equals(plainText(child))) {
+				return child;
+			}
+		}
+		return createChildNode(doc, root, label, usedIds);
+	}
+
 	private static Element ensureChildByText(final Document doc, final Element parent, final String text,
 			final Set usedIds) {
 		final Element existing = findChildByText(parent, text);
@@ -622,6 +716,39 @@ final class TodoistSilentImportWriter {
 		public int compare(Object a, Object b) {
 			return resolveName(names, (String) a, "").compareToIgnoreCase(resolveName(names, (String) b, ""));
 		}
+	}
+
+	/** Yellow background is the visible reminder. Identity stays in TODOIST_* attributes. */
+	private static boolean ensureTodoistMark(final Element node, final TodoistImportTask task) {
+		boolean changed = false;
+		if (!TodoistReminderFactory.MARK_BACKGROUND.equalsIgnoreCase(node.getAttribute("BACKGROUND_COLOR"))) {
+			node.setAttribute("BACKGROUND_COLOR", TodoistReminderFactory.MARK_BACKGROUND);
+			changed = true;
+		}
+		final NodeList children = node.getChildNodes();
+		for (int i = children.getLength() - 1; i >= 0; i--) {
+			final Node child = children.item(i);
+			if (child.getNodeType() == Node.ELEMENT_NODE && "icon".equals(child.getNodeName())
+					&& "bookmark".equals(((Element) child).getAttribute("BUILTIN"))) {
+				node.removeChild(child);
+				changed = true;
+			}
+		}
+		if (!"true".equals(node.getAttribute(TodoistNodeMetaIo.XML_LINKED))) {
+			node.setAttribute(TodoistNodeMetaIo.XML_LINKED, "true");
+			changed = true;
+		}
+		if (task.projectId != null && task.projectId.length() > 0
+				&& !task.projectId.equals(node.getAttribute(TodoistNodeMetaIo.XML_PROJECT_ID))) {
+			node.setAttribute(TodoistNodeMetaIo.XML_PROJECT_ID, task.projectId);
+			changed = true;
+		}
+		if (task.sectionId != null && task.sectionId.length() > 0
+				&& !task.sectionId.equals(node.getAttribute(TodoistNodeMetaIo.XML_SECTION_ID))) {
+			node.setAttribute(TodoistNodeMetaIo.XML_SECTION_ID, task.sectionId);
+			changed = true;
+		}
+		return changed;
 	}
 
 	private static final class SectionComparator implements Comparator {

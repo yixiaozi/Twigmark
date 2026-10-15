@@ -42,8 +42,15 @@ class SaveAction extends AFreeplaneAction {
 	}
 
 	public void actionPerformed(final ActionEvent e) {
-		final boolean success = ((MModeController) Controller.getCurrentModeController()).save();
 		final Controller controller = Controller.getCurrentController();
+		final org.freeplane.features.ui.IDocumentTabView doc = org.freeplane.main.application.DocumentTabSupport
+		        .getActiveDocumentView();
+		if (doc != null && doc.saveDocument()) {
+			controller.getViewController().out(TextUtils.getText("saved"));
+			org.freeplane.main.application.DocumentTabSupport.refreshTabTitles();
+			return;
+		}
+		final boolean success = ((MModeController) Controller.getCurrentModeController()).save();
 		if (success) {
 			controller.getViewController().out(TextUtils.getText("saved"));
 		}
@@ -55,6 +62,12 @@ class SaveAction extends AFreeplaneAction {
 	
 	@Override
 	public void setEnabled() {
+		final org.freeplane.features.ui.IDocumentTabView doc = org.freeplane.main.application.DocumentTabSupport
+		        .getActiveDocumentView();
+		if (doc != null) {
+			setEnabled(doc.isModified());
+			return;
+		}
 		final Controller controller = Controller.getCurrentController();
 		MapModel map = controller.getMap();
 		setEnabled(map != null && ! map.isSaved() && ! map.isReadOnly());

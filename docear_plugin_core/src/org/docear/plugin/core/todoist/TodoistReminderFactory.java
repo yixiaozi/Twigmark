@@ -1,11 +1,21 @@
 package org.docear.plugin.core.todoist;
 
+import java.awt.Color;
 import java.io.File;
 
 import org.docear.plugin.core.util.NodeUtilities;
 import org.freeplane.core.io.UnknownElements;
+import org.freeplane.core.util.ColorUtils;
 import org.freeplane.core.util.HtmlUtils;
+import org.freeplane.features.icon.IconController;
+import org.freeplane.features.icon.MindIcon;
+import org.freeplane.features.icon.mindmapmode.MIconController;
+import org.freeplane.features.map.HistoryInformationModel;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
+import org.freeplane.features.nodestyle.NodeStyleController;
+import org.freeplane.features.nodestyle.NodeStyleModel;
+import org.freeplane.features.nodestyle.mindmapmode.MNodeStyleController;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderCycleAttributes;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes;
@@ -15,7 +25,89 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes
  * Todoist linkage is stored on {@link TodoistNodeMeta} (hidden XML), not visible attributes.
  */
 final class TodoistReminderFactory {
+	/** Same yellow as the sample node in test.mm. A reminder for the user, not the identity. */
+	static final String MARK_BACKGROUND = "#ffff00";
+	/** Previously used as the visible mark. Stripped so it is not left on linked nodes. */
+	private static final String RETIRED_ICON = "bookmark";
+
 	private TodoistReminderFactory() {
+	}
+
+	/**
+	 * Yellow background for the user, plus hidden identity attributes.
+	 * Does not treat the color as the link.
+	 *
+	 * @return true when the node appearance changed
+	 */
+	static boolean markLinkedNode(final NodeModel node, final String projectId, final String sectionId) {
+		if (node == null) {
+			return false;
+		}
+		rememberIdentity(node, projectId, sectionId);
+		final boolean removedIcon = removeRetiredIcon(node);
+		final boolean painted = ensureYellowBackground(node);
+		return removedIcon || painted;
+	}
+
+	static boolean markLinkedNode(final NodeModel node) {
+		return markLinkedNode(node, null, null);
+	}
+
+	private static void rememberIdentity(final NodeModel node, final String projectId, final String sectionId) {
+		final TodoistNodeMeta meta = TodoistNodeMeta.getOrCreate(node);
+		boolean changed = !meta.isLinked();
+		meta.setLinked(true);
+		if (projectId != null && projectId.trim().length() > 0 && !projectId.trim().equals(meta.getProjectId())) {
+			meta.setProjectId(projectId);
+			changed = true;
+		}
+		if (sectionId != null && sectionId.trim().length() > 0 && !sectionId.trim().equals(meta.getSectionId())) {
+			meta.setSectionId(sectionId);
+			changed = true;
+		}
+		if (changed && node.getMap() != null) {
+			node.getMap().setSaved(false);
+		}
+	}
+
+	private static boolean removeRetiredIcon(final NodeModel node) {
+		final java.util.List icons = node.getIcons();
+		if (icons == null || icons.isEmpty()) {
+			return false;
+		}
+		boolean removed = false;
+		try {
+			final MIconController iconsController = (MIconController) IconController.getController();
+			for (int i = icons.size() - 1; i >= 0; i--) {
+				final Object icon = icons.get(i);
+				if (icon instanceof MindIcon && RETIRED_ICON.equals(((MindIcon) icon).getName())) {
+					iconsController.removeIcon(node, i);
+					removed = true;
+				}
+			}
+		}
+		catch (Exception e) {
+			// Headless: leave the icon; the next UI sync removes it.
+		}
+		return removed;
+	}
+
+	private static boolean ensureYellowBackground(final NodeModel node) {
+		final Color desired = ColorUtils.stringToColor(MARK_BACKGROUND);
+		final Color current = NodeStyleModel.getBackgroundColor(node);
+		if (desired.equals(current)) {
+			return false;
+		}
+		try {
+			((MNodeStyleController) NodeStyleController.getController()).setBackgroundColor(node, desired);
+		}
+		catch (Exception e) {
+			NodeStyleModel.setBackgroundColor(node, desired);
+			if (node.getMap() != null) {
+				node.getMap().setSaved(false);
+			}
+		}
+		return true;
 	}
 
 	static TodoistReminderRecord fromNode(final NodeModel node) {
@@ -106,6 +198,76 @@ final class TodoistReminderFactory {
 			return meta.getContentHash();
 		}
 		return null;
+	}
+
+	static boolean isUserPlaced(final NodeModel node) {
+		migrateLegacyAttributesIfNeeded(node);
+		final TodoistNodeMeta meta = TodoistNodeMeta.get(node);
+		return meta != null && meta.isUserPlaced();
+	}
+
+	static void setUserPlaced(final NodeModel node, final boolean placed) {
+		if (node == null) {
+			return;
+		}
+		migrateLegacyAttributesIfNeeded(node);
+		TodoistNodeMeta.getOrCreate(node).setUserPlaced(placed);
+	}
+
+	static long localModifiedMillis(final NodeModel node) {
+		if (node == null || node.getHistoryInformation() == null
+				|| node.getHistoryInformation().getLastModifiedAt() == null) {
+			return 0L;
+		}
+		return node.getHistoryInformation().getLastModifiedAt().getTime();
+	}
+
+	static long syncedLocalMillis(final NodeModel node) {
+		final TodoistNodeMeta meta = node == null ? null : TodoistNodeMeta.get(node);
+		return meta == null ? 0L : meta.getSyncedLocalMillis();
+	}
+
+	static long syncedRemoteMillis(final NodeModel node) {
+		final TodoistNodeMeta meta = node == null ? null : TodoistNodeMeta.get(node);
+		return meta == null ? 0L : meta.getSyncedRemoteMillis();
+	}
+
+	static void copyClock(final NodeModel node, final TodoistReminderRecord record) {
+		if (node == null || record == null) {
+			return;
+		}
+		record.localModified = localModifiedMillis(node);
+		record.syncedLocal = syncedLocalMillis(node);
+		record.syncedRemote = syncedRemoteMillis(node);
+		record.userPlaced = isUserPlaced(node);
+		if (record.linkedTaskId == null || record.linkedTaskId.length() == 0) {
+			record.linkedTaskId = getTaskId(node);
+		}
+	}
+
+	/**
+	 * Remember both clocks after a sync. One {@code nodeChanged} bumps {@code MODIFIED}; the stored
+	 * local time is the value after that bump, so the write itself is not a new edit next time.
+	 */
+	static void stampWatermarks(final NodeModel node, final long remoteUpdatedMillis) {
+		if (node == null || remoteUpdatedMillis <= 0) {
+			return;
+		}
+		setSyncWatermarks(node, localModifiedMillis(node), remoteUpdatedMillis);
+		try {
+			Controller.getCurrentModeController().getMapController().nodeChanged(node, HistoryInformationModel.class,
+					null, null);
+		}
+		catch (Exception e) {
+			// Headless or mid-load: keep the clocks already stored.
+		}
+		setSyncWatermarks(node, localModifiedMillis(node), remoteUpdatedMillis);
+	}
+
+	private static void setSyncWatermarks(final NodeModel node, final long localMillis, final long remoteMillis) {
+		final TodoistNodeMeta meta = TodoistNodeMeta.getOrCreate(node);
+		meta.setSyncedLocalMillis(localMillis);
+		meta.setSyncedRemoteMillis(remoteMillis);
 	}
 
 	static void setStoredContentHash(final NodeModel node, final String hash) {

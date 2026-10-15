@@ -307,6 +307,8 @@
 					<ribbon_action action="SyncPomodoroNoteAction" />
 					<ribbon_action action="CyclePomodoroSkinAction" />
 				</ribbon_action>
+				<ribbon_action action="TodoistSyncAction" priority="medium"/>
+				<ribbon_action action="TodoistSettingsAction" priority="medium"/>
 				<ribbon_action name="menu_encryption" priority="medium">
 					<ribbon_action action="EnterPassword" />
 					<ribbon_action action="EncryptionSettingsAction" />

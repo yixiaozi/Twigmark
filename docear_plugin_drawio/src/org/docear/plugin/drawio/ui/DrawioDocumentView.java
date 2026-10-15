@@ -103,6 +103,11 @@ public class DrawioDocumentView extends JPanel implements IDocumentTabView, Draw
 		return modified;
 	}
 
+	public boolean saveDocument() {
+		saveToDisk(diagramXml);
+		return true;
+	}
+
 	public void onEditorReady() {
 		editorReady = true;
 		if (pendingLoad || DocumentTabSupport.getActiveDocumentView() == this) {

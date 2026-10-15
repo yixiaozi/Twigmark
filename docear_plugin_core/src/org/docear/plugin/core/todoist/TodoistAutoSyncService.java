@@ -17,6 +17,7 @@ import org.freeplane.features.map.INodeChangeListener;
 import org.freeplane.features.map.MapChangeEvent;
 import org.freeplane.features.map.NodeChangeEvent;
 import org.freeplane.features.map.NodeModel;
+import org.freeplane.features.mode.Controller;
 import org.freeplane.features.mode.ModeController;
 import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
 
@@ -32,7 +33,8 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderExtension;
  * Permanent removal is closed later by full-scan cleanup when the reminder is gone from disk.
  */
 public final class TodoistAutoSyncService {
-	private static final int DEBOUNCE_MS = 1500;
+	/** Short pause so a burst of keystrokes becomes one Todoist write. */
+	private static final int DEBOUNCE_MS = 400;
 	/** Extra grace so cut→paste across a slightly longer pause still cancels the close. */
 	private static final int CLOSE_GRACE_MS = 8000;
 	private static final int STARTUP_DELAY_MS = 20000;
@@ -45,8 +47,12 @@ public final class TodoistAutoSyncService {
 	};
 
 	private final Set dirtyNodes = new HashSet();
+	/** Nodes put back by undo or paste. A completed Todoist task should be reopened. */
+	private final Set reopenNodes = new HashSet();
 	/** Pending closes keyed by identity ({@code mapName|nodeId}) → {@link PendingClose}. */
 	private final Map pendingCloses = new HashMap();
+	/** Closes already handed to the background thread. Undo must still be able to cancel these. */
+	private final List inFlightCloses = new ArrayList();
 	private Timer debounceTimer;
 	private Timer closeGraceTimer;
 	private Timer periodicTimer;
@@ -94,11 +100,14 @@ public final class TodoistAutoSyncService {
 			}
 
 			public void onNodeInserted(final NodeModel parent, final NodeModel child, final int newIndex) {
+				noteUserPlacement(child);
 				queueDirty(child);
+				queueReopenTree(child);
 			}
 
 			public void onNodeMoved(final NodeModel oldParent, final int oldIndex, final NodeModel newParent,
 					final NodeModel child, final int newIndex) {
+				noteUserPlacement(child);
 				queueDirty(child);
 			}
 
@@ -134,7 +143,7 @@ public final class TodoistAutoSyncService {
 	}
 
 	private void onNodeChanged(final NodeChangeEvent event) {
-		if (isSuppressOutgoing() || !TodoistConfig.isAutoSyncEnabled()) {
+		if (isSuppressOutgoing()) {
 			return;
 		}
 		final Object property = event.getProperty();
@@ -159,8 +168,78 @@ public final class TodoistAutoSyncService {
 		return name.endsWith("ReminderTaskExtension");
 	}
 
+	/**
+	 * A cut or move keeps the Todoist task id on the node and must not be undone by the next import.
+	 * Moving a project or section folder has no task id of its own, so every task under it is marked too.
+	 */
+	private void noteUserPlacement(final NodeModel node) {
+		if (isSuppressOutgoing() || node == null || node.getMap() == null || node.getMap().getFile() == null) {
+			return;
+		}
+		try {
+			final ModeController mode = Controller.getCurrentModeController();
+			if (mode != null && mode.getMapController().getMapReader().isMapLoadingInProcess()) {
+				return;
+			}
+		}
+		catch (Exception e) {
+			return;
+		}
+		final TodoistMappingStore store = TodoistMappingStore.get();
+		markUserPlacedTree(node, store);
+		try {
+			store.save();
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not save moved-node mapping", e);
+		}
+	}
+
+	private void markUserPlacedTree(final NodeModel node, final TodoistMappingStore store) {
+		if (node == null) {
+			return;
+		}
+		final String taskId = TodoistReminderFactory.getTaskId(node);
+		if (taskId != null && taskId.length() > 0) {
+			TodoistReminderFactory.setUserPlaced(node, true);
+			try {
+				final String key = TodoistSyncKeys.syncKey(node.getMap().getFile(), node.getID());
+				final String hash = TodoistReminderFactory.getStoredContentHash(node);
+				long remindAt = 0L;
+				final ReminderExtension reminder = ReminderExtension.getExtension(node);
+				if (reminder != null) {
+					remindAt = reminder.getRemindUserAt();
+				}
+				store.removeByTaskId(taskId);
+				store.putMapping(key, taskId, remindAt, hash == null ? "" : hash);
+			}
+			catch (Exception e) {
+				LogUtils.warn("Todoist: could not remember moved node " + node.getID(), e);
+			}
+		}
+		for (int i = 0; i < node.getChildCount(); i++) {
+			markUserPlacedTree((NodeModel) node.getChildAt(i), store);
+		}
+	}
+
+	private void queueReopenTree(final NodeModel node) {
+		if (node == null || isSuppressOutgoing()) {
+			return;
+		}
+		if (TodoistReminderFactory.getTaskId(node) != null) {
+			synchronized (this) {
+				reopenNodes.add(node);
+			}
+			cancelPendingCloseFor(node);
+			scheduleDebounce();
+		}
+		for (int i = 0; i < node.getChildCount(); i++) {
+			queueReopenTree((NodeModel) node.getChildAt(i));
+		}
+	}
+
 	private synchronized void queueDirty(final NodeModel node) {
-		if (node == null || isSuppressOutgoing() || !TodoistConfig.isAutoSyncEnabled()) {
+		if (node == null || isSuppressOutgoing()) {
 			return;
 		}
 		dirtyNodes.add(node);
@@ -169,7 +248,7 @@ public final class TodoistAutoSyncService {
 	}
 
 	private synchronized void queueClose(final NodeModel node) {
-		if (node == null || isSuppressOutgoing() || !TodoistConfig.isAutoSyncEnabled()) {
+		if (node == null || isSuppressOutgoing()) {
 			return;
 		}
 		if (TodoistReminderFactory.getTaskId(node) == null && ReminderExtension.getExtension(node) == null) {
@@ -189,16 +268,31 @@ public final class TodoistAutoSyncService {
 	}
 
 	private void cancelPendingCloseFor(final NodeModel node) {
-		final String identity = identityOf(node);
-		if (identity != null) {
-			pendingCloses.remove(identity);
+		if (node == null) {
+			return;
 		}
-		if (node != null && node.getID() != null) {
-			for (Iterator it = pendingCloses.entrySet().iterator(); it.hasNext();) {
-				Map.Entry entry = (Map.Entry) it.next();
-				PendingClose pending = (PendingClose) entry.getValue();
-				if (pending != null && node.getID().equals(pending.nodeIdFromIdentity())) {
-					it.remove();
+		synchronized (this) {
+			final String identity = identityOf(node);
+			if (identity != null) {
+				final PendingClose removed = (PendingClose) pendingCloses.remove(identity);
+				if (removed != null) {
+					removed.cancelled = true;
+				}
+			}
+			if (node.getID() != null) {
+				for (Iterator it = pendingCloses.entrySet().iterator(); it.hasNext();) {
+					Map.Entry entry = (Map.Entry) it.next();
+					PendingClose pending = (PendingClose) entry.getValue();
+					if (pending != null && node.getID().equals(pending.nodeIdFromIdentity())) {
+						pending.cancelled = true;
+						it.remove();
+					}
+				}
+				for (int i = 0; i < inFlightCloses.size(); i++) {
+					final PendingClose pending = (PendingClose) inFlightCloses.get(i);
+					if (pending != null && node.getID().equals(pending.nodeIdFromIdentity())) {
+						pending.cancelled = true;
+					}
 				}
 			}
 		}
@@ -243,14 +337,17 @@ public final class TodoistAutoSyncService {
 
 	private void flushDirtyQueue() {
 		final List toPush;
+		final List toReopen;
 		synchronized (this) {
 			toPush = new ArrayList(dirtyNodes);
 			dirtyNodes.clear();
+			toReopen = new ArrayList(reopenNodes);
+			reopenNodes.clear();
 			for (int i = 0; i < toPush.size(); i++) {
 				cancelPendingCloseFor((NodeModel) toPush.get(i));
 			}
 		}
-		if (toPush.isEmpty()) {
+		if (toPush.isEmpty() && toReopen.isEmpty()) {
 			return;
 		}
 		final String token = TodoistConfig.getApiToken();
@@ -260,10 +357,28 @@ public final class TodoistAutoSyncService {
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
 				if (!TodoistSyncGuard.tryEnter()) {
-					LogUtils.info("Todoist auto-sync push skipped; full sync in progress");
+					LogUtils.info("Todoist auto-sync push deferred; full sync in progress");
+					synchronized (TodoistAutoSyncService.this) {
+						dirtyNodes.addAll(toPush);
+						reopenNodes.addAll(toReopen);
+					}
+					EventQueue.invokeLater(new Runnable() {
+						public void run() {
+							scheduleDebounce();
+						}
+					});
 					return;
 				}
 				try {
+					for (int i = 0; i < toReopen.size(); i++) {
+						final NodeModel node = (NodeModel) toReopen.get(i);
+						try {
+							TodoistSyncService.reopenLinkedTask(node);
+						}
+						catch (Exception e) {
+							LogUtils.warn("Todoist auto-sync reopen failed for node " + node.getID(), e);
+						}
+					}
 					for (int i = 0; i < toPush.size(); i++) {
 						final NodeModel node = (NodeModel) toPush.get(i);
 						try {
@@ -298,6 +413,7 @@ public final class TodoistAutoSyncService {
 					continue;
 				}
 				toClose.add(pending);
+				inFlightCloses.add(pending);
 				it.remove();
 			}
 			if (!pendingCloses.isEmpty() && closeGraceTimer != null) {
@@ -309,21 +425,52 @@ public final class TodoistAutoSyncService {
 		}
 		final String token = TodoistConfig.getApiToken();
 		if (token == null || token.trim().length() == 0) {
+			synchronized (this) {
+				inFlightCloses.removeAll(toClose);
+			}
 			return;
 		}
 		final Thread thread = new Thread(new Runnable() {
 			public void run() {
 				if (!TodoistSyncGuard.tryEnter()) {
-					LogUtils.info("Todoist auto-sync close skipped; full sync in progress");
+					LogUtils.info("Todoist auto-sync close deferred; full sync in progress");
+					synchronized (TodoistAutoSyncService.this) {
+						inFlightCloses.removeAll(toClose);
+						for (int i = 0; i < toClose.size(); i++) {
+							PendingClose pending = (PendingClose) toClose.get(i);
+							if (pending != null && !pending.cancelled) {
+								pendingCloses.put(pending.identity, pending);
+							}
+						}
+					}
+					EventQueue.invokeLater(new Runnable() {
+						public void run() {
+							scheduleCloseGrace();
+						}
+					});
 					return;
 				}
 				try {
 					for (int i = 0; i < toClose.size(); i++) {
 						PendingClose pending = (PendingClose) toClose.get(i);
+						if (pending.cancelled) {
+							continue;
+						}
 						TodoistSyncService.closeByIdentity(pending.identity, pending.syncKey, pending.taskId);
+						if (pending.cancelled) {
+							try {
+								TodoistSyncService.reopenTaskIfCompleted(pending.taskId);
+							}
+							catch (Exception e) {
+								LogUtils.warn("Todoist auto-sync reopen after cancelled close failed for " + pending.taskId, e);
+							}
+						}
 					}
 				}
 				finally {
+					synchronized (TodoistAutoSyncService.this) {
+						inFlightCloses.removeAll(toClose);
+					}
 					TodoistSyncGuard.leave();
 				}
 			}
@@ -338,6 +485,8 @@ public final class TodoistAutoSyncService {
 		final String taskId;
 		final long queuedAtMillis;
 
+		volatile boolean cancelled;
+
 		PendingClose(String identity, String syncKey, String taskId, long queuedAtMillis) {
 			this.identity = identity;
 			this.syncKey = syncKey;
@@ -346,11 +495,17 @@ public final class TodoistAutoSyncService {
 		}
 
 		String nodeIdFromIdentity() {
-			if (identity == null) {
+			if (identity == null || identity.length() == 0) {
 				return null;
 			}
 			final int sep = identity.lastIndexOf('|');
-			return sep >= 0 ? identity.substring(sep + 1) : null;
+			if (sep < 0) {
+				return identity;
+			}
+			if (sep >= identity.length() - 1) {
+				return null;
+			}
+			return identity.substring(sep + 1);
 		}
 	}
 
