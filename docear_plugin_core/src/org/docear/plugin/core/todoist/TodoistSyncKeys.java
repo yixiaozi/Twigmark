@@ -3,11 +3,14 @@ package org.docear.plugin.core.todoist;
 import java.io.File;
 
 /**
- * Stable keys for Todoist ↔ mind-map linkage.
+ * Link keys for Todoist ↔ mind-map.
  * <p>
- * Exact sync keys use a canonical absolute path (so short/long Windows paths do not
- * drift). Identity keys use {@code mapFileName|nodeId} so relocated maps and
- * absolute-path variants still resolve to the same Todoist task.
+ * The association is the pair of ids: the mind-map node stores {@code TODOIST_TASK_ID},
+ * and the Todoist task stores the node id. File paths are not part of the link. A node
+ * moved to another map keeps the same node id, so the task still matches.
+ * <p>
+ * Sync-store keys may still cache {@code absolutePath|nodeId} so a closed file can be
+ * patched. Matching never requires that path.
  */
 final class TodoistSyncKeys {
 	private TodoistSyncKeys() {
@@ -17,41 +20,61 @@ final class TodoistSyncKeys {
 		return absolutePath(file) + "|" + (nodeId == null ? "" : nodeId);
 	}
 
+	/** Identity is the mind-map node id alone. */
 	static String identityKey(File file, String nodeId) {
-		if (file == null || nodeId == null || nodeId.length() == 0) {
+		if (nodeId == null || nodeId.length() == 0) {
 			return null;
 		}
-		return file.getName() + "|" + nodeId;
+		return nodeId;
 	}
 
 	static String identityKeyFromSyncKey(String syncKey) {
+		return nodeIdFromSyncKey(syncKey);
+	}
+
+	static String nodeIdFromSyncKey(String syncKey) {
 		if (syncKey == null) {
 			return null;
 		}
 		final int sep = syncKey.lastIndexOf('|');
-		if (sep <= 0 || sep >= syncKey.length() - 1) {
+		if (sep < 0 || sep >= syncKey.length() - 1) {
+			return null;
+		}
+		final String nodeId = syncKey.substring(sep + 1).trim();
+		return nodeId.length() == 0 ? null : nodeId;
+	}
+
+	/** File name cached in a {@code path|nodeId} store key. Not used for matching. */
+	static String mapNameFromSyncKey(String syncKey) {
+		if (syncKey == null) {
+			return null;
+		}
+		final int sep = syncKey.lastIndexOf('|');
+		if (sep <= 0) {
 			return null;
 		}
 		final String path = syncKey.substring(0, sep);
-		final String nodeId = syncKey.substring(sep + 1);
 		final int slash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
 		final String name = slash >= 0 ? path.substring(slash + 1) : path;
-		if (name.length() == 0 || nodeId.length() == 0) {
-			return null;
-		}
-		return name + "|" + nodeId;
+		return name.length() == 0 ? null : name;
 	}
 
 	static String identityKeyFromDescription(String description) {
 		if (description == null || description.indexOf("Docear reminder") < 0) {
 			return null;
 		}
-		final String map = extractLinePrefix(description, "Map: ");
-		final String nodeId = extractLinePrefix(description, "Node ID: ");
-		if (map == null || nodeId == null || map.length() == 0 || nodeId.length() == 0) {
+		return nodeIdFromDescription(description);
+	}
+
+	static String nodeIdFromDescription(String description) {
+		if (description == null) {
 			return null;
 		}
-		return map.trim() + "|" + nodeId.trim();
+		final String nodeId = extractLinePrefix(description, "Node ID: ");
+		if (nodeId == null || nodeId.length() == 0) {
+			return null;
+		}
+		return nodeId.trim();
 	}
 
 	static String absolutePath(File file) {

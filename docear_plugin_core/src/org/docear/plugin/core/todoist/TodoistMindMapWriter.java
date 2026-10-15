@@ -16,6 +16,11 @@ import org.freeplane.core.util.Compat;
 import org.freeplane.core.util.HtmlUtils;
 import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
+import org.freeplane.features.icon.IconController;
+import org.freeplane.features.icon.MindIcon;
+import org.freeplane.features.icon.factory.IconStoreFactory;
+import org.freeplane.features.icon.factory.MindIconFactory;
+import org.freeplane.features.icon.mindmapmode.MIconController;
 import org.freeplane.features.link.LinkController;
 import org.freeplane.features.link.mindmapmode.MLinkController;
 import org.freeplane.features.map.MapModel;
@@ -45,9 +50,11 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes
 final class TodoistMindMapWriter {
 	private static final String TODOIST_BRANCH = "Todoist";
 	private static final String NO_SECTION_KEY = "__no_section__";
+	/** Same checkmark as Alt+R. Marks a moved node whose Todoist task is no longer active. */
+	static final String DONE_ICON = "button_ok";
 
 	TodoistImportResult write(File targetFile, List tasks, Map projectNames, Map sectionNames) {
-		return write(targetFile, tasks, projectNames, sectionNames, false);
+		return write(targetFile, tasks, projectNames, sectionNames, false, null);
 	}
 
 	/**
@@ -56,12 +63,17 @@ final class TodoistMindMapWriter {
 	 */
 	TodoistImportResult write(File targetFile, List tasks, Map projectNames, Map sectionNames,
 			boolean preserveLinkedInboxCopies) {
+		return write(targetFile, tasks, projectNames, sectionNames, preserveLinkedInboxCopies, null);
+	}
+
+	TodoistImportResult write(File targetFile, List tasks, Map projectNames, Map sectionNames,
+			boolean preserveLinkedInboxCopies, TodoistTaskAnchorIndex anchors) {
 		final TodoistImportResult result = new TodoistImportResult();
 		result.targetFile = targetFile.getAbsolutePath();
 		// Prefer silent disk write when the import map is not already open — never auto-open UI.
 		if (findOpenMap(targetFile) == null) {
 			return TodoistSilentImportWriter.write(targetFile, tasks, projectNames, sectionNames,
-					preserveLinkedInboxCopies);
+					preserveLinkedInboxCopies, anchors);
 		}
 		final boolean previousSuppress = TodoistAutoSyncService.setSuppressOutgoing(true);
 		try {
@@ -69,49 +81,41 @@ final class TodoistMindMapWriter {
 			if (map == null) {
 				// Race: map closed between check and now — fall back to silent write.
 				return TodoistSilentImportWriter.write(targetFile, tasks, projectNames, sectionNames,
-						preserveLinkedInboxCopies);
+						preserveLinkedInboxCopies, anchors);
 			}
-			final NodeModel todoistRoot = ensureTodoistBranch(map);
-			final Map existingByTaskId = indexTaskNodes(todoistRoot);
-			final Set seenTaskIds = new HashSet();
-			final Map grouped = groupTasks(tasks);
-			final List projectIds = new ArrayList(grouped.keySet());
-			Collections.sort(projectIds, new ProjectNameComparator(projectNames));
-			for (int p = 0; p < projectIds.size(); p++) {
-				String projectId = (String) projectIds.get(p);
-				String projectName = resolveName(projectNames, projectId, TextUtils.getText("todoist.import.unknown_project"));
-				NodeModel projectNode = ensureChild(map, todoistRoot, projectName);
-				final Map sectionMap = (Map) grouped.get(projectId);
-				final List sectionIds = new ArrayList(sectionMap.keySet());
-				Collections.sort(sectionIds, new SectionNameComparator(sectionNames));
-				for (int s = 0; s < sectionIds.size(); s++) {
-					String sectionId = (String) sectionIds.get(s);
-					String sectionName = NO_SECTION_KEY.equals(sectionId) ? TextUtils.getText("todoist.import.no_section")
-							: resolveName(sectionNames, sectionId, TextUtils.getText("todoist.import.unknown_section"));
-					NodeModel sectionNode = ensureChild(map, projectNode, sectionName);
-					final List sectionTasks = (List) sectionMap.get(sectionId);
-					for (int t = 0; t < sectionTasks.size(); t++) {
-						TodoistImportTask task = (TodoistImportTask) sectionTasks.get(t);
-						seenTaskIds.add(task.id);
-						NodeModel existing = (NodeModel) existingByTaskId.remove(task.id);
-						if (existing != null) {
-							if (updateTaskNode(map, existing, sectionNode, task)) {
-								result.addUpdated("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-							}
-							else {
-								result.addSkipped("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-							}
-						}
-						else {
-							createTaskNode(map, sectionNode, task);
-							result.addCreated("[" + projectName + " / " + sectionName + "] " + parsedLine(task));
-						}
-						result.totalFetched++;
+			final NodeModel mapRoot = map.getRootNode();
+			final Map existingByTaskId = indexTaskNodes(mapRoot);
+			final TodoistImportLayout layout = TodoistImportLayout.build(tasks, projectNames, sectionNames);
+			final List projectKeys = layout.projectKeys();
+			for (int p = 0; p < projectKeys.size(); p++) {
+				final String projectKey = (String) projectKeys.get(p);
+				final String projectName = layout.projectLabel(projectKey);
+				final NodeModel projectNode = ensureSection(map, mapRoot, projectName);
+				final List sectionKeys = layout.sectionKeys(projectKey);
+				for (int s = 0; s < sectionKeys.size(); s++) {
+					final String sectionKey = (String) sectionKeys.get(s);
+					final String sectionName = layout.sectionLabel(sectionKey);
+					final NodeModel sectionNode = ensureSection(map, projectNode, sectionName);
+					final List roots = layout.roots(sectionKey);
+					final String linePrefix = projectName + " / " + sectionName;
+					for (int t = 0; t < roots.size(); t++) {
+						placeTask(map, sectionNode, (TodoistImportTask) roots.get(t), layout, existingByTaskId,
+								anchors, targetFile, result, linePrefix);
 					}
 				}
 			}
 			removeStaleTaskNodes(existingByTaskId, result, preserveLinkedInboxCopies);
-			pruneEmptyFolders(todoistRoot);
+			syncDoneIconsOnMovedNodes(tasks, anchors);
+			pruneEmptyImportedFolders(mapRoot);
+			final NodeModel legacyBranch = findChildByPlainText(mapRoot, TODOIST_BRANCH);
+			if (legacyBranch != null && TodoistReminderFactory.getTaskId(legacyBranch) == null) {
+				pruneEmptyFolders(legacyBranch);
+				if (legacyBranch.getChildCount() == 0) {
+					final MMapController mapController = (MMapController) Controller.getCurrentModeController()
+							.getMapController();
+					mapController.deleteNode(legacyBranch);
+				}
+			}
 			saveMap(map, targetFile);
 		}
 		catch (Exception e) {
@@ -155,10 +159,16 @@ final class TodoistMindMapWriter {
 		for (Iterator it = leftoverByTaskId.entrySet().iterator(); it.hasNext();) {
 			Map.Entry entry = (Map.Entry) it.next();
 			final String taskId = (String) entry.getKey();
+			NodeModel stale = (NodeModel) entry.getValue();
+			if (TodoistReminderFactory.isUserPlaced(stale)) {
+				if (ensureDoneIcon(stale)) {
+					result.addUpdated("[checked] " + nodePlainText(stale));
+				}
+				continue;
+			}
 			if (store != null && store.isLinkedToSourceMap(taskId)) {
 				continue;
 			}
-			NodeModel stale = (NodeModel) entry.getValue();
 			try {
 				mapController.deleteNode(stale);
 				result.addUpdated("[removed closed task] " + nodePlainText(stale));
@@ -242,36 +252,327 @@ final class TodoistMindMapWriter {
 
 	private static NodeModel createNode(MapModel map, NodeModel parent, String text) {
 		final MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
-		final NodeModel node = new NodeModel(text, map);
+		final MapModel target = parent != null && parent.getMap() != null ? parent.getMap() : map;
+		final NodeModel node = new NodeModel(text, target);
 		MTextController.getController().setNodeText(node, text);
 		mapController.insertNode(node, parent, parent.getChildCount());
 		return node;
 	}
 
-	private static void createTaskNode(MapModel map, NodeModel parent, TodoistImportTask task) {
+	private static void placeTask(MapModel map, NodeModel canonicalParent, TodoistImportTask task,
+			TodoistImportLayout layout, Map existingByTaskId, TodoistTaskAnchorIndex anchors, File importFile,
+			TodoistImportResult result, String sectionName) {
+		result.totalFetched++;
+		final String line = "[" + sectionName + "] " + parsedLine(task);
+		NodeModel existing = (NodeModel) existingByTaskId.remove(task.id);
+		final NodeModel openElsewhere = TodoistTaskAnchorIndex.findOpenNode(task.id, importFile);
+		final File anchoredFile = anchors == null ? null : anchors.fileFor(task.id);
+		if (existing == null && openElsewhere != null) {
+			existing = openElsewhere;
+		}
+		if (existing != null) {
+			final boolean userPlaced = TodoistReminderFactory.isUserPlaced(existing) || existing.getMap() != map;
+			if (userPlaced) {
+				TodoistReminderFactory.setUserPlaced(existing, true);
+			}
+			if (updateTaskNode(map, existing, canonicalParent, task, !userPlaced)) {
+				result.addUpdated(line);
+			}
+			else {
+				result.addSkipped(line);
+			}
+		}
+		else if (anchoredFile != null) {
+			result.addSkipped(line + " (kept in " + anchoredFile.getName() + ")");
+		}
+		else {
+			existing = createTaskNode(map, canonicalParent, task);
+			result.addCreated(line);
+		}
+		final List children = layout.childrenOf(task.id);
+		for (int i = 0; i < children.size(); i++) {
+			final TodoistImportTask child = (TodoistImportTask) children.get(i);
+			final NodeModel parentForChild = existing != null ? existing : canonicalParent;
+			placeTask(map, parentForChild, child, layout, existingByTaskId, anchors, importFile, result, sectionName);
+		}
+	}
+
+	private static void pruneEmptyImportedFolders(NodeModel root) {
+		final MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
+		for (int p = root.getChildCount() - 1; p >= 0; p--) {
+			final NodeModel project = (NodeModel) root.getChildAt(p);
+			if (TodoistReminderFactory.getTaskId(project) != null) {
+				continue;
+			}
+			for (int s = project.getChildCount() - 1; s >= 0; s--) {
+				final NodeModel section = (NodeModel) project.getChildAt(s);
+				if (TodoistReminderFactory.getTaskId(section) == null && section.getChildCount() == 0) {
+					mapController.deleteNode(section);
+				}
+			}
+			if (project.getChildCount() == 0) {
+				mapController.deleteNode(project);
+			}
+		}
+	}
+
+	private static NodeModel ensureSection(MapModel map, NodeModel root, String label) {
+		for (int i = 0; i < root.getChildCount(); i++) {
+			NodeModel child = (NodeModel) root.getChildAt(i);
+			if (TodoistReminderFactory.getTaskId(child) == null && label.equals(nodePlainText(child))) {
+				return child;
+			}
+		}
+		return createNode(map, root, label);
+	}
+
+	private static NodeModel createTaskNode(MapModel map, NodeModel parent, TodoistImportTask task) {
 		TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final NodeModel node = createNode(map, parent, parsed.nodeText);
 		applyTaskFields(map, node, task, parsed);
+		return node;
 	}
 
 	/** @return true if anything changed */
-	private static boolean updateTaskNode(MapModel map, NodeModel node, NodeModel desiredParent, TodoistImportTask task) {
+	private static boolean updateTaskNode(MapModel map, NodeModel node, NodeModel desiredParent, TodoistImportTask task,
+			boolean allowMove) {
 		boolean changed = false;
-		if (node.getParentNode() != desiredParent) {
+		if (allowMove && node.getMap() == map && node.getParentNode() != desiredParent) {
 			final MMapController mapController = (MMapController) Controller.getCurrentModeController().getMapController();
 			mapController.moveNode(node, desiredParent, desiredParent.getChildCount());
 			changed = true;
 		}
 		TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desiredText = parsed.nodeText;
-		if (!desiredText.equals(nodePlainText(node))) {
-			MTextController.getController().setNodeText(node, desiredText);
-			changed = true;
+		final String currentText = nodePlainText(node);
+		if (!desiredText.equals(currentText)) {
+			if (TodoistSyncService.localTitleWins(TodoistReminderFactory.localModifiedMillis(node), task.updatedAtMillis,
+					TodoistReminderFactory.syncedLocalMillis(node), TodoistReminderFactory.syncedRemoteMillis(node))) {
+				try {
+					final long remote = TodoistSyncService.pushLinkedTitle(task.id, currentText);
+					if (remote > 0) {
+						TodoistReminderFactory.stampWatermarks(node, remote);
+					}
+					changed = true;
+				}
+				catch (Exception e) {
+					LogUtils.warn("Todoist: could not push newer mind-map title for " + task.id, e);
+				}
+			}
+			else if (TodoistSyncClock.choose(TodoistReminderFactory.localModifiedMillis(node), task.updatedAtMillis,
+					TodoistReminderFactory.syncedLocalMillis(node),
+					TodoistReminderFactory.syncedRemoteMillis(node)) == TodoistSyncClock.PULL) {
+				MTextController.getController().setNodeText(node, desiredText);
+				changed = true;
+			}
 		}
 		if (applyTaskFields(map, node, task, parsed)) {
 			changed = true;
 		}
+		if (TodoistReminderFactory.isUserPlaced(node) && removeDoneIcon(node)) {
+			changed = true;
+		}
 		return changed;
+	}
+
+	/**
+	 * Nodes the user moved out of the import map stay where they are. A task that left the active
+	 * list gets a checkmark; a task that is active again loses it.
+	 */
+	static void syncDoneIconsOnMovedNodes(final List tasks, final TodoistTaskAnchorIndex anchors) {
+		if (anchors == null) {
+			return;
+		}
+		if (!java.awt.EventQueue.isDispatchThread()) {
+			try {
+				java.awt.EventQueue.invokeAndWait(new Runnable() {
+					public void run() {
+						syncDoneIconsOnMovedNodes(tasks, anchors);
+					}
+				});
+			}
+			catch (Exception e) {
+				LogUtils.warn("Todoist: could not mark completed nodes", e);
+			}
+			return;
+		}
+		final boolean previousSuppress = TodoistAutoSyncService.setSuppressOutgoing(true);
+		try {
+			syncDoneIconsOnEdt(tasks, anchors);
+		}
+		finally {
+			TodoistAutoSyncService.setSuppressOutgoing(previousSuppress);
+		}
+	}
+
+	private static void syncDoneIconsOnEdt(final List tasks, final TodoistTaskAnchorIndex anchors) {
+		final Map moved = anchors.movedImportedFiles();
+		if (moved == null || moved.isEmpty()) {
+			return;
+		}
+		final Set activeIds = new HashSet();
+		if (tasks != null) {
+			for (int i = 0; i < tasks.size(); i++) {
+				final TodoistImportTask task = (TodoistImportTask) tasks.get(i);
+				if (task != null && task.id != null) {
+					activeIds.add(task.id);
+				}
+			}
+		}
+		final Map closedByPath = new HashMap();
+		for (Iterator it = moved.entrySet().iterator(); it.hasNext();) {
+			final Map.Entry entry = (Map.Entry) it.next();
+			final String taskId = (String) entry.getKey();
+			final File file = (File) entry.getValue();
+			if (file == null) {
+				continue;
+			}
+			final boolean active = activeIds.contains(taskId);
+			final MapModel open = findOpenMap(file);
+			if (open != null) {
+				final NodeModel node = findTaskNode(open.getRootNode(), taskId);
+				if (node == null || !TodoistReminderFactory.isUserPlaced(node)) {
+					continue;
+				}
+				if (active) {
+					removeDoneIcon(node);
+				}
+				else {
+					ensureDoneIcon(node);
+				}
+				continue;
+			}
+			List pending = (List) closedByPath.get(file.getAbsolutePath());
+			if (pending == null) {
+				pending = new ArrayList();
+				closedByPath.put(file.getAbsolutePath(), pending);
+			}
+			pending.add(new Object[] { file, taskId, Boolean.valueOf(active) });
+		}
+		for (Iterator it = closedByPath.values().iterator(); it.hasNext();) {
+			final List pending = (List) it.next();
+			if (pending.isEmpty()) {
+				continue;
+			}
+			final File file = (File) ((Object[]) pending.get(0))[0];
+			patchClosedDoneIcons(file, pending);
+		}
+	}
+
+	private static void patchClosedDoneIcons(final File file, final List pending) {
+		if (file == null || !file.isFile() || findOpenMap(file) != null) {
+			return;
+		}
+		try {
+			TodoistSilentMmUpdater.recoverInterruptedWrite(file);
+			final org.w3c.dom.Document doc = TodoistSilentMmUpdater.loadDocument(file);
+			final org.w3c.dom.Element root = doc.getDocumentElement();
+			final org.w3c.dom.Element mapRoot = firstElement(root, "node");
+			if (mapRoot == null) {
+				return;
+			}
+			boolean changed = false;
+			for (int i = 0; i < pending.size(); i++) {
+				final Object[] item = (Object[]) pending.get(i);
+				final org.w3c.dom.Element node = findTaskElement(mapRoot, (String) item[1]);
+				if (node == null || !"true".equalsIgnoreCase(node.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED))) {
+					continue;
+				}
+				if (((Boolean) item[2]).booleanValue()) {
+					changed = TodoistSilentImportWriter.removeDoneIcon(node) || changed;
+				}
+				else {
+					changed = TodoistSilentImportWriter.ensureDoneIcon(doc, node) || changed;
+				}
+			}
+			if (changed) {
+				TodoistSilentMmUpdater.writeDocumentAtomically(file, doc);
+			}
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not mark completed node in " + file.getPath(), e);
+		}
+	}
+
+	private static NodeModel findTaskNode(final NodeModel node, final String taskId) {
+		if (node == null) {
+			return null;
+		}
+		if (taskId.equals(TodoistReminderFactory.getTaskId(node))) {
+			return node;
+		}
+		for (int i = 0; i < node.getChildCount(); i++) {
+			final NodeModel found = findTaskNode((NodeModel) node.getChildAt(i), taskId);
+			if (found != null) {
+				return found;
+			}
+		}
+		return null;
+	}
+
+	private static org.w3c.dom.Element findTaskElement(final org.w3c.dom.Element node, final String taskId) {
+		if (taskId.equals(node.getAttribute(TodoistNodeMetaIo.XML_TASK_ID))) {
+			return node;
+		}
+		final org.w3c.dom.NodeList children = node.getChildNodes();
+		for (int i = 0; i < children.getLength(); i++) {
+			final org.w3c.dom.Node child = children.item(i);
+			if (child.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE && "node".equals(child.getNodeName())) {
+				final org.w3c.dom.Element found = findTaskElement((org.w3c.dom.Element) child, taskId);
+				if (found != null) {
+					return found;
+				}
+			}
+		}
+		return null;
+	}
+
+	private static org.w3c.dom.Element firstElement(final org.w3c.dom.Element parent, final String name) {
+		if (parent == null) {
+			return null;
+		}
+		final org.w3c.dom.NodeList children = parent.getChildNodes();
+		for (int i = 0; i < children.getLength(); i++) {
+			final org.w3c.dom.Node child = children.item(i);
+			if (child.getNodeType() == org.w3c.dom.Node.ELEMENT_NODE && name.equals(child.getNodeName())) {
+				return (org.w3c.dom.Element) child;
+			}
+		}
+		return null;
+	}
+
+	static boolean ensureDoneIcon(final NodeModel node) {
+		if (node == null || doneIconIndex(node) >= 0) {
+			return false;
+		}
+		MindIcon icon = IconStoreFactory.create().getMindIcon(DONE_ICON);
+		if (icon == null || !DONE_ICON.equals(icon.getName())) {
+			icon = MindIconFactory.create(DONE_ICON);
+		}
+		((MIconController) IconController.getController()).addIcon(node, icon);
+		return true;
+	}
+
+	static boolean removeDoneIcon(final NodeModel node) {
+		final int index = doneIconIndex(node);
+		if (index < 0) {
+			return false;
+		}
+		((MIconController) IconController.getController()).removeIcon(node, index);
+		return true;
+	}
+
+	private static int doneIconIndex(final NodeModel node) {
+		if (node == null || node.getIcons() == null) {
+			return -1;
+		}
+		final List icons = node.getIcons();
+		for (int i = 0; i < icons.size(); i++) {
+			if (DONE_ICON.equals(((MindIcon) icons.get(i)).getName())) {
+				return i;
+			}
+		}
+		return -1;
 	}
 
 	private static boolean applyTaskFields(MapModel map, NodeModel node, TodoistImportTask task,
@@ -280,6 +581,9 @@ final class TodoistMindMapWriter {
 		final String previousTaskId = TodoistReminderFactory.getTaskId(node);
 		if (!task.id.equals(previousTaskId)) {
 			TodoistReminderFactory.setTaskId(node, task.id);
+			changed = true;
+		}
+		if (TodoistReminderFactory.markLinkedNode(node, task.projectId, task.sectionId)) {
 			changed = true;
 		}
 		applyLink(node, parsed.linkUri);

@@ -84,14 +84,26 @@ public final class ReportDocumentView extends JPanel implements IDocumentTabView
 
 	public boolean requestClose(final boolean force) {
 		closed = true;
+		final boolean activity = ReportDocumentService.KEY_ACTIVITY.equals(assignmentKey);
 		DocumentTabSupport.closeDocumentTab(this);
 		ReportDocumentService.forget(this);
 		content = null;
 		removeAll();
+		if (activity) {
+			final org.freeplane.features.usagestats.UsageStatsReportService stats =
+			        org.freeplane.features.usagestats.UsageStatsReportService.get();
+			if (stats != null) {
+				stats.onActivityTabClosed();
+			}
+		}
 		return true;
 	}
 
 	public boolean isModified() {
+		return false;
+	}
+
+	public boolean saveDocument() {
 		return false;
 	}
 

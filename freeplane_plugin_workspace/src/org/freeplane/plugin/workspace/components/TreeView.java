@@ -111,6 +111,7 @@ public class TreeView extends JPanel implements IWorkspaceView, ComponentCollaps
 			}
 		};
 		mTree.setBorder(BorderFactory.createEmptyBorder(2, view_margin, view_margin, view_margin));
+		mTree.setToggleClickCount(1);
 		mTree.putClientProperty("JTree.lineStyle", "Angled");
 		mTree.setCellRenderer(new WorkspaceNodeRenderer());
 		mTree.setCellEditor(new WorkspaceCellEditor(mTree, (DefaultTreeCellRenderer) mTree.getCellRenderer()));

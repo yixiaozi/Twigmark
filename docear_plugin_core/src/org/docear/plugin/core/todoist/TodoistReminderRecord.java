@@ -5,7 +5,8 @@ import java.io.File;
 final class TodoistReminderRecord {
 	final File file;
 	final String nodeId;
-	final String nodeText;
+	/** Not final: an open map replaces the text read from disk before the direction is chosen. */
+	String nodeText;
 	final long remindAt;
 	final int period;
 	final String periodUnit;
@@ -18,6 +19,18 @@ final class TodoistReminderRecord {
 	final String remindType;
 	/** Weekday codes 1=Mon … 7=Sun for weekly cycles ({@code RWEEKS}). */
 	final String weekDays;
+	/**
+	 * Todoist id already stored on the mind-map node. Set for tasks imported from Todoist.
+	 * Sync must not create a second task or edit the original when this is set and the task
+	 * lives outside the Docear project.
+	 */
+	String linkedTaskId;
+	/** Node {@code MODIFIED} when this record was read. */
+	long localModified;
+	long syncedLocal;
+	long syncedRemote;
+	/** User cut or moved this node; the linked Todoist task must stay in its own project. */
+	boolean userPlaced;
 
 	TodoistReminderRecord(File file, String nodeId, String nodeText, long remindAt, int period, String periodUnit,
 			boolean recurring) {

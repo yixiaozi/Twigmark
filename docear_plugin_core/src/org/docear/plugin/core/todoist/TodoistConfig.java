@@ -23,7 +23,7 @@ public final class TodoistConfig {
 	/** Empty until the user configures a path (or a library root provides a default). */
 	public static final String DEFAULT_IMPORT_TARGET = "";
 	public static final String DEFAULT_IMPORT_FILENAME = "todolist.mm";
-	/** Off by default: auto-sync can wipe local reminders until bidirectional logic is solid. */
+	/** Off until the user opts in. Live edits still push within about 1.5s once enabled. */
 	public static final String DEFAULT_AUTO_SYNC = "false";
 	public static final String DEFAULT_AUTO_SYNC_INTERVAL_MINUTES = "5";
 	/** Node attribute linking an imported (or pushed) mind-map node to a Todoist task id. */
@@ -45,16 +45,55 @@ public final class TodoistConfig {
 
 	public static String getApiToken() {
 		final ResourceController resources = ResourceController.getResourceController();
-		String token = resources.getProperty(PROP_API_TOKEN, "").trim();
-		if (token.length() > 0) {
-			return token;
+		final String fromFile = normalizeToken(readTokenFromLocalFile());
+		final String fromProps = normalizeToken(resources.getProperty(PROP_API_TOKEN, ""));
+		// The local file is written immediately when the user clicks OK. auto.properties
+		// is only flushed on exit, so a newer key must win or the next launch keeps the old one (401).
+		if (fromFile.length() > 0) {
+			if (!fromFile.equals(fromProps)) {
+				resources.setProperty(PROP_API_TOKEN, fromFile);
+				persistResourceProperties();
+			}
+			return fromFile;
 		}
-		return loadTokenFromLocalFile();
+		return fromProps;
 	}
 
 	public static void setApiToken(String token) {
-		ResourceController.getResourceController().setProperty(PROP_API_TOKEN, token == null ? "" : token.trim());
+		token = normalizeToken(token);
+		ResourceController.getResourceController().setProperty(PROP_API_TOKEN, token);
 		saveTokenToLocalFile(token);
+		persistResourceProperties();
+	}
+
+	static String normalizeToken(String token) {
+		if (token == null) {
+			return "";
+		}
+		token = token.trim();
+		if (token.regionMatches(true, 0, "Bearer ", 0, 7)) {
+			token = token.substring(7).trim();
+		}
+		if ((token.startsWith("\"") && token.endsWith("\"")) || (token.startsWith("'") && token.endsWith("'"))) {
+			token = token.substring(1, token.length() - 1).trim();
+		}
+		final StringBuilder sb = new StringBuilder(token.length());
+		for (int i = 0; i < token.length(); i++) {
+			final char c = token.charAt(i);
+			if (!Character.isWhitespace(c)) {
+				sb.append(c);
+			}
+		}
+		return sb.toString();
+	}
+
+	private static void persistResourceProperties() {
+		try {
+			ResourceController.getResourceController().saveProperties();
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not flush API token to auto.properties", e);
+		}
 	}
 
 	public static String getLabel() {
@@ -264,7 +303,7 @@ public final class TodoistConfig {
 		return new File(Compat.getApplicationUserDirectory(), "todoist.local.properties");
 	}
 
-	private static String loadTokenFromLocalFile() {
+	private static String readTokenFromLocalFile() {
 		File file = localPropertiesFile();
 		if (!file.isFile()) {
 			return "";
@@ -277,9 +316,6 @@ public final class TodoistConfig {
 			String token = props.getProperty("todoist.api_token", "").trim();
 			if (token.length() == 0) {
 				token = props.getProperty("key", "").trim();
-			}
-			if (token.length() > 0) {
-				ResourceController.getResourceController().setProperty(PROP_API_TOKEN, token);
 			}
 			return token;
 		}

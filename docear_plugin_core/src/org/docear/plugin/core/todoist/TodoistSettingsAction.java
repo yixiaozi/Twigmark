@@ -17,6 +17,7 @@ import javax.swing.border.EmptyBorder;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.theme.DocearUiTheme;
+import org.freeplane.core.util.LogUtils;
 import org.freeplane.core.util.TextUtils;
 import org.freeplane.features.mode.Controller;
 
@@ -117,15 +118,33 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		if (option != JOptionPane.OK_OPTION) {
 			return;
 		}
+		final String previousName = TodoistConfig.getProjectName();
+		final String previousId = TodoistConfig.getProjectId();
 		TodoistConfig.setApiToken(new String(tokenField.getPassword()));
-		TodoistConfig.setProjectName(projectField.getText());
-		String projectId = projectIdField.getText().trim();
-		if (projectId.length() > 0) {
-			TodoistConfig.setProjectId(projectId, projectField.getText().trim());
+		final String projectName = projectField.getText() == null ? "" : projectField.getText().trim();
+		TodoistConfig.setProjectName(projectName);
+		final String projectId = projectIdField.getText().trim();
+		final boolean nameChanged = !previousName.equals(TodoistConfig.getProjectName());
+		if (projectId.length() == 0) {
+			TodoistConfig.clearStoredProjectId();
+		}
+		else if (!(nameChanged && projectId.equals(previousId))) {
+			TodoistConfig.setProjectId(projectId, TodoistConfig.getProjectName());
 		}
 		TodoistConfig.setImportTargetFile(importTargetField.getText());
 		TodoistConfig.setAutoSyncEnabled(autoSyncCheck.isSelected());
 		TodoistConfig.setAutoSyncIntervalMinutes(((Integer) intervalSpinner.getValue()).intValue());
+		final String savedToken = TodoistConfig.getApiToken();
+		if (savedToken.length() > 0) {
+			try {
+				new TodoistApiClient(savedToken).checkToken();
+			}
+			catch (Exception ex) {
+				LogUtils.warn("Todoist token check failed", ex);
+				JOptionPane.showMessageDialog(Controller.getCurrentController().getViewController().getFrame(),
+						ex.getMessage(), TextUtils.getText("todoist.settings.title"), JOptionPane.WARNING_MESSAGE);
+			}
+		}
 		TodoistAutoSyncService.getInstance().restartPeriodicTimer();
 		if (TodoistConfig.isAutoSyncEnabled()) {
 			TodoistAutoSyncService.getInstance().requestImmediateFullSync();

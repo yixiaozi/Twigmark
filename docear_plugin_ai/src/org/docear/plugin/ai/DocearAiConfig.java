@@ -314,9 +314,11 @@ public class DocearAiConfig {
     }
 
     public boolean isWorkspaceSnapshotExportEnabled() {
+        // Default off: auto-writing 01-全部提醒.md etc. into the library was surprising.
+        // Manual MCP export_workspace_snapshot still works when explicitly enabled.
         String value = ResourceController.getResourceController().getProperty(
-                PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED, "true");
-        return !"false".equalsIgnoreCase(value) && !"0".equals(value);
+                PROPERTY_AI_WORKSPACE_SNAPSHOT_EXPORT_ENABLED, "false");
+        return "true".equalsIgnoreCase(value) || "1".equals(value);
     }
 
     public String getWorkspaceSnapshotDirectory() {

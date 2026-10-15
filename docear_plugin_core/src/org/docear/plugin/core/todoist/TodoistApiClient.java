@@ -27,6 +27,8 @@ final class TodoistApiClient {
 
 	private final String apiToken;
 	private final Map sectionIdCache = new HashMap();
+	/** Todoist rejects further POST /sections once the project hits its plan limit. */
+	private static boolean sectionCreationBlocked;
 
 	TodoistApiClient(String apiToken) {
 		this.apiToken = apiToken;
@@ -67,10 +69,23 @@ final class TodoistApiClient {
 		}
 		String sectionId = findSectionIdByName(projectId, sectionName);
 		if (sectionId == null) {
+			if (sectionCreationBlocked) {
+				return null;
+			}
 			String body = "{\"name\":\"" + TodoistJson.escape(truncate(sectionName, 120))
 					+ "\",\"project_id\":\"" + TodoistJson.escape(projectId) + "\"}";
-			String response = request("POST", "/sections", body);
-			sectionId = TodoistJson.extractIdField(response);
+			try {
+				String response = request("POST", "/sections", body);
+				sectionId = TodoistJson.extractIdField(response);
+			}
+			catch (IOException e) {
+				if (isSectionLimit(e)) {
+					sectionCreationBlocked = true;
+					LogUtils.warn("Todoist section limit reached; tasks stay in the project without a new section");
+					return null;
+				}
+				throw e;
+			}
 			if (sectionId == null || sectionId.length() == 0) {
 				throw new IOException("Todoist create section: missing id");
 			}
@@ -81,16 +96,40 @@ final class TodoistApiClient {
 		return sectionId;
 	}
 
+	/** Confirms the token with Todoist. Throws on 401 or other HTTP errors. */
+	void checkToken() throws IOException {
+		request("GET", "/projects?limit=1", null);
+	}
+
+	private static boolean isSectionLimit(IOException e) {
+		String message = e.getMessage();
+		return message != null && (message.indexOf("MAX_SECTIONS_LIMIT_REACHED") >= 0
+				|| message.indexOf("Maximum number of sections") >= 0);
+	}
+
+	/**
+	 * One section per top-level mind-map folder. Todoist allows 20 active sections per project,
+	 * so a section per file path cannot work.
+	 */
 	static String sectionNameForFile(File file) {
-		String base = file.getName();
-		if (base.toLowerCase().endsWith(".mm")) {
-			base = base.substring(0, base.length() - 3);
+		String top = topLevelFolder(file);
+		if (top == null || top.length() == 0 || "_data".equals(top)) {
+			return "\u5176\u4ed6";
 		}
-		String parentPath = MindMapDataRootResolver.getRelativePathWithinScanRoots(file.getParentFile());
-		if (parentPath != null && parentPath.length() > 0) {
-			return parentPath.replace("/", " / ") + " / " + base;
+		return top;
+	}
+
+	private static String topLevelFolder(File file) {
+		if (file == null) {
+			return "";
 		}
-		return base;
+		File parent = file.getParentFile();
+		String relative = MindMapDataRootResolver.getRelativePathWithinScanRoots(parent);
+		if (relative == null || relative.length() == 0) {
+			return "";
+		}
+		int slash = relative.indexOf('/');
+		return slash < 0 ? relative : relative.substring(0, slash);
 	}
 
 	String createTask(TodoistReminderRecord record, String projectId, String sectionId) throws IOException {
@@ -111,15 +150,59 @@ final class TodoistApiClient {
 		updateTaskContent(taskId, record);
 	}
 
-	void updateTaskContent(String taskId, TodoistReminderRecord record) throws IOException {
-		String body = buildUpdateTaskJson(record);
+	/**
+	 * Writes only fields that differ from the current Todoist task.
+	 * An unchanged name is omitted, so Todoist does not record a name change.
+	 *
+	 * @return true when a request was sent
+	 */
+	boolean updateTaskContent(String taskId, TodoistReminderRecord record) throws IOException {
+		return updateTaskContent(taskId, record, false);
+	}
+
+	/**
+	 * @param contentOnly update the title and due only. Used for a task that already existed in
+	 *                    another Todoist project: its description and project stay untouched.
+	 */
+	boolean updateTaskContent(String taskId, TodoistReminderRecord record, boolean contentOnly) throws IOException {
+		TodoistImportTask existing = fetchTask(taskId);
+		String body = buildUpdateTaskJson(record, existing, contentOnly);
+		if (body == null) {
+			return false;
+		}
 		request("POST", "/tasks/" + taskId, body);
+		return true;
+	}
+
+	TodoistImportTask fetchTask(String taskId) throws IOException {
+		try {
+			String response = request("GET", "/tasks/" + taskId, null);
+			java.util.List tasks = new java.util.ArrayList();
+			TodoistJson.collectImportTasks(response, tasks);
+			if (tasks.isEmpty()) {
+				return null;
+			}
+			return (TodoistImportTask) tasks.get(0);
+		}
+		catch (IOException e) {
+			String message = e.getMessage();
+			if (message != null && message.indexOf("404") >= 0) {
+				return null;
+			}
+			throw e;
+		}
 	}
 
 	void relocateTaskTo(String taskId, String projectId, String sectionId) throws IOException {
 		TodoistTaskLocation before = getTaskLocation(taskId);
 		if (!before.exists) {
 			throw new IOException("Todoist task not found: " + taskId);
+		}
+		if (sectionId == null || sectionId.length() == 0) {
+			if (projectId != null && !projectId.equals(before.projectId)) {
+				moveTaskToProject(taskId, projectId);
+			}
+			return;
 		}
 		if (isTaskInLocation(before, projectId, sectionId)) {
 			return;
@@ -163,13 +246,48 @@ final class TodoistApiClient {
 		request("POST", "/tasks/" + taskId + "/move", body);
 	}
 
-	void closeTask(String taskId) throws IOException {
-		request("POST", "/tasks/" + taskId + "/close", null);
+	/**
+	 * Mark a task complete. A 404 means it is already gone, which is the same end state, so it is
+	 * not reported as a failure and the task is not recreated.
+	 *
+	 * @return false when Todoist no longer has the task
+	 */
+	boolean closeTask(String taskId) throws IOException {
+		try {
+			request("POST", "/tasks/" + taskId + "/close", null);
+			return true;
+		}
+		catch (IOException e) {
+			final String message = e.getMessage();
+			if (message != null && message.indexOf("404") >= 0) {
+				return false;
+			}
+			throw e;
+		}
+	}
+
+	/** Remove a task. 404 means it is already gone. */
+	void deleteTask(String taskId) throws IOException {
+		try {
+			request("DELETE", "/tasks/" + taskId, null);
+		}
+		catch (IOException e) {
+			final String message = e.getMessage();
+			if (message != null && message.indexOf("404") >= 0) {
+				return;
+			}
+			throw e;
+		}
 	}
 
 	/** Uncomplete a closed task so the same Todoist id stays 1:1 with the mind-map node. */
 	void reopenTask(String taskId) throws IOException {
 		request("POST", "/tasks/" + taskId + "/reopen", null);
+	}
+
+	/** Drop the due date. Does not complete the task or change its description. */
+	void clearDueDate(String taskId) throws IOException {
+		request("POST", "/tasks/" + taskId, "{\"due_string\":\"no date\"}");
 	}
 
 	/**
@@ -192,7 +310,9 @@ final class TodoistApiClient {
 			String response = request("GET", "/tasks/" + taskId, null);
 			boolean completed = isCompletedTaskJson(response);
 			return TodoistTaskLocation.found(TodoistJson.extractStringField(response, "project_id"),
-					TodoistJson.extractStringField(response, "section_id"), completed);
+					TodoistJson.extractStringField(response, "section_id"), completed,
+					TodoistJson.extractStringField(response, "description"),
+					TodoistSyncClock.parseUpdatedAt(TodoistJson.extractStringField(response, "updated_at")));
 		}
 		catch (IOException e) {
 			String message = e.getMessage();
@@ -221,6 +341,11 @@ final class TodoistApiClient {
 		}
 		if (!projectId.equals(location.projectId)) {
 			return false;
+		}
+		// No section means "anywhere in this project" — do not reshuffle tasks when the
+		// project is already at Todoist's section cap.
+		if (sectionId == null || sectionId.length() == 0) {
+			return true;
 		}
 		return sameId(location.sectionId, sectionId);
 	}
@@ -280,10 +405,25 @@ final class TodoistApiClient {
 	}
 
 	java.util.List fetchAllActiveTasks() throws IOException {
+		return fetchActiveTasks(null);
+	}
+
+	/** Active tasks in one project. Does not include the rest of the account. */
+	java.util.List fetchActiveTasksInProject(String projectId) throws IOException {
+		if (projectId == null || projectId.trim().length() == 0) {
+			return new java.util.ArrayList();
+		}
+		return fetchActiveTasks(projectId.trim());
+	}
+
+	private java.util.List fetchActiveTasks(String projectId) throws IOException {
 		java.util.List tasks = new java.util.ArrayList();
 		String cursor = null;
 		do {
 			String path = "/tasks?limit=" + PAGE_LIMIT;
+			if (projectId != null) {
+				path += "&project_id=" + urlEncode(projectId);
+			}
 			if (cursor != null) {
 				path += "&cursor=" + urlEncode(cursor);
 			}
@@ -483,7 +623,9 @@ final class TodoistApiClient {
 		sb.append("{\"content\":\"").append(TodoistJson.escape(truncate(record.nodeText, 500))).append("\"");
 		sb.append(",\"description\":\"").append(TodoistJson.escape(buildDescription(record))).append("\"");
 		sb.append(",\"project_id\":\"").append(TodoistJson.escape(projectId)).append("\"");
-		sb.append(",\"section_id\":\"").append(TodoistJson.escape(sectionId)).append("\"");
+		if (sectionId != null && sectionId.length() > 0) {
+			sb.append(",\"section_id\":\"").append(TodoistJson.escape(sectionId)).append("\"");
+		}
 		sb.append(",\"priority\":").append(TodoistPriority.toTodoistApi(record.jinji));
 		appendDurationFields(sb, record.durationMinutes);
 		appendDueFields(sb, record);
@@ -491,7 +633,73 @@ final class TodoistApiClient {
 		return sb.toString();
 	}
 
-	private String buildUpdateTaskJson(TodoistReminderRecord record) {
+	/**
+	 * Partial update. Returns null when the remote task already matches, so the caller
+	 * does not POST and Todoist does not log a no-op name change.
+	 */
+	private String buildUpdateTaskJson(TodoistReminderRecord record, TodoistImportTask existing, boolean contentOnly) {
+		if (existing == null) {
+			return contentOnly ? buildContentOnlyUpdateJson(record) : buildFullUpdateTaskJson(record);
+		}
+		StringBuilder sb = new StringBuilder(384);
+		sb.append('{');
+		boolean any = false;
+		String desiredContent = truncate(record.nodeText, 500);
+		if (!sameTaskName(existing.content, desiredContent)) {
+			any = appendStringField(sb, any, "content", desiredContent);
+		}
+		if (!contentOnly) {
+			String desiredDescription = buildDescription(record);
+			if (!sameTaskName(existing.description, desiredDescription)) {
+				any = appendStringField(sb, any, "description", desiredDescription);
+			}
+		}
+		int priority = TodoistPriority.toTodoistApi(record.jinji);
+		if (!contentOnly && existing.priority != priority) {
+			if (any) {
+				sb.append(',');
+			}
+			sb.append("\"priority\":").append(priority);
+			any = true;
+		}
+		if (record.durationMinutes > 0 && existing.durationMinutes != record.durationMinutes) {
+			int mark = sb.length();
+			appendDurationFields(sb, record.durationMinutes);
+			if (!any && sb.length() > mark && sb.charAt(mark) == ',') {
+				sb.deleteCharAt(mark);
+			}
+			if (sb.length() > mark) {
+				any = true;
+			}
+		}
+		if (dueChanged(record, existing)) {
+			int mark = sb.length();
+			appendDueFields(sb, record);
+			if (!any && sb.length() > mark && sb.charAt(mark) == ',') {
+				sb.deleteCharAt(mark);
+			}
+			if (sb.length() > mark) {
+				any = true;
+			}
+		}
+		if (!any) {
+			return null;
+		}
+		sb.append('}');
+		return sb.toString();
+	}
+
+	/** Title and due only, for a task that already belongs to another project. */
+	private String buildContentOnlyUpdateJson(TodoistReminderRecord record) {
+		StringBuilder sb = new StringBuilder(256);
+		sb.append("{\"content\":\"").append(TodoistJson.escape(truncate(record.nodeText, 500))).append('"');
+		appendDurationFields(sb, record.durationMinutes);
+		appendDueFields(sb, record);
+		sb.append('}');
+		return sb.toString();
+	}
+
+	private String buildFullUpdateTaskJson(TodoistReminderRecord record) {
 		StringBuilder sb = new StringBuilder(384);
 		sb.append("{\"content\":\"").append(TodoistJson.escape(truncate(record.nodeText, 500))).append("\"");
 		sb.append(",\"description\":\"").append(TodoistJson.escape(buildDescription(record))).append("\"");
@@ -500,6 +708,60 @@ final class TodoistApiClient {
 		appendDueFields(sb, record);
 		sb.append('}');
 		return sb.toString();
+	}
+
+	private static boolean appendStringField(StringBuilder sb, boolean any, String name, String value) {
+		if (any) {
+			sb.append(',');
+		}
+		sb.append('"').append(name).append("\":\"").append(TodoistJson.escape(value == null ? "" : value)).append('"');
+		return true;
+	}
+
+	/** Visible task title: ignore surrounding space and runs of whitespace. */
+	static boolean sameTaskName(String remote, String desired) {
+		return normalizeTaskName(remote).equals(normalizeTaskName(desired));
+	}
+
+	private static String normalizeTaskName(String text) {
+		if (text == null) {
+			return "";
+		}
+		String source = text.replace('\u00a0', ' ').replace('\u3000', ' ').trim();
+		StringBuilder sb = new StringBuilder(source.length());
+		boolean pendingSpace = false;
+		for (int i = 0; i < source.length(); i++) {
+			char c = source.charAt(i);
+			if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+				if (!pendingSpace && sb.length() > 0) {
+					sb.append(' ');
+					pendingSpace = true;
+				}
+			}
+			else {
+				sb.append(c);
+				pendingSpace = false;
+			}
+		}
+		return sb.toString();
+	}
+
+	private static boolean dueChanged(TodoistReminderRecord record, TodoistImportTask existing) {
+		if (record.recurring) {
+			String dueString = TodoistCycleMapper.toDueString(record.cycle(), record.remindAt);
+			if (dueString == null || dueString.length() == 0) {
+				return false;
+			}
+			String remote = existing.dueString == null ? "" : existing.dueString.trim();
+			return !dueString.equalsIgnoreCase(remote);
+		}
+		if (record.remindAt <= 0) {
+			return false;
+		}
+		if (existing.dueAtMillis <= 0) {
+			return true;
+		}
+		return Math.abs(existing.dueAtMillis - record.remindAt) > 60000L;
 	}
 
 	private static void appendDurationFields(StringBuilder sb, int durationMinutes) {
@@ -533,13 +795,98 @@ final class TodoistApiClient {
 		return TodoistCycleMapper.toDueString(record.cycle(), record.remindAt);
 	}
 
+	/**
+	 * Todoist tasks have no custom field. The node id is stored in the description.
+	 * File path is not written: a node can move to another map without changing id.
+	 */
 	static String buildDescription(TodoistReminderRecord record) {
+		return buildNodeLink(record == null ? null : record.nodeId);
+	}
+
+	static String buildNodeLink(String nodeId) {
 		StringBuilder sb = new StringBuilder();
 		sb.append("Docear reminder\n");
-		sb.append("Map: ").append(record.file.getName()).append('\n');
-		sb.append("Path: ").append(TodoistSyncKeys.absolutePath(record.file)).append('\n');
-		sb.append("Node ID: ").append(record.nodeId);
+		sb.append("Node ID: ").append(nodeId == null ? "" : nodeId);
 		return sb.toString();
+	}
+
+	/**
+	 * Rewrite the description of a task this sync created. Imported tasks must not be passed here.
+	 *
+	 * @return true when a request was sent
+	 */
+	boolean refreshNodeLink(String taskId, String nodeId, String currentDescription) throws IOException {
+		if (taskId == null || taskId.length() == 0 || nodeId == null || nodeId.length() == 0) {
+			return false;
+		}
+		if (!keepsDocearNodeLink(currentDescription, nodeId)) {
+			return false;
+		}
+		final String desired = buildNodeLink(nodeId);
+		if (sameTaskName(currentDescription, desired)) {
+			return false;
+		}
+		final String body = "{\"description\":\"" + TodoistJson.escape(desired) + "\"}";
+		request("POST", "/tasks/" + taskId, body);
+		return true;
+	}
+
+	/**
+	 * Remove a description that is only our mind-map stamp. Leaves a person's own notes alone.
+	 *
+	 * @return true when a request was sent
+	 */
+	boolean clearOwnedStamp(String taskId, String description) throws IOException {
+		if (taskId == null || taskId.length() == 0 || !isOwnedStamp(description)) {
+			return false;
+		}
+		request("POST", "/tasks/" + taskId, "{\"description\":\"\"}");
+		return true;
+	}
+
+	/** True when every line is the stamp this sync writes, with no other note. */
+	static boolean isOwnedStamp(String description) {
+		if (description == null || description.indexOf("Docear reminder") < 0) {
+			return false;
+		}
+		boolean any = false;
+		int start = 0;
+		while (start <= description.length()) {
+			int end = description.indexOf('\n', start);
+			if (end < 0) {
+				end = description.length();
+			}
+			final String line = description.substring(start, end).trim();
+			start = end + 1;
+			if (line.length() == 0) {
+				if (end >= description.length()) {
+					break;
+				}
+				continue;
+			}
+			any = true;
+			if ("Docear reminder".equals(line) || line.startsWith("Map: ") || line.startsWith("Path: ")
+					|| line.startsWith("Node ID: ")) {
+				if (end >= description.length()) {
+					break;
+				}
+				continue;
+			}
+			return false;
+		}
+		return any;
+	}
+
+	private static boolean keepsDocearNodeLink(String description, TodoistReminderRecord record) {
+		return record != null && keepsDocearNodeLink(description, record.nodeId);
+	}
+
+	/** True when this task was created by Docear and we know which node it belongs to. */
+	private static boolean keepsDocearNodeLink(String description, String nodeId) {
+		if (nodeId == null || nodeId.length() == 0 || description == null) {
+			return false;
+		}
+		return description.indexOf("Docear reminder") >= 0;
 	}
 
 	private static String formatUtcDateTime(long millis) {
@@ -617,11 +964,17 @@ final class TodoistApiClient {
 				out.flush();
 			}
 			int code = connection.getResponseCode();
+			if (code == 204) {
+				return "";
+			}
 			in = code >= 400 ? connection.getErrorStream() : connection.getInputStream();
 			if (in == null) {
 				throw new IOException("Todoist HTTP " + code + " (empty body) for " + path);
 			}
 			String response = readStream(in);
+			if (code == 401) {
+				throw new IOException("Todoist API 密钥无效（401）。请在「Todoist 设置」重新粘贴密钥并确定。");
+			}
 			if (code >= 400) {
 				throw new IOException("Todoist HTTP " + code + " for " + path + ": " + response);
 			}

@@ -87,7 +87,13 @@ public class FileOpener implements DropTargetListener {
 				final List<File> list = (List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 				for (final File file : list) {
 					String fileName = file.getName();
-					if (file.isDirectory() || !isMindMapUrl(fileName)) {
+					if (file.isDirectory()) {
+						continue;
+					}
+					if (org.freeplane.features.ui.DocumentOpenRegistry.tryOpen(file)) {
+						continue;
+					}
+					if (!isMindMapUrl(fileName)) {
 						continue;
 					}
 					modeController.getMapController().newMap(Compat.fileToUrl(file));

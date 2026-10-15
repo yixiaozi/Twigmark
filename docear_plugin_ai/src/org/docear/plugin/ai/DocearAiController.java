@@ -26,7 +26,6 @@ import org.docear.plugin.ai.ui.AiChatContextInfo;
 import org.docear.plugin.ai.ui.AiChatSidebar;
 import org.docear.plugin.ai.ui.AiChatTabInstaller;
 import org.docear.plugin.ai.ui.AiChatTabMetrics;
-import org.docear.plugin.ai.snapshot.AiWorkspaceSnapshotAutoSync;
 import org.docear.plugin.ai.ui.AiMarkdownRenderer;
 import org.docear.plugin.ai.usage.AiUsageCounter;
 import org.freeplane.core.ui.AFreeplaneAction;
@@ -75,7 +74,14 @@ public class DocearAiController {
         registerActions();
         registerMenus();
         installAiChatTab();
-        AiWorkspaceSnapshotAutoSync.install(modeController);
+        // Workspace snapshot auto-sync disabled: do not write 给AI / 01-全部提醒.md etc. on save.
+        // Clear any leftover enabled flag from older builds; MCP can still export on demand.
+        try {
+            org.freeplane.core.resources.ResourceController.getResourceController()
+                    .setProperty("ai.workspace_snapshot_export_enabled", "false");
+        }
+        catch (Exception ignore) {
+        }
     }
 
     private void scheduleWorkspaceScanPreload() {

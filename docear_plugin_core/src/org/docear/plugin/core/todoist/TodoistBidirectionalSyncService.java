@@ -69,6 +69,18 @@ public final class TodoistBidirectionalSyncService {
 		return merged;
 	}
 
+	/** Prefer the task id stored on the node, then the node id stored on the task. */
+	private static NodeModel findLinkedOpenNode(final TodoistImportTask task) {
+		if (task == null) {
+			return null;
+		}
+		final NodeModel byTask = TodoistNodeLocator.findOpenNodeByTaskId(task.id);
+		if (byTask != null) {
+			return byTask;
+		}
+		return TodoistNodeLocator.findOpenNodeByNodeId(TodoistSyncKeys.nodeIdFromDescription(task.description));
+	}
+
 	/** Forwards progress events but swallows nested {@code onFinished}. */
 	private static TodoistSyncProgressCallback phaseCallback(final TodoistSyncProgressCallback callback) {
 		if (callback == null) {
@@ -123,12 +135,47 @@ public final class TodoistBidirectionalSyncService {
 		try {
 			final TodoistApiClient client = new TodoistApiClient(token.trim());
 			final TodoistMappingStore store = TodoistMappingStore.get();
-			final List tasks = client.fetchAllActiveTasks();
+			final String projectId = client.ensureProject(TodoistConfig.getProjectName());
+			final List tasks = client.fetchActiveTasksInProject(projectId);
 			result.totalScanned = tasks.size();
 			final Map silentByPath = new HashMap();
 			for (int i = 0; i < tasks.size(); i++) {
 				final TodoistImportTask task = (TodoistImportTask) tasks.get(i);
 				progress(callback, i + 1, tasks.size());
+				final NodeModel linked = findLinkedOpenNode(task);
+				if (linked != null && linked.getMap() != null && linked.getMap().getFile() != null
+						&& !TodoistConfig.isImportTargetFile(linked.getMap().getFile())) {
+					final File liveFile = linked.getMap().getFile();
+					final String liveKey = TodoistSyncKeys.syncKey(liveFile, linked.getID());
+					try {
+						final boolean changed = applyTaskToOpenNode(task, liveKey, store, linked);
+						final String line = "[" + liveFile.getName() + "] " + plainContent(task);
+						if (changed) {
+							result.updated++;
+							result.updatedLines.add(line);
+							if (callback != null) {
+								callback.onUpdated(line);
+							}
+						}
+						else {
+							result.skipped++;
+							result.skippedLines.add(line);
+							if (callback != null) {
+								callback.onSkipped(line);
+							}
+						}
+					}
+					catch (Exception e) {
+						result.failed++;
+						final String failedLine = liveKey + " — " + e.getMessage();
+						result.failedLines.add(failedLine);
+						if (callback != null) {
+							callback.onFailed(failedLine);
+						}
+						LogUtils.warn("Todoist pull to linked node failed: " + liveKey, e);
+					}
+					continue;
+				}
 				String syncKey = store.getSyncKeyForTaskId(task.id);
 				if (syncKey == null || syncKey.length() == 0) {
 					syncKey = TodoistApiClient.syncKeyFromDescription(task.description);
@@ -303,6 +350,20 @@ public final class TodoistBidirectionalSyncService {
 
 	private static boolean applyTaskToOpenNode(final TodoistImportTask task, final String syncKey,
 			final TodoistMappingStore store, final NodeModel openNode) throws Exception {
+		final TodoistContentParser title = TodoistContentParser.parse(task.content);
+		final String currentTitle = TodoistReminderFactory.plainText(openNode);
+		if (title.nodeText.length() > 0 && !title.nodeText.equals(currentTitle)
+				&& TodoistSyncService.localTitleWins(TodoistReminderFactory.localModifiedMillis(openNode),
+						task.updatedAtMillis, TodoistReminderFactory.syncedLocalMillis(openNode),
+						TodoistReminderFactory.syncedRemoteMillis(openNode))) {
+			final long remote = TodoistSyncService.pushLinkedTitle(task.id, currentTitle);
+			if (remote > 0) {
+				TodoistReminderFactory.stampWatermarks(openNode, remote);
+			}
+			TodoistReminderFactory.setTaskId(openNode, task.id);
+			refreshStoredHash(openNode, syncKey, task, store);
+			return remote > 0;
+		}
 		if (!needsPull(openNode, task)) {
 			TodoistReminderFactory.setTaskId(openNode, task.id);
 			refreshStoredHash(openNode, syncKey, task, store);
@@ -318,7 +379,8 @@ public final class TodoistBidirectionalSyncService {
 					final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 					final String desired = parsed.nodeText;
 					final String current = TodoistReminderFactory.plainText(openNode);
-					if (!desired.equals(current)) {
+					if (!desired.equals(current)
+							&& TodoistReminderFactory.localModifiedMillis(openNode) <= task.updatedAtMillis) {
 						MTextController.getController().setNodeText(openNode, desired);
 						changed[0] = true;
 					}
@@ -332,6 +394,9 @@ public final class TodoistBidirectionalSyncService {
 						changed[0] = true;
 					}
 					refreshStoredHash(openNode, syncKey, task, store);
+					if (changed[0]) {
+						TodoistReminderFactory.stampWatermarks(openNode, task.updatedAtMillis);
+					}
 					if (changed[0] && openNode.getMap() != null) {
 						openNode.getMap().setSaved(false);
 					}
@@ -361,10 +426,19 @@ public final class TodoistBidirectionalSyncService {
 	 * Empty/default Todoist fields never force a destructive pull (map settings win).
 	 */
 	private static boolean needsPull(final NodeModel node, final TodoistImportTask task) {
+		final int direction = TodoistSyncClock.choose(TodoistReminderFactory.localModifiedMillis(node),
+				task.updatedAtMillis, TodoistReminderFactory.syncedLocalMillis(node),
+				TodoistReminderFactory.syncedRemoteMillis(node));
+		if (direction == TodoistSyncClock.PUSH || direction == TodoistSyncClock.SKIP) {
+			return false;
+		}
+		if (direction == TodoistSyncClock.PULL) {
+			return true;
+		}
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desired = parsed.nodeText;
 		final String current = TodoistReminderFactory.plainText(node);
-		if (desired.length() > 0 && !desired.equals(current)) {
+		if (desired.length() > 0 && !desired.equals(current) && direction != TodoistSyncClock.UNKNOWN) {
 			return true;
 		}
 		final int localDuration = ReminderTaskAttributes.readTaskTimeFromNode(node);

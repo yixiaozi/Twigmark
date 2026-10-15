@@ -278,6 +278,16 @@ public class FolderLinkNode extends AFolderNode implements IWorkspaceNodeActionL
 			if (getModel() != null) {
 				getModel().reload(this);
 			}
+			final Object source = event.getSource();
+			final javax.swing.tree.TreePath path = event.getPath();
+			if (source instanceof javax.swing.JTree && path != null) {
+				final javax.swing.JTree tree = (javax.swing.JTree) source;
+				javax.swing.SwingUtilities.invokeLater(new Runnable() {
+					public void run() {
+						tree.expandPath(path);
+					}
+				});
+			}
 		}
 	}
 

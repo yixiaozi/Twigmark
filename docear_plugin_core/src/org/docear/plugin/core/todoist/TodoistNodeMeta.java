@@ -10,6 +10,18 @@ import org.freeplane.features.map.NodeModel;
 final class TodoistNodeMeta implements IExtension {
 	private String taskId;
 	private String contentHash;
+	/** User cut or moved this node; later imports must not pull it back. */
+	private boolean userPlaced;
+	/** Node {@code MODIFIED} remembered at the last sync. */
+	private long syncedLocalMillis;
+	/** Todoist {@code updated_at} remembered at the last sync. */
+	private long syncedRemoteMillis;
+	/** This node is a Todoist task. The yellow background is only a visual reminder. */
+	private boolean linked;
+	private String projectId;
+	private String sectionId;
+	/** {@code docear} if this sync created the task, {@code todoist} if it already existed. */
+	private String origin;
 
 	static TodoistNodeMeta get(final NodeModel node) {
 		if (node == null) {
@@ -43,7 +55,66 @@ final class TodoistNodeMeta implements IExtension {
 		this.contentHash = contentHash == null || contentHash.trim().length() == 0 ? null : contentHash.trim();
 	}
 
+	boolean isUserPlaced() {
+		return userPlaced;
+	}
+
+	void setUserPlaced(final boolean userPlaced) {
+		this.userPlaced = userPlaced;
+	}
+
+	long getSyncedLocalMillis() {
+		return syncedLocalMillis;
+	}
+
+	void setSyncedLocalMillis(final long syncedLocalMillis) {
+		this.syncedLocalMillis = syncedLocalMillis < 0 ? 0L : syncedLocalMillis;
+	}
+
+	long getSyncedRemoteMillis() {
+		return syncedRemoteMillis;
+	}
+
+	void setSyncedRemoteMillis(final long syncedRemoteMillis) {
+		this.syncedRemoteMillis = syncedRemoteMillis < 0 ? 0L : syncedRemoteMillis;
+	}
+
+	boolean isLinked() {
+		return linked;
+	}
+
+	void setLinked(final boolean linked) {
+		this.linked = linked;
+	}
+
+	String getProjectId() {
+		return projectId;
+	}
+
+	void setProjectId(final String projectId) {
+		this.projectId = projectId == null || projectId.trim().length() == 0 ? null : projectId.trim();
+	}
+
+	String getSectionId() {
+		return sectionId;
+	}
+
+	void setSectionId(final String sectionId) {
+		this.sectionId = sectionId == null || sectionId.trim().length() == 0 ? null : sectionId.trim();
+	}
+
+	String getOrigin() {
+		return origin;
+	}
+
+	void setOrigin(final String origin) {
+		this.origin = origin == null || origin.trim().length() == 0 ? null : origin.trim();
+	}
+
 	boolean isEmpty() {
-		return (taskId == null || taskId.length() == 0) && (contentHash == null || contentHash.length() == 0);
+		return (taskId == null || taskId.length() == 0) && (contentHash == null || contentHash.length() == 0)
+				&& !userPlaced && syncedLocalMillis <= 0 && syncedRemoteMillis <= 0 && !linked
+				&& (projectId == null || projectId.length() == 0) && (sectionId == null || sectionId.length() == 0)
+				&& (origin == null || origin.length() == 0);
 	}
 }

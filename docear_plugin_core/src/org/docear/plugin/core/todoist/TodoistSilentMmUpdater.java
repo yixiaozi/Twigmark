@@ -744,4 +744,147 @@ final class TodoistSilentMmUpdater {
 			return raw.trim();
 		}
 	}
+
+	/** True when the map root itself is encrypted, so reminder nodes are not in the XML. */
+	static boolean isEncryptedRoot(final File mmFile) {
+		if (mmFile == null || !mmFile.isFile()) {
+			return false;
+		}
+		try {
+			final Document doc = loadDocument(mmFile);
+			final Element mapRoot = firstMapNode(doc);
+			if (mapRoot == null) {
+				return false;
+			}
+			final String encrypted = mapRoot.getAttribute("ENCRYPTED_CONTENT");
+			return encrypted != null && encrypted.length() > 0;
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not check encryption for " + mmFile.getPath(), e);
+			return true;
+		}
+	}
+
+	/**
+	 * Write a reminder onto {@code preferredNodeId}, or onto the node already stamped with this
+	 * task, or create that node under the map root when the id is gone.
+	 *
+	 * @return the node id actually used, or null when the file was not written
+	 */
+	static String restoreReminderNode(final File mmFile, final String preferredNodeId, final Patch patch) {
+		if (mmFile == null || !mmFile.isFile() || patch == null) {
+			return null;
+		}
+		if (TodoistNodeLocator.findOpenMap(mmFile) != null) {
+			LogUtils.warn("Todoist: skip restore while map is open: " + mmFile.getPath());
+			return null;
+		}
+		recoverInterruptedWrite(mmFile);
+		try {
+			final Document doc = loadDocument(mmFile);
+			final Element mapRoot = firstMapNode(doc);
+			if (mapRoot == null) {
+				return null;
+			}
+			if (mapRoot.getAttribute("ENCRYPTED_CONTENT") != null
+					&& mapRoot.getAttribute("ENCRYPTED_CONTENT").length() > 0) {
+				return null;
+			}
+			Element node = findNodeById(doc, preferredNodeId);
+			String usedId = preferredNodeId;
+			if (node == null && patch.taskId != null) {
+				node = findNodeByAttribute(doc, TodoistNodeMetaIo.XML_TASK_ID, patch.taskId);
+				if (node != null) {
+					usedId = node.getAttribute("ID");
+				}
+			}
+			if (node == null && patch.plainText != null && patch.plainText.length() > 0) {
+				node = findUniqueNodeByPlainText(doc, mapRoot, patch.plainText);
+				if (node != null) {
+					usedId = node.getAttribute("ID");
+				}
+			}
+			if (node == null) {
+				usedId = preferredNodeId != null && preferredNodeId.length() > 0
+						&& findNodeById(doc, preferredNodeId) == null ? preferredNodeId : newNodeId(doc);
+				node = doc.createElement("node");
+				node.setAttribute("TEXT", patch.plainText == null ? "" : patch.plainText);
+				node.setAttribute("ID", usedId);
+				node.setAttribute("CREATED", Long.toString(System.currentTimeMillis()));
+				node.setAttribute("MODIFIED", Long.toString(System.currentTimeMillis()));
+				node.setAttribute("POSITION", "right");
+				mapRoot.appendChild(node);
+			}
+			applyPatchToElement(node, patch);
+			if (!writeDocumentAtomically(mmFile, doc)) {
+				return null;
+			}
+			return usedId;
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: restore reminder failed for " + mmFile.getPath(), e);
+			return null;
+		}
+	}
+
+	private static Element firstMapNode(final Document doc) {
+		if (doc == null || doc.getDocumentElement() == null) {
+			return null;
+		}
+		final NodeList children = doc.getDocumentElement().getChildNodes();
+		for (int i = 0; i < children.getLength(); i++) {
+			final Node child = children.item(i);
+			if (child.getNodeType() == Node.ELEMENT_NODE && "node".equals(child.getNodeName())) {
+				return (Element) child;
+			}
+		}
+		return null;
+	}
+
+	private static Element findNodeById(final Document doc, final String nodeId) {
+		if (nodeId == null || nodeId.length() == 0) {
+			return null;
+		}
+		return findNodeByAttribute(doc, "ID", nodeId);
+	}
+
+	private static Element findNodeByAttribute(final Document doc, final String attr, final String value) {
+		final NodeList nodes = doc.getElementsByTagName("node");
+		for (int i = 0; i < nodes.getLength(); i++) {
+			final Element node = (Element) nodes.item(i);
+			if (value.equals(node.getAttribute(attr))) {
+				return node;
+			}
+		}
+		return null;
+	}
+
+	private static Element findUniqueNodeByPlainText(final Document doc, final Element mapRoot, final String plain) {
+		Element found = null;
+		final NodeList nodes = doc.getElementsByTagName("node");
+		for (int i = 0; i < nodes.getLength(); i++) {
+			final Element node = (Element) nodes.item(i);
+			if (node == mapRoot) {
+				continue;
+			}
+			if (!plain.equals(htmlToPlainSafe(node.getAttribute("TEXT")))) {
+				continue;
+			}
+			if (found != null) {
+				return null;
+			}
+			found = node;
+		}
+		return found;
+	}
+
+	private static String newNodeId(final Document doc) {
+		String id = "ID_" + Long.toString(System.currentTimeMillis());
+		int n = 0;
+		while (findNodeById(doc, id) != null) {
+			n++;
+			id = "ID_" + Long.toString(System.currentTimeMillis()) + "_" + n;
+		}
+		return id;
+	}
 }

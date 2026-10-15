@@ -274,8 +274,15 @@ final class TodoistJson {
 				|| (dueString != null && dueString.toLowerCase().indexOf("every") >= 0);
 		int priority = parseIntField(object, "priority", 1);
 		int durationMinutes = parseDurationMinutes(object);
-		return new TodoistImportTask(id, content, description, projectId, sectionId, dueAt, recurring, dueString,
-				priority, durationMinutes);
+		String parentId = extractFieldValue(object, "parent_id");
+		int childOrder = parseIntField(object, "child_order", Integer.MIN_VALUE);
+		if (childOrder == Integer.MIN_VALUE) {
+			childOrder = parseIntField(object, "order", 0);
+		}
+		final TodoistImportTask task = new TodoistImportTask(id, content, description, projectId, sectionId, dueAt,
+				recurring, dueString, priority, durationMinutes, parentId, childOrder);
+		task.updatedAtMillis = TodoistSyncClock.parseUpdatedAt(extractFieldValue(object, "updated_at"));
+		return task;
 	}
 
 	private static boolean extractDueIsRecurring(String taskJson) {

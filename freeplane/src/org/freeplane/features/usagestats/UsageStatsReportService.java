@@ -31,9 +31,19 @@ public class UsageStatsReportService implements IExtension {
 		final UsageStatsReportService service = new UsageStatsReportService();
 		modeController.addExtension(UsageStatsReportService.class, service);
 		modeController.addAction(new ToggleUsageStatsReportAction());
-		if (ResourceController.getResourceController().getBooleanProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY)) {
-			service.setReportVisible(true);
-		}
+		// Never restore the activity-report document tab on startup. Closing the tab
+		// via the bottom strip used to leave usageStatsReportVisible=true, so the
+		// report stole the first tab on every launch.
+		ResourceController.getResourceController()
+		        .setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, false);
+	}
+
+	/** Called when the activity-report document tab is closed (X / Ctrl+W / etc.). */
+	public void onActivityTabClosed() {
+		lastPanel = null;
+		ResourceController.getResourceController()
+		        .setProperty(ToggleUsageStatsReportAction.VISIBLE_PROPERTY, false);
+		syncToggleAction(false);
 	}
 
 	public void setReportVisible(final boolean visible) {
