@@ -92,6 +92,7 @@ final class TodoistSilentImportWriter {
 				}
 			}
 			removeStaleTaskNodes(existingByTaskId, result, preserveLinkedInboxCopies);
+			TodoistMindMapWriter.syncDoneIconsOnMovedNodes(tasks, anchors);
 			pruneEmptyRootFolders(mapRootNode);
 			final Element legacyBranch = findChildByText(mapRootNode, TODOIST_BRANCH);
 			if (legacyBranch != null && !hasTaskId(legacyBranch)) {
@@ -164,19 +165,61 @@ final class TodoistSilentImportWriter {
 		for (Iterator it = leftoverByTaskId.entrySet().iterator(); it.hasNext();) {
 			final Map.Entry entry = (Map.Entry) it.next();
 			final String taskId = (String) entry.getKey();
+			final Element stale = (Element) entry.getValue();
+			final String text = plainText(stale);
+			if ("true".equalsIgnoreCase(stale.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED))) {
+				if (ensureDoneIcon(stale.getOwnerDocument(), stale)) {
+					result.addUpdated("[checked] " + text);
+				}
+				continue;
+			}
 			if (store != null && store.isLinkedToSourceMap(taskId)) {
 				continue;
 			}
-			final Element stale = (Element) entry.getValue();
-			if ("true".equalsIgnoreCase(stale.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED))) {
-				continue;
-			}
-			final String text = plainText(stale);
 			if (stale.getParentNode() != null) {
 				stale.getParentNode().removeChild(stale);
 				result.addUpdated("[removed closed task] " + text);
 			}
 		}
+	}
+
+	static boolean ensureDoneIcon(final Document doc, final Element node) {
+		if (doc == null || node == null || hasDoneIcon(node)) {
+			return false;
+		}
+		final Element icon = doc.createElement("icon");
+		icon.setAttribute("BUILTIN", TodoistMindMapWriter.DONE_ICON);
+		node.appendChild(icon);
+		return true;
+	}
+
+	static boolean removeDoneIcon(final Element node) {
+		if (node == null) {
+			return false;
+		}
+		boolean removed = false;
+		final NodeList children = node.getChildNodes();
+		for (int i = children.getLength() - 1; i >= 0; i--) {
+			final Node child = children.item(i);
+			if (child.getNodeType() == Node.ELEMENT_NODE && "icon".equals(child.getNodeName())
+					&& TodoistMindMapWriter.DONE_ICON.equals(((Element) child).getAttribute("BUILTIN"))) {
+				node.removeChild(child);
+				removed = true;
+			}
+		}
+		return removed;
+	}
+
+	private static boolean hasDoneIcon(final Element node) {
+		final NodeList children = node.getChildNodes();
+		for (int i = 0; i < children.getLength(); i++) {
+			final Node child = children.item(i);
+			if (child.getNodeType() == Node.ELEMENT_NODE && "icon".equals(child.getNodeName())
+					&& TodoistMindMapWriter.DONE_ICON.equals(((Element) child).getAttribute("BUILTIN"))) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static void pruneEmptyFolders(final Element todoistBranch) {
@@ -200,7 +243,8 @@ final class TodoistSilentImportWriter {
 	}
 
 	private static boolean applyTaskElement(final Document doc, final Element node, final TodoistImportTask task) {
-		boolean changed = false;
+		boolean changed = "true".equalsIgnoreCase(node.getAttribute(TodoistNodeMetaIo.XML_USER_PLACED))
+				&& removeDoneIcon(node);
 		final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
 		final String desiredText = parsed.nodeText;
 		final String currentText = plainText(node);

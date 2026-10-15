@@ -20,6 +20,8 @@ final class TodoistNodeMeta implements IExtension {
 	private boolean linked;
 	private String projectId;
 	private String sectionId;
+	/** {@code docear} if this sync created the task, {@code todoist} if it already existed. */
+	private String origin;
 
 	static TodoistNodeMeta get(final NodeModel node) {
 		if (node == null) {
@@ -101,9 +103,18 @@ final class TodoistNodeMeta implements IExtension {
 		this.sectionId = sectionId == null || sectionId.trim().length() == 0 ? null : sectionId.trim();
 	}
 
+	String getOrigin() {
+		return origin;
+	}
+
+	void setOrigin(final String origin) {
+		this.origin = origin == null || origin.trim().length() == 0 ? null : origin.trim();
+	}
+
 	boolean isEmpty() {
 		return (taskId == null || taskId.length() == 0) && (contentHash == null || contentHash.length() == 0)
 				&& !userPlaced && syncedLocalMillis <= 0 && syncedRemoteMillis <= 0 && !linked
-				&& (projectId == null || projectId.length() == 0) && (sectionId == null || sectionId.length() == 0);
+				&& (projectId == null || projectId.length() == 0) && (sectionId == null || sectionId.length() == 0)
+				&& (origin == null || origin.length() == 0);
 	}
 }

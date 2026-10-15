@@ -23,6 +23,8 @@ import javax.xml.parsers.SAXParserFactory;
  */
 final class TodoistTaskAnchorIndex {
 	private final Map fileByTaskId = new HashMap();
+	/** Task id → file, for nodes the user moved and that came from Todoist. */
+	private final Map movedImportedFileByTaskId = new HashMap();
 
 	private TodoistTaskAnchorIndex() {
 	}
@@ -53,6 +55,11 @@ final class TodoistTaskAnchorIndex {
 			return null;
 		}
 		return (File) fileByTaskId.get(taskId);
+	}
+
+	/** User-moved original Todoist tasks that now live outside the import map. */
+	Map movedImportedFiles() {
+		return movedImportedFileByTaskId;
 	}
 
 	/** Open non-import map that already contains this task id. */
@@ -113,8 +120,16 @@ final class TodoistTaskAnchorIndex {
 						return;
 					}
 					final String taskId = attributes.getValue(TodoistNodeMetaIo.XML_TASK_ID);
-					if (taskId != null && taskId.length() > 0 && !fileByTaskId.containsKey(taskId)) {
+					if (taskId == null || taskId.length() == 0) {
+						return;
+					}
+					if (!fileByTaskId.containsKey(taskId)) {
 						fileByTaskId.put(taskId, file);
+					}
+					if ("true".equalsIgnoreCase(attributes.getValue(TodoistNodeMetaIo.XML_USER_PLACED))
+							&& TodoistReminderFactory.ORIGIN_TODOIST.equals(attributes.getValue(TodoistNodeMetaIo.XML_ORIGIN))
+							&& !movedImportedFileByTaskId.containsKey(taskId)) {
+						movedImportedFileByTaskId.put(taskId, file);
 					}
 				}
 			});

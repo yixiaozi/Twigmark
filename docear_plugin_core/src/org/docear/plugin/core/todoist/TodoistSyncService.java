@@ -113,7 +113,8 @@ public final class TodoistSyncService {
 					&& (taskId == null || !mappedTaskId.equals(taskId))) {
 				try {
 					final TodoistTaskLocation linkedLocation = client.getTaskLocation(mappedTaskId);
-					if (record.userPlaced || isImportedMirror(linkedLocation, result.projectId)) {
+					if (record.userPlaced || isImportedMirror(TodoistNodeLocator.findOpenNodeBySyncKey(key), linkedLocation,
+							result.projectId)) {
 						applyClock(client, record, mappedTaskId, linkedLocation, hash, store, key, sectionName, line,
 								result, callback);
 						continue;
@@ -133,7 +134,8 @@ public final class TodoistSyncService {
 				if (taskId != null && taskId.length() > 0) {
 					TodoistTaskLocation location = client.getTaskLocation(taskId);
 					if (location.exists) {
-						if (record.userPlaced || isImportedMirror(location, result.projectId)) {
+						if (record.userPlaced || isImportedMirror(TodoistNodeLocator.findOpenNodeBySyncKey(key), location,
+								result.projectId)) {
 							applyClock(client, record, taskId, location, hash, store, key, sectionName, line, result,
 									callback);
 							continue;
@@ -240,6 +242,7 @@ public final class TodoistSyncService {
 							taskId = createAndIndex(client, remoteIndex, record, result.projectId, sectionId);
 							store.putMapping(key, taskId, record.remindAt, hash);
 							stampLiveNodeIfOpen(key, taskId, hash);
+							markOpenOrigin(key, TodoistReminderFactory.ORIGIN_DOCEAR);
 							rememberRemoteClock(key, taskId, client, location);
 							result.addCreated(record, sectionName);
 							if (callback != null) {
@@ -252,6 +255,7 @@ public final class TodoistSyncService {
 					taskId = createAndIndex(client, remoteIndex, record, result.projectId, sectionId);
 					store.putMapping(key, taskId, record.remindAt, hash);
 					stampLiveNodeIfOpen(key, taskId, hash);
+					markOpenOrigin(key, TodoistReminderFactory.ORIGIN_DOCEAR);
 					rememberRemoteClock(key, taskId, client, null);
 					result.addCreated(record, sectionName);
 					if (callback != null) {
@@ -298,7 +302,7 @@ public final class TodoistSyncService {
 					if (!location.exists) {
 						// Already deleted in Todoist. Drop the stale id; do not create a replacement.
 					}
-					else if (isImportedMirror(location, result.projectId)) {
+					else if (isImportedMirror(null, location, result.projectId)) {
 						continue;
 					}
 					else if (stillLinked(reminderScanner, taskId, location.description)) {
@@ -327,7 +331,7 @@ public final class TodoistSyncService {
 		}
 		store.save();
 		sectionStore.save();
-		repairOpenNodeLinks(client);
+		repairOpenNodeLinks(client, result.projectId, reminderScanner);
 		finish(callback, result);
 		return result;
 	}
@@ -555,33 +559,64 @@ public final class TodoistSyncService {
 	private static final Set repairedNodeLinks = new HashSet();
 
 	/**
-	 * Drop a stale file path from Docear-owned tasks that are open in the UI.
-	 * Each task is checked once per session. Imported tasks are not rewritten.
+	 * Mind-map tasks keep a node id in the description. Original Todoist tasks stay in their own
+	 * project, and a stamp that was written onto them by mistake is removed.
 	 */
-	private static void repairOpenNodeLinks(final TodoistApiClient client) {
+	private static void repairOpenNodeLinks(final TodoistApiClient client, final String docearProjectId,
+			final MindMapReminderScanner scanner) {
 		final List nodes = TodoistNodeLocator.openLinkedNodes();
 		for (int i = 0; i < nodes.size(); i++) {
 			final NodeModel node = (NodeModel) nodes.get(i);
-			final String taskId = TodoistReminderFactory.getTaskId(node);
-			if (taskId == null || repairedNodeLinks.contains(taskId)) {
-				continue;
+			repairOneLink(client, docearProjectId, TodoistReminderFactory.getTaskId(node), node);
+		}
+		if (scanner == null) {
+			return;
+		}
+		for (Iterator it = scanner.importedTaskIds().iterator(); it.hasNext();) {
+			repairOneLink(client, docearProjectId, (String) it.next(), null);
+		}
+	}
+
+	private static void repairOneLink(final TodoistApiClient client, final String docearProjectId, final String taskId,
+			final NodeModel node) {
+		if (taskId == null || taskId.length() == 0 || repairedNodeLinks.contains(taskId)) {
+			return;
+		}
+		try {
+			final TodoistTaskLocation location = client.getTaskLocation(taskId);
+			repairedNodeLinks.add(taskId);
+			if (!location.exists) {
+				return;
 			}
-			try {
-				final TodoistTaskLocation location = client.getTaskLocation(taskId);
-				repairedNodeLinks.add(taskId);
-				if (!location.exists) {
-					continue;
+			final boolean imported = isImportedMirror(node, location, docearProjectId);
+			if (imported) {
+				if (node != null) {
+					TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_TODOIST);
+				}
+				if (!client.clearOwnedStamp(taskId, location.description)) {
+					return;
+				}
+			}
+			else if (node != null) {
+				if (!TodoistReminderFactory.isTodoistOrigin(node)) {
+					TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_DOCEAR);
 				}
 				if (!client.refreshNodeLink(taskId, node.getID(), location.description)) {
-					continue;
+					return;
 				}
-				final TodoistTaskLocation after = client.getTaskLocation(taskId);
-				TodoistReminderFactory.stampWatermarks(node,
-						after.updatedAtMillis > 0 ? after.updatedAtMillis : location.updatedAtMillis);
 			}
-			catch (Exception e) {
-				LogUtils.warn("Todoist: could not store node id on task " + taskId, e);
+			else {
+				return;
 			}
+			if (node == null) {
+				return;
+			}
+			final TodoistTaskLocation after = client.getTaskLocation(taskId);
+			TodoistReminderFactory.stampWatermarks(node,
+					after.updatedAtMillis > 0 ? after.updatedAtMillis : location.updatedAtMillis);
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not store node id on task " + taskId, e);
 		}
 	}
 
@@ -690,15 +725,19 @@ public final class TodoistSyncService {
 	}
 
 	/**
-	 * A task imported from outside the Docear project. Moving its node must not create a copy
-	 * or edit the original. Tasks this sync itself created carry a "Docear reminder" description
-	 * and are still pushed back into the Docear project.
+	 * A task that already lived outside the Docear project. Its description must not be rewritten
+	 * into "Docear reminder", and it must not be moved into that project. A node already marked
+	 * {@code todoist} stays an original Todoist task even if the remote project later changes.
 	 */
-	private static boolean isImportedMirror(final TodoistTaskLocation location, final String docearProjectId) {
-		if (location == null || !location.exists || docearProjectId == null || docearProjectId.equals(location.projectId)) {
+	private static boolean isImportedMirror(final NodeModel node, final TodoistTaskLocation location,
+			final String docearProjectId) {
+		if (TodoistReminderFactory.isTodoistOrigin(node)) {
+			return true;
+		}
+		if (location == null || !location.exists || docearProjectId == null || docearProjectId.length() == 0) {
 			return false;
 		}
-		return location.description == null || location.description.indexOf("Docear reminder") < 0;
+		return !docearProjectId.equals(location.projectId);
 	}
 
 	private static boolean isImportTargetSyncKey(final String syncKey) {
@@ -710,6 +749,15 @@ public final class TodoistSyncService {
 			return false;
 		}
 		return TodoistConfig.isImportTargetFile(new File(syncKey.substring(0, sep)));
+	}
+
+	private static void markOpenOrigin(final String syncKey, final String origin) {
+		try {
+			TodoistReminderFactory.setOrigin(TodoistNodeLocator.findOpenNodeBySyncKey(syncKey), origin);
+		}
+		catch (Exception e) {
+			LogUtils.warn("Todoist: could not remember task origin for " + syncKey, e);
+		}
 	}
 
 	private static void stampLiveNodeIfOpen(final String syncKey, final String taskId, final String hash) {
@@ -778,7 +826,7 @@ public final class TodoistSyncService {
 			TodoistTaskLocation location = client.getTaskLocation(taskId);
 			final int direction = TodoistSyncClock.choose(record.localModified, location.updatedAtMillis,
 					record.syncedLocal, record.syncedRemote);
-			final boolean keep = record.userPlaced || isImportedMirror(location, projectId);
+			final boolean keep = record.userPlaced || isImportedMirror(node, location, projectId);
 			if (keep || direction == TodoistSyncClock.PULL || direction == TodoistSyncClock.SKIP) {
 				if (direction == TodoistSyncClock.PUSH
 						|| (keep && direction == TodoistSyncClock.UNKNOWN && !hash.equals(storedHash))) {
@@ -888,6 +936,7 @@ public final class TodoistSyncService {
 		store.save();
 		sectionStore.save();
 		TodoistReminderFactory.setTaskId(node, taskId);
+		TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_DOCEAR);
 		TodoistReminderFactory.setStoredContentHash(node, hash);
 		return true;
 	}
@@ -952,7 +1001,16 @@ public final class TodoistSyncService {
 		final boolean titleWins = localTitleWins(TodoistReminderFactory.localModifiedMillis(node),
 				location.updatedAtMillis, TodoistReminderFactory.syncedLocalMillis(node),
 				TodoistReminderFactory.syncedRemoteMillis(node));
-		if (client.refreshNodeLink(taskId, node.getID(), location.description)) {
+		final boolean imported = isImportedMirror(node, location, TodoistConfig.getProjectId());
+		boolean relabeled = false;
+		if (imported) {
+			TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_TODOIST);
+			relabeled = client.clearOwnedStamp(taskId, location.description);
+		}
+		else if (!TodoistReminderFactory.isTodoistOrigin(node)) {
+			relabeled = client.refreshNodeLink(taskId, node.getID(), location.description);
+		}
+		if (relabeled) {
 			final TodoistTaskLocation linked = client.getTaskLocation(taskId);
 			if (linked.updatedAtMillis > 0) {
 				location = linked;
@@ -970,6 +1028,45 @@ public final class TodoistSyncService {
 		}
 		TodoistReminderFactory.markLinkedNode(node, location.projectId, location.sectionId);
 		return remote > 0;
+	}
+
+	/**
+	 * The reminder hook was removed. A mind-map task is completed. An original Todoist task only
+	 * loses its due date.
+	 */
+	static void pushReminderRemoved(final NodeModel node) throws Exception {
+		if (node == null || ReminderExtension.getExtension(node) != null) {
+			return;
+		}
+		final String taskId = TodoistReminderFactory.getTaskId(node);
+		if (taskId == null || taskId.length() == 0) {
+			return;
+		}
+		final String token = TodoistConfig.getApiToken();
+		if (token == null || token.trim().length() == 0) {
+			return;
+		}
+		final TodoistApiClient client = new TodoistApiClient(token.trim());
+		final TodoistTaskLocation location = client.getTaskLocation(taskId);
+		if (!location.exists || location.completed) {
+			return;
+		}
+		final boolean imported = isImportedMirror(node, location, TodoistConfig.getProjectId());
+		if (imported) {
+			TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_TODOIST);
+			client.clearOwnedStamp(taskId, location.description);
+			client.clearDueDate(taskId);
+		}
+		else {
+			if (!TodoistReminderFactory.isTodoistOrigin(node)) {
+				TodoistReminderFactory.setOrigin(node, TodoistReminderFactory.ORIGIN_DOCEAR);
+			}
+			client.closeTask(taskId);
+		}
+		final TodoistTaskLocation after = client.getTaskLocation(taskId);
+		TodoistReminderFactory.markLinkedNode(node, location.projectId, location.sectionId);
+		TodoistReminderFactory.stampWatermarks(node,
+				after.updatedAtMillis > 0 ? after.updatedAtMillis : location.updatedAtMillis);
 	}
 
 	/** Import-map node already has hidden {@code TODOIST_TASK_ID}; update remote task content/due. */

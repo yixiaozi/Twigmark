@@ -285,6 +285,11 @@ final class TodoistApiClient {
 		request("POST", "/tasks/" + taskId + "/reopen", null);
 	}
 
+	/** Drop the due date. Does not complete the task or change its description. */
+	void clearDueDate(String taskId) throws IOException {
+		request("POST", "/tasks/" + taskId, "{\"due_string\":\"no date\"}");
+	}
+
 	/**
 	 * Ensures the task is active. Reopens when Todoist still has the id but marked completed
 	 * (e.g. after a cut/delete race).
@@ -643,7 +648,7 @@ final class TodoistApiClient {
 		if (!sameTaskName(existing.content, desiredContent)) {
 			any = appendStringField(sb, any, "content", desiredContent);
 		}
-		if (!contentOnly || keepsDocearNodeLink(existing.description, record)) {
+		if (!contentOnly) {
 			String desiredDescription = buildDescription(record);
 			if (!sameTaskName(existing.description, desiredDescription)) {
 				any = appendStringField(sb, any, "description", desiredDescription);
@@ -806,8 +811,7 @@ final class TodoistApiClient {
 	}
 
 	/**
-	 * Rewrite the description of a task this sync already owns, so it stores only the node id.
-	 * Imported tasks (no "Docear reminder") are left unchanged and are not moved.
+	 * Rewrite the description of a task this sync created. Imported tasks must not be passed here.
 	 *
 	 * @return true when a request was sent
 	 */
@@ -825,6 +829,52 @@ final class TodoistApiClient {
 		final String body = "{\"description\":\"" + TodoistJson.escape(desired) + "\"}";
 		request("POST", "/tasks/" + taskId, body);
 		return true;
+	}
+
+	/**
+	 * Remove a description that is only our mind-map stamp. Leaves a person's own notes alone.
+	 *
+	 * @return true when a request was sent
+	 */
+	boolean clearOwnedStamp(String taskId, String description) throws IOException {
+		if (taskId == null || taskId.length() == 0 || !isOwnedStamp(description)) {
+			return false;
+		}
+		request("POST", "/tasks/" + taskId, "{\"description\":\"\"}");
+		return true;
+	}
+
+	/** True when every line is the stamp this sync writes, with no other note. */
+	static boolean isOwnedStamp(String description) {
+		if (description == null || description.indexOf("Docear reminder") < 0) {
+			return false;
+		}
+		boolean any = false;
+		int start = 0;
+		while (start <= description.length()) {
+			int end = description.indexOf('\n', start);
+			if (end < 0) {
+				end = description.length();
+			}
+			final String line = description.substring(start, end).trim();
+			start = end + 1;
+			if (line.length() == 0) {
+				if (end >= description.length()) {
+					break;
+				}
+				continue;
+			}
+			any = true;
+			if ("Docear reminder".equals(line) || line.startsWith("Map: ") || line.startsWith("Path: ")
+					|| line.startsWith("Node ID: ")) {
+				if (end >= description.length()) {
+					break;
+				}
+				continue;
+			}
+			return false;
+		}
+		return any;
 	}
 
 	private static boolean keepsDocearNodeLink(String description, TodoistReminderRecord record) {

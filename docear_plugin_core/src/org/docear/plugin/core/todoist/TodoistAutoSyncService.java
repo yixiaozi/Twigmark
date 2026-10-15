@@ -49,6 +49,8 @@ public final class TodoistAutoSyncService {
 	private final Set dirtyNodes = new HashSet();
 	/** Nodes put back by undo or paste. A completed Todoist task should be reopened. */
 	private final Set reopenNodes = new HashSet();
+	/** Reminder hook was removed. Push that fact without waiting for a full sync. */
+	private final Set reminderRemovedNodes = new HashSet();
 	/** Pending closes keyed by identity ({@code mapName|nodeId}) → {@link PendingClose}. */
 	private final Map pendingCloses = new HashMap();
 	/** Closes already handed to the background thread. Undo must still be able to cancel these. */
@@ -150,6 +152,12 @@ public final class TodoistAutoSyncService {
 		if (property == null) {
 			return;
 		}
+		if (property.equals(ReminderExtension.class) && ReminderExtension.getExtension(event.getNode()) == null) {
+			if (TodoistReminderFactory.getTaskId(event.getNode()) != null) {
+				queueReminderRemoved(event.getNode());
+			}
+			return;
+		}
 		if (property.equals(NodeModel.NODE_TEXT) || property.equals(ReminderExtension.class)
 				|| isReminderTaskProperty(property)
 				|| property.getClass().getName().indexOf("ReminderCycle") >= 0) {
@@ -236,6 +244,14 @@ public final class TodoistAutoSyncService {
 		for (int i = 0; i < node.getChildCount(); i++) {
 			queueReopenTree((NodeModel) node.getChildAt(i));
 		}
+	}
+
+	private synchronized void queueReminderRemoved(final NodeModel node) {
+		if (node == null || isSuppressOutgoing()) {
+			return;
+		}
+		reminderRemovedNodes.add(node);
+		scheduleDebounce();
 	}
 
 	private synchronized void queueDirty(final NodeModel node) {
@@ -338,16 +354,19 @@ public final class TodoistAutoSyncService {
 	private void flushDirtyQueue() {
 		final List toPush;
 		final List toReopen;
+		final List toClearReminder;
 		synchronized (this) {
 			toPush = new ArrayList(dirtyNodes);
 			dirtyNodes.clear();
 			toReopen = new ArrayList(reopenNodes);
 			reopenNodes.clear();
+			toClearReminder = new ArrayList(reminderRemovedNodes);
+			reminderRemovedNodes.clear();
 			for (int i = 0; i < toPush.size(); i++) {
 				cancelPendingCloseFor((NodeModel) toPush.get(i));
 			}
 		}
-		if (toPush.isEmpty() && toReopen.isEmpty()) {
+		if (toPush.isEmpty() && toReopen.isEmpty() && toClearReminder.isEmpty()) {
 			return;
 		}
 		final String token = TodoistConfig.getApiToken();
@@ -361,6 +380,7 @@ public final class TodoistAutoSyncService {
 					synchronized (TodoistAutoSyncService.this) {
 						dirtyNodes.addAll(toPush);
 						reopenNodes.addAll(toReopen);
+						reminderRemovedNodes.addAll(toClearReminder);
 					}
 					EventQueue.invokeLater(new Runnable() {
 						public void run() {
@@ -377,6 +397,15 @@ public final class TodoistAutoSyncService {
 						}
 						catch (Exception e) {
 							LogUtils.warn("Todoist auto-sync reopen failed for node " + node.getID(), e);
+						}
+					}
+					for (int i = 0; i < toClearReminder.size(); i++) {
+						final NodeModel node = (NodeModel) toClearReminder.get(i);
+						try {
+							TodoistSyncService.pushReminderRemoved(node);
+						}
+						catch (Exception e) {
+							LogUtils.warn("Todoist auto-sync reminder removal failed for node " + node.getID(), e);
 						}
 					}
 					for (int i = 0; i < toPush.size(); i++) {

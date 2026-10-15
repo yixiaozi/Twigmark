@@ -26,6 +26,8 @@ final class TodoistNodeMetaIo {
 	static final String XML_LINKED = "TODOIST_LINKED";
 	static final String XML_PROJECT_ID = "TODOIST_PROJECT_ID";
 	static final String XML_SECTION_ID = "TODOIST_SECTION_ID";
+	/** {@code docear} or {@code todoist}. Keeps imported tasks from being relabeled. */
+	static final String XML_ORIGIN = "TODOIST_ORIGIN";
 
 	private static boolean installed;
 
@@ -109,6 +111,13 @@ final class TodoistNodeMetaIo {
 				}
 			}
 		});
+		readManager.addAttributeHandler("node", XML_ORIGIN, new IAttributeHandler() {
+			public void setAttribute(final Object node, final String value) {
+				if (node instanceof NodeModel && value != null && value.trim().length() > 0) {
+					TodoistNodeMeta.getOrCreate((NodeModel) node).setOrigin(value.trim());
+				}
+			}
+		});
 
 		writeManager.addExtensionAttributeWriter(TodoistNodeMeta.class, new IExtensionAttributeWriter() {
 			public void writeAttributes(final ITreeWriter writer, final Object userObject, final IExtension extension) {
@@ -141,6 +150,9 @@ final class TodoistNodeMetaIo {
 					}
 					if (meta.getSectionId() != null) {
 						writer.addAttribute(XML_SECTION_ID, meta.getSectionId());
+					}
+					if (meta.getOrigin() != null) {
+						writer.addAttribute(XML_ORIGIN, meta.getOrigin());
 					}
 				}
 				catch (final Exception e) {

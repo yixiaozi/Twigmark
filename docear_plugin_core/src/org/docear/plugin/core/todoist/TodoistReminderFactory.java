@@ -27,6 +27,10 @@ import org.freeplane.view.swing.features.time.mindmapmode.ReminderTaskAttributes
 final class TodoistReminderFactory {
 	/** Same yellow as the sample node in test.mm. A reminder for the user, not the identity. */
 	static final String MARK_BACKGROUND = "#ffff00";
+	/** This sync created the Todoist task. */
+	static final String ORIGIN_DOCEAR = "docear";
+	/** The task already existed in Todoist. Never relabel it as a mind-map task. */
+	static final String ORIGIN_TODOIST = "todoist";
 	/** Previously used as the visible mark. Stripped so it is not left on linked nodes. */
 	private static final String RETIRED_ICON = "bookmark";
 
@@ -65,9 +69,57 @@ final class TodoistReminderFactory {
 			meta.setSectionId(sectionId);
 			changed = true;
 		}
+		if (rememberOrigin(meta, projectId)) {
+			changed = true;
+		}
 		if (changed && node.getMap() != null) {
 			node.getMap().setSaved(false);
 		}
+	}
+
+	/**
+	 * A task outside the Docear project is an original Todoist task. That mark sticks, so a later
+	 * move into the Docear project does not turn it into a mind-map task.
+	 */
+	private static boolean rememberOrigin(final TodoistNodeMeta meta, final String projectId) {
+		if (projectId == null || projectId.trim().length() == 0) {
+			return false;
+		}
+		final String docearProjectId = TodoistConfig.getProjectId();
+		final String next;
+		if (docearProjectId != null && docearProjectId.length() > 0 && !docearProjectId.equals(projectId.trim())) {
+			next = ORIGIN_TODOIST;
+		}
+		else if (ORIGIN_TODOIST.equals(meta.getOrigin())) {
+			return false;
+		}
+		else {
+			next = ORIGIN_DOCEAR;
+		}
+		if (next.equals(meta.getOrigin())) {
+			return false;
+		}
+		meta.setOrigin(next);
+		return true;
+	}
+
+	static void setOrigin(final NodeModel node, final String origin) {
+		if (node == null || origin == null || origin.length() == 0) {
+			return;
+		}
+		final TodoistNodeMeta meta = TodoistNodeMeta.getOrCreate(node);
+		if (origin.equals(meta.getOrigin())) {
+			return;
+		}
+		meta.setOrigin(origin);
+		if (node.getMap() != null) {
+			node.getMap().setSaved(false);
+		}
+	}
+
+	static boolean isTodoistOrigin(final NodeModel node) {
+		final TodoistNodeMeta meta = node == null ? null : TodoistNodeMeta.get(node);
+		return meta != null && ORIGIN_TODOIST.equals(meta.getOrigin());
 	}
 
 	private static boolean removeRetiredIcon(final NodeModel node) {

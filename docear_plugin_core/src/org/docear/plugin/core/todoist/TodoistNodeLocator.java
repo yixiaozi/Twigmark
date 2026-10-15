@@ -60,7 +60,7 @@ final class TodoistNodeLocator {
 		return null;
 	}
 
-	/** Linked nodes on open maps, excluding the import target. */
+	/** Linked nodes on open maps, including the import target. */
 	static List openLinkedNodes() {
 		final List out = new ArrayList();
 		final Map maps = openMaps();
@@ -69,7 +69,7 @@ final class TodoistNodeLocator {
 		}
 		for (Iterator it = maps.values().iterator(); it.hasNext();) {
 			final MapModel map = (MapModel) it.next();
-			if (map == null || map.getFile() == null || TodoistConfig.isImportTargetFile(map.getFile())) {
+			if (map == null || map.getRootNode() == null) {
 				continue;
 			}
 			collectLinked(map.getRootNode(), out);

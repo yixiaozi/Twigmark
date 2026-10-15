@@ -31,6 +31,8 @@ final class MindMapReminderScanner {
 	private final Set linkedNodeIds = new HashSet();
 	/** Todoist task ids still stored on some mind-map node. */
 	private final Set linkedTaskIds = new HashSet();
+	/** Task ids explicitly marked as original Todoist tasks. */
+	private final Set importedTaskIds = new HashSet();
 
 	/** Map file names whose XML could not be read. Their Todoist tasks must not be deleted. */
 	Set unreadableMapNames() {
@@ -45,6 +47,10 @@ final class MindMapReminderScanner {
 		return linkedTaskIds;
 	}
 
+	Set importedTaskIds() {
+		return importedTaskIds;
+	}
+
 	List scanAllReminders() {
 		final File[] roots = MindMapDataRootResolver.getScanRoots();
 		final List files = new ArrayList();
@@ -55,6 +61,7 @@ final class MindMapReminderScanner {
 		for (int i = 0; i < files.size(); i++) {
 			File file = (File) files.get(i);
 			if (TodoistConfig.isImportTargetFile(file)) {
+				scanFile(file);
 				continue;
 			}
 			reminders.addAll(scanFile(file));
@@ -82,7 +89,11 @@ final class MindMapReminderScanner {
 			for (Iterator it = maps.values().iterator(); it.hasNext();) {
 				final MapModel map = (MapModel) it.next();
 				final File file = map.getFile();
-				if (file == null || TodoistConfig.isImportTargetFile(file) || map.getRootNode() == null) {
+				if (file == null || map.getRootNode() == null) {
+					continue;
+				}
+				collectLiveLinks(map.getRootNode());
+				if (TodoistConfig.isImportTargetFile(file)) {
 					continue;
 				}
 				openPaths.add(pathKey(file));
@@ -127,6 +138,9 @@ final class MindMapReminderScanner {
 		final String taskId = TodoistReminderFactory.getTaskId(node);
 		if (taskId != null && taskId.length() > 0) {
 			linkedTaskIds.add(taskId);
+			if (TodoistReminderFactory.isTodoistOrigin(node)) {
+				importedTaskIds.add(taskId);
+			}
 			if (node.getID() != null && node.getID().length() > 0) {
 				linkedNodeIds.add(node.getID());
 			}
@@ -174,6 +188,9 @@ final class MindMapReminderScanner {
 						String linkedTaskId = attributes.getValue("TODOIST_TASK_ID");
 						if (linkedTaskId != null && linkedTaskId.length() > 0) {
 							linkedTaskIds.add(linkedTaskId);
+							if ("todoist".equals(attributes.getValue("TODOIST_ORIGIN"))) {
+								importedTaskIds.add(linkedTaskId);
+							}
 							if (id != null && id.length() > 0) {
 								linkedNodeIds.add(id);
 							}
