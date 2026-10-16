@@ -80,6 +80,7 @@ public final class WebMapsApi {
 			final Map q = queryParams(exchange);
 			final String query = str(q, "q");
 			final String filePath = str(q, "path");
+			final String mode = str(q, "mode");
 			final int limit = intParam(q, "limit", 40);
 			final int days = intParam(q, "modifiedWithinDays", 0);
 			if (query.length() == 0 && filePath.length() == 0) {
@@ -87,7 +88,8 @@ public final class WebMapsApi {
 				return;
 			}
 			final String json = McpMindMapService.searchNodes(query, limit, days,
-					filePath.length() == 0 ? null : filePath, null);
+					filePath.length() == 0 ? null : filePath, null,
+					mode.length() == 0 ? "keyword" : mode);
 			final JsonValue hits = JsonParser.parse(json);
 			final Map out = new LinkedHashMap();
 			out.put("hits", hits);
