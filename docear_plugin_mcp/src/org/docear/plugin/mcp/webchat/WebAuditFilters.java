@@ -184,6 +184,20 @@ public final class WebAuditFilters {
 		return existing + "," + action;
 	}
 
+	static int writeCount(final List rows) {
+		int total = 0;
+		if (rows == null) {
+			return 0;
+		}
+		for (int i = 0; i < rows.size(); i++) {
+			final Map row = (Map) rows.get(i);
+			if (isMutatingAction(str(row, "action"))) {
+				total += intVal(row.get("count"));
+			}
+		}
+		return total;
+	}
+
 	private static int intVal(final Object value) {
 		if (value instanceof Number) {
 			return ((Number) value).intValue();

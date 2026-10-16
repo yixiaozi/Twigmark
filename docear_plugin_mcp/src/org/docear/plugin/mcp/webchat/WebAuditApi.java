@@ -29,6 +29,14 @@ public final class WebAuditApi {
 			final McpAuditQuery q = WebAuditFilters.parseQuery(queryMap(exchange));
 			final Map body = new LinkedHashMap();
 			body.put("summary", WebchatService.plainToJson(McpAuditService.summarizeForUi(q)));
+			final McpAuditQuery actionQuery = WebAuditFilters.parseQuery(queryMap(exchange));
+			actionQuery.limit = 80;
+			final List byAction = McpAuditService.statsByActionForUi(actionQuery);
+			body.put("byAction", JsonValue.ofList(WebchatService.toJsonMaps(byAction)));
+			body.put("writeCount", JsonValue.ofNumber(Integer.valueOf(WebAuditFilters.writeCount(byAction))));
+			final McpAuditQuery dayQuery = WebAuditFilters.parseQuery(queryMap(exchange));
+			dayQuery.limit = 7;
+			body.put("byDay", JsonValue.ofList(WebchatService.toJsonMaps(McpAuditService.statsByDayForUi(dayQuery))));
 			body.put("actors", JsonValue.ofList(stringList(McpAuditService.distinctForUi("actor"))));
 			body.put("actions", JsonValue.ofList(stringList(McpAuditService.distinctForUi("action"))));
 			body.put("dbCount", JsonValue.ofNumber(Integer.valueOf(McpAuditService.loadedAuditDatabaseCount())));
@@ -85,7 +93,7 @@ public final class WebAuditApi {
 			final McpAuditQuery eventQuery = WebAuditFilters.parseQuery(params);
 			eventQuery.traceId = "";
 			eventQuery.emptyTraceOnly = true;
-			eventQuery.limit = WebAuditFilters.MAX_LIMIT;
+			eventQuery.limit = 200;
 			final List ungroupedEvents = McpAuditService.queryEventsForUi(eventQuery);
 			rows = WebAuditFilters.mergeUngroupedTraces(rows, ungroupedEvents);
 			if (writesOnly) {
