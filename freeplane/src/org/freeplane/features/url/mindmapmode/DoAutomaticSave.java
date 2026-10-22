@@ -21,6 +21,7 @@ package org.freeplane.features.url.mindmapmode;
 
 import java.awt.EventQueue;
 import java.io.File;
+import java.net.URI;
 import java.net.URL;
 import java.util.TimerTask;
 
@@ -38,8 +39,12 @@ import org.freeplane.features.url.UrlManager;
 public class DoAutomaticSave extends TimerTask {
 	static final String AUTOSAVE_EXTENSION = "autosave";
 	private static final long EXTERNAL_CHANGE_CHECK_PAUSE_MS = 3000L;
-	/** Do not serialize while the user is still inserting/typing (idle gate). */
-	private static final long EDIT_IDLE_BEFORE_SAVE_MS = 4000L;
+	/**
+	 * Do not serialize while the user is still inserting/typing (idle gate).
+	 * Kept short so saves feel near-realtime after a pause; long enough that
+	 * CJK IME composition / rapid Insert clicks are not interrupted mid-stroke.
+	 */
+	private static final long EDIT_IDLE_BEFORE_SAVE_MS = 800L;
 	/**
 	 * This value is compared with the result of
 	 * getNumberOfChangesSinceLastSave(). If the values coincide, no further
@@ -72,6 +77,10 @@ public class DoAutomaticSave extends TimerTask {
 		if (model.getNumberOfChangesSinceLastSave() == changeState) {
 			return;
 		}
+		if (model.getNumberOfChangesSinceLastSave() == 0) {
+			changeState = 0;
+			return;
+		}
 		// Never serialize while the inline node editor (or other blocked UI) is open.
 		// Typing / IME composition does not dirty the model until ok(), so idle-gate
 		// alone is not enough — and saving on the EDT can interrupt macOS IME.
@@ -89,25 +98,25 @@ public class DoAutomaticSave extends TimerTask {
 		if (lastChange > 0L && System.currentTimeMillis() - lastChange < EDIT_IDLE_BEFORE_SAVE_MS) {
 			return;
 		}
-		changeState = model.getNumberOfChangesSinceLastSave();
-		if (changeState == 0) {
-			/* map was recently saved. */
-			return;
-		}
 		// Use invokeLater (not invokeAndWait): blocking the timer thread on a full-map
 		// serialize freezes UI interactions that also need the EDT (node switching).
+		// Important: only update changeState after a successful save (or a definitive
+		// skip). Advancing it before EDT used to "eat" dirtiness when the EDT then
+		// bailed on isBlocked / idle-gate — autosave never retried until another edit.
 		try {
 			EventQueue.invokeLater(new Runnable() {
 				public void run() {
 					/* Now, it is dirty, we save it. */
 					try {
 						if (model.getNumberOfChangesSinceLastSave() == 0) {
+							changeState = 0;
 							return;
 						}
 						final ModeController currentModeController = Controller.getCurrentModeController();
 						if(!(currentModeController instanceof MModeController))
 							return;
 						// Re-check on EDT: editor may have opened after the timer tick.
+						// Leave changeState alone so the next tick retries.
 						if (currentModeController.isBlocked()) {
 							return;
 						}
@@ -117,26 +126,6 @@ public class DoAutomaticSave extends TimerTask {
 							return;
 						}
 						MModeController modeController = ((MModeController) currentModeController);
-						final File pathToStore;
-						final URL url = model.getURL();
-						final File file = new File(url != null ? url.getFile() //
-						        : model.getTitle() + UrlManager.FREEPLANE_FILE_EXTENSION);
-						if (url == null) {
-							pathToStore = new File(ResourceController.getResourceController()
-							    .getFreeplaneUserDirectory(), BACKUP_DIR);
-						}
-						else if (singleBackupDirectory != null) {
-							pathToStore = singleBackupDirectory;
-						}
-						else {
-							pathToStore = new File(file.getParent(), BACKUP_DIR);
-						}
-						pathToStore.mkdirs();
-						final File tempFile = MFileManager.renameBackupFiles(pathToStore, file, numberOfFiles,
-						    AUTOSAVE_EXTENSION);
-						if (tempFile == null) {
-							return;
-						}
 						final MFileManager fileManager = (MFileManager) UrlManager.getController();
 						if (!mModel.isExternalModificationDetected()) {
 							final File originalFile = mModel.getFile();
@@ -145,17 +134,42 @@ public class DoAutomaticSave extends TimerTask {
 								modeController.getMapController().setSaved(mModel, true);
 								mModel.setKnownFileTimestamp(originalFile.lastModified());
 								mModel.setExternalModificationDetected(false);
+								changeState = 0;
 								modeController.getController().getViewController()
 								    .out(TextUtils.format("automatically_save_message", originalFile));
 								return;
 							}
 						}
+						final File pathToStore;
+						final URL url = model.getURL();
+						final File file = originalFileForBackupSlot(url);
+						if (url == null) {
+							pathToStore = new File(ResourceController.getResourceController()
+							    .getFreeplaneUserDirectory(), BACKUP_DIR);
+						}
+						else if (singleBackupDirectory != null) {
+							pathToStore = singleBackupDirectory;
+						}
+						else {
+							final File parent = file.getParentFile();
+							pathToStore = parent != null ? new File(parent, BACKUP_DIR)
+							        : new File(ResourceController.getResourceController()
+							            .getFreeplaneUserDirectory(), BACKUP_DIR);
+						}
+						pathToStore.mkdirs();
+						final File tempFile = MFileManager.renameBackupFiles(pathToStore, file, numberOfFiles,
+						    AUTOSAVE_EXTENSION);
+						if (tempFile == null) {
+							return;
+						}
 						if (filesShouldBeDeletedAfterShutdown) {
 							tempFile.deleteOnExit();
 						}
-						fileManager.saveInternal(mModel, tempFile, true /*=internal call*/);
-						modeController.getController().getViewController()
-						    .out(TextUtils.format("automatically_save_message", tempFile));
+						if (fileManager.saveInternal(mModel, tempFile, true /*=internal call*/)) {
+							changeState = model.getNumberOfChangesSinceLastSave();
+							modeController.getController().getViewController()
+							    .out(TextUtils.format("automatically_save_message", tempFile));
+						}
 					}
 					catch (final Exception e) {
 						LogUtils.severe("Error in automatic MapModel.save(): ", e);
@@ -166,6 +180,23 @@ public class DoAutomaticSave extends TimerTask {
 		catch (final Exception e) {
 			LogUtils.severe(e);
 		}
+	}
+
+	/** Prefer {@link MMapModel#getFile()} so Windows {@code URL#getFile()} oddities do not break backups. */
+	private File originalFileForBackupSlot(final URL url) {
+		final File mapFile = model.getFile();
+		if (mapFile != null) {
+			return mapFile;
+		}
+		if (url != null) {
+			try {
+				return new File(url.toURI());
+			}
+			catch (Exception e) {
+				return new File(url.getFile());
+			}
+		}
+		return new File(model.getTitle() + UrlManager.FREEPLANE_FILE_EXTENSION);
 	}
 
 	private boolean handleExternalChange(final MMapModel mModel) {

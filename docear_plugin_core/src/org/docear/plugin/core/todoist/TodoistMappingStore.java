@@ -10,6 +10,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -187,7 +189,15 @@ final class TodoistMappingStore {
 	}
 
 	synchronized void save() {
-		final File tmp = new File(storeFile.getParentFile(), "~" + storeFile.getName());
+		File tmp;
+		try {
+			tmp = File.createTempFile("todoist-mappings-", ".tmp");
+			tmp.deleteOnExit();
+		}
+		catch (IOException e) {
+			LogUtils.warn("Todoist: could not create temp file for mapping store", e);
+			return;
+		}
 		OutputStream out = null;
 		try {
 			out = new FileOutputStream(tmp);
@@ -209,14 +219,18 @@ final class TodoistMappingStore {
 			writer.flush();
 			writer.close();
 			out = null;
-			if (storeFile.exists() && !storeFile.delete()) {
-				LogUtils.warn("Todoist: could not replace mapping store: " + storeFile.getPath());
-				tmp.delete();
-				return;
+			try {
+				Files.move(tmp.toPath(), storeFile.toPath(), StandardCopyOption.REPLACE_EXISTING,
+						StandardCopyOption.ATOMIC_MOVE);
 			}
-			if (!tmp.renameTo(storeFile)) {
-				LogUtils.warn("Todoist: could not rename mapping store into place");
-				tmp.delete();
+			catch (Exception atomicFailed) {
+				try {
+					Files.move(tmp.toPath(), storeFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+				}
+				catch (Exception moveFailed) {
+					Files.copy(tmp.toPath(), storeFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
+					tmp.delete();
+				}
 			}
 		}
 		catch (IOException e) {

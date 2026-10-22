@@ -891,10 +891,14 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 	/**@deprecated -- use MMapIO*/
 	@Deprecated
 	public void writeToFile(final MapModel map, final File file) throws FileNotFoundException, IOException {
-		final File tmpFile = new File(file.getParentFile(), "~"+file.getName());
+		// Write to the OS temp dir — never create "~name.mm" next to the real map
+		// (those clutter libraries / cloud sync, and used to linger when rename failed).
+		final File tmpFile = File.createTempFile("twigmark-save-", ".mm.tmp");
+		tmpFile.deleteOnExit();
 		final FileOutputStream out = new FileOutputStream(tmpFile);
 		final FileLock lock = out.getChannel().tryLock();
 		if (lock == null) {
+			tmpFile.delete();
 			throw new IOException("can not obtain file lock for " + file);
 		}
 		try {
@@ -921,18 +925,30 @@ public class MFileManager extends UrlManager implements IMapViewChangeListener {
 				publishTempFile(tmpFile, file);
 			}
 			else {
-				// Invalid save: never leave a stray ~temp behind in the map folder.
 				tmpFile.delete();
 			}
+			deleteLegacyTildeTemp(file);
 		}
 	}
 
 	/**
-	 * Move the validated temp map ({@code ~name}) onto the real file without ever
-	 * deleting the original before the new content is in place. This prevents the
-	 * old delete-then-rename hazard that could leave the map as {@code ~name} (and
-	 * lose the original) when the rename failed — e.g. the target being locked by
-	 * a cloud-sync client on Windows.
+	 * Remove an old-style same-folder temp ({@code ~name.mm}) left by earlier builds.
+	 */
+	private static void deleteLegacyTildeTemp(final File file) {
+		final File parent = file.getParentFile();
+		if (parent == null) {
+			return;
+		}
+		final File legacy = new File(parent, "~" + file.getName());
+		if (legacy.isFile() && !legacy.delete()) {
+			LogUtils.warn("Could not delete legacy temp map " + legacy.getAbsolutePath());
+		}
+	}
+
+	/**
+	 * Move the validated temp map onto the real file without ever deleting the
+	 * original before the new content is in place. Prefers atomic replace; falls
+	 * back to copy when the temp lives on another volume (system temp dir).
 	 */
 	private static void publishTempFile(final File tmpFile, final File file) {
 		try {

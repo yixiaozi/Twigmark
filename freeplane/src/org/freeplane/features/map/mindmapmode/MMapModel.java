@@ -131,14 +131,17 @@ public class MMapModel extends MapModel {
 		if (configuredDelay == 0) {
 			return;
 		}
-		final int delay = Math.max(1000, configuredDelay);
+		// Floor 500ms: below that, full-map serialize on the EDT fights typing/IME.
+		final int delay = Math.max(500, configuredDelay);
 		final boolean useSingleBackupDirectory = ResourceController.getResourceController().getBooleanProperty(
 		    "single_backup_directory");
 		final String singleBackupDirectory = ResourceController.getResourceController()
 		    .getProperty("single_backup_directory_path");
 		final Timer timer = SysUtils.createTimer("TimerForAutomaticSaving");
+		// First check soon so a single edit is not stuck waiting a full period.
+		final int firstDelay = Math.min(500, delay);
 		timer.schedule(new DoAutomaticSave(this, numberOfTempFiles, filesShouldBeDeletedAfterShutdown,
-		    useSingleBackupDirectory, singleBackupDirectory), delay, delay);
+		    useSingleBackupDirectory, singleBackupDirectory), firstDelay, delay);
 		this.setTimerForAutomaticSaving(timer);
 	}
 
