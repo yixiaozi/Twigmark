@@ -346,7 +346,12 @@ final class TodoistMindMapWriter {
 		final String desiredText = parsed.nodeText;
 		final String currentText = nodePlainText(node);
 		if (!desiredText.equals(currentText)) {
-			if (TodoistSyncService.localTitleWins(TodoistReminderFactory.localModifiedMillis(node), task.updatedAtMillis,
+			// Empty local title is never authoritative — always take Todoist content.
+			if (currentText.length() == 0 && desiredText.length() > 0) {
+				MTextController.getController().setNodeText(node, desiredText);
+				changed = true;
+			}
+			else if (TodoistSyncService.localTitleWins(TodoistReminderFactory.localModifiedMillis(node), task.updatedAtMillis,
 					TodoistReminderFactory.syncedLocalMillis(node), TodoistReminderFactory.syncedRemoteMillis(node))) {
 				try {
 					final long remote = TodoistSyncService.pushLinkedTitle(task.id, currentText);

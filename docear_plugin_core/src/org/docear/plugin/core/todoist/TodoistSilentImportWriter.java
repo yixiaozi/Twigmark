@@ -252,7 +252,13 @@ final class TodoistSilentImportWriter {
 			final long localModified = parseMillis(node.getAttribute("MODIFIED"));
 			final long syncedLocal = parseMillis(node.getAttribute(TodoistNodeMetaIo.XML_SYNCED_LOCAL));
 			final long syncedRemote = parseMillis(node.getAttribute(TodoistNodeMetaIo.XML_SYNCED_REMOTE));
-			if (TodoistSyncService.localTitleWins(localModified, task.updatedAtMillis, syncedLocal, syncedRemote)) {
+			// Empty local title is never authoritative (new silent-import nodes start as TEXT="").
+			// Without this, clock SKIP/UNKNOWN/PUSH leaves blank yellow nodes forever.
+			if (currentText.length() == 0 && desiredText.length() > 0) {
+				node.setAttribute("TEXT", desiredText);
+				changed = true;
+			}
+			else if (TodoistSyncService.localTitleWins(localModified, task.updatedAtMillis, syncedLocal, syncedRemote)) {
 				try {
 					final long remote = TodoistSyncService.pushLinkedTitle(task.id, currentText);
 					if (remote > 0) {
@@ -572,7 +578,8 @@ final class TodoistSilentImportWriter {
 			existing = null;
 		}
 		else {
-			existing = createChildNode(doc, canonicalParent, "", usedIds);
+			existing = createChildNode(doc, canonicalParent, TodoistContentParser.parse(task.content).nodeText,
+					usedIds);
 			applyTaskElement(doc, existing, task);
 			result.addCreated(line);
 		}
