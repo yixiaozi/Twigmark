@@ -1,11 +1,17 @@
 package org.docear.plugin.core.todoist;
 
+import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.io.File;
 
+import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
@@ -14,6 +20,7 @@ import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 
 import org.freeplane.core.ui.AFreeplaneAction;
 import org.freeplane.core.ui.theme.DocearUiTheme;
@@ -34,6 +41,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 	}
 
 	static void showSettingsDialog() {
+		final Component owner = Controller.getCurrentController().getViewController().getFrame();
 		final JTextField projectField = new JTextField(TodoistConfig.getProjectName(), 32);
 		final JTextField projectIdField = new JTextField(TodoistConfig.getProjectId(), 32);
 		final JTextField importTargetField = new JTextField(TodoistConfig.getImportTargetFile().getAbsolutePath(), 32);
@@ -91,7 +99,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridx = 1;
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.weightx = 1.0;
-		panel.add(importTargetField, c);
+		panel.add(importTargetRow(importTargetField, owner), c);
 		c.gridx = 0;
 		c.gridy = 4;
 		c.gridwidth = 2;
@@ -112,9 +120,8 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		c.gridwidth = 2;
 		panel.add(DocearUiTheme.mutedLabel(TextUtils.getText("todoist.settings.hint")), c);
 
-		int option = JOptionPane.showConfirmDialog(Controller.getCurrentController().getViewController().getFrame(),
-				panel, TextUtils.getText("todoist.settings.title"), JOptionPane.OK_CANCEL_OPTION,
-				JOptionPane.PLAIN_MESSAGE);
+		int option = JOptionPane.showConfirmDialog(owner, panel, TextUtils.getText("todoist.settings.title"),
+				JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
 		if (option != JOptionPane.OK_OPTION) {
 			return;
 		}
@@ -131,7 +138,7 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 		else if (!(nameChanged && projectId.equals(previousId))) {
 			TodoistConfig.setProjectId(projectId, TodoistConfig.getProjectName());
 		}
-		TodoistConfig.setImportTargetFile(importTargetField.getText());
+		TodoistConfig.setImportTargetFile(normalizeImportPath(importTargetField.getText()));
 		TodoistConfig.setAutoSyncEnabled(autoSyncCheck.isSelected());
 		TodoistConfig.setAutoSyncIntervalMinutes(((Integer) intervalSpinner.getValue()).intValue());
 		final String savedToken = TodoistConfig.getApiToken();
@@ -141,13 +148,74 @@ public class TodoistSettingsAction extends AFreeplaneAction {
 			}
 			catch (Exception ex) {
 				LogUtils.warn("Todoist token check failed", ex);
-				JOptionPane.showMessageDialog(Controller.getCurrentController().getViewController().getFrame(),
-						ex.getMessage(), TextUtils.getText("todoist.settings.title"), JOptionPane.WARNING_MESSAGE);
+				JOptionPane.showMessageDialog(owner, ex.getMessage(), TextUtils.getText("todoist.settings.title"),
+						JOptionPane.WARNING_MESSAGE);
 			}
 		}
 		TodoistAutoSyncService.getInstance().restartPeriodicTimer();
 		if (TodoistConfig.isAutoSyncEnabled()) {
 			TodoistAutoSyncService.getInstance().requestImmediateFullSync();
+		}
+	}
+
+	private static JPanel importTargetRow(final JTextField field, final Component owner) {
+		final JPanel row = new JPanel(new BorderLayout(6, 0));
+		DocearUiTheme.styleSurface(row);
+		row.add(field, BorderLayout.CENTER);
+		final JButton browse = DocearUiTheme.softButton(TextUtils.getText("browse"));
+		browse.addActionListener(new ActionListener() {
+			public void actionPerformed(final ActionEvent e) {
+				final File selected = chooseMindMapFile(owner, field.getText());
+				if (selected != null) {
+					field.setText(selected.getAbsolutePath());
+				}
+			}
+		});
+		row.add(browse, BorderLayout.EAST);
+		return row;
+	}
+
+	/** Open a chooser filtered to {@code .mm} mind maps. */
+	private static File chooseMindMapFile(final Component owner, final String currentPath) {
+		final JFileChooser chooser = new JFileChooser();
+		chooser.setDialogTitle(TextUtils.getText("todoist.settings.import_target"));
+		chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+		chooser.setAcceptAllFileFilterUsed(false);
+		chooser.setFileFilter(new FileNameExtensionFilter("Mind map (*.mm)", "mm"));
+		File start = null;
+		if (currentPath != null && currentPath.trim().length() > 0) {
+			start = new File(currentPath.trim());
+		}
+		if (start != null) {
+			final File dir = start.isDirectory() ? start : start.getParentFile();
+			if (dir != null && dir.isDirectory()) {
+				chooser.setCurrentDirectory(dir);
+			}
+			if (start.isFile()) {
+				chooser.setSelectedFile(start);
+			}
+		}
+		if (chooser.showOpenDialog(owner) != JFileChooser.APPROVE_OPTION) {
+			return null;
+		}
+		final File selected = chooser.getSelectedFile();
+		return selected == null ? null : selected.getAbsoluteFile();
+	}
+
+	/** Prefer a clean absolute path so hand-typed / pasted paths do not get doubled. */
+	private static String normalizeImportPath(final String raw) {
+		if (raw == null) {
+			return "";
+		}
+		final String trimmed = raw.trim();
+		if (trimmed.length() == 0) {
+			return "";
+		}
+		try {
+			return new File(trimmed).getCanonicalFile().getAbsolutePath();
+		}
+		catch (Exception e) {
+			return new File(trimmed).getAbsolutePath();
 		}
 	}
 

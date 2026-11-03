@@ -578,8 +578,8 @@ final class TodoistSilentImportWriter {
 			existing = null;
 		}
 		else {
-			existing = createChildNode(doc, canonicalParent, TodoistContentParser.parse(task.content).nodeText,
-					usedIds);
+			final TodoistContentParser parsed = TodoistContentParser.parse(task.content);
+			existing = createChildNode(doc, canonicalParent, parsed.nodeText, usedIds);
 			applyTaskElement(doc, existing, task);
 			result.addCreated(line);
 		}
