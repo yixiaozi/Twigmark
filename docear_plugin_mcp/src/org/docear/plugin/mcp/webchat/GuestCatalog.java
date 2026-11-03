@@ -55,6 +55,10 @@ public final class GuestCatalog {
 				+ "若问题超出产品介绍，请引导对方使用页面上的「功能搜集箱」提交想法。";
 	}
 
+	public static List builtInPresets() {
+		return buildPresets();
+	}
+
 	private static List buildPresets() {
 		final List list = new ArrayList();
 		list.add(new Preset("what", "Twigmark 是什么？",
@@ -78,6 +82,22 @@ public final class GuestCatalog {
 				"明确回答：不能。未登录对话没有 MCP 工具，也不会列出导图文件。"
 						+ "导图库、待办、对话历史都需要登录。公开问答库是主人主动公开的条目，与导图库不是一回事。"));
 		return Collections.unmodifiableList(list);
+	}
+
+	static List builtInPresetsAsMaps() {
+		final List built = builtInPresets();
+		final List out = new ArrayList();
+		for (int i = 0; i < built.size(); i++) {
+			final Preset p = (Preset) built.get(i);
+			final Map row = new LinkedHashMap();
+			row.put("id", p.id);
+			row.put("title", p.title);
+			row.put("prompt", p.prompt);
+			row.put("sortOrder", Integer.valueOf(i));
+			row.put("enabled", Boolean.TRUE);
+			out.add(row);
+		}
+		return out;
 	}
 
 	public static final class Preset {

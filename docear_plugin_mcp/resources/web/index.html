@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b1220" />
+    <meta name="theme-color" content="#1c2838" />
     <title>Twigmark</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,7 +49,7 @@
           <button type="button" class="nav-btn active" data-view="library" data-member-only>导图库</button>
           <button type="button" class="nav-btn" data-view="chat">对话</button>
           <button type="button" class="nav-btn" data-view="audit" data-member-only>审计</button>
-          <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集箱</button>
+          <button type="button" class="nav-btn" data-view="ideas" data-member-only>访客</button>
           <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
           <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>
         </nav>
@@ -193,7 +193,7 @@
                 <div id="preset-chips" class="preset-chips hidden"></div>
                 <textarea id="input" rows="3" placeholder="询问或操作导图…（Enter 发送，Shift+Enter 换行）"></textarea>
                 <div class="composer-bar">
-                  <span class="muted tiny" id="composer-hint">用户靠右 · 助手靠左 · 思索过程可展开 · 可公开回答</span>
+                  <span class="muted tiny" id="composer-hint">你在最右 · 助手在最左 · 思索过程可展开</span>
                   <button type="button" id="btn-send" class="primary">发送</button>
                 </div>
               </div>
@@ -222,10 +222,21 @@
           <header class="shares-manage-head">
             <div>
               <h2>MCP 审计</h2>
-              <p class="muted tiny">哪个 AI / 客户端查了什么、改了什么。Grok 不会传问题摘要，会显示为账号名 + Grok。点右侧卡片可看请求与响应。</p>
+              <p class="muted tiny">谁查了什么、改了什么。点右侧卡片可看请求与响应。</p>
             </div>
             <button type="button" id="btn-refresh-audit" class="ghost small">刷新</button>
           </header>
+          <div class="audit-stats" id="audit-stats"></div>
+          <div class="audit-charts">
+            <div class="chart-card">
+              <h3>常用工具</h3>
+              <div id="audit-by-action"></div>
+            </div>
+            <div class="chart-card">
+              <h3>近几日调用</h3>
+              <div id="audit-by-day" class="day-bars"></div>
+            </div>
+          </div>
           <div class="audit-filters">
             <label class="search-field">
               <span class="sr-only">搜索</span>
@@ -258,16 +269,28 @@
       </section>
 
       <section id="view-ideas" class="view hidden">
-        <div class="settings-page">
+        <div class="settings-page ideas-page">
           <header class="shares-manage-head">
             <div>
-              <h2>功能搜集箱</h2>
-              <p class="muted tiny">游客提交的功能想法。仅登录后可见。</p>
+              <h2>访客与搜集</h2>
+              <p class="muted tiny">维护游客能点的预设问题；右侧是游客投进搜集箱的想法。</p>
             </div>
             <button type="button" id="btn-refresh-ideas" class="ghost small">刷新</button>
           </header>
-          <div id="ideas-list" class="ideas-list">
-            <p class="muted">加载中…</p>
+          <div class="ideas-split">
+            <section class="ideas-panel">
+              <h3>访客问题</h3>
+              <p class="muted tiny">游客未登录时只能点这些问题。标题给游客看，提示词只给模型，不会出现在芯片上。</p>
+              <div id="preset-editor" class="preset-editor"></div>
+              <button type="button" id="btn-preset-add" class="ghost small">新增问题</button>
+            </section>
+            <section class="ideas-panel">
+              <h3>功能搜集箱</h3>
+              <p class="muted tiny">游客提交的功能想法。</p>
+              <div id="ideas-list" class="ideas-list">
+                <p class="muted">加载中…</p>
+              </div>
+            </section>
           </div>
         </div>
       </section>
@@ -344,7 +367,7 @@
         <button type="button" class="nav-btn active" data-view="library" data-member-only>导图</button>
         <button type="button" class="nav-btn" data-view="chat">对话</button>
         <button type="button" class="nav-btn" data-view="audit" data-member-only>审计</button>
-        <button type="button" class="nav-btn" data-view="ideas" data-member-only>搜集</button>
+        <button type="button" class="nav-btn" data-view="ideas" data-member-only>访客</button>
         <button type="button" class="nav-btn" data-view="shares" data-member-only>公开</button>
         <button type="button" class="nav-btn" data-view="settings" data-member-only>模型</button>
       </nav>
