@@ -58,6 +58,7 @@ public final class WebchatSystemPrompt {
 		sb.append("B. 问「现在 / 最近 / 最近在想什么 / 最近改了什么」：先 list_recently_modified");
 		sb.append("（默认近 365 天），或 search_nodes(..., modifiedWithinDays=30 或 365)。\n");
 		sb.append("C. 历史考古、找旧笔记：search_nodes(..., modifiedWithinDays=0)，并尽量加 filePath 或 projectId。\n");
+		sb.append("D. 记不清汉字 / 拼音搜：search_nodes(..., mode=\"fuzzy\")（全拼/首字母/子序列，也匹配导图名）。\n");
 		sb.append("D. 关键词：拆成 2～3 次短查询（人名、项目名、同义词分开搜），不要把整句当 query。\n");
 		sb.append("E. 零命中：换词、放宽 modifiedWithinDays、list_projects 找项目范围；仍空则如实说，并给出已试过的范围。\n");
 		sb.append("F. 大库不要无 filePath 的全库深读。先 list_projects 或 search 拿到 mapFile，再 get_mindmap_json。\n");

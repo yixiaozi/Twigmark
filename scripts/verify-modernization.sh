@@ -84,7 +84,7 @@ else
   bad "DocearUiTheme missing dark/density modernization hooks"
 fi
 
-if search_quiet 'standardbackgroundcolor[[:space:]]*=[[:space:]]*#f2f4f7' \
+if search_quiet 'standardbackgroundcolor[[:space:]]*=[[:space:]]*#f7f8fa' \
     freeplane/viewer-resources/freeplane.properties; then
   ok "map canvas default uses modern canvas color"
 else
