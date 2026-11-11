@@ -281,11 +281,13 @@ public final class McpProtocol {
 				schema("reportId", "string", false), schema("from", "string", false), schema("to", "string", false),
 				schema("showInViewport", "boolean", false)));
 		tools.add(tool("search_nodes",
-				"Fast keyword search over node TEXT (indexed + disk spill). Default modifiedWithinDays=365. "
-						+ "Pass 0 for unlimited. Prefer filePath/projectId on large workspaces.",
+				"Fast keyword or fuzzy search over node TEXT (indexed + disk spill). "
+						+ "mode=keyword (default) = literal substring; mode=fuzzy = also match map file names "
+						+ "by pinyin/initials (and node pinyin when filePath scopes to one map). "
+						+ "Default modifiedWithinDays=365. Pass 0 for unlimited. Prefer filePath/projectId on large workspaces.",
 				schema("query", "string", false), schema("limit", "number", false),
 				schema("modifiedWithinDays", "number", false), schema("filePath", "string", false),
-				schema("projectId", "string", false)));
+				schema("projectId", "string", false), schema("mode", "string", false)));
 		tools.add(tool("list_recently_modified",
 				"List recently modified nodes (node MODIFIED). Uses search index; default modifiedWithinDays=365.",
 				schema("query", "string", false), schema("limit", "number", false),
@@ -708,7 +710,7 @@ public final class McpProtocol {
 			final int defaultDays = (filePath != null && filePath.trim().length() > 0) ? 0 : 365;
 			textResult = McpMindMapService.searchNodes(argString(args, "query", ""),
 					argInt(args, "limit", 50), argInt(args, "modifiedWithinDays", defaultDays),
-					filePath, argString(args, "projectId", ""));
+					filePath, argString(args, "projectId", ""), argString(args, "mode", "keyword"));
 		}
 		else if ("list_recently_modified".equals(name)) {
 			textResult = McpMindMapService.listRecentlyModified(argString(args, "query", ""),
