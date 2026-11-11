@@ -21,7 +21,7 @@ import org.freeplane.core.util.LogUtils;
 public final class WebchatDatabase {
 
 	private static final String JDBC_PREFIX = "jdbc:sqlite:";
-	private static final int SCHEMA_VERSION = 7;
+	private static final int SCHEMA_VERSION = 8;
 	public static final String SOURCE_WEB = "web";
 	public static final String SOURCE_DESKTOP = "desktop";
 	private static volatile WebchatDatabase LOCAL;
@@ -956,6 +956,15 @@ public final class WebchatDatabase {
 					+ "user_agent TEXT NOT NULL DEFAULT ''"
 					+ ")");
 			st.execute("CREATE INDEX IF NOT EXISTS idx_webchat_ideas_created ON feature_ideas(created_at)");
+			st.execute("CREATE TABLE IF NOT EXISTS guest_presets ("
+					+ "id TEXT PRIMARY KEY,"
+					+ "title TEXT NOT NULL,"
+					+ "prompt TEXT NOT NULL,"
+					+ "sort_order INTEGER NOT NULL DEFAULT 0,"
+					+ "enabled INTEGER NOT NULL DEFAULT 1,"
+					+ "updated_at INTEGER NOT NULL"
+					+ ")");
+			seedGuestPresets(c);
 			st.execute("CREATE TABLE IF NOT EXISTS oauth_tokens ("
 					+ "access_hash TEXT PRIMARY KEY,"
 					+ "refresh_hash TEXT NOT NULL DEFAULT '',"
@@ -1052,6 +1061,135 @@ public final class WebchatDatabase {
 			closeQuietly(c);
 		}
 		return rows;
+	}
+
+	private static void seedGuestPresets(final Connection c) throws SQLException {
+		PreparedStatement count = null;
+		ResultSet rs = null;
+		PreparedStatement insert = null;
+		try {
+			count = c.prepareStatement("SELECT COUNT(*) FROM guest_presets");
+			rs = count.executeQuery();
+			if (rs.next() && rs.getInt(1) > 0) {
+				return;
+			}
+			insert = c.prepareStatement(
+					"INSERT INTO guest_presets(id, title, prompt, sort_order, enabled, updated_at) VALUES(?,?,?,?,1,?)");
+			final List builtIn = GuestCatalog.builtInPresets();
+			final long now = System.currentTimeMillis();
+			for (int i = 0; i < builtIn.size(); i++) {
+				final GuestCatalog.Preset p = (GuestCatalog.Preset) builtIn.get(i);
+				insert.setString(1, p.id);
+				insert.setString(2, p.title);
+				insert.setString(3, p.prompt);
+				insert.setInt(4, i);
+				insert.setLong(5, now);
+				insert.addBatch();
+			}
+			insert.executeBatch();
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(count);
+			closeQuietly(insert);
+		}
+	}
+
+	public List listGuestPresets(final boolean includeDisabled) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		final List rows = new ArrayList();
+		try {
+			c = openConnection();
+			final String sql = includeDisabled
+					? "SELECT id, title, prompt, sort_order, enabled, updated_at FROM guest_presets ORDER BY sort_order, id"
+					: "SELECT id, title, prompt, sort_order, enabled, updated_at FROM guest_presets WHERE enabled=1 ORDER BY sort_order, id";
+			ps = c.prepareStatement(sql);
+			rs = ps.executeQuery();
+			while (rs.next()) {
+				rows.add(presetRow(rs));
+			}
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+		return rows;
+	}
+
+	public Map getGuestPreset(final String id) throws SQLException {
+		if (id == null || id.trim().length() == 0) {
+			return null;
+		}
+		Connection c = null;
+		PreparedStatement ps = null;
+		ResultSet rs = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"SELECT id, title, prompt, sort_order, enabled, updated_at FROM guest_presets WHERE id=?");
+			ps.setString(1, id.trim());
+			rs = ps.executeQuery();
+			if (rs.next()) {
+				return presetRow(rs);
+			}
+			return null;
+		}
+		finally {
+			closeQuietly(rs);
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public void upsertGuestPreset(final String id, final String title, final String prompt, final int sortOrder,
+			final boolean enabled) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement(
+					"INSERT OR REPLACE INTO guest_presets(id, title, prompt, sort_order, enabled, updated_at) VALUES(?,?,?,?,?,?)");
+			ps.setString(1, id);
+			ps.setString(2, title);
+			ps.setString(3, prompt);
+			ps.setInt(4, sortOrder);
+			ps.setInt(5, enabled ? 1 : 0);
+			ps.setLong(6, System.currentTimeMillis());
+			ps.executeUpdate();
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	public boolean deleteGuestPreset(final String id) throws SQLException {
+		Connection c = null;
+		PreparedStatement ps = null;
+		try {
+			c = openConnection();
+			ps = c.prepareStatement("DELETE FROM guest_presets WHERE id=?");
+			ps.setString(1, id);
+			return ps.executeUpdate() > 0;
+		}
+		finally {
+			closeQuietly(ps);
+			closeQuietly(c);
+		}
+	}
+
+	private static Map presetRow(final ResultSet rs) throws SQLException {
+		final Map row = new LinkedHashMap();
+		row.put("id", rs.getString(1));
+		row.put("title", rs.getString(2));
+		row.put("prompt", rs.getString(3));
+		row.put("sortOrder", Integer.valueOf(rs.getInt(4)));
+		row.put("enabled", Boolean.valueOf(rs.getInt(5) == 1));
+		row.put("updatedAt", Long.valueOf(rs.getLong(6)));
+		return row;
 	}
 
 	public void insertOauthToken(final String accessHash, final String refreshHash, final String username,

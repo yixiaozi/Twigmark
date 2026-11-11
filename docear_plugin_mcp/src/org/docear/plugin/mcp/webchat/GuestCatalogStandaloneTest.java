@@ -14,6 +14,9 @@ public final class GuestCatalogStandaloneTest {
 		assertFind();
 		assertPublicListHidesPrompt();
 		assertSystemPrompt();
+		if (GuestCatalog.builtInPresets().size() != 6) {
+			throw new IllegalStateException("built-in count");
+		}
 		System.out.println("GuestCatalogStandaloneTest OK");
 	}
 
