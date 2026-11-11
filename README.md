@@ -107,9 +107,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
 
 | 变量 | 作用 |
 |------|------|
-| `DOCEAR_DIST_DIR` | 解压 / 部署目标（默认：仓库内 `dist\TwigmarkDist`） |
-| `DOCEAR_DAILY_INSTALL` | 额外同步到的日常安装目录 |
-| `DOCEAR_WORK_DIR` | 写入 `working-directory.txt` 的主目录 |
+| `DOCEAR_DIST_DIR` | 解压 / 部署目标（默认：`E:\SoftWare\Twigmark`） |
+| `DOCEAR_DAILY_INSTALL` | 额外同步到的日常安装目录（默认同 `E:\SoftWare\Twigmark`） |
+| `DOCEAR_WORK_DIR` | 仅在目标目录尚无 `working-directory.txt` 时写入主目录（已有文件不覆盖） |
 
 ### 只打便携包（推荐发给别人 / 归档）
 

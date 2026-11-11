@@ -5,9 +5,10 @@ cd /d "%~dp0"
 
 echo.
 echo ========================================
-echo   Docear one-click build and launch
-echo   Build -^> E:\Temp\DocearDist -^> start
+echo   Twigmark one-click build and launch
+echo   Build -^> E:\SoftWare\Twigmark -^> start
 echo   Your mind-map data is not modified
+echo   Existing working-directory.txt is kept
 echo ========================================
 echo.
 
@@ -19,7 +20,7 @@ if %ERR% neq 0 (
   echo [FAILED] exit code %ERR%. Scroll up for errors.
   echo Common causes: JDK 8 not installed, or ant build error.
 ) else (
-  echo [OK] If Docear did not open, run docear.exe under E:\Temp\DocearDist\docear_windows
+  echo [OK] If Twigmark did not open, run docear.exe under E:\SoftWare\Twigmark
 )
 echo.
 pause

@@ -10,11 +10,13 @@
 #
 # Options:
 #   -SkipBuild          reuse existing windows zip
-#   -TargetDir <path>   install dir (default: <repo>\dist\TwigmarkDist, or $env:DOCEAR_DIST_DIR)
+#   -TargetDir <path>   install dir (default: E:\SoftWare\Twigmark, or $env:DOCEAR_DIST_DIR)
 #   -NoLaunch           do not start after deploy
 #
 # Optional env:
 #   DOCEAR_DIST_DIR, DOCEAR_DAILY_INSTALL, DOCEAR_WORK_DIR
+#
+# working-directory.txt: never overwrite an existing file (preserved across re-extract / sync).
 
 param(
     [switch] $SkipBuild,
@@ -22,12 +24,14 @@ param(
     [switch] $NoLaunch
 )
 
+$defaultDistDir = "E:\SoftWare\Twigmark"
+
 if ([string]::IsNullOrWhiteSpace($TargetDir)) {
     if (-not [string]::IsNullOrWhiteSpace($env:DOCEAR_DIST_DIR)) {
         $TargetDir = $env:DOCEAR_DIST_DIR
     }
     else {
-        $TargetDir = Join-Path ((Resolve-Path (Join-Path $PSScriptRoot "..")).Path) "dist\TwigmarkDist"
+        $TargetDir = $defaultDistDir
     }
 }
 
@@ -163,6 +167,67 @@ Write-Step "Stop running Docear"
 Stop-RunningDocear
 Write-Host "Extracting to $extractDir ..."
 
+function Get-ExistingWorkingDirectoryText([string] $FilePath) {
+    if ([string]::IsNullOrWhiteSpace($FilePath) -or !(Test-Path -LiteralPath $FilePath)) {
+        return $null
+    }
+    return [System.IO.File]::ReadAllText($FilePath)
+}
+
+function Write-WorkingDirectoryFile([string] $FilePath, [string] $Value) {
+    # UTF-8 without BOM — a BOM breaks Java path reading.
+    [System.IO.File]::WriteAllText($FilePath, ($Value.Trim() + "`n"), [System.Text.UTF8Encoding]::new($false))
+}
+
+function Restore-WorkingDirectoryFile([string] $FilePath, [string] $PreservedText, [string] $FallbackFromEnv) {
+    if (-not [string]::IsNullOrWhiteSpace($PreservedText)) {
+        [System.IO.File]::WriteAllText($FilePath, $PreservedText, [System.Text.UTF8Encoding]::new($false))
+        Write-Host "Preserved existing working-directory.txt at $FilePath"
+        return
+    }
+    if (Test-Path -LiteralPath $FilePath) {
+        Write-Host "Keeping existing working-directory.txt at $FilePath (not overwritten)"
+        return
+    }
+    if (-not [string]::IsNullOrWhiteSpace($FallbackFromEnv)) {
+        Write-WorkingDirectoryFile -FilePath $FilePath -Value $FallbackFromEnv
+        Write-Host "working-directory.txt -> $FallbackFromEnv"
+        return
+    }
+    Write-Host "No working-directory.txt at $FilePath (first-run wizard will ask)."
+}
+
+# Preserve any existing working-directory.txt before wipe/sync.
+$preservedWdByPath = @{}
+$wdCandidates = @(
+    (Join-Path $TargetDir "working-directory.txt"),
+    (Join-Path $extractDir "working-directory.txt")
+)
+if (Test-Path $extractDir) {
+    $oldInstall = Find-DocearInstallDir -RootDir $extractDir
+    if ($null -ne $oldInstall) {
+        $wdCandidates += (Join-Path $oldInstall "working-directory.txt")
+    }
+}
+foreach ($candidate in ($wdCandidates | Select-Object -Unique)) {
+    $text = Get-ExistingWorkingDirectoryText -FilePath $candidate
+    if ($null -ne $text) {
+        $preservedWdByPath[$candidate] = $text
+        Write-Host "Found existing working-directory.txt: $candidate"
+    }
+}
+# Prefer TargetDir copy, then nested install copy.
+$preservedWdText = $null
+foreach ($key in @((Join-Path $TargetDir "working-directory.txt")) + @($preservedWdByPath.Keys)) {
+    if ($preservedWdByPath.ContainsKey($key)) {
+        $preservedWdText = $preservedWdByPath[$key]
+        break
+    }
+}
+if ($null -eq $preservedWdText -and $preservedWdByPath.Count -gt 0) {
+    $preservedWdText = @($preservedWdByPath.Values)[0]
+}
+
 if (Test-Path $extractDir) {
     try {
         Remove-Item -Path $extractDir -Recurse -Force -ErrorAction Stop
@@ -183,45 +248,70 @@ if ($null -eq $installDir) {
     throw "Docear install folder not found under $extractDir (missing freeplanelauncher.jar)"
 }
 
-Write-Step "Write default working-directory.txt"
-# Prefer env; otherwise leave unset so first-run wizard chooses the home directory.
+Write-Step "Write / preserve working-directory.txt"
+# Prefer preserving existing file; else DOCEAR_WORK_DIR; else leave for first-run wizard.
 $defaultWorkDir = $env:DOCEAR_WORK_DIR
-function Write-WorkingDirectoryFile([string] $FilePath, [string] $Value) {
-    # UTF-8 without BOM — a BOM breaks Java path reading.
-    [System.IO.File]::WriteAllText($FilePath, ($Value.Trim() + "`n"), [System.Text.UTF8Encoding]::new($false))
-}
 $wdFile = Join-Path $installDir "working-directory.txt"
-if (-not [string]::IsNullOrWhiteSpace($defaultWorkDir)) {
-    Write-WorkingDirectoryFile -FilePath $wdFile -Value $defaultWorkDir
-    Write-Host "working-directory.txt -> $defaultWorkDir"
-}
-else {
-    Write-Host "DOCEAR_WORK_DIR not set; skipping working-directory.txt (first-run wizard will ask)."
-}
+Restore-WorkingDirectoryFile -FilePath $wdFile -PreservedText $preservedWdText -FallbackFromEnv $defaultWorkDir
 
-# Optional sync into a daily install path when DOCEAR_DAILY_INSTALL is set (or legacy path exists).
+# Publish / sync into daily install (default: E:\SoftWare\Twigmark).
 $dailyInstall = $env:DOCEAR_DAILY_INSTALL
-if ([string]::IsNullOrWhiteSpace($dailyInstall) -and (Test-Path "E:\SoftWare\Docear")) {
-    $dailyInstall = "E:\SoftWare\Docear"
+if ([string]::IsNullOrWhiteSpace($dailyInstall)) {
+    if (Test-Path $defaultDistDir) {
+        $dailyInstall = $defaultDistDir
+    }
+    elseif (Test-Path "E:\SoftWare\Docear") {
+        # Legacy fallback for older machines that still run from Docear.
+        $dailyInstall = "E:\SoftWare\Docear"
+    }
 }
 $launchDir = $installDir
 if ((-not [string]::IsNullOrWhiteSpace($dailyInstall)) -and (Test-Path $dailyInstall) -and ($installDir -ne $dailyInstall)) {
-    Write-Step "Sync core + plugins into $dailyInstall"
+    $dailyLauncher = Join-Path $dailyInstall "freeplanelauncher.jar"
     $srcCoreLib = Join-Path $installDir "core\org.freeplane.core\lib"
     $dstCoreLib = Join-Path $dailyInstall "core\org.freeplane.core\lib"
-    if ((Test-Path $srcCoreLib) -and (Test-Path $dstCoreLib)) {
-        Copy-Item -Path (Join-Path $srcCoreLib "*") -Destination $dstCoreLib -Force
-        Write-Host "Updated core lib jars (ribbon / pomodoro / git UI)"
-    }
     $srcPlugins = Join-Path $installDir "plugins"
     $dstPlugins = Join-Path $dailyInstall "plugins"
-    if ((Test-Path $srcPlugins) -and (Test-Path $dstPlugins)) {
-        Copy-Item -Path (Join-Path $srcPlugins "*") -Destination $dstPlugins -Recurse -Force
-        Write-Host "Updated plugins"
+    $dailyWd = Join-Path $dailyInstall "working-directory.txt"
+    $dailyWdPreserved = Get-ExistingWorkingDirectoryText -FilePath $dailyWd
+    if ($null -eq $dailyWdPreserved) {
+        $dailyWdPreserved = $preservedWdText
     }
-    if (-not [string]::IsNullOrWhiteSpace($defaultWorkDir)) {
-        Write-WorkingDirectoryFile -FilePath (Join-Path $dailyInstall "working-directory.txt") -Value $defaultWorkDir
+
+    if (!(Test-Path $dailyLauncher)) {
+        Write-Step "Publish full install into $dailyInstall"
+        Get-ChildItem -Path $installDir -Force | ForEach-Object {
+            $dest = Join-Path $dailyInstall $_.Name
+            if ($_.PSIsContainer) {
+                Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force
+            }
+            else {
+                Copy-Item -Path $_.FullName -Destination $dest -Force
+            }
+        }
+        Write-Host "Installed runtime files into $dailyInstall"
     }
+    else {
+        Write-Step "Sync core + plugins into $dailyInstall"
+        if ((Test-Path $srcCoreLib) -and (Test-Path $dstCoreLib)) {
+            Copy-Item -Path (Join-Path $srcCoreLib "*") -Destination $dstCoreLib -Force
+            Write-Host "Updated core lib jars (ribbon / pomodoro / git UI)"
+        }
+        if ((Test-Path $srcPlugins) -and (Test-Path $dstPlugins)) {
+            Copy-Item -Path (Join-Path $srcPlugins "*") -Destination $dstPlugins -Recurse -Force
+            Write-Host "Updated plugins"
+        }
+        # Keep root launchers / framework jars in sync with the new package.
+        foreach ($name in @("framework.jar", "freeplanelauncher.jar", "docear.exe", "docearConsole.exe", "twigmark.exe", "docear.bat", "docear-javafx.bat")) {
+            $src = Join-Path $installDir $name
+            if (Test-Path $src) {
+                Copy-Item -Path $src -Destination (Join-Path $dailyInstall $name) -Force
+            }
+        }
+    }
+
+    Restore-WorkingDirectoryFile -FilePath $dailyWd -PreservedText $dailyWdPreserved -FallbackFromEnv $defaultWorkDir
+
     # Ribbon XML was write-once-cached under resource-cache (bundle:// URL hash).
     # Stale copies keep the old "帮助" tab even after freeplaneeditor.jar is updated.
     $cacheDirs = @(
@@ -259,9 +349,12 @@ if (!(Test-Path $drawioPlugin)) {
 }
 
 Write-Step "Inject JavaFX JRE for Draw.io"
-$bundledJre = Join-Path $installDir "jre"
-$jfxJar = Join-Path $bundledJre "lib\ext\jfxrt.jar"
-if (!(Test-Path $jfxJar)) {
+function Ensure-JavaFxJre([string] $DestInstallDir) {
+    $bundledJre = Join-Path $DestInstallDir "jre"
+    $jfxJar = Join-Path $bundledJre "lib\ext\jfxrt.jar"
+    if (Test-Path $jfxJar) {
+        return
+    }
     if (!(Test-JavaFxJreRoot $javaFxCacheJre)) {
         throw "JavaFX JRE cache missing at $javaFxCacheJre. Re-run scripts\setup-drawio-javafx.ps1."
     }
@@ -270,9 +363,13 @@ if (!(Test-Path $jfxJar)) {
     }
     Write-Host "Copying $javaFxCacheJre -> $bundledJre"
     Copy-Item -Path $javaFxCacheJre -Destination $bundledJre -Recurse -Force
+    if (!(Test-Path $jfxJar)) {
+        throw "Bundled JavaFX JRE missing ($jfxJar) after inject."
+    }
 }
-if (!(Test-Path $jfxJar)) {
-    throw "Bundled JavaFX JRE missing ($jfxJar) after inject."
+Ensure-JavaFxJre -DestInstallDir $installDir
+if ($launchDir -ne $installDir) {
+    Ensure-JavaFxJre -DestInstallDir $launchDir
 }
 Write-Host "Draw.io plugin + JavaFX JRE OK"
 

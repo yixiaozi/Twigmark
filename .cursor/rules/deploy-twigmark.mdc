@@ -31,7 +31,7 @@ alwaysApply: true
 powershell -ExecutionPolicy Bypass -File .\scripts\build-docear-to-dist.ps1
 ```
 
-默认装到仓库 `dist\TwigmarkDist`（或 `DOCEAR_DIST_DIR`）。
+默认装到 `E:\SoftWare\Twigmark`（或 `DOCEAR_DIST_DIR`）。已有 `working-directory.txt` 不会被覆盖。
 
 ## 允许
 
